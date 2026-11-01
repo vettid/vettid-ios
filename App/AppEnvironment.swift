@@ -25,6 +25,8 @@ struct AppEnvironment: Equatable, Sendable {
     /// The manifest keys a Staging, Debug or DevStack build pins (SPKI DER, base64, comma-separated): the staging
     /// channel's key A in Staging and Debug. Release ignores it and pins ``ManifestKeys/production``, which is in code.
     let manifestKeys: [String]
+    /// The public votes site (`votes.vettid.org`, `votes.staging.vettid.org`); nil on the dev stack, which has none.
+    let votesHost: String?
 
     /// Reads the environment from an Info.plist dictionary; `nil` when a
     /// key is missing or unknown.
@@ -45,6 +47,8 @@ struct AppEnvironment: Equatable, Sendable {
         self.manifestHost = manifest
         let keys = (infoDictionary["VettIDManifestKeys"] as? String) ?? ""
         self.manifestKeys = keys.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+        let votes = ((infoDictionary["VettIDVotesHost"] as? String) ?? "").trimmingCharacters(in: .whitespaces)
+        self.votesHost = votes.isEmpty ? nil : votes
     }
 
     /// This build's environment. A build without one is misconfigured.
@@ -66,6 +70,9 @@ struct AppEnvironment: Equatable, Sendable {
 
     /// The relay base URL tokens name (`aud`): always HTTPS (the dev stack maps it to its port).
     var relayURL: String { "https://\(relayHost)" }
+
+    /// The public votes site's base URL, always HTTPS; nil where the build has no site.
+    var votesURL: String? { votesHost.map { "https://\($0)" } }
 
     /// The pinned Nitro root and manifest keys (§11.2, §11.10.1): production's in Release; the staging channel's key A
     /// in Staging and Debug. The dev stack's TEST-ONLY anchors come from its control port, in the VettIDDevStack app only

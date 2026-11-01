@@ -95,6 +95,7 @@ extension VaultManager {
             await messages.refreshConversationsQuietly()
             try? await items.refresh(quietly: true)
             await votes.openNow()
+            if phase == .unlocked, !votes.held() { votes.startSync() }
         }
     }
 

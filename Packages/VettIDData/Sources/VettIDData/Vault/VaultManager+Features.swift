@@ -116,6 +116,7 @@ extension VaultManager {
     /// for the screens.
     func refreshListsQuietly() {
         listsReads += 1
+        let reads = listsReads
         listsRead = Task { [weak self] in
             guard let self else { return }
             profiles.refreshQuietly()
@@ -129,6 +130,9 @@ extension VaultManager {
             try? await items.refresh(quietly: true)
             // The votes after the items (chosen; not in the spec): nothing that expires within minutes waits on them.
             await votes.openNow()
+            // Then the public site, and every hour while the vault stays open (not when a lock, a hold or a newer read came
+            // meanwhile: that one starts it).
+            if listsReads == reads, phase == .unlocked, !votes.held() { votes.startSync() }
         }
     }
 }

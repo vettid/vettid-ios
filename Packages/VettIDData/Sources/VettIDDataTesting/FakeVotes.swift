@@ -28,6 +28,8 @@ public final class FakeVotes: VotesRepository {
     @ObservationIgnored public var castPasswords: [String?] = []
     @ObservationIgnored public var releasePins: [String] = []
     @ObservationIgnored public var acknowledged: [[String]] = []
+    /// What ``checkResults(_:)`` answers.
+    @ObservationIgnored public var resultsOutcome: ResultsOutcome = .submitted(.pending)
     /// Runs when ``refresh()`` is asked, before it answers (the vault's list changing meanwhile).
     @ObservationIgnored public var onRefresh: @MainActor () -> Void = {}
 
@@ -89,4 +91,13 @@ public final class FakeVotes: VotesRepository {
     }
 
     public func titleOf(_ key: VoteKey) -> String? { votes.first { $0.key == key }?.title }
+
+    public func siteCheck(_ key: VoteKey) async throws { try call("siteCheck:\(Self.name(key))") }
+
+    public func checkResults(_ key: VoteKey) async throws -> ResultsOutcome {
+        try call("checkResults:\(Self.name(key))")
+        return resultsOutcome
+    }
+
+    public func diagnoseGaveUp(_ key: VoteKey) async { calls.append("diagnoseGaveUp:\(Self.name(key))") }
 }

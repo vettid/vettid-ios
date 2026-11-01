@@ -43,7 +43,7 @@ public struct VoteHint: Equatable, Sendable {
 
 /// The member's votes (IOS-PLAN §4.16; VAULT-MESSAGING 0.81.3 §10.19.8). Every failure is a ``VaultFailure``; a vote is
 /// identified by the pair (`connection_id`, `proposal_id`) throughout (0.81.2). Mirrors vettid-android
-/// `VotesRepository` (the public site and the results come with the work on the site).
+/// `VotesRepository`.
 @MainActor
 public protocol VotesRepository: AnyObject, Observable, Sendable {
     /// The vault's list in its order; empty until read and after a lock. Never carries a choice.
@@ -81,6 +81,13 @@ public protocol VotesRepository: AnyObject, Observable, Sendable {
     func acknowledgeDropped(_ connectionIDs: [String])
     /// The title of a vote as the list has it, for a notification or History row; nil when not known.
     func titleOf(_ key: VoteKey) -> String?
+    /// A vote's screen opened: its documents are read from the public site and handed to the vault, which compares them
+    /// with what it holds (VAULT-MESSAGING §10.19.4). Nothing when the build has no site.
+    func siteCheck(_ key: VoteKey) async throws
+    /// The results of a closed vote, fetched from the site and handed to the vault (the member's **Check again**).
+    func checkResults(_ key: VoteKey) async throws -> ResultsOutcome
+    /// For a `gave_up` check the app has no reason for: looks at the site once and remembers which of two things.
+    func diagnoseGaveUp(_ key: VoteKey) async
 }
 
 /// The vault calls behind ``VotesManager``, so that it can be tested without a vault.
@@ -181,6 +188,8 @@ public final class VotesManager: VotesRepository {
     /// The vault setting `credential.unlock_ttl_seconds` alone; nil when it can't be read. Asked only after a lock failed.
     @ObservationIgnored private let unlockTtl: @MainActor () async -> Int?
     @ObservationIgnored let now: @Sendable () -> Date
+    /// The work with the public site (``VoteSiteRunner``); nil where the app hands the vault nothing from it (tests).
+    @ObservationIgnored private(set) var siteRunner: VoteSiteRunner?
     /// The background time the lock of a cast's window asks iOS for; nil where there is none (tests, other builds).
     @ObservationIgnored private let backgroundTasks: (any BackgroundTasks)?
 
@@ -193,6 +202,10 @@ public final class VotesManager: VotesRepository {
         closeWindow: @escaping @MainActor () async throws -> Void = {},
         unlockTtl: @escaping @MainActor () async -> Int? = { nil },
         now: @escaping @Sendable () -> Date = { Date() },
+        site: (any VoteSite)? = nil,
+        siteOps: (@MainActor (_ quietly: Bool) async throws -> any VoteSiteOps)? = nil,
+        syncEvery: Duration = .seconds(3600),
+        sleep: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) },
         backgroundTasks: (any BackgroundTasks)? = nil
     ) {
         self.ops = ops
@@ -204,10 +217,14 @@ public final class VotesManager: VotesRepository {
         self.unlockTtl = unlockTtl
         self.now = now
         self.backgroundTasks = backgroundTasks
+        if let site, let siteOps {
+            siteRunner = VoteSiteRunner(votes: self, site: site, ops: siteOps, every: syncEvery, sleep: sleep)
+        }
     }
 
     /// Forgets everything: the vault locked, was held or wiped. The feature is asked about again at the next read.
     public func clear() {
+        siteRunner?.stop()
         generation += 1
         queued = false
         load = .notLoaded
@@ -223,11 +240,33 @@ public final class VotesManager: VotesRepository {
         listSha256 = nil
     }
 
-    /// `vote.event` (§10.19.8, the app only): a change of any vote re-reads the list. The event carries no choice.
+    /// `vote.event` (§10.19.8, the app only): a change of any vote re-reads the list; a due check (`check_due`) is run
+    /// after it. The event carries no choice.
     public func onEvent(_ m: VaultMessage) {
         guard m.type == VaultApi.typeVoteEvent, !gated() else { return }
         refreshQuietly()
+        if VaultJSON.string(m.object, "event") == "check_due", let runner = siteRunner {
+            let generation = runner.haltGeneration
+            Task { [weak self] in
+                try? await self?.read(quietly: true)
+                // Not when a lock or the app leaving came during the read.
+                await runner.submitDueNow(ifGeneration: generation)
+            }
+        }
     }
+
+    /// The vault opened, or a hold ended: the work with the public site runs now, then every hour while the vault stays
+    /// open (IOS-PLAN §4.16). Stopped by ``clear()``.
+    public func startSync() { siteRunner?.start() }
+
+    /// The app left the foreground: no run while it is away.
+    public func pauseSync() { siteRunner?.pause() }
+
+    /// The app came back to the foreground: a run now when the work was started, then hourly again.
+    public func resumeSync() { siteRunner?.resume() }
+
+    /// One run with the public site (the hourly work's step).
+    public func syncOnce() async throws { try await siteRunner?.syncOnce() }
 
     /// The vault opened or a check passed: the list is read in the background, over the session already open.
     public func openNow() async { try? await read(quietly: true) }
@@ -240,8 +279,11 @@ public final class VotesManager: VotesRepository {
 
     public func refresh() async throws { try await read(quietly: false) }
 
+    /// True while the vault is held or due: nothing is read or sent.
+    func held() -> Bool { gated() }
+
     /// One read after the reads before it.
-    private func read(quietly: Bool, queued fromQueue: Bool = false) async throws {
+    func read(quietly: Bool, queued fromQueue: Bool = false) async throws {
         let before = reading
         let task = Task { @MainActor [weak self] in
             _ = await before?.result
@@ -324,8 +366,12 @@ public final class VotesManager: VotesRepository {
         hints[key] = h == VoteHint() ? nil : h
     }
 
-    public func get(_ key: VoteKey) async throws -> VoteDetail {
-        let body = try await guarded { try await self.ops().voteGet(key) }
+    public func get(_ key: VoteKey) async throws -> VoteDetail { try await detail(key, quietly: false) }
+
+    /// `vote.get`, over the session already open when [quietly] (the work with the site nobody asked for).
+    func detail(_ key: VoteKey, quietly: Bool) async throws -> VoteDetail {
+        let o = quietly ? quietOps : ops
+        let body = try await guarded { try await o().voteGet(key) }
         guard let d = VoteWire.detail(body) else { throw VaultFailure(.other, code: "unreadable") }
         return d
     }
@@ -437,6 +483,15 @@ public final class VotesManager: VotesRepository {
     public func titleOf(_ key: VoteKey) -> String? {
         votes.first { $0.key == key }.flatMap { $0.title.isEmpty ? nil : $0.title }
     }
+
+    public func siteCheck(_ key: VoteKey) async throws { try await siteRunner?.siteCheck(key) }
+
+    public func checkResults(_ key: VoteKey) async throws -> ResultsOutcome {
+        guard let siteRunner else { return .siteUnreachable }
+        return try await siteRunner.checkResults(key, quietly: false)
+    }
+
+    public func diagnoseGaveUp(_ key: VoteKey) async { await siteRunner?.diagnoseGaveUp(key) }
 
     private func guarded<T: Sendable>(_ body: @MainActor () async throws -> T) async throws -> T {
         do {

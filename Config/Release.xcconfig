@@ -8,5 +8,7 @@ VETTID_ENVIRONMENT = production
 VETTID_ACCOUNT_HOST = account.vettid.org
 VETTID_RELAY_HOST = relay.vettid.org
 VETTID_MANIFEST_HOST = vettid.org
+// The public votes site the app reads for the vault (IOS-PLAN §4.16 "The site").
+VETTID_VOTES_HOST = votes.vettid.org
 // Release pins only the production manifest keys, in code (VettIDAttestation's ManifestKeys).
 VETTID_MANIFEST_KEYS =

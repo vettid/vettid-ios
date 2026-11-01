@@ -97,11 +97,14 @@ public struct HTTPTransport: Sendable {
         self.sleep = sleep
     }
 
-    /// Sends the request [build] makes (called again for every attempt), reading at most [maxBody] body bytes.
+    /// Sends the request [build] makes (called again for every attempt), reading at most [maxBody] body bytes. [readsBody]
+    /// says for a status whether its body is read at all: for one that is not, the answer has an empty body and the cap
+    /// is not applied (an error page over the cap is then no "too large").
     public func send(
         policy: Policy,
         maxBody: Int,
         timeout: TimeInterval? = nil,
+        readsBody: @Sendable (Int) -> Bool = { _ in true },
         _ build: () throws -> URLRequest
     ) async throws -> HTTPAnswer {
         var budget = networkWait
@@ -111,7 +114,7 @@ public struct HTTPTransport: Sendable {
             var r = try build()
             if let timeout { r.timeoutInterval = timeout }
             do {
-                return try await once(prepared(r), maxBody: maxBody)
+                return try await once(prepared(r), maxBody: maxBody, readsBody: readsBody)
             } catch let e as URLError {
                 try Task.checkCancellation()
                 guard attempt < maxRetries, Self.retryable(e, policy) else { throw e }
@@ -121,9 +124,13 @@ public struct HTTPTransport: Sendable {
         }
     }
 
-    private func once(_ r: URLRequest, maxBody: Int) async throws -> HTTPAnswer {
+    private func once(_ r: URLRequest, maxBody: Int, readsBody: @Sendable (Int) -> Bool) async throws -> HTTPAnswer {
         let (bytes, response) = try await session.bytes(for: r)
         guard let http = response as? HTTPURLResponse else { throw URLError(.badServerResponse) }
+        guard readsBody(http.statusCode) else {
+            bytes.task.cancel()
+            return HTTPAnswer(status: http.statusCode, headers: [:], body: [])
+        }
         if http.expectedContentLength > Int64(maxBody) { throw BodyTooLarge(status: http.statusCode) }
         var body: [UInt8] = []
         for try await b in bytes {

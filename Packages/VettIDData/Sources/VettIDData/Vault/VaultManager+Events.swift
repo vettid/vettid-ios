@@ -80,6 +80,9 @@ extension VaultManager {
         // A return to the foreground keeps the estimate of tries left (VAULT-MESSAGING 0.73.0 §3.6.5).
         if phase == .unlocked, let v = ownerChecks.ownerCheck, v.gated(t) || v.warning(t) { ownerChecks.onOpened(afterUnlock: false) }
         if phase == .unlocked { Task { [weak self] in await self?.releaseUpdate.refreshOffer() } }
+        // The votes site again on return (IOS-PLAN §4.16: at unlock, at open, hourly while open), when its work was started
+        // (a lock stopped it: the next opening starts it).
+        votes.resumeSync()
         Task { [weak self] in
             guard let self, let s = try? await storedSession() else { return }
             // A session opened in the background (a lock's retry) has not collected yet.
@@ -99,6 +102,8 @@ extension VaultManager {
         // check's retry (VAULT-MESSAGING §3.6.5), also while an unlock and its check are on their way.
         forgetPairingPin()
         ownerChecks.setForeground(false)
+        // No run with the votes site while the app is away (there is no background job).
+        votes.pauseSync()
         let work = Task { @MainActor [weak self] in
             guard let self else { return }
             await lockGuard.keeper.firstAttemptDone()

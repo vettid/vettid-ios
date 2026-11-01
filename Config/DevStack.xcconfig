@@ -8,6 +8,8 @@ VETTID_ENVIRONMENT = devstack
 VETTID_ACCOUNT_HOST = 127.0.0.1:18081
 VETTID_RELAY_HOST = relay.vettid.test
 VETTID_MANIFEST_HOST = 127.0.0.1:18081
+// The public votes site the app reads for the vault (IOS-PLAN §4.16 "The site"); none on the dev stack.
+VETTID_VOTES_HOST =
 // The dev stack's TEST-ONLY manifest key and Nitro root come from its control port (VettIDAltChanTesting's DevStack).
 VETTID_MANIFEST_KEYS =
 

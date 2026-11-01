@@ -18,10 +18,12 @@ public enum StrictJson {
     public static let maxDepth = 32
     public static let maxSafeInteger: UInt64 = (1 << 53) - 1
 
-    /// Parses [b] as exactly one JSON object.
-    public static func parseObject(_ b: [UInt8]) throws -> JsonObject {
+    /// Parses [b] as exactly one JSON object, nested at most [maxDepth] deep (an object with no container inside is depth
+    /// 1): for a value that is copied into a larger document, whose own nesting limit is for the whole (a value at level
+    /// L of a document limited to ``maxDepth`` has `maxDepth - L + 1` left).
+    public static func parseObject(_ b: [UInt8], maxDepth: Int = StrictJson.maxDepth) throws -> JsonObject {
         guard String(bytes: b, encoding: .utf8) != nil else { throw CryptoError.format("json: invalid UTF-8") }
-        var parser = JsonParser(b)
+        var parser = JsonParser(b, maxDepth: maxDepth)
         guard case .object(let o) = try parser.parseDocument() else { throw CryptoError.format("json: not an object") }
         return o
     }
@@ -31,8 +33,8 @@ public enum StrictJson {
 
     /// Validates [raw] as a strict JSON object and returns its compact form (white space outside strings removed,
     /// everything else byte for byte), as Go's json.Compact does.
-    public static func compactObject(_ raw: [UInt8]) throws -> [UInt8] {
-        _ = try parseObject(raw)
+    public static func compactObject(_ raw: [UInt8], maxDepth: Int = StrictJson.maxDepth) throws -> [UInt8] {
+        _ = try parseObject(raw, maxDepth: maxDepth)
         return compact(raw)
     }
 
@@ -186,8 +188,12 @@ public struct JsonObject: Sendable {
 private struct JsonParser {
     private let s: [UInt8]
     private var i = 0
+    private let maxDepth: Int
 
-    init(_ bytes: [UInt8]) { s = bytes }
+    init(_ bytes: [UInt8], maxDepth: Int = StrictJson.maxDepth) {
+        s = bytes
+        self.maxDepth = maxDepth
+    }
 
     mutating func parseDocument() throws -> JsonValue {
         ws()
@@ -230,7 +236,7 @@ private struct JsonParser {
     }
 
     private mutating func obj(_ depth: Int) throws -> JsonObject {
-        guard depth <= StrictJson.maxDepth else { throw CryptoError.format("json: nesting too deep") }
+        guard depth <= maxDepth else { throw CryptoError.format("json: nesting too deep") }
         let start = i
         i += 1 // {
         var members: [(name: String, value: JsonValue)] = []
@@ -263,7 +269,7 @@ private struct JsonParser {
     }
 
     private mutating func arr(_ depth: Int) throws -> JsonValue {
-        guard depth <= StrictJson.maxDepth else { throw CryptoError.format("json: nesting too deep") }
+        guard depth <= maxDepth else { throw CryptoError.format("json: nesting too deep") }
         let start = i
         i += 1 // [
         var items: [JsonValue] = []

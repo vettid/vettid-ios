@@ -33,5 +33,7 @@
 	<string>$(VETTID_MANIFEST_KEYS)</string>
 	<key>VettIDRelayHost</key>
 	<string>$(VETTID_RELAY_HOST)</string>
+	<key>VettIDVotesHost</key>
+	<string>$(VETTID_VOTES_HOST)</string>
 </dict>
 </plist>
