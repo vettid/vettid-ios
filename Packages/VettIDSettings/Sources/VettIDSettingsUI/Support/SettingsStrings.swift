@@ -45,6 +45,42 @@ enum SettingsStrings {
         String(localized: "settings_app_theme", defaultValue: "Theme", bundle: .module)
     }
 
+    static var notifyShow: String {
+        String(localized: "settings_notify_show", defaultValue: "Show in notifications", bundle: .module)
+    }
+
+    static var notifyShowNames: String {
+        String(localized: "settings_notify_show_names", defaultValue: "Names", bundle: .module)
+    }
+
+    static var notifyShowNamesBody: String {
+        String(
+            localized: "settings_notify_show_names_body",
+            defaultValue: "Who it is from and what it is, never message text or item names", bundle: .module
+        )
+    }
+
+    static var notifyShowText: String {
+        String(localized: "settings_notify_show_text", defaultValue: "Names and message text", bundle: .module)
+    }
+
+    static var notifyShowTextBody: String {
+        String(
+            localized: "settings_notify_show_text_body",
+            defaultValue: "Also the message text and item names, never values or secrets", bundle: .module
+        )
+    }
+
+    static var notifyShowNothing: String {
+        String(localized: "settings_notify_show_nothing", defaultValue: "Nothing", bundle: .module)
+    }
+
+    static var notifyShowNothingBody: String {
+        String(
+            localized: "settings_notify_show_nothing_body", defaultValue: "“New activity in VettID” for everything", bundle: .module
+        )
+    }
+
     static var themeSystem: String {
         String(localized: "settings_theme_system", defaultValue: "System default", bundle: .module)
     }

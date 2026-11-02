@@ -136,6 +136,11 @@ public final class FeedManager: FeedRepository {
     /// New and changed unread items as they arrive (`feed.event`, the items of a catch-up), never from a full read: the
     /// notifications' source (IOS-PLAN §6.7), so that nothing missed while locked or held is replayed as a notification.
     @ObservationIgnored public var onArrival: @MainActor (FeedItem) -> Void = { _ in }
+    /// The items after each change (a read, an event, a status set here or on another device, the clear): the
+    /// notifications of items read, archived or deleted anywhere go (IOS-PLAN §6.7).
+    @ObservationIgnored public var onItems: @MainActor ([FeedItem]) -> Void = { _ in }
+    /// The feed was forgotten (the vault locked, was held or wiped): every item notification goes.
+    @ObservationIgnored public var onCleared: @MainActor () -> Void = {}
 
     public init(
         ops: @escaping @MainActor () async throws -> any FeedOps,
@@ -165,6 +170,7 @@ public final class FeedManager: FeedRepository {
         catchUpQueued = false
         load = .notLoaded
         publish()
+        onCleared()
     }
 
     /// `feed.event` and `sync.event{feed.updated, feed.deleted}` (§10.1, §10.9).
@@ -289,7 +295,10 @@ public final class FeedManager: FeedRepository {
             let (x, y) = (a.1 ?? .distantPast, b.1 ?? .distantPast)
             return x != y ? x > y : a.0.itemID > b.0.itemID
         }.map(\.0)
-        if sorted != items { items = sorted }
+        if sorted != items {
+            items = sorted
+            onItems(sorted)
+        }
         let unread = sorted.filter { $0.status == Self.statusActive }
         let next = FeedBadge(unread: unread.count, urgent: unread.contains { $0.priority == Self.priorityUrgent })
         if next != badge { badge = next }

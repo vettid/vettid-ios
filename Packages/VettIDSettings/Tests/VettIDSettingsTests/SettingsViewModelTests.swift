@@ -187,6 +187,20 @@ import VettIDKeys
         #expect(preview.state.theme == .system)
     }
 
+    /// "Show in notifications": the stored choice, applied and stored on this phone; hidden without the app's setting.
+    @Test func whatNotificationsShowIsStoredOnThisPhone() throws {
+        let name = "settings-previews-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: name))
+        defer { defaults.removePersistentDomain(forName: name) }
+        let setting = NotificationPreviewsSetting(defaults: defaults)
+        let m = SettingsViewModel(account: repo, vault: repo, appLock: lock, promptReason: "Unlock VettID", previews: setting)
+        #expect(m.state.notificationPreviews == .names)
+        m.setNotificationPreviews(.namesAndText)
+        #expect(m.state.notificationPreviews == .namesAndText && NotificationPreviewsSetting(defaults: defaults).previews == .namesAndText)
+        #expect(repo.calls.isEmpty, "nothing asked of the vault: \(repo.calls)")
+        #expect(model().state.notificationPreviews == nil)
+    }
+
     /// New phone secret is offered only on a phone that holds a phone secret (release R).
     @Test func newPhoneSecretFollowsThePhoneSecret() {
         #expect(!model().state.phoneSecret)

@@ -28,6 +28,8 @@ public struct SettingsActions {
     public var setTimeout: @MainActor (AppLockTimeout) -> Void = { _ in }
     /// Settings → App → Theme.
     public var setTheme: @MainActor (ThemePreference) -> Void = { _ in }
+    /// Settings → App → "Show in notifications".
+    public var setNotificationPreviews: @MainActor (NotificationPreviews) -> Void = { _ in }
     public var acknowledgeInvalidated: @MainActor () -> Void = {}
     public var dismissAppLockUnavailable: @MainActor () -> Void = {}
     public var accountSite: @MainActor () -> Void = {}
@@ -166,11 +168,34 @@ public struct SettingsContent: View {
             SettingsGroup {
                 SettingsRow(SettingsStrings.appTheme, icon: .darkMode, supporting: Self.themeLabel(state.theme)) { picker = .theme }
                     .accessibilityIdentifier("theme")
+                // What notifications show (ANDROID-PLAN §4 Notification modes 8; on the iPhone a row here, as there is no
+                // notification mode to choose before Apple push: chosen; not in the spec).
+                if let p = state.notificationPreviews {
+                    SettingsDivider()
+                    SettingsRow(SettingsStrings.notifyShow, icon: .notifications, supporting: Self.previewsLabel(p)) { picker = .previews }
+                        .accessibilityIdentifier("notification_previews")
+                }
                 if Self.screenshotsRowShown {
                     SettingsDivider()
                     AllowScreenshotsRow(state: state, actions: actions, confirm: $confirmScreenshots)
                 }
             }
+        }
+    }
+
+    static func previewsLabel(_ p: NotificationPreviews) -> String {
+        switch p {
+        case .names: SettingsStrings.notifyShowNames
+        case .namesAndText: SettingsStrings.notifyShowText
+        case .nothing: SettingsStrings.notifyShowNothing
+        }
+    }
+
+    static func previewsDetail(_ p: NotificationPreviews) -> String {
+        switch p {
+        case .names: SettingsStrings.notifyShowNamesBody
+        case .namesAndText: SettingsStrings.notifyShowTextBody
+        case .nothing: SettingsStrings.notifyShowNothingBody
         }
     }
 
@@ -318,9 +343,9 @@ struct AllowScreenshotsRow: View {
     }
 }
 
-/// Which of the screen's choices is open: the app lock's method or timeout, or the theme.
+/// Which of the screen's choices is open: the app lock's method or timeout, the theme, or what notifications show.
 enum SettingsPicker: String, Identifiable {
-    case method, timeout, theme
+    case method, timeout, theme, previews
 
     var id: String { rawValue }
 }
@@ -423,6 +448,19 @@ struct SettingsPickerSheet: View {
                 onPick: { t in
                     close()
                     actions.setTheme(t)
+                },
+                onDismiss: close
+            )
+        case .previews:
+            ChoiceSheet(
+                title: SettingsStrings.notifyShow,
+                options: NotificationPreviews.allCases.map {
+                    ChoiceOption(value: $0, label: SettingsContent.previewsLabel($0), detail: SettingsContent.previewsDetail($0))
+                },
+                selected: state.notificationPreviews ?? .names,
+                onPick: { p in
+                    close()
+                    actions.setNotificationPreviews(p)
                 },
                 onDismiss: close
             )

@@ -21,7 +21,7 @@ import VettIDUI
             .appendingPathComponent("Sources/VettIDSettingsUI/Resources/Localizable.xcstrings")
         let doc = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
         let keys = try #require((doc["strings"] as? [String: Any])?.keys)
-        #expect(keys.count == 452)
+        #expect(keys.count == 459)
         let missing = "\u{0}missing"
         for key in keys {
             let text = Bundle.module.localizedString(forKey: key, value: missing, table: nil)
@@ -63,6 +63,21 @@ import VettIDUI
         #expect(ThemePreference.allCases.map(SettingsContent.themeLabel) == ["System default", "Light", "Dark"])
         for t in ThemePreference.allCases {
             #expect(height(SettingsContent(state: SettingsState(theme: t), now: now)) > 0)
+        }
+    }
+
+    /// Settings → App → "Show in notifications": vettid-android's texts (Notification settings), its three choices in its
+    /// order, each with its line; the row only with the app's setting.
+    @Test func whatNotificationsShowIsAndroids() {
+        #expect(SettingsStrings.notifyShow == "Show in notifications")
+        #expect(NotificationPreviews.allCases.map(SettingsContent.previewsLabel) == ["Names", "Names and message text", "Nothing"])
+        #expect(NotificationPreviews.allCases.map(SettingsContent.previewsDetail) == [
+            "Who it is from and what it is, never message text or item names",
+            "Also the message text and item names, never values or secrets",
+            "“New activity in VettID” for everything",
+        ])
+        for p in NotificationPreviews.allCases {
+            #expect(height(SettingsContent(state: SettingsState(notificationPreviews: p), now: now)) > 0)
         }
     }
 

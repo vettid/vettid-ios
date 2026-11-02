@@ -65,3 +65,21 @@ import Testing
         #expect(ThemeSetting(defaults: d).theme == .light)
     }
 }
+
+/// Settings → App → "Show in notifications" (ANDROID-PLAN §4 Notification modes 8): names until chosen (Android's
+/// default), then the stored choice read back at the next start; a value that does not read is the default.
+@MainActor
+@Suite struct NotificationPreviewsSettingTests {
+    @Test func namesUntilChosenThenStoredAndReadBack() throws {
+        let name = "previews-tests-\(UUID().uuidString)"
+        let d = try #require(UserDefaults(suiteName: name))
+        defer { d.removePersistentDomain(forName: name) }
+        #expect(NotificationPreviews.allCases == [.names, .namesAndText, .nothing])
+        let first = NotificationPreviewsSetting(defaults: d)
+        #expect(first.previews == .names)
+        first.set(.nothing)
+        #expect(first.previews == .nothing && NotificationPreviewsSetting(defaults: d).previews == .nothing)
+        d.set("garbled", forKey: NotificationPreviewsSetting.key)
+        #expect(NotificationPreviewsSetting(defaults: d).previews == .names)
+    }
+}

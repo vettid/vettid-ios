@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <!-- The app's privacy manifest. No tracking. The required-reason APIs the app and its packages use:
-     UserDefaults for the app's own settings (the theme, App/VettIDApp.swift, VettIDData ThemeSetting; cleared by the
-     wipe, App/Composition/AppWipeTargets.swift): CA92.1. File metadata of files in the app's own container: the size
+     UserDefaults for the app's own settings (the theme, App/VettIDApp.swift, VettIDData ThemeSetting; what notifications
+     show, VettIDData NotificationPreviewsSetting; cleared by the wipe, App/Composition/AppWipeTargets.swift): CA92.1. File metadata of files in the app's own container: the size
      of a state file (fstat, VettIDKeys EncryptedFileStore; libsodium also imports fstat) and the age of copied-in canary manifests
      (App/CanaryManifestFiles.swift): C617.1.
      Collected (what VettID's member API and relay can read; everything sealed to the member's vault is end to end and

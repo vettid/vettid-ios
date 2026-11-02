@@ -36,6 +36,8 @@ final class AppComposition {
     let releaseNotes: any ReleaseNotesRepository
     /// A request to open the update screen (fed by the "Vault updates" notification with phase P, IOS-PLAN §6.7).
     let releaseInbox = ReleaseUpdateInbox()
+    /// The feed's notifications (IOS-PLAN §6.7): the notifier, the taps, "Show in notifications".
+    let notifications = AppNotifications()
 
     /// The app's own wiring: the Secure Enclave and App Attest (or ``NoSecureHardware``), and the build's pinned trust.
     convenience init(environment: AppEnvironment) {
@@ -126,6 +128,7 @@ final class AppComposition {
         // A wipe a crash interrupted is finished before anything reads a local file (the app lock's included).
         if firstRun.isOpen { vault.resumePendingWipe() }
         startAppLock()
+        notifications.start(vault: vault)
     }
 
     /// Reads the app lock's preferences once the first-run cleanup ran (before it, nothing is read); tried again when the

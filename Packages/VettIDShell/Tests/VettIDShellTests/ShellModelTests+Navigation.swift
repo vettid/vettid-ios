@@ -4,6 +4,7 @@ import VettIDConnections
 import VettIDData
 import VettIDDataTesting
 import VettIDOnboarding
+import VettIDVault
 @testable import VettIDShell
 
 /// Where the member is in the shell: the drawer's navigation, the asked owner check, the lock from the avatar sheet.
@@ -204,6 +205,39 @@ import VettIDOnboarding
         m.push(.notifications(archived: false))
         m.openFeedTarget(.security)
         #expect(m.destination == .settings && m.path.isEmpty)
+    }
+
+    /// A notification's tap opens its item's screen, or the Notifications screen for an item with only a sheet or one no
+    /// longer in the feed (vettid-android `AppShell`'s tap).
+    @Test func aNotificationsTapOpensItsItemsScreen() {
+        let m = model
+        let at = "2026-10-09T12:00:00Z"
+        m.openNotified(FeedItem(itemID: "f1", seq: 1, kind: "message.received", at: at, status: "active", connectionID: "c1"))
+        #expect(m.path == [.conversation("c1")])
+        m.openNotified(FeedItem(itemID: "f2", seq: 2, kind: "guide", at: at, status: "active"))
+        #expect(m.path.last == .notifications(archived: false))
+        m.path = []
+        m.openNotified(nil)
+        #expect(m.path == [.notifications(archived: false)])
+    }
+
+    /// The screen in front as the notifications see it (vettid-android `visibleOf`): the Notifications list, a
+    /// conversation, an approval, a connection or a vote; nothing for any other screen.
+    @Test func theScreenInFrontForTheNotifications() {
+        let m = model
+        #expect(m.notifyVisible == nil)
+        m.path = [.notifications(archived: true)]
+        #expect(m.notifyVisible == .notifications)
+        m.path = [.conversation("c1")]
+        #expect(m.notifyVisible == .target(.conversation("c1")))
+        m.path = [.approval("grant:g1")]
+        #expect(m.notifyVisible == .target(.approval(key: "grant:g1")))
+        m.path = [.connection("c2")]
+        #expect(m.notifyVisible == .target(.connection("c2")))
+        m.path = [.vote(connectionID: "c3", proposalID: "p1")]
+        #expect(m.notifyVisible == .target(.vote(connectionID: "c3", proposalID: "p1")))
+        m.path = [.alarm]
+        #expect(m.notifyVisible == nil)
     }
 
     /// A vote item opens the vote by the pair over the screen on top, or the Votes list as a drawer destination.

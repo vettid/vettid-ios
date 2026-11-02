@@ -34,6 +34,7 @@ struct VettIDApp: App {
                 .vettIDTheme(theme.theme.mode)
                 .environment(screenshots)
                 .environment(theme)
+                .environment(AppComposition.shared.notifications.previews)
                 .privacyShield()
         }
     }
@@ -92,7 +93,7 @@ struct RootView: View {
         AppRoot(
             environment: environment, vault: composition.vault, inbox: composition.inbox, canaryInbox: composition.canaryInbox,
             appLock: composition.appLock, releaseNotes: composition.releaseNotes, releaseInbox: composition.releaseInbox,
-            inviteInbox: composition.inviteInbox
+            inviteInbox: composition.inviteInbox, notifications: composition.notifications
         )
     }
 }
@@ -110,6 +111,8 @@ struct AppRoot: View {
     let releaseInbox: ReleaseUpdateInbox
     /// An invitation link the app was opened with (VAULT-MESSAGING §6.4): the open app's accept screen takes it.
     let inviteInbox: InviteLinkInbox
+    /// The feed's notifications: the screen in front, a tap waiting for the shell, the permission.
+    let notifications: AppNotifications?
     /// Where the member is in the open app, kept while the check past the deadline takes the shell's place.
     @State private var shell: ShellModel
     /// The last phase shown before "Finish the move" began (``RootHold``).
@@ -121,7 +124,8 @@ struct AppRoot: View {
 
     init(
         environment: AppEnvironment, vault: VaultManager, inbox: SetupLinkInbox, canaryInbox: CanaryManifestInbox, appLock: AppLock,
-        releaseNotes: any ReleaseNotesRepository, releaseInbox: ReleaseUpdateInbox, inviteInbox: InviteLinkInbox
+        releaseNotes: any ReleaseNotesRepository, releaseInbox: ReleaseUpdateInbox, inviteInbox: InviteLinkInbox,
+        notifications: AppNotifications? = nil
     ) {
         self.environment = environment
         self.vault = vault
@@ -131,6 +135,7 @@ struct AppRoot: View {
         self.releaseNotes = releaseNotes
         self.releaseInbox = releaseInbox
         self.inviteInbox = inviteInbox
+        self.notifications = notifications
         _held = State(initialValue: vault.phase)
         _shell = State(initialValue: ShellModel(account: vault, vault: vault, ownerChecks: vault.ownerChecks))
     }
@@ -308,7 +313,23 @@ struct AppRoot: View {
                     history: vault.history, historyExport: vault.historyExport, items: vault.items, sharing: vault.sharing,
                     votes: vault.votes, move: move
                 ) { openPortal() }
+                .modifier(OptionalNotificationsHook(notifications: notifications, model: shell, feed: vault.feed))
             }
+        }
+    }
+}
+
+/// ``ShellNotificationsHook`` when the app has notifications (not in the debug catalog's previews).
+struct OptionalNotificationsHook: ViewModifier {
+    let notifications: AppNotifications?
+    let model: ShellModel
+    let feed: FeedManager
+
+    func body(content: Content) -> some View {
+        if let notifications {
+            content.modifier(ShellNotificationsHook(notifications: notifications, model: model, feed: feed))
+        } else {
+            content
         }
     }
 }
