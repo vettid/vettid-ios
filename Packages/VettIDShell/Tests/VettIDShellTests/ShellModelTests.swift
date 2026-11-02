@@ -10,8 +10,9 @@ import VettIDData
 
     /// vettid-android `TopLevelDestination`: Messages, Connections, Approvals | Vault, History | Settings, Help.
     @Test func theDrawerIsAndroids() {
-        #expect(TopLevelDestination.sections == [[.messages, .connections, .approvals], [.items, .history], [.settings, .help]])
-        #expect(TopLevelDestination.allCases.map(\.key) == ["messages", "connections", "approvals", "items", "history", "settings", "help"])
+        #expect(TopLevelDestination.sections == [[.messages, .connections, .approvals, .votes], [.items, .history], [.settings, .help]])
+        let keys = ["messages", "connections", "approvals", "votes", "items", "history", "settings", "help"]
+        #expect(TopLevelDestination.allCases.map(\.key) == keys)
         #expect(TopLevelDestination.fromKey("settings") == .settings && TopLevelDestination.fromKey("nope") == nil)
         #expect(TopLevelDestination.start == .messages)
         #expect(TopLevelDestination.allCases.filter(\.available) == [.settings, .help])

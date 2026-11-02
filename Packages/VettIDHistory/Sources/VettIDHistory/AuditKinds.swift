@@ -13,6 +13,21 @@ public enum AuditKinds {
         return { items.names }
     }
 
+    /// The titles of the votes in memory by (connection, proposal) (``VoteTitles/key(_:_:)``), read when asked; nil without Votes.
+    @MainActor
+    static func voteTitles(_ votes: (any VotesRepository)?) -> (@MainActor () -> [String: String])? {
+        guard let votes else { return nil }
+        return {
+            Dictionary(votes.votes.map { (VoteTitles.key($0.connectionID, $0.proposalID), $0.title) }, uniquingKeysWith: { a, _ in a })
+        }
+    }
+
+    /// A vote entry's vote title, from [titles] by the pair (the entry's connection, the `ref`'s proposal id); nil when not known.
+    static func voteTitle(_ kind: String, _ ref: String?, connectionID: String?, in titles: [String: String]?) -> String? {
+        guard let id = voteOf(kind, ref), let t = titles?[VoteTitles.key(connectionID, id)], !t.isEmpty else { return nil }
+        return t
+    }
+
     /// The kinds whose `ref` is an `item_id` (§10.9: the vault's search reads the item's name for them), with
     /// `leash.item.run`, `.proxy` and `.changed` (IOS-PLAN §4.1).
     public static let itemRefKinds: Set<String> = [
@@ -94,12 +109,39 @@ public enum AuditKinds {
         case unknown(String)
         case counted(String, n: Int, of: Int)
         case named(String, any: String, who: Who)
+        /// A vote entry (ANDROID-PLAN 0.1.102 "Votes"): [key] names the vote's title in quotes, [any] is the same without it (the
+        /// Votes list is not in memory); [service] puts the service's name first (the entry's connection, else "A service");
+        /// [reason] is a refusal's reason (a ``HistoryKindTexts`` key), last.
+        case vote(VoteTitle)
+    }
+
+    /// A vote entry's title: the text with the vote's title [key], without it [any]; [service] puts the service first; [reason].
+    public struct VoteTitle: Equatable, Sendable {
+        public let key: String
+        public let any: String
+        public let service: Bool
+        public let reason: String?
+    }
+
+    /// The vote entries whose `ref` is `<proposal_id>` or `<proposal_id>:<detail>`: the pair is with the entry's connection.
+    public static let voteKinds: Set<String> = [
+        "vote.cast", "vote.recorded", "vote.refused", "vote.conflict", "vote.receipt_rejected", "vote.extended",
+        "vote.extension_rejected", "vote.check_ok", "vote.check_unconfirmed", "vote.check_failed", "vote.check_gave_up",
+        "vote.released",
+    ]
+
+    /// The proposal id of a vote entry's `ref`; nil for another kind or an empty id.
+    public static func voteOf(_ kind: String, _ ref: String?) -> String? {
+        guard voteKinds.contains(kind), let id = ref?.split(separator: ":", maxSplits: 1, omittingEmptySubsequences: false).first,
+              !id.isEmpty else { return nil }
+        return String(id)
     }
 
     public static let kindAttempt = RecoveryRefs.kindAttempt
     public static let kindAttemptsUsed = "recovery.attempts_used"
     public static let kindClosed = RecoveryRefs.kindClosed
 
+    // swiftlint:disable cyclomatic_complexity
     /// How the entry of [kind] with [ref] reads (IOS-PLAN §4.1): the titles that depend on `ref` first, then those that
     /// name the connection, device or item, then the fixed titles.
     public static func title(_ kind: String, _ ref: String? = nil) -> Title {
@@ -118,6 +160,7 @@ public enum AuditKinds {
         default:
             break
         }
+        if let v = voteTitle(kind, ref) { return v }
         if let n = named[kind] { return n }
         if let t = titles[kind] { return .known(t) }
         if kind.hasSuffix(summary), let t = titles[String(kind.dropLast(summary.count))] { return .summary(t) }
@@ -126,6 +169,51 @@ public enum AuditKinds {
             return .dropped(String(kind.dropFirst(drop.count)).replacingOccurrences(of: "_", with: " "))
         }
         return .unknown(kind)
+    }
+
+    /// The vote kinds of ANDROID-PLAN 0.1.102 "Votes" (History): the title depends on `ref`'s suffix for some.
+    private static func voteTitle(_ kind: String, _ ref: String?) -> Title? {
+        let detail = ref.flatMap { r in r.firstIndex(of: ":").map { String(r[r.index(after: $0)...]) } }
+        func vote(_ k: String, service: Bool = false, reason: String? = nil) -> Title {
+            .vote(VoteTitle(key: "history_kind_vote_\(k)", any: "history_kind_vote_\(k)_any", service: service, reason: reason))
+        }
+        func service(_ k: String) -> Title { .named("history_kind_vote_\(k)", any: "history_kind_vote_\(k)_any", who: .connection) }
+        switch kind {
+        case "vote.cast": return vote("cast")
+        case "vote.recorded": return vote("recorded", service: true)
+        case "vote.refused": return vote("refused", service: true, reason: refusedReason(detail))
+        case "vote.conflict": return vote("conflict", service: true)
+        case "vote.receipt_rejected": return vote("receipt_rejected")
+        case "vote.extended": return vote("extended")
+        case "vote.extension_rejected": return vote("extension_rejected")
+        case "vote.check_ok": return vote("check_ok")
+        case "vote.check_unconfirmed": return vote("check_unconfirmed")
+        case "vote.check_failed": return vote("check_failed")
+        case "vote.check_gave_up": return vote("check_gave_up")
+        case "vote.released": return vote("released")
+        case "vote.proposal_rejected": return service("proposal_rejected")
+        case "vote.proposal_conflict":
+            switch detail {
+            case "mismatch": return service("site_mismatch")
+            case "not_listed": return service("not_listed")
+            case "unpublished": return service("unpublished")
+            default: return service("two_versions")
+            }
+        default: return nil
+        }
+    }
+
+    // swiftlint:enable cyclomatic_complexity
+
+    /// A refusal's reason in words; a code this app does not know is "not accepted".
+    private static func refusedReason(_ code: String?) -> String {
+        switch code {
+        case "closed", "late": "history_vote_reason_closed"
+        case "not_active": "history_vote_reason_not_active"
+        case "not_eligible": "history_vote_reason_not_eligible"
+        case "connection_ended": "history_vote_reason_connection_ended"
+        default: "history_vote_reason_not_accepted"
+        }
     }
 
     private static func closedTitle(_ reason: String?) -> String {

@@ -3,7 +3,7 @@ import PackageDescription
 
 // The app's shell (vettid-android `app/ui`): the drawer and its destinations, the avatar sheet, the owner check's
 // banners (IOS-PLAN §8 I1.8, ID14), where the connect flow and an opened invitation link go (I2.1), the messages (I2.2),
-// approvals, notifications and History (I2.3), the Vault (I3.1).
+// approvals, notifications and History (I2.3), the Vault (I3.1), Votes (IOS-PLAN §4.16).
 let package = Package(
     name: "VettIDShell",
     defaultLocalization: "en",
@@ -25,6 +25,7 @@ let package = Package(
         .package(path: "../VettIDNotifications"),
         .package(path: "../VettIDHistory"),
         .package(path: "../VettIDItems"),
+        .package(path: "../VettIDVotes"),
     ],
     targets: [
         // What the shell decides (destinations, the account's lines, the notices' texts): no UI, so `swift test` runs
@@ -51,6 +52,7 @@ let package = Package(
                 .product(name: "VettIDNotifications", package: "VettIDNotifications"),
                 .product(name: "VettIDHistory", package: "VettIDHistory"),
                 .product(name: "VettIDItems", package: "VettIDItems"),
+                .product(name: "VettIDVotes", package: "VettIDVotes"),
                 .product(name: "VettIDUI", package: "VettIDUI", condition: .when(platforms: [.iOS])),
             ],
             resources: [.process("Resources/Localizable.xcstrings")]

@@ -22,6 +22,16 @@ public enum FeedTarget: Equatable, Sendable {
     /// Settings → Security (the daily check and the hold).
     case security
     case sheet
+    /// A vote's screen in Votes (ANDROID-PLAN 0.1.102): the pair names it, never the proposal id alone.
+    case vote(connectionID: String, proposalID: String)
+    /// The Votes list (a vote item without the ids that name its vote).
+    case voteList
+}
+
+/// The key of a vote's title in ``FeedNames/votes`` and History's rows: the pair (VAULT-MESSAGING 0.81.2), never the proposal
+/// id alone. Mirrors vettid-android `VoteTitles`.
+public enum VoteTitles {
+    public static func key(_ connectionID: String?, _ proposalID: String?) -> String { "\(connectionID ?? "")/\(proposalID ?? "")" }
 }
 
 /// How the app treats a feed kind (VAULT-MESSAGING §10.9 as of 0.50.0; ANDROID-PLAN §4 Notifications, 4). Only the
@@ -62,6 +72,8 @@ public enum FeedKinds {
         "identity.rotation_failed", "identity.rotate_conflict",
         // VAULT-MESSAGING 0.50.0 (owner decision of 2026-10-20): a `rollback` closure's urgent item.
         "recovery.generation_closed",
+        // VAULT-MESSAGING 0.81.0 §10.19.7 (ANDROID-PLAN 0.1.102 "Votes"): each carries `connection_id` with `ref` = `proposal_id`.
+        "vote.open", "vote.closing", "vote.result", "vote.problem",
     ]
 
     /// Feed kinds the app neither lists nor notifies (IOS-PLAN §4.1, de-duplication): one recovery raises one
@@ -121,6 +133,9 @@ public enum FeedKinds {
         case "credential.password_failed": return .history
         case "credential.rotated", "credential.reset": return .credential
         case "owner_check.failed", "owner_check.locked", "owner_check.hold_changed": return .security
+        case "vote.open", "vote.closing", "vote.result", "vote.problem":
+            guard let c, let ref, !ref.isEmpty else { return .voteList }
+            return .vote(connectionID: c, proposalID: ref)
         default: return .sheet
         }
     }

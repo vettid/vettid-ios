@@ -9,19 +9,30 @@ public struct FeedNames: Equatable, Sendable {
     public var connections: [String: ConnectionInfo]
     public var items: [String: String]
     public var approvals: [String: PendingApproval]
+    /// Vote titles from the Votes list in memory, by ``VoteTitles/key(_:_:)`` (cleaned, one line); the second line of a vote
+    /// item. Never a choice.
+    public var votes: [String: String]
 
-    public init(connections: [String: ConnectionInfo] = [:], items: [String: String] = [:], approvals: [String: PendingApproval] = [:]) {
+    public init(
+        connections: [String: ConnectionInfo] = [:], items: [String: String] = [:], approvals: [String: PendingApproval] = [:],
+        votes: [String: String] = [:]
+    ) {
         self.connections = connections
         self.items = items
         self.approvals = approvals
+        self.votes = votes
     }
 
     /// From the lists the repositories hold.
-    public init(connections: [ConnectionInfo], items: [String: String] = [:], approvals: [PendingApproval]) {
+    public init(connections: [ConnectionInfo], items: [String: String] = [:], approvals: [PendingApproval], votes: [VoteSummary] = []) {
         self.init(
             connections: Dictionary(connections.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a }),
             items: items,
-            approvals: Dictionary(approvals.map { ($0.key, $0) }, uniquingKeysWith: { a, _ in a })
+            approvals: Dictionary(approvals.map { ($0.key, $0) }, uniquingKeysWith: { a, _ in a }),
+            votes: Dictionary(
+                votes.compactMap { v in AccountNames.isolateOrNull(v.title).map { (VoteTitles.key(v.connectionID, v.proposalID), $0) } },
+                uniquingKeysWith: { a, _ in a }
+            )
         )
     }
 }
@@ -95,8 +106,17 @@ public extension FeedKinds {
         case "device.signer_changed": return signerChangeText(item.ref)
         case "connection.authenticate.requested" where authenticationPurpose(item, names) == .signin:
             return DataStrings.feedAuthenticateSigninBody
+        case "vote.open", "vote.closing", "vote.result": return voteLine(item, names)
         default: return eventLine(item) ?? itemName(item, names)
         }
+    }
+
+    /// A vote item's second line (ANDROID-PLAN 0.1.102 "Votes"): "<service>: <proposal title>", the title from the Votes list in
+    /// memory; the service alone without it. Never the member's choice (no feed item has it).
+    private static func voteLine(_ item: FeedItem, _ names: FeedNames) -> String {
+        let who = connectionName(item, names)
+        guard let title = names.votes[VoteTitles.key(item.connectionID, item.ref)] else { return who }
+        return DataStrings.feedVoteLine(who, title)
     }
 
     /// A challenge's purpose (§10.4, 0.65.0), from its pending approval of the same connection: the feed item does not
@@ -258,6 +278,10 @@ public extension FeedKinds {
             return RecoveryRefs.rollback(item.kind, ref: item.ref) ? DataStrings.feedRecoveryRollback : DataStrings.feedUnknown(item.kind)
         case "identity.rotation_failed": return DataStrings.feedRotationFailed
         case "identity.rotate_conflict": return DataStrings.feedRotateConflict(connectionName(item, names))
+        case "vote.open": return DataStrings.feedVoteOpen
+        case "vote.closing": return DataStrings.feedVoteClosing
+        case "vote.result": return DataStrings.feedVoteResult
+        case "vote.problem": return DataStrings.feedVoteProblem
         case "leash.item.run", "leash.item.proxy":
             let thing = details ? itemName(item, names) : nil
             return thing.map { DataStrings.feedLeashItemUsed($0) } ?? DataStrings.feedLeashItemUsedAny
@@ -288,6 +312,7 @@ public extension FeedKinds {
         case "identity.rotation_failed": DataStrings.feedRotationFailedBody
         case "identity.rotate_conflict": DataStrings.feedRotateConflictBody
         case "recovery.generation_closed": RecoveryRefs.rollback(item.kind, ref: item.ref) ? DataStrings.feedRecoveryRollbackBody : nil
+        case "vote.problem": DataStrings.feedVoteProblemBody
         default: nil
         }
     }

@@ -34,6 +34,25 @@ import VettIDVault
         return m
     }
 
+    /// Vote items (ANDROID-PLAN 0.1.102 "Votes"): the vote titles come from the Votes list in memory, and a vote item opens its vote.
+    @Test func voteItemsNameTheirVoteFromTheList() async {
+        let votes = FakeVotes()
+        votes.votes = [VoteSummary(proposalID: "p1", connectionID: "c1", title: "Adopt the budget", state: .open)]
+        let m = NotificationsViewModel(feed: feed, connections: connections, approvals: approvals, votes: votes)
+        await m.settle()
+        #expect(m.state.names.votes == [VoteTitles.key("c1", "p1"): "\u{2068}Adopt the budget\u{2069}"])
+        let item = Self.item("v1", "vote.open", connection: "c1", ref: "p1")
+        #expect(FeedKinds.title(item, m.state.names) == "A new vote")
+        #expect(FeedKinds.supporting(item, m.state.names)?.hasSuffix(": \u{2068}Adopt the budget\u{2069}") == true)
+        // The list changes: the names follow.
+        votes.votes = []
+        #expect(m.state.names.votes.isEmpty)
+        // Without Votes in the app nothing is named.
+        let none = NotificationsViewModel(feed: feed, connections: connections, approvals: approvals)
+        #expect(none.state.names.votes.isEmpty)
+        #expect(FeedKinds.target(item) == .vote(connectionID: "c1", proposalID: "p1"))
+    }
+
     @Test func sectionsPutUrgentUnreadFirstThenDays() {
         let items = [
             Self.item("a", at: "2026-10-19T09:00:00.000Z"), Self.item("b", "credential.alarm", at: "2026-10-18T09:00:00.000Z", priority: "urgent"),

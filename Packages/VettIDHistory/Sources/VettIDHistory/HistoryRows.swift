@@ -39,7 +39,8 @@ public extension HistoryState {
         let device = HistoryText.deviceName(e.deviceID, devices, isolate: true)
         let names = EntryNames(
             connection: connectionTitleName(e.connectionID), device: devices?.device(e.deviceID)?.rowName,
-            item: itemID.flatMap { itemNames?[$0] }
+            item: itemID.flatMap { itemNames?[$0] },
+            vote: AuditKinds.voteTitle(r.kind, e.ref, connectionID: e.connectionID, in: voteTitles)
         )
         return HistoryRow(
             title: HistoryText.title(r.kind, e.ref, names: names),
@@ -60,7 +61,9 @@ public extension HistoryState {
     }
 
     /// What an export of the list exports: its filter and the names it shows.
-    var exportContext: ExportContext { ExportContext(filter: filter, connectionNames: connectionNames, itemNames: itemNames) }
+    var exportContext: ExportContext {
+        ExportContext(filter: filter, connectionNames: connectionNames, itemNames: itemNames, voteTitles: voteTitles)
+    }
 }
 
 /// One line of an entry's screen: its label and value, in a monospaced face for identifiers.
@@ -88,7 +91,8 @@ public extension HistoryEntryState {
     var title: String {
         guard let e = entry else { return "" }
         // A removed or unnamed device, a gone connection or item: the title drops the name.
-        return HistoryText.title(e.kind, e.entry.ref, names: EntryNames(connection: connectionName, device: deviceName, item: itemName))
+        let names = EntryNames(connection: connectionName, device: deviceName, item: itemName, vote: voteTitle)
+        return HistoryText.title(e.kind, e.entry.ref, names: names)
     }
 
     /// The connection's line: its name, "Name not shared yet", or "Removed connection".

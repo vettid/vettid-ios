@@ -34,19 +34,21 @@ public struct HistoryRoute: View {
     private let chrome: ShellChrome?
     private let host: HistoryHost
     private let items: (any ItemsRepository)?
+    private let votes: (any VotesRepository)?
     @State private var model: HistoryViewModel?
     @State private var exportModel: HistoryExportViewModel?
 
     /// [items]: the Vault list, whose names the item entries show ("Deleted item" for one it does not hold).
     public init(
         history: any HistoryRepository, export: any HistoryExportRepository, connections: (any ConnectionsRepository)? = nil,
-        ownerChecks: (any OwnerCheckRepository)? = nil, items: (any ItemsRepository)? = nil, connectionID: String? = nil,
-        chrome: ShellChrome?, host: HistoryHost
+        ownerChecks: (any OwnerCheckRepository)? = nil, items: (any ItemsRepository)? = nil, votes: (any VotesRepository)? = nil,
+        connectionID: String? = nil, chrome: ShellChrome?, host: HistoryHost
     ) {
         self.history = history
         self.export = export
         self.connections = connections
         self.items = items
+        self.votes = votes
         self.ownerChecks = ownerChecks
         self.connectionID = connectionID
         self.chrome = chrome
@@ -70,7 +72,7 @@ public struct HistoryRoute: View {
             if model == nil {
                 model = HistoryViewModel(
                     history: history, connections: connections, ownerChecks: ownerChecks, connectionID: connectionID,
-                    items: items
+                    items: items, votes: votes
                 )
             }
             if exportModel == nil { exportModel = HistoryExportViewModel(repo: export) }
@@ -129,18 +131,20 @@ public struct HistoryEntryRoute: View {
     private let history: any HistoryRepository
     private let connections: (any ConnectionsRepository)?
     private let items: (any ItemsRepository)?
+    private let votes: (any VotesRepository)?
     private let host: HistoryHost
     @State private var model: HistoryEntryViewModel?
 
     /// [items]: the Vault list (the entry's item, its name and "Open the item").
     public init(
         _ seq: Int64, history: any HistoryRepository, connections: (any ConnectionsRepository)? = nil, items: (any ItemsRepository)? = nil,
-        host: HistoryHost
+        votes: (any VotesRepository)? = nil, host: HistoryHost
     ) {
         self.seq = seq
         self.history = history
         self.connections = connections
         self.items = items
+        self.votes = votes
         self.host = host
     }
 
@@ -148,7 +152,7 @@ public struct HistoryEntryRoute: View {
         HistoryEntryScreen(state: model?.state ?? HistoryEntryState(), actions: actions)
             .onAppear {
                 if model == nil {
-                    model = HistoryEntryViewModel(seq: seq, history: history, connections: connections, items: items)
+                    model = HistoryEntryViewModel(seq: seq, history: history, connections: connections, items: items, votes: votes)
                 }
             }
     }

@@ -105,7 +105,16 @@ check_app() {
 
   local text
   text=$(mktemp)
+  # ALLOWED_TEXTS (newline-separated, set by the caller): exact sentences of the owner-approved texts that name a host for the
+  # member; each is removed, whole, before the strings are looked for. Nothing else is: a host anywhere else still counts.
   bundle_text "${app}" >"${text}"
+  if [[ -n "${ALLOWED_TEXTS:-}" ]]; then
+    local sentence
+    while IFS= read -r sentence; do
+      [[ -n "${sentence}" ]] || continue
+      SENTENCE="${sentence}" LC_ALL=C perl -0777 -pi -e 's/\Q$ENV{SENTENCE}\E//g' "${text}"
+    done <<<"${ALLOWED_TEXTS}"
+  fi
 
   local problems=()
   local actual
@@ -130,14 +139,37 @@ check_app() {
 # App Attest service (IOS-PLAN §6.2) are linked.
 HARDWARE_KEYS=("SecureEnclavePhoneSecretSource" "DeviceCheckAppAttestService")
 
-check_release() {
-  check_app "$1" com.vettid.app "${PRODUCTION_HOSTS[@]}" "${HARDWARE_KEYS[@]}" "${DOCUMENT_TYPES[@]}" \
-    -- "${TEST_MARKERS[@]}" "${DEV_ONLY[@]}" "${STAGING_HOSTS[@]}" "${STAGING_KEYS[@]}" "${TEST_MANIFEST_KEY[@]}"
+# check_votes_host <app> <expected>: the site the app reads votes from (IOS-PLAN §4.16) is exactly the environment's own, as
+# configured (VettIDVotesHost); a text naming it elsewhere in the app does not stand in for it.
+check_votes_host() {
+  local app=$1 expected=$2 actual
+  actual=$(/usr/libexec/PlistBuddy -c 'Print :VettIDVotesHost' "${app}/Info.plist" 2>/dev/null || true)
+  if [[ "${actual}" != "${expected}" ]]; then
+    echo "${app}: VettIDVotesHost '${actual}', expected ${expected}" >&2
+    return 1
+  fi
+  echo "${app}: VettIDVotesHost ${expected}"
 }
 
+check_release() {
+  # Only Staging sets texts aside: a value in the caller's environment does not reach Release.
+  local ALLOWED_TEXTS=
+  check_app "$1" com.vettid.app "${PRODUCTION_HOSTS[@]}" "${HARDWARE_KEYS[@]}" "${DOCUMENT_TYPES[@]}" \
+    -- "${TEST_MARKERS[@]}" "${DEV_ONLY[@]}" "${STAGING_HOSTS[@]}" "${STAGING_KEYS[@]}" "${TEST_MANIFEST_KEY[@]}" &&
+    check_votes_host "$1" votes.vettid.org
+}
+
+# The two owner-approved texts of the Votes screens that name the production site for the member (vote_checking_list and
+# vote_checking_site, ANDROID-PLAN 0.1.108 §4 "Votes"): they are text, not a host the app talks to, and only Staging needs them
+# set aside (it refuses the production site's name everywhere else, also as a URL or as the configured host).
+STAGING_ALLOWED_TEXTS="VettID is checking this vote. It needs the list of services from votes.vettid.org. Check that this phone is online.
+VettID is checking this vote. It is waiting for the vote's documents from votes.vettid.org."
+
 check_staging() {
-  check_app "$1" com.vettid.app.staging "${STAGING_REQUIRED_HOSTS[@]}" "${HARDWARE_KEYS[@]}" "${DOCUMENT_TYPES[@]}" \
-    -- "${TEST_MARKERS[@]}" "${DEV_ONLY[@]}" "${PRODUCTION_HOSTS[@]}" "${TEST_MANIFEST_KEY[@]}"
+  ALLOWED_TEXTS="${STAGING_ALLOWED_TEXTS}" check_app "$1" com.vettid.app.staging "${STAGING_REQUIRED_HOSTS[@]}" "${HARDWARE_KEYS[@]}" "${DOCUMENT_TYPES[@]}" \
+    -- "${TEST_MARKERS[@]}" "${DEV_ONLY[@]}" "${PRODUCTION_HOSTS[@]}" "https://votes.vettid.org" "<string>votes.vettid.org</string>" \
+    "${TEST_MANIFEST_KEY[@]}" &&
+    check_votes_host "$1" votes.staging.vettid.org
 }
 
 app_of() { echo "${OUT}/$1.xcarchive/Products/Applications/VettID.app"; }
@@ -201,7 +233,7 @@ check_archive_products() {
 # The package products the VettID app links: exactly these (one per shipping package of project.yml).
 APP_PRODUCTS="VettIDCrypto VettIDAttestation VettIDRelay VettIDAltChan VettIDVault VettIDKeys VettIDData VettIDMedia
 VettIDNotify VettIDUI VettIDOnboarding VettIDSettings VettIDShell VettIDConnections VettIDMessages VettIDApprovals
-VettIDNotifications VettIDHistory VettIDItems"
+VettIDNotifications VettIDHistory VettIDItems VettIDVotes"
 
 # The VettID app target (whatever the scheme) links exactly APP_PRODUCTS (each product id resolved to its productName)
 # and compiles no file of AppDevStack/, read from the project file: its package products and its Sources phase.
@@ -367,6 +399,25 @@ if [[ ${SELF_TEST} -eq 1 ]]; then
     fi
     echo "self-test: ${config} refuses a planted '${planted}'"
   }
+  # plant_votes_host <config> <checker> <value>: the check must refuse a copy of the app whose VettIDVotesHost is <value>
+  # (the approved texts naming the production site do not make up for a missing or wrong configured host).
+  plant_votes_host() {
+    local config=$1 checker=$2 value=$3
+    local copy="${OUT}/planted/${config}/VettID.app"
+    rm -rf "${OUT}/planted/${config}"
+    mkdir -p "$(dirname "${copy}")"
+    cp -R "$(app_of "${config}")" "${copy}"
+    /usr/libexec/PlistBuddy -c "Set :VettIDVotesHost ${value}" "${copy}/Info.plist"
+    if "${checker}" "${copy}" >/dev/null 2>&1; then
+      echo "self-test FAILED: ${config} accepted VettIDVotesHost '${value}'" >&2
+      exit 1
+    fi
+    echo "self-test: ${config} refuses VettIDVotesHost '${value}'"
+  }
+  plant_votes_host Release check_release ""
+  plant_votes_host Release check_release "votes.staging.vettid.org"
+  plant_votes_host Staging check_staging ""
+  plant_votes_host Staging check_staging "votes.vettid.org"
   plant Release check_release "VettIDTesting"
   plant Release check_release "VettIDDataTesting"
   plant Release check_release "VETTID TEST ONLY: the repository-level fake"
@@ -390,6 +441,10 @@ if [[ ${SELF_TEST} -eq 1 ]]; then
   plant Release check_release "account.staging.vettid.org"
   plant Release check_release "votes.staging.vettid.org"
   plant Staging check_staging "votes.vettid.org"
+  plant Staging check_staging "from votes.vettid.org/index.json"
+  plant Staging check_staging "https://votes.vettid.org"
+  plant Staging check_staging "<string>votes.vettid.org</string>"
+  plant Staging check_staging "VettID is checking this vote. It needs the list of services from votes.vettid.org/index.json. Check that this phone is online."
   plant Release check_release "Scan: another environment"
   plant Staging check_staging "Scan: another environment"
   plant Staging check_staging "TESTTEAM00.com.vettid.app"

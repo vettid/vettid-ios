@@ -29,6 +29,7 @@ public extension TopLevelDestination {
         case .messages: ShellStrings.navMessages
         case .connections: ShellStrings.navConnections
         case .approvals: ShellStrings.navApprovals
+        case .votes: ShellStrings.navVotes
         case .items: ShellStrings.navItems
         case .history: ShellStrings.navHistory
         case .settings: ShellStrings.navSettings
@@ -41,6 +42,7 @@ public extension TopLevelDestination {
         case .messages: .messages
         case .connections: .connections
         case .approvals: .approvals
+        case .votes: .howToVote
         case .items: .vault
         case .history: .history
         case .settings: .settings
@@ -49,9 +51,13 @@ public extension TopLevelDestination {
     }
 
     /// The drawer's sections as rows, with [badges]' counts (vettid-android `drawerSections`: approvals waiting for a
-    /// decision, conversations with unread messages).
-    @MainActor static func drawerSections(badges: [TopLevelDestination: Int] = [:]) -> [[DrawerItem]] {
-        sections.map { group in group.map { DrawerItem(key: $0.key, label: $0.label, icon: $0.symbol, badge: badges[$0] ?? 0) } }
+    /// decision, conversations with unread messages, open votes not voted on). The Votes entry is there only with
+    /// [votesShown]: the vault answers `vote.list` and holds a vote or a connection to connect again (no empty screen).
+    @MainActor static func drawerSections(badges: [TopLevelDestination: Int] = [:], votesShown: Bool = false) -> [[DrawerItem]] {
+        sections.map { group in
+            group.filter { $0 != .votes || votesShown }
+                .map { DrawerItem(key: $0.key, label: $0.label, icon: $0.symbol, badge: badges[$0] ?? 0) }
+        }
     }
 }
 #endif
