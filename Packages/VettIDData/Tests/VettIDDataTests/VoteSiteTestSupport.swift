@@ -146,11 +146,13 @@ enum VoteResultsFixture {
     /// A TEST-ONLY voting key from a fixed seed.
     private static let key = try! Ed25519PrivateKey.fromSeed([UInt8](repeating: 3, count: 32)) // swiftlint:disable:this force_try
     static var vk: [UInt8] { key.publicKey }
+    /// The proposal the results are of (the rows and results name it too).
+    static let proposalID = "01JBQZ0000000000000000000B"
 
     static func lp(_ x: [UInt8]) -> [UInt8] { [UInt8(x.count >> 8), UInt8(x.count & 0xFF)] + x }
 
     static var proposal: [UInt8] {
-        Array(#"{"choices":[{"id":"yes","label":"Yes"},{"id":"no","label":"No"},{"id":"abstain","label":"Abstain"}],"eligible":2,"record_root":"\#(Base64s.encodeStd(VoteMerkle.root([otherTag, tag])))","v":1}"#.utf8)
+        Array(#"{"choices":[{"id":"yes","label":"Yes"},{"id":"no","label":"No"},{"id":"abstain","label":"Abstain"}],"eligible":2,"proposal_id":"\#(proposalID)","record_root":"\#(Base64s.encodeStd(VoteMerkle.root([otherTag, tag])))","v":1}"#.utf8)
     }
 
     static var ballotSig: [UInt8] {
@@ -159,14 +161,14 @@ enum VoteResultsFixture {
     }
 
     static var rows: [UInt8] {
-        Array(#"{"rows":[{"record_tag":"\#(Base64s.encodeStd(otherTag))","ballot":null},{"record_tag":"\#(Base64s.encodeStd(tag))","ballot":{"vk":"\#(Base64s.encodeStd(vk))","choice_id":"yes","ballot_sig":"\#(Base64s.encodeStd(ballotSig))"}}]}"#.utf8)
+        Array(#"{"proposal_id":"\#(proposalID)","rows":[{"record_tag":"\#(Base64s.encodeStd(otherTag))","ballot":null},{"record_tag":"\#(Base64s.encodeStd(tag))","ballot":{"vk":"\#(Base64s.encodeStd(vk))","choice_id":"yes","ballot_sig":"\#(Base64s.encodeStd(ballotSig))"}}],"v":1}"#.utf8)
     }
 
     static var results: [UInt8] {
         let leaves = [otherTag, tag + lp(vk) + lp(Array("yes".utf8)) + lp(ballotSig)]
         let root = VoteMerkle.root(leaves)
         let sig = Base64s.encodeStd([UInt8](repeating: 5, count: 64))
-        return Array(#"{"counts":{"ballots":1,"eligible":2,"removed":0,"unhandled":0},"proposal":{"doc":"\#(Base64s.encodeStd(proposal))","sig":"\#(sig)"},"rows_hash":"\#(Base64s.encodeStd(Bytes.sha256(rows)))","rows_root":"\#(Base64s.encodeStd(root))","tally":{"abstain":0,"no":0,"yes":1}}"#.utf8)
+        return Array(#"{"counts":{"ballots":1,"eligible":2,"removed":0,"unhandled":0},"proposal":{"doc":"\#(Base64s.encodeStd(proposal))","sig":"\#(sig)"},"proposal_id":"\#(proposalID)","rows_hash":"\#(Base64s.encodeStd(Bytes.sha256(rows)))","rows_root":"\#(Base64s.encodeStd(root))","tally":{"abstain":0,"no":0,"yes":1}}"#.utf8)
     }
 
     /// Serves the results of [pid] on [site].

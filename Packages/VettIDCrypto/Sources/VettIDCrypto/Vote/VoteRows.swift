@@ -50,7 +50,13 @@ public enum VoteRows {
         let proposalHash: [UInt8]
         let recordRoot: [UInt8]
         let choices: Set<String>
+        let proposalID: String
     }
+
+    /// The most bytes a row takes in `rows.json` (a full ballot is about 250), and the most the rest of it takes: a
+    /// larger `rows.json` is not the one the results name, and is refused before it is parsed.
+    private static let rowBytes = 256
+    private static let rowsOverhead = 4_096
 
     /// One row of `rows.json`: its tag, and its ballot (`vk`, `choice_id`, `ballot_sig`) as the site has it, or nil.
     private struct Row {
@@ -62,8 +68,10 @@ public enum VoteRows {
     /// ``ResultsProblem`` for anything that does not hold, including a tag that has no row.
     public static func ownRow(results resultsBytes: [UInt8], rows rowsBytes: [UInt8], recordTag: [UInt8]) throws -> OwnRow {
         let published = try read(resultsBytes)
+        // Bounded before anything else is done with them: as many rows as `eligible`, each of at most ``rowBytes``.
+        if UInt64(rowsBytes.count) > published.eligible * UInt64(rowBytes) + UInt64(rowsOverhead) { throw ResultsProblem("rows") }
         if !Bytes.constantTimeEquals(Bytes.sha256(rowsBytes), published.rowsHash) { throw ResultsProblem("rows_hash") }
-        let rows = try readRows(rowsBytes, eligible: published.eligible)
+        let rows = try readRows(rowsBytes, eligible: published.eligible, proposalID: published.proposalID)
         // The tags are the electorate the signed proposal fixed before anyone voted (§8.1, §8.2: record leaves in order).
         if !Bytes.constantTimeEquals(VoteMerkle.root(rows.map(\.tag)), published.recordRoot) {
             throw ResultsProblem("record_root")
@@ -128,6 +136,9 @@ public enum VoteRows {
             let proposalBytes = try results.obj("proposal").base64("doc")
             let proposal = try StrictJson.parseObject(proposalBytes)
             if try proposal.uint("eligible", min: 1, max: UInt64(maxRows)) != eligible { throw ResultsProblem("results") }
+            // §8.5: the results are of the proposal they carry.
+            let proposalID = try proposal.string("proposal_id")
+            if try results.string("proposal_id") != proposalID { throw ResultsProblem("results") }
             var choices = Set<String>()
             for c in try proposal.array("choices") {
                 let id = try c.asObject().string("id")
@@ -143,7 +154,7 @@ public enum VoteRows {
                 rowsHash: try results.base64("rows_hash", VoteMerkle.hashSize),
                 rowsRoot: try results.base64("rows_root", VoteMerkle.hashSize),
                 eligible: eligible, ballots: ballots, tally: tally, proposalHash: Bytes.sha256(proposalBytes),
-                recordRoot: try proposal.base64("record_root", VoteMerkle.hashSize), choices: choices
+                recordRoot: try proposal.base64("record_root", VoteMerkle.hashSize), choices: choices, proposalID: proposalID
             )
         } catch let p as ResultsProblem {
             throw p
@@ -152,34 +163,45 @@ public enum VoteRows {
         }
     }
 
-    /// The rows of `rows.json`: as many as [eligible], sorted by tag and each tag once (§8.2: another order is not the
-    /// tree the roots were made over).
-    private static func readRows(_ bytes: [UInt8], eligible: UInt64) throws -> [Row] {
+    /// The rows of `rows.json` (§8.5: exactly `v` 1, the results' `proposal_id` and `rows`, nested no deeper than a
+    /// ballot): as many as [eligible], sorted by tag and each tag once (§8.2: another order is not the tree the roots were
+    /// made over).
+    private static func readRows(_ bytes: [UInt8], eligible: UInt64, proposalID: String) throws -> [Row] {
         do {
-            let items = try StrictJson.parseObject(bytes).array("rows")
+            let top = try StrictJson.parseObject(bytes, maxDepth: 4)
+            guard only(top, ["v", "proposal_id", "rows"]), try top.uint("v", min: 1, max: 1) == 1,
+                  try top.string("proposal_id") == proposalID
+            else { throw ResultsProblem("rows") }
+            let items = try top.array("rows")
             if UInt64(items.count) != eligible { throw ResultsProblem("rows_count") }
             var out: [Row] = []
             out.reserveCapacity(items.count)
             for e in items {
-                let row = try e.asObject()
-                // §8.5: exactly these members (a verifier refuses unknown or missing fields).
-                if !only(row, ["record_tag", "ballot"]) { throw ResultsProblem("rows") }
-                let tag = try row.base64("record_tag", VoteMerkle.hashSize)
-                if let previous = out.last?.tag, !previous.lexicographicallyPrecedes(tag) { throw ResultsProblem("rows_order") }
-                switch row["ballot"] {
-                case .null?: out.append(Row(tag: tag, ballot: nil))
-                case let v?:
-                    let ballot = try v.asObject()
-                    if !only(ballot, ["vk", "choice_id", "ballot_sig"]) { throw ResultsProblem("rows") }
-                    out.append(Row(tag: tag, ballot: ballot))
-                case nil: throw ResultsProblem("rows")
-                }
+                let row = try readRow(e)
+                if let previous = out.last?.tag, !previous.lexicographicallyPrecedes(row.tag) { throw ResultsProblem("rows_order") }
+                out.append(row)
             }
             return out
         } catch let p as ResultsProblem {
             throw p
         } catch {
             throw ResultsProblem("rows")
+        }
+    }
+
+    /// One row (§8.5: exactly `record_tag` and `ballot`, a ballot exactly `vk`, `choice_id` and `ballot_sig`; a verifier
+    /// refuses unknown or missing fields).
+    private static func readRow(_ e: JsonValue) throws -> Row {
+        let row = try e.asObject()
+        if !only(row, ["record_tag", "ballot"]) { throw ResultsProblem("rows") }
+        let tag = try row.base64("record_tag", VoteMerkle.hashSize)
+        switch row["ballot"] {
+        case .null?: return Row(tag: tag, ballot: nil)
+        case let v?:
+            let ballot = try v.asObject()
+            if !only(ballot, ["vk", "choice_id", "ballot_sig"]) { throw ResultsProblem("rows") }
+            return Row(tag: tag, ballot: ballot)
+        case nil: throw ResultsProblem("rows")
         }
     }
 

@@ -322,4 +322,40 @@ struct VoteRowsTests {
             try VoteRows.ownRow(results: try results(["rows_root": otherRoot], rows: bytes), rows: bytes, recordTag: tag)
         }
     }
+
+    /// §8.5: `rows.json` is exactly `v` 1, the results' `proposal_id` and `rows`, nested no deeper than a ballot; and the
+    /// results are of the proposal they carry.
+    @Test func rowsOrResultsOfAnotherProposalOrShapeAreAProblem() throws {
+        let base = try StrictJson.parseObject(docs.str("rows"))
+        let tag = try rows()[0].base64("record_tag", 32)
+        let variants = [
+            rebuild(base, ["v": "2"]),
+            rebuild(base, ["proposal_id": JsonBuilder.quote("01JBQZ0000000000000000000B")]),
+            String(rebuild(base, [:]).dropLast()) + #","note":1}"#,
+            "{" + JsonBuilder.quote("rows") + ":" + (base["rows"]?.raw ?? "") + "}",
+            rebuild(base, ["rows": #"[{"record_tag":"AA==","ballot":{"vk":{"x":{"y":1}}}}]"#]),
+        ]
+        let anyRoot = ["rows_root": JsonBuilder.quote(Base64s.encodeStd(rep(1, 32)))]
+        for variant in variants {
+            let bytes = Array(variant.utf8)
+            #expect(throws: ResultsProblem("rows"), "\(variant)") {
+                try VoteRows.ownRow(results: try results(anyRoot, rows: bytes), rows: bytes, recordTag: tag)
+            }
+        }
+        let rowsBytes = Array(try docs.str("rows").utf8)
+        let other = JsonBuilder.quote("01JBQZ0000000000000000000B")
+        #expect(throws: ResultsProblem("results")) {
+            try VoteRows.ownRow(results: try results(["proposal_id": other], rows: rowsBytes), rows: rowsBytes, recordTag: tag)
+        }
+    }
+
+    /// A `rows.json` larger than `eligible` rows can be is refused before it is hashed or parsed.
+    @Test func rowsLargerThanTheElectorateCanMakeAreAProblem() throws {
+        let tag = try rows()[0].base64("record_tag", 32)
+        let big = Array(try docs.str("rows").utf8) + [UInt8](repeating: 0x20, count: 3 * 256 + 4_096)
+        let anyRoot = ["rows_root": JsonBuilder.quote(Base64s.encodeStd(rep(1, 32)))]
+        #expect(throws: ResultsProblem("rows")) {
+            try VoteRows.ownRow(results: try results(anyRoot, rows: big), rows: big, recordTag: tag)
+        }
+    }
 }
