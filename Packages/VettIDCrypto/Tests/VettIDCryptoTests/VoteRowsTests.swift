@@ -121,10 +121,20 @@ struct VoteRowsTests {
         "{" + o.members.map { JsonBuilder.quote($0.name) + ":" + (over[$0.name] ?? $0.value.raw) }.joined(separator: ",") + "}"
     }
 
-    /// The vector's results, with [over] replaced, and `rows_hash` made [rows]'s.
+    /// The vector's results, with [over] replaced, and `rows_hash` and (unless [over] names it) `rows_root` made [rows]'s,
+    /// so that the check under test is the one that fails.
     private func results(_ over: [String: String] = [:], rows rowsBytes: [UInt8]) throws -> [UInt8] {
         var all = over
         all["rows_hash"] = JsonBuilder.quote(Base64s.encodeStd(Bytes.sha256(rowsBytes)))
+        if all["rows_root"] == nil {
+            let leaves = try StrictJson.parseObject(rowsBytes).array("rows").map { e -> [UInt8] in
+                let row = try e.asObject()
+                let tag = try row.base64("record_tag", 32)
+                if case .object(let b)? = row["ballot"] { return try VoteRows.leaf(tag: tag, ballot: b) }
+                return tag
+            }
+            all["rows_root"] = JsonBuilder.quote(Base64s.encodeStd(VoteMerkle.root(leaves)))
+        }
         return Array(rebuild(try StrictJson.parseObject(docs.str("results")), all).utf8)
     }
 
@@ -251,6 +261,61 @@ struct VoteRowsTests {
         #expect(throws: ResultsProblem("ballot_sig")) {
             let changed = try results(proposal: ["title": JsonBuilder.quote("Another")], rows: rowsBytes)
             return try VoteRows.ownRow(results: changed, rows: rowsBytes, recordTag: tag)
+        }
+    }
+
+    /// A proposal whose choices repeat an id or carry one the vault would refuse is no proposal to count against.
+    @Test func aProposalWithBadChoicesIsAProblem() throws {
+        let rowsBytes = Array(try docs.str("rows").utf8)
+        let tag = try rows()[0].base64("record_tag", 32)
+        for choices in [
+            #"[{"id":"yes","label":"Yes"},{"id":"yes","label":"No"},{"id":"abstain","label":"Abstain"}]"#,
+            #"[{"id":"Yes","label":"Yes"},{"id":"no","label":"No"},{"id":"abstain","label":"Abstain"}]"#,
+        ] {
+            #expect(throws: ResultsProblem("results"), "\(choices)") {
+                let changed = try results(proposal: ["choices": choices], rows: rowsBytes)
+                return try VoteRows.ownRow(results: changed, rows: rowsBytes, recordTag: tag)
+            }
+        }
+    }
+
+    /// §8.5: a row without its `ballot`, or a row or ballot with a member the schema does not have, is refused.
+    @Test func rowsWithMissingOrUnknownMembersAreAProblem() throws {
+        let all = try rows()
+        let tag = try all[0].base64("record_tag", 32)
+        let at = try #require(all.firstIndex { if case .object? = $0["ballot"] { true } else { false } })
+        let empty = try #require(all.firstIndex { if case .null? = $0["ballot"] { true } else { false } })
+        let ballot = try all[at].obj("ballot")
+        let variants: [String] = [
+            "{" + JsonBuilder.quote("record_tag") + ":" + (all[empty]["record_tag"]?.raw ?? "") + "}",
+            rebuild(all[empty], [:]).dropLast() + #","note":1}"#,
+            rebuild(all[at], ["ballot": String(rebuild(ballot, [:]).dropLast()) + #","note":1}"#]),
+        ]
+        for (i, variant) in variants.enumerated() {
+            var changed = all
+            changed[i == 0 || i == 1 ? empty : at] = try StrictJson.parseObject(variant)
+            let bytes = try rowsDoc(changed)
+            #expect(throws: ResultsProblem("rows"), "\(variant)") {
+                try VoteRows.ownRow(results: try results(rows: bytes), rows: bytes, recordTag: tag)
+            }
+        }
+    }
+
+    /// A tree that is not the published one fails before any ballot's signature is checked.
+    @Test func theTreeIsCheckedBeforeTheSignatures() throws {
+        let all = try rows()
+        let tag = try all[0].base64("record_tag", 32)
+        let at = try #require(all.firstIndex { if case .object? = $0["ballot"] { true } else { false } })
+        var sig = try all[at].obj("ballot").base64("ballot_sig", 64)
+        sig[0] ^= 1
+        var changed = all
+        changed[at] = try StrictJson.parseObject(
+            rebuild(all[at], ["ballot": rebuild(try all[at].obj("ballot"), ["ballot_sig": JsonBuilder.quote(Base64s.encodeStd(sig))])])
+        )
+        let bytes = try rowsDoc(changed)
+        let otherRoot = JsonBuilder.quote(Base64s.encodeStd(rep(1, 32)))
+        #expect(throws: ResultsProblem("rows_root")) {
+            try VoteRows.ownRow(results: try results(["rows_root": otherRoot], rows: bytes), rows: bytes, recordTag: tag)
         }
     }
 }

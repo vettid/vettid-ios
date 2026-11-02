@@ -23,14 +23,14 @@ public struct ResultsProblem: Error, Equatable, Sendable {
 
 /// The observer's check (BALLOT-PROTOCOL §8.4, items 2 to 4) the app does from the site's bytes before
 /// `vote.results.submit` (VAULT-MESSAGING §10.19.6 step 1): the hash of `rows.json`; the tags in order, unique, as many as
-/// `eligible`, and their tree against the proposal's `record_root`; every ballot's `ballot_sig` under its `vk` and its
-/// choice one of the proposal's; the rows' tree against `rows_root`; the tally and `ballots` recomputed; and the member's
+/// `eligible`, and their tree against the proposal's `record_root`; the rows' tree against `rows_root`; every ballot's
+/// `ballot_sig` under its `vk` and its choice one of the proposal's; the tally and `ballots` recomputed; and the member's
 /// row. Results that fail any of these are not submitted, and the member is told of a problem with the published results.
-/// The signatures of the documents, the anchor and the verdict are the vault's; it never relies on this. Mirrors
-/// vettid-android `VoteRows`.
+/// The signatures of the documents, the anchor and the verdict are the vault's; it never relies on this. Builds on
+/// vettid-android `VoteRows` (the hash, order and tree), with the signatures, the tally and `record_root` added.
 public enum VoteRows {
-    /// The most rows read: a ceiling far above any electorate the results can name (the site's results are at most 512 KiB
-    /// and a row is about 250 bytes, so about 2,000 rows), small enough to bound the work on a hostile `rows.json`.
+    /// The most rows read: far above any electorate a vote is held for, and small enough to bound the work on a hostile
+    /// `rows.json` (the app fetches at most about 256 bytes a row of it).
     public static let maxRows = 100_000
 
     /// The label of `ballot_sig` (BALLOT-PROTOCOL §5), its `0x00` included (§2).
@@ -68,30 +68,33 @@ public enum VoteRows {
         if !Bytes.constantTimeEquals(VoteMerkle.root(rows.map(\.tag)), published.recordRoot) {
             throw ResultsProblem("record_root")
         }
+        // The cheap tree check first: a hostile `rows.json` costs no signature checks unless it is the published tree.
         var leaves: [[UInt8]] = []
         leaves.reserveCapacity(rows.count)
-        var counted: [String: UInt64] = [:]
         var found: Int?
         for (i, row) in rows.enumerated() {
-            if let b = row.ballot {
-                let choice = try ballotChoice(row.tag, b, published)
-                counted[choice, default: 0] += 1
-                leaves.append(try leaf(tag: row.tag, ballot: b))
-            } else {
-                leaves.append(row.tag)
-            }
+            leaves.append(try row.ballot.map { try leaf(tag: row.tag, ballot: $0) } ?? row.tag)
             if Bytes.constantTimeEquals(row.tag, recordTag) { found = i }
         }
         if !Bytes.constantTimeEquals(VoteMerkle.root(leaves), published.rowsRoot) { throw ResultsProblem("rows_root") }
-        // §8.4 item 4: every choice's count and the number of ballots are the rows', exactly.
-        let ballots = counted.values.reduce(0, +)
-        if ballots != published.ballots { throw ResultsProblem("ballots") }
-        for choice in published.choices where counted[choice, default: 0] != published.tally[choice] {
-            throw ResultsProblem("tally")
-        }
+        try checkTally(rows, published)
         guard let found else { throw ResultsProblem("no_row") }
         guard let path = VoteMerkle.proof(leaves, found) else { throw ResultsProblem("rows") }
         return OwnRow(ballot: rows[found].ballot, index: UInt64(found), treeSize: UInt64(leaves.count), path: path)
+    }
+
+    /// §8.4 items 3 and 4: every ballot verifies and names one of the proposal's choices, and every choice's count and
+    /// the number of ballots are the rows', exactly.
+    private static func checkTally(_ rows: [Row], _ published: Published) throws {
+        var counted: [String: UInt64] = [:]
+        for row in rows {
+            guard let b = row.ballot else { continue }
+            counted[try ballotChoice(row.tag, b, published), default: 0] += 1
+        }
+        if counted.values.reduce(0, +) != published.ballots { throw ResultsProblem("ballots") }
+        for choice in published.choices where counted[choice, default: 0] != published.tally[choice] {
+            throw ResultsProblem("tally")
+        }
     }
 
     /// A ballot's choice, once its choice is one of the proposal's and its `ballot_sig` verifies under its `vk` for
@@ -159,11 +162,17 @@ public enum VoteRows {
             out.reserveCapacity(items.count)
             for e in items {
                 let row = try e.asObject()
+                // §8.5: exactly these members (a verifier refuses unknown or missing fields).
+                if !only(row, ["record_tag", "ballot"]) { throw ResultsProblem("rows") }
                 let tag = try row.base64("record_tag", VoteMerkle.hashSize)
                 if let previous = out.last?.tag, !previous.lexicographicallyPrecedes(tag) { throw ResultsProblem("rows_order") }
                 switch row["ballot"] {
-                case nil, .null?: out.append(Row(tag: tag, ballot: nil))
-                case let v?: out.append(Row(tag: tag, ballot: try v.asObject()))
+                case .null?: out.append(Row(tag: tag, ballot: nil))
+                case let v?:
+                    let ballot = try v.asObject()
+                    if !only(ballot, ["vk", "choice_id", "ballot_sig"]) { throw ResultsProblem("rows") }
+                    out.append(Row(tag: tag, ballot: ballot))
+                case nil: throw ResultsProblem("rows")
                 }
             }
             return out
@@ -182,6 +191,11 @@ public enum VoteRows {
         // [a-z0-9-]{1,32}, as vettid-vault's ValidChoiceID: a row with another id is not one the vault would accept.
         if !validChoice(id) { throw ResultsProblem("rows") }
         return Bytes.concat(tag, lp(vk), lp(Array(id.utf8)), lp(sig))
+    }
+
+    /// Whether [o] has exactly the members [names] (names are unique: a strict parse).
+    private static func only(_ o: JsonObject, _ names: Set<String>) -> Bool {
+        o.members.count == names.count && o.members.allSatisfy { names.contains($0.name) }
     }
 
     /// `[a-z0-9-]{1,32}`.

@@ -347,8 +347,8 @@ final class VoteSiteRunner {
         try? await serially(.runs) { [self] in try await submitDue() }
     }
 
-    /// The results of a closed vote, fetched, checked as far as the app can (BALLOT-PROTOCOL §8.4: the rows' hash, order
-    /// and tree, and the member's row) and handed to the vault (the member's **Check again**, and the run's retry). The
+    /// The results of a closed vote, fetched, checked as an observer does (BALLOT-PROTOCOL §8.4 items 2 to 4: the rows'
+    /// hash, order and trees, every ballot's signature and choice, the tally and the member's row) and handed to the vault (the member's **Check again**, and the run's retry). The
     /// vault alone judges. An attempt already on its way for the vote is joined, not repeated.
     func checkResults(_ key: VoteKey, quietly: Bool) async throws -> ResultsOutcome {
         guard site.configured else { return .siteUnreachable }
