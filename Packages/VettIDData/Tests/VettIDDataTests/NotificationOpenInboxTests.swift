@@ -46,4 +46,16 @@ struct NotificationOpenInboxTests {
         taps.waitEnded(for: "f1")
         #expect(taps.itemID == nil && !taps.waitOver)
     }
+
+    @Test func aShellThatLeftWaitsAgainForTheItem() {
+        let taps = NotificationOpenInbox()
+        taps.offer("f1")
+        _ = taps.startWaiting()
+        taps.rearm()
+        taps.waitEnded(for: "f1")
+        #expect(taps.itemID == "f1" && !taps.waitOver, "the old wait's end is ignored")
+        #expect(taps.startWaiting())
+        taps.waitEnded(for: "f1")
+        #expect(taps.waitOver)
+    }
 }

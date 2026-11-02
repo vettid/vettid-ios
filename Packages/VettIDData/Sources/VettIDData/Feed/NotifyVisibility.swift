@@ -58,6 +58,13 @@ public final class NotificationOpenInbox: CustomStringConvertible, CustomDebugSt
         waitOver = true
     }
 
+    /// The shell left (the vault locked, a check took its place): a tap still waiting keeps its item, and its item is
+    /// waited for again when the shell is back, since the feed is read again then.
+    public func rearm() {
+        waitOver = false
+        waiting = false
+    }
+
     public func consume() {
         itemID = nil
         waitOver = false

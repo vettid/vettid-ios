@@ -128,13 +128,19 @@ struct ShellNotificationsHook: ViewModifier {
     func body(content: Content) -> some View {
         content
             .onAppear(perform: update)
-            .onDisappear { notifications.visibility.set(nil) }
+            .onDisappear {
+                notifications.visibility.set(nil)
+                // The vault locked or a check took the shell's place: the tap's item is waited for again after it.
+                notifications.taps.rearm()
+            }
             .onChange(of: model.notifyVisible) { _, _ in show() }
             .onChange(of: appLocked) { _, _ in update() }
             .onChange(of: model.asked) { _, _ in update() }
             .onChange(of: scenePhase) { _, now in
                 show()
-                if now == .active { notifications.refreshAllowed() }
+                guard now == .active else { return }
+                notifications.refreshAllowed()
+                openTapped()
             }
             .onChange(of: notifications.taps.itemID) { _, _ in openTapped() }
             .onChange(of: notifications.taps.waitOver) { _, _ in openTapped() }
@@ -155,7 +161,8 @@ struct ShellNotificationsHook: ViewModifier {
     /// acts by itself, it only asks the shell to decide again (``NotificationOpenInbox/waitOver``).
     private func openTapped() {
         let taps = notifications.taps
-        guard inFront, let id = taps.itemID else { return }
+        // Only in the foreground: a wait that ends in the background leaves the tap for the return.
+        guard inFront, scenePhase == .active, let id = taps.itemID else { return }
         let item = feed.items.first { $0.itemID == id }
         guard item != nil || taps.waitOver else {
             if taps.startWaiting() { wait(for: id) }
