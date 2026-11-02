@@ -173,6 +173,15 @@ struct VotesManagerTests: VotesTestCase {
         // The reserved abstain is always the app's own "Abstain", whatever the service labelled it.
         #expect(d.choices[1].label == "Abstain")
         #expect(d.choices[2].label == "Yes")
+        // The label "Abstain" is reserved: another choice labelled so, in any case, trimmed and with control and
+        // bidirectional-override characters removed, shows its id (ANDROID-PLAN 0.1.116 §4 "Votes").
+        for label in ["Abstain", "abstain", "ABSTAIN", " ABSTAIN ", " abstain ", "Abs\\u202Etain", "\\u2066Abstain\\u2069"] {
+            ops.detail = obj(#"{"proposal_id":"\#(pid)","connection_id":"\#(conn)","title":"T","state":"open","choices":[{"id":"no","label":"\#(label)"},{"id":"abstain","label":"Abstain"},{"id":"yes","label":"Yes"}]}"#)
+            let r = try await m.get(key)
+            #expect(r.choices.map(\.label) == ["no", "Abstain", "Yes"], "\(label)")
+        }
+        #expect(!VoteWire.readsAsAbstain("Abstain from it") && !VoteWire.readsAsAbstain("No"))
+        #expect(VoteWire.readsAsAbstain(" ABSTAIN ") && VoteWire.readsAsAbstain("abstain\n"))
         #expect(d.choiceID == "yes")
         #expect(d.text == "Line one\n\nLine two <b>x</b> http://example.test")
         #expect(d.minBallots == 2)
