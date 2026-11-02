@@ -20,6 +20,8 @@ public struct HistoryEntryState: Equatable, Sendable, CustomStringConvertible, C
     public var muteError: FailureKind?
     /// The item the entry refers to (§10.9 item kinds): its current name, and whether it is still in the vault.
     public var itemName: String?
+    /// The title of the entry's vote, from the Votes list in memory (never its choice); nil when not known.
+    public var voteTitle: String?
     public var itemExists = false
     /// The item list is held (IOS-PLAN §8 I3.1): an item it does not hold was deleted.
     public var itemsKnown = false
@@ -66,6 +68,7 @@ public final class HistoryEntryViewModel {
     @ObservationIgnored private let history: any HistoryRepository
     @ObservationIgnored private let connections: (any ConnectionsRepository)?
     @ObservationIgnored private let itemNames: (@MainActor () -> [String: String]?)?
+    @ObservationIgnored private let voteTitles: (@MainActor () -> [String: String])?
     @ObservationIgnored private let work = Work()
     private var local = HistoryEntryState()
 
@@ -73,12 +76,14 @@ public final class HistoryEntryViewModel {
     /// its place: the names by item id, nil before the list is read).
     public init(
         seq: Int64, history: any HistoryRepository, connections: (any ConnectionsRepository)? = nil,
-        items: (any ItemsRepository)? = nil, itemNames: (@MainActor () -> [String: String]?)? = nil
+        items: (any ItemsRepository)? = nil, itemNames: (@MainActor () -> [String: String]?)? = nil,
+        votes: (any VotesRepository)? = nil
     ) {
         self.seq = seq
         self.history = history
         self.connections = connections
         self.itemNames = itemNames ?? AuditKinds.itemNames(items)
+        self.voteTitles = AuditKinds.voteTitles(votes)
         load()
         items?.readIfNotLoaded()
     }
@@ -89,6 +94,9 @@ public final class HistoryEntryViewModel {
     public var state: HistoryEntryState {
         var s = local
         if itemNames != nil, s.entry != nil { Self.named(&s, itemNames?()) }
+        if let r = s.entry {
+            s.voteTitle = AuditKinds.voteTitle(r.kind, r.entry.ref, connectionID: r.entry.connectionID, in: voteTitles?())
+        }
         return s
     }
 

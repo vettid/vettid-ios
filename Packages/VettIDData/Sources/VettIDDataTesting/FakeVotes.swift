@@ -21,6 +21,8 @@ public final class FakeVotes: VotesRepository {
 
     @ObservationIgnored public var calls: [String] = []
     @ObservationIgnored public var fail: [String: VaultFailure] = [:]
+    /// Any other error the next call of that name throws (once): a ``CancellationError`` (a lock or the app leaving).
+    @ObservationIgnored public var failError: [String: any Error] = [:]
     @ObservationIgnored public var details: [VoteKey: VoteDetail] = [:]
     @ObservationIgnored public var evidenceText = #"{"evidence":true}"#
     @ObservationIgnored public var windowIsOpen = false
@@ -40,6 +42,7 @@ public final class FakeVotes: VotesRepository {
     private func call(_ name: String) throws {
         calls.append(name)
         if let f = fail.removeValue(forKey: name) { throw f }
+        if let e = failError.removeValue(forKey: name) { throw e }
     }
 
     public func closeWindowNow() async throws {

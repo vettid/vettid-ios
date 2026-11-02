@@ -86,6 +86,7 @@ public final class ShellModel {
         case .history: navigate(.history)
         case .security: navigate(.settings)
         case .conversation(let id): openConversation(id)
+        case .voteList: navigate(.votes)
         case .sheet: break
         default: if let r = Self.screen(t) { pushOnce(r) }
         }
@@ -102,9 +103,18 @@ public final class ShellModel {
         case .alarm: .alarm
         case .credential: .credential
         case .item(let id): .item(id)
+        case .vote(let connectionID, let proposalID): .vote(connectionID: connectionID, proposalID: proposalID)
         default: nil
         }
     }
+
+    /// A vote over the Votes list (or the screen on top), once.
+    public func openVote(_ connectionID: String, _ proposalID: String) {
+        pushOnce(.vote(connectionID: connectionID, proposalID: proposalID))
+    }
+
+    /// A service connection's votes over its page, once.
+    public func openConnectionVotes(_ connectionID: String) { pushOnce(.connectionVotes(connectionID)) }
 
     /// An item of the Vault over the current screen, once (a History entry's "Open the item").
     public func openItem(_ itemID: String) { pushOnce(.item(itemID)) }

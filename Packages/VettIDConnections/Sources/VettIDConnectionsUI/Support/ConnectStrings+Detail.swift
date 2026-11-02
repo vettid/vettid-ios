@@ -149,4 +149,32 @@ extension ConnectStrings {
     static var asksAllowAgain: String {
         String(localized: "connections_asks_allow_again", defaultValue: "Allow declined requests again", bundle: .module)
     }
+
+    // ANDROID-PLAN 0.1.102 "Votes": approved by the owner 2026-10-30 (the same words as the Votes screens).
+    static func voteRow(_ name: String) -> String {
+        String(localized: "connections_vote_row", defaultValue: "Votes from \(name)", bundle: .module)
+    }
+
+    static func voteRemoveWarning(_ name: String) -> String {
+        String(
+            localized: "connections_vote_remove_warning",
+            defaultValue: "You have a vote with \(name) that isn't finished. If you remove this connection you can't vote in it.",
+            bundle: .module
+        )
+    }
+
+    static var voteReconnectTitle: String {
+        String(localized: "connections_vote_reconnect_title", defaultValue: "Connect again to vote", bundle: .module)
+    }
+
+    static func voteReconnectBody(_ name: String) -> String {
+        String(
+            localized: "connections_vote_reconnect_body",
+            defaultValue: """
+                \(name) is registered with VettID as a service. This connection was made before it said it was a service, \
+                so it can't take part in votes. Remove it and connect again from a new invitation from \(name).
+                """,
+            bundle: .module
+        )
+    }
 }

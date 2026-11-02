@@ -15,6 +15,8 @@ public struct HistoryState: Equatable, Sendable, CustomStringConvertible, Custom
     /// list (the Vault screens come with IOS-PLAN §8 I3.1): no item is then named, rather than every one called deleted
     /// (chosen; not in the spec).
     public var itemNames: [String: String]?
+    /// The titles of the votes in memory by (connection, proposal), for the rows of vote entries (ANDROID-PLAN 0.1.102).
+    public var voteTitles: [String: String] = [:]
     /// The vault's devices (`device.list`), for entries with a device; nil while not known.
     public var devices: HistoryDevices?
     public var loading = true
@@ -67,6 +69,7 @@ public final class HistoryViewModel {
     @ObservationIgnored private let connections: (any ConnectionsRepository)?
     @ObservationIgnored private let ownerChecks: (any OwnerCheckRepository)?
     @ObservationIgnored private let itemNames: (@MainActor () -> [String: String]?)?
+    @ObservationIgnored private let voteTitles: (@MainActor () -> [String: String])?
     @ObservationIgnored private let debounce: Duration
     @ObservationIgnored private let now: @MainActor () -> Date
     @ObservationIgnored private let calendar: Calendar
@@ -88,18 +91,24 @@ public final class HistoryViewModel {
         history: any HistoryRepository, connections: (any ConnectionsRepository)? = nil, ownerChecks: (any OwnerCheckRepository)? = nil,
         connectionID: String? = nil, items: (any ItemsRepository)? = nil, itemNames: (@MainActor () -> [String: String]?)? = nil,
         debounce: Duration = HistoryViewModel.searchDebounce, now: @escaping @MainActor () -> Date = { Date() },
-        calendar: Calendar = .current
+        calendar: Calendar = .current, votes: (any VotesRepository)? = nil
     ) {
         self.history = history
         self.connections = connections
         self.ownerChecks = ownerChecks
         self.itemNames = itemNames ?? AuditKinds.itemNames(items)
+        self.voteTitles = AuditKinds.voteTitles(votes)
         self.debounce = debounce
         self.now = now
         self.calendar = calendar
         local = HistoryState(filter: AuditFilter(connectionID: connectionID))
         local.itemNames = self.itemNames?()
+        local.voteTitles = self.voteTitles?() ?? [:]
         pager = newPager()
+        // The vote titles follow the Votes list in memory.
+        if self.voteTitles != nil {
+            follows.add(follow(self, read: { $0.voteTitles?() ?? [:] }, apply: { m, t in m.local.voteTitles = t }))
+        }
         // The item names follow the Vault list (an item renamed, deleted, or the list read meanwhile).
         if self.itemNames != nil {
             follows.add(follow(self, read: { $0.itemNames?() }, apply: { m, n in m.local.itemNames = n }))
@@ -156,7 +165,10 @@ public final class HistoryViewModel {
         let item = AuditKinds.itemOf(r.kind, r.entry.ref).flatMap { local.itemNames?[$0] }
         let device = local.devices?.device(r.entry.deviceID)?.rowName
         let name = AccountNames.cleaned(c?.displayName)
-        let title = HistoryText.title(r.kind, r.entry.ref, names: EntryNames(connection: name, device: device, item: item), isolate: false)
+        let vote = AuditKinds.voteTitle(r.kind, r.entry.ref, connectionID: r.entry.connectionID, in: local.voteTitles)
+        let title = HistoryText.title(
+            r.kind, r.entry.ref, names: EntryNames(connection: name, device: device, item: item, vote: vote), isolate: false
+        )
         let names = [c?.name, c?.firstName, c?.lastName, c?.accountName, item].map { AccountNames.cleaned($0) }
         return AuditFilter.kindText(r.kind) + ([title] + names + [device]).compactMap { $0 }
     }

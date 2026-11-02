@@ -29,7 +29,8 @@ public enum AuditCategory: String, CaseIterable, Sendable {
         case .vaultAccess: ["vault", "owner_check"]
         case .security: ["credential", "identity", "recovery", "audit"]
         case .devices: ["device", "approval"]
-        case .connections: ["connection", "intro", "profile"]
+        // 0.1.102: `vote.*` entries are the service connection's ("Votes" in ANDROID-PLAN §4 History).
+        case .connections: ["connection", "intro", "profile", "vote"]
         case .messages: ["message", "call"]
         case .items: ["item", "tag", "share", "grant", "critical-secret", "wallet"]
         case .agents: ["leash", "action"]

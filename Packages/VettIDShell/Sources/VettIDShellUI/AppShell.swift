@@ -19,6 +19,8 @@ import VettIDSettings
 import VettIDSettingsUI
 import VettIDShell
 import VettIDUI
+import VettIDVotes
+import VettIDVotesUI
 
 /// The open app (IOS-PLAN ID14): the slide-in drawer, the only top-level navigation (no tab bar), with its destinations in
 /// vettid-android's order; the owner check's banners above every screen; a navigation stack per destination for the
@@ -55,6 +57,7 @@ public struct AppShell: View {
     let historyExport: (any HistoryExportRepository)?
     let items: (any ItemsRepository)?
     let sharing: (any SharingRepository)?
+    let votes: (any VotesRepository)?
     private let move: (any MoveRepository)?
     private let onOpenPortal: @MainActor () -> Void
     /// The member's own profile photo (VAULT-MESSAGING §10.8), decoded once per photo, for the top bar's avatar, the avatar
@@ -72,7 +75,8 @@ public struct AppShell: View {
     /// with (VAULT-MESSAGING §6.4). [messages]: Messages, its conversations and the new-message picker (§10.5), with
     /// [connections]; [attachments]: their photos and the viewer (§10.5.1). [feed]: the bell and the Notifications screen (§10.9); [approvals]: Approvals and its decisions
     /// (§10.4, §10.12, §10.13), with [connections]. [history] and [historyExport]: History, its entries and its export
-    /// (§10.9). [items] and [sharing]: the Vault, its items and their tags (§10.7, §10.8).
+    /// (§10.9). [items] and [sharing]: the Vault, its items and their tags (§10.7, §10.8). [votes]: Votes, a vote and a
+    /// service's votes (§10.19, IOS-PLAN §4.16), with [connections].
     public init(
         account: any AccountRepository,
         vault: any VaultRepository,
@@ -102,6 +106,7 @@ public struct AppShell: View {
         historyExport: (any HistoryExportRepository)? = nil,
         items: (any ItemsRepository)? = nil,
         sharing: (any SharingRepository)? = nil,
+        votes: (any VotesRepository)? = nil,
         move: (any MoveRepository)? = nil,
         onOpenPortal: @escaping @MainActor () -> Void
     ) {
@@ -133,6 +138,7 @@ public struct AppShell: View {
         self.historyExport = historyExport
         self.items = items
         self.sharing = sharing
+        self.votes = votes
         self.move = move
         self.onOpenPortal = onOpenPortal
     }
@@ -198,7 +204,7 @@ public struct AppShell: View {
         ZStack {
             DrawerContainer(isOpen: $model.drawerOpen) {
                 VettIDDrawerSheet(
-                    sections: TopLevelDestination.drawerSections(badges: badges),
+                    sections: TopLevelDestination.drawerSections(badges: badges, votesShown: votes?.entry.shown == true),
                     selectedKey: model.destination.key,
                     versionLabel: ShellStrings.drawerVersion(version.name, version.build)
                 ) { item in
@@ -289,11 +295,12 @@ public struct AppShell: View {
     }
 
     /// The drawer's counts (vettid-android `ShellBadges`): the approvals waiting for a decision, the conversations with
-    /// unread messages.
+    /// unread messages, the open votes not yet voted on.
     private var badges: [TopLevelDestination: Int] {
         [
             .approvals: approvals?.approvals.count { $0.needsDecision } ?? 0,
             .messages: messages?.conversations.count { $0.unread > 0 } ?? 0,
+            .votes: votes?.entry.badge ?? 0,
         ]
     }
 
@@ -333,11 +340,17 @@ public struct AppShell: View {
             } else {
                 ComingLaterScreen(destination: model.destination, chrome: chrome)
             }
+        case .votes:
+            if let votes, let connections {
+                VotesRoute(votes: votes, connections: connections, ownerChecks: ownerChecks, chrome: chrome, host: votesHost)
+            } else {
+                ComingLaterScreen(destination: model.destination, chrome: chrome)
+            }
         case .history:
             if let history, let historyExport {
                 HistoryRoute(
                     history: history, export: historyExport, connections: connections, ownerChecks: ownerChecks, items: items,
-                    chrome: chrome, host: historyHost
+                    votes: votes, chrome: chrome, host: historyHost
                 )
             } else {
                 ComingLaterScreen(destination: model.destination, chrome: chrome)
@@ -380,6 +393,8 @@ public struct AppShell: View {
             activityDetail(route)
         case .item, .newItem, .itemEdit, .tags, .connectionSharing, .ruleEdit, .sharedWithYou:
             itemsDetail(route)
+        case .vote, .connectionVotes:
+            votesDetail(route)
         }
     }
 
@@ -421,7 +436,7 @@ public struct AppShell: View {
                 ConnectRoute(destination, connections: connections, requests: connectionRequests, host: connectHost)
             }
         case .connection(let id):
-            if let connections { ConnectionDetailRoute(id, connections: connections, sharing: sharing, host: connectHost) }
+            if let connections { ConnectionDetailRoute(id, connections: connections, sharing: sharing, votes: votes, host: connectHost) }
         default:
             EmptyView()
         }
@@ -487,6 +502,8 @@ public struct AppShell: View {
         if history != nil, historyExport != nil { h.onOpenHistory = { model.openConnectionHistory($0) } }
         // "Send a message" on a connection's page and after connecting, once the messages are there (IOS-PLAN §8 I2.2).
         if messages != nil { h.onOpenConversation = { model.openConversation($0) } }
+        // "Votes from <name>" on a service connection's page, once the Votes are there.
+        if votes != nil { h.onOpenVotes = { model.openConnectionVotes($0) } }
         // The sharing cards of a connection's page, once the Vault's sharing screens are there (IOS-PLAN §8 I3.2).
         if items != nil, sharing != nil {
             h.onOpenSharing = { model.openSharing($0) }

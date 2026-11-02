@@ -18,6 +18,10 @@ enum ShellStrings {
         String(localized: "nav_approvals", defaultValue: "Approvals", bundle: .module)
     }
 
+    static var navVotes: String {
+        String(localized: "nav_votes", defaultValue: "Votes", bundle: .module)
+    }
+
     static var navItems: String {
         String(localized: "nav_items", defaultValue: "Vault", bundle: .module)
     }

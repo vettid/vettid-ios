@@ -3941,6 +3941,468 @@
           }
         }
       }
+    },
+    "history_kind_vote_cast": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You cast a vote: “%@”"
+          }
+        }
+      }
+    },
+    "history_kind_vote_cast_any": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You cast a vote"
+          }
+        }
+      }
+    },
+    "history_kind_vote_recorded": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ recorded your vote: “%@”"
+          }
+        }
+      }
+    },
+    "history_kind_vote_recorded_any": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ recorded your vote"
+          }
+        }
+      }
+    },
+    "history_kind_vote_refused": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ did not accept your vote: “%@” (%@)"
+          }
+        }
+      }
+    },
+    "history_kind_vote_refused_any": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ did not accept your vote (%@)"
+          }
+        }
+      }
+    },
+    "history_kind_vote_conflict": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ holds a different vote under your code: “%@”"
+          }
+        }
+      }
+    },
+    "history_kind_vote_conflict_any": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ holds a different vote under your code"
+          }
+        }
+      }
+    },
+    "history_kind_vote_receipt_rejected": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A receipt for your vote could not be checked: “%@”"
+          }
+        }
+      }
+    },
+    "history_kind_vote_receipt_rejected_any": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A receipt for your vote could not be checked"
+          }
+        }
+      }
+    },
+    "history_kind_vote_extended": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The closing time of “%@” was extended"
+          }
+        }
+      }
+    },
+    "history_kind_vote_extended_any": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The closing time of a vote was extended"
+          }
+        }
+      }
+    },
+    "history_kind_vote_extension_rejected": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A change of closing time was not accepted: “%@”"
+          }
+        }
+      }
+    },
+    "history_kind_vote_extension_rejected_any": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A change of closing time was not accepted"
+          }
+        }
+      }
+    },
+    "history_kind_vote_proposal_rejected": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A vote from %@ could not be checked and was set aside"
+          }
+        }
+      }
+    },
+    "history_kind_vote_proposal_rejected_any": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A vote could not be checked and was set aside"
+          }
+        }
+      }
+    },
+    "history_kind_vote_site_mismatch": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The vote from %@ differs from the one published on the public site"
+          }
+        }
+      }
+    },
+    "history_kind_vote_site_mismatch_any": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A vote differs from the one published on the public site"
+          }
+        }
+      }
+    },
+    "history_kind_vote_not_listed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A vote from %@ is not on the public site yet"
+          }
+        }
+      }
+    },
+    "history_kind_vote_not_listed_any": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A vote is not on the public site yet"
+          }
+        }
+      }
+    },
+    "history_kind_vote_unpublished": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A vote from %@ was never published on the public site"
+          }
+        }
+      }
+    },
+    "history_kind_vote_unpublished_any": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A vote was never published on the public site"
+          }
+        }
+      }
+    },
+    "history_kind_vote_two_versions": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ sent two different versions of one vote"
+          }
+        }
+      }
+    },
+    "history_kind_vote_two_versions_any": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A service sent two different versions of one vote"
+          }
+        }
+      }
+    },
+    "history_kind_vote_list_rejected": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The list of services was not accepted"
+          }
+        }
+      }
+    },
+    "history_kind_vote_check_ok": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The published results include your vote: “%@”"
+          }
+        }
+      }
+    },
+    "history_kind_vote_check_ok_any": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The published results include your vote"
+          }
+        }
+      }
+    },
+    "history_kind_vote_check_unconfirmed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your vote could not be confirmed in the published results: “%@”"
+          }
+        }
+      }
+    },
+    "history_kind_vote_check_unconfirmed_any": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your vote could not be confirmed in the published results"
+          }
+        }
+      }
+    },
+    "history_kind_vote_check_failed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The published results do not match your vote: “%@”"
+          }
+        }
+      }
+    },
+    "history_kind_vote_check_failed_any": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The published results do not match your vote"
+          }
+        }
+      }
+    },
+    "history_kind_vote_check_gave_up": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The results of “%@” could not be checked"
+          }
+        }
+      }
+    },
+    "history_kind_vote_check_gave_up_any": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The results of a vote could not be checked"
+          }
+        }
+      }
+    },
+    "history_kind_vote_released": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vote record released: “%@”"
+          }
+        }
+      }
+    },
+    "history_kind_vote_released_any": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vote record released"
+          }
+        }
+      }
+    },
+    "history_kind_vote_ignored": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A vote message was ignored"
+          }
+        }
+      }
+    },
+    "history_vote_a_service": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A service"
+          }
+        }
+      }
+    },
+    "history_vote_reason_closed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "the vote had closed"
+          }
+        }
+      }
+    },
+    "history_vote_reason_not_active": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "you are no longer a member"
+          }
+        }
+      }
+    },
+    "history_vote_reason_not_eligible": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "you were not on the list"
+          }
+        }
+      }
+    },
+    "history_vote_reason_connection_ended": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "the connection ended"
+          }
+        }
+      }
+    },
+    "history_vote_reason_not_accepted": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "not accepted"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

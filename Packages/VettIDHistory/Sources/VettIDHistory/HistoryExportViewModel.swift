@@ -88,11 +88,16 @@ public struct ExportContext: Equatable, Sendable {
     public var filter: AuditFilter
     public var connectionNames: [String: String]
     public var itemNames: [String: String]?
+    /// The titles of the votes in memory by (connection, proposal), for the file's titles of vote entries.
+    public var voteTitles: [String: String]
 
-    public init(filter: AuditFilter, connectionNames: [String: String] = [:], itemNames: [String: String]? = nil) {
+    public init(
+        filter: AuditFilter, connectionNames: [String: String] = [:], itemNames: [String: String]? = nil, voteTitles: [String: String] = [:]
+    ) {
         self.filter = filter
         self.connectionNames = connectionNames
         self.itemNames = itemNames
+        self.voteTitles = voteTitles
     }
 }
 
@@ -286,7 +291,8 @@ public final class HistoryExportViewModel {
         let names = EntryNames(
             connection: r.entry.connectionID.flatMap { AccountNames.cleaned(c.connectionNames[$0]) },
             device: devices?.device(r.entry.deviceID)?.rowName,
-            item: itemID.flatMap { c.itemNames?[$0] }
+            item: itemID.flatMap { c.itemNames?[$0] },
+            vote: AuditKinds.voteTitle(r.kind, r.entry.ref, connectionID: r.entry.connectionID, in: c.voteTitles)
         )
         return ExportRow(
             record: r, label: HistoryText.title(r.kind, r.entry.ref, names: names, isolate: false), connectionName: connection,

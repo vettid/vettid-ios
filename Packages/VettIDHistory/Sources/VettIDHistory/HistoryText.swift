@@ -7,11 +7,14 @@ public struct EntryNames: Equatable, Sendable {
     public var connection: String?
     public var device: String?
     public var item: String?
+    /// The title of the entry's vote, from the Votes list in memory (ANDROID-PLAN 0.1.102 "Votes"); nil when not known.
+    public var vote: String?
 
-    public init(connection: String? = nil, device: String? = nil, item: String? = nil) {
+    public init(connection: String? = nil, device: String? = nil, item: String? = nil, vote: String? = nil) {
         self.connection = connection
         self.device = device
         self.item = item
+        self.vote = vote
     }
 }
 
@@ -27,6 +30,7 @@ public enum HistoryText {
         case .dropped(let reason): HistoryStrings.kindDropped(reason)
         case .unknown(let kind): HistoryStrings.kindUnknown(kind)
         case .counted(let key, let n, let of): HistoryKindTexts.text(key, Int64(n), Int64(of))
+        case .vote(let t): voteText(t, names, isolate)
         case .named(let key, let any, let who):
             // Without the name (gone or not known), the title drops it.
             if let name = name(who, names).flatMap({ isolate ? AccountNames.isolateOrNull($0) : AccountNames.cleaned($0) }) {
@@ -35,6 +39,20 @@ public enum HistoryText {
                 HistoryKindTexts.text(any)
             }
         }
+    }
+
+    /// A title with the vote's name in curly quotes and, for some, the service and the reason of a refusal. Without the vote's
+    /// title (the Votes list is not in memory, or the vote is gone) the title says "a vote" by dropping the quoted part; without
+    /// the service's name it says "A service".
+    private static func voteText(_ t: AuditKinds.VoteTitle, _ names: EntryNames, _ isolate: Bool) -> String {
+        let (key, any, service, reason) = (t.key, t.any, t.service, t.reason)
+        let clean = { (s: String?) in isolate ? AccountNames.isolateOrNull(s) : AccountNames.cleaned(s) }
+        var args: [any CVarArg] = []
+        if service { args.append(clean(names.connection) ?? HistoryKindTexts.text("history_vote_a_service")) }
+        let title = clean(names.vote)
+        if let title { args.append(title) }
+        if let reason { args.append(HistoryKindTexts.text(reason)) }
+        return String(format: HistoryKindTexts.text(title != nil ? key : any), locale: Locale.current, arguments: args)
     }
 
     private static func name(_ who: AuditKinds.Who, _ names: EntryNames) -> String? {

@@ -441,6 +441,17 @@
         }
       }
     },
+    "nav_votes": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Votes"
+          }
+        }
+      }
+    },
     "nav_connections": {
       "extractionState": "manual",
       "localizations": {

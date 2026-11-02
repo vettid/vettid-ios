@@ -23,6 +23,7 @@ public struct NotificationsRoute: View {
     private let connections: (any ConnectionsRepository)?
     private let approvals: (any ApprovalsRepository)?
     private let items: (any ItemsRepository)?
+    private let votes: (any VotesRepository)?
     private let archived: Bool
     private let host: NotificationsHost
     @Environment(\.scenePhase) private var scenePhase
@@ -30,12 +31,14 @@ public struct NotificationsRoute: View {
 
     public init(
         feed: any FeedRepository, connections: (any ConnectionsRepository)? = nil, approvals: (any ApprovalsRepository)? = nil,
-        items: (any ItemsRepository)? = nil, archived: Bool = false, host: NotificationsHost
+        items: (any ItemsRepository)? = nil, votes: (any VotesRepository)? = nil, archived: Bool = false,
+        host: NotificationsHost
     ) {
         self.feed = feed
         self.connections = connections
         self.approvals = approvals
         self.items = items
+        self.votes = votes
         self.archived = archived
         self.host = host
     }
@@ -45,7 +48,7 @@ public struct NotificationsRoute: View {
             .onAppear {
                 if model == nil {
                     model = NotificationsViewModel(
-                        feed: feed, connections: connections, approvals: approvals, items: items, archived: archived
+                        feed: feed, connections: connections, approvals: approvals, items: items, votes: votes, archived: archived
                     )
                 }
                 if scenePhase == .active { model?.shown() }

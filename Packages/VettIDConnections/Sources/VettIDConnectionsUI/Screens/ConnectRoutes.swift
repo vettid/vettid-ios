@@ -29,6 +29,8 @@ public struct ConnectHost {
     public var onOpenShareRule: (@MainActor (String, String?) -> Void)?
     /// Asking the connection for something (`grant.request`: "Shared with you", the ask opened at once).
     public var onAskFor: (@MainActor (String) -> Void)?
+    /// The votes from a service connection (the Votes screens); nil while the app has no Votes.
+    public var onOpenVotes: (@MainActor (String) -> Void)?
 
     public init() {}
 }
@@ -200,17 +202,20 @@ public struct ConnectionDetailRoute: View {
     private let connectionID: String
     private let connections: any ConnectionsRepository
     private let sharing: (any SharingRepository)?
+    private let votes: (any VotesRepository)?
     private let host: ConnectHost
     @Environment(\.scenePhase) private var scenePhase
     @State private var model: ConnectionDetailViewModel?
 
     /// [sharing]: what the sharing cards read and delete a rule with; nil while the app has no sharing (no cards).
     public init(
-        _ connectionID: String, connections: any ConnectionsRepository, sharing: (any SharingRepository)? = nil, host: ConnectHost
+        _ connectionID: String, connections: any ConnectionsRepository, sharing: (any SharingRepository)? = nil,
+        votes: (any VotesRepository)? = nil, host: ConnectHost
     ) {
         self.connectionID = connectionID
         self.connections = connections
         self.sharing = sharing
+        self.votes = votes
         self.host = host
     }
 
@@ -219,7 +224,7 @@ public struct ConnectionDetailRoute: View {
             .onAppear {
                 // Back from the rule editor or the shared items: both directions are read again.
                 if let model { model.loadSharing() } else {
-                    model = ConnectionDetailViewModel(connectionID: connectionID, connections: connections, sharing: sharing)
+                    model = ConnectionDetailViewModel(connectionID: connectionID, connections: connections, sharing: sharing, votes: votes)
                 }
             }
             // The app came back from the background: both directions are read again (vettid-android reads on ON_RESUME).
@@ -238,6 +243,7 @@ public struct ConnectionDetailRoute: View {
         a.onBack = host.onBack
         a.onMessage = opening(host.onOpenConversation, connectionID)
         a.onHistory = opening(host.onOpenHistory, connectionID)
+        a.onOpenVotes = opening(host.onOpenVotes, connectionID)
         if hasSharing {
             let id = connectionID
             a.onSharing = opening(host.onOpenSharing, id)

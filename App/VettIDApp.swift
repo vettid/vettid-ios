@@ -306,7 +306,7 @@ struct AppRoot: View {
                     connections: vault.connections, connectionRequests: vault.connections, inviteInbox: inviteInbox,
                     messages: vault.messages, attachments: vault.attachments, feed: vault.feed, approvals: vault.approvals,
                     history: vault.history, historyExport: vault.historyExport, items: vault.items, sharing: vault.sharing,
-                    move: move
+                    votes: vault.votes, move: move
                 ) { openPortal() }
             }
         }
