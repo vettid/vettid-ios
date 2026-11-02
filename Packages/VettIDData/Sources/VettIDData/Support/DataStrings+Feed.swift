@@ -510,6 +510,11 @@ extension DataStrings {
         String(localized: "data_feed_vote_problem_body", defaultValue: "Something about your vote needs your attention.", bundle: .module)
     }
 
+    /// The reserved `abstain` choice, in the app's own words whatever the service labelled it.
+    static var voteChoiceAbstain: String {
+        String(localized: "data_vote_choice_abstain", defaultValue: "Abstain", bundle: .module)
+    }
+
     static func feedVoteLine(_ service: String, _ title: String) -> String {
         String(localized: "data_feed_vote_line", defaultValue: "\(service): \(title)", bundle: .module)
     }

@@ -377,6 +377,24 @@ struct VoteSiteTests: VotesTestCase {
         #expect(m.hints[key] == nil)
     }
 
+    /// Results whose rows hash and tree hold but whose tally the rows don't make (BALLOT-PROTOCOL §8.4): the app finds
+    /// it, sends nothing, and says there is a problem with the published results.
+    @Test func resultsAnObserverWouldRefuseAreNeverSubmitted() async throws {
+        let ops = FakeVoteOps()
+        ops.list = listing(closedPending())
+        ops.detail = detail()
+        let m = siteManager(ops)
+        try await m.refresh()
+        VoteResultsFixture.publish(site, pid)
+        let doc = try #require(String(bytes: VoteResultsFixture.results, encoding: .utf8))
+        let changed = doc.replacingOccurrences(of: #""tally":{"abstain":0,"no":0,"yes":1}"#, with: #""tally":{"abstain":0,"no":1,"yes":0}"#)
+        #expect(changed != doc)
+        site["p/\(pid)/results.json"] = .found(Array(changed.utf8))
+        #expect(try await m.checkResults(key) == .problem)
+        #expect(m.hints[key]?.resultsProblem == true)
+        #expect(vault.submits.isEmpty)
+    }
+
     @Test func aCheckDueEventRunsTheCheck() async throws {
         VoteResultsFixture.publish(site, pid)
         let ops = FakeVoteOps()

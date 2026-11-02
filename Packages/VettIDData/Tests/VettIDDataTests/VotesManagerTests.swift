@@ -170,8 +170,9 @@ struct VotesManagerTests: VotesTestCase {
         let m = manager(ops)
         let d = try await m.get(key)
         #expect(d.choices.map(\.id) == ["no", "abstain", "yes"])
-        // The reserved abstain keeps the label it was sent with.
-        #expect(d.choices[1].label == "Yes, really")
+        // The reserved abstain is always the app's own "Abstain", whatever the service labelled it.
+        #expect(d.choices[1].label == "Abstain")
+        #expect(d.choices[2].label == "Yes")
         #expect(d.choiceID == "yes")
         #expect(d.text == "Line one\n\nLine two <b>x</b> http://example.test")
         #expect(d.minBallots == 2)
