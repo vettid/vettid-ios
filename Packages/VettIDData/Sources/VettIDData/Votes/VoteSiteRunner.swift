@@ -396,6 +396,8 @@ final class VoteSiteRunner {
             // No row with a proof: nothing to submit.
             return fail(key, .problem)
         }
+        // A member's row whose ballot the vault would not read makes it refuse the whole call: nothing is sent (chosen;
+        // not in the spec).
         guard let body = Self.submitBody(key, doc: doc, sig: sig, bundle: bundle, own: checked.own) else { return fail(key, .problem) }
         try Task.checkCancellation()
         // A failure of the observer's check outside the four inputs does not hold the row back (VAULT-MESSAGING 0.83.2
@@ -411,6 +413,8 @@ final class VoteSiteRunner {
         do {
             answer = try await guarded { try await self.ops(quietly).voteResultsSubmit(body: body) }
         } catch {
+            // A refused or lost call is kept too: the find is the app's own, whatever the vault made of it (chosen; not in
+            // the spec).
             if !Task.isCancelled, !(error is CancellationError) { votes.hint(key) { $0.resultsDontAddUp = dontAddUp } }
             throw error
         }

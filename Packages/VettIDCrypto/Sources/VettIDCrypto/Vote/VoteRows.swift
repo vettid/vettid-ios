@@ -103,7 +103,10 @@ public enum VoteRows {
         // The cheap tree check first: a hostile `rows.json` costs no signature checks unless it is the published tree.
         let leaves = rows.map(\.leaf)
         if !Bytes.constantTimeEquals(VoteMerkle.root(leaves), published.rowsRoot) { throw ResultsProblem("rows_root") }
-        guard let found = rows.lastIndex(where: { Bytes.constantTimeEquals($0.tag, recordTag) }) else { throw ResultsProblem("no_row") }
+        // A tag on more than one row is already a problem with the rows' order: the first of them is submitted, and the
+        // vault judges it against the index its `record_proof` fixes (VAULT-MESSAGING §10.19.6 step 3; chosen; not in
+        // the spec).
+        guard let found = rows.firstIndex(where: { Bytes.constantTimeEquals($0.tag, recordTag) }) else { throw ResultsProblem("no_row") }
         guard let path = VoteMerkle.proof(leaves, found) else { throw ResultsProblem("rows") }
         let own = OwnRow(ballot: rows[found].ballot, index: UInt64(found), treeSize: UInt64(leaves.count), path: path)
         do {

@@ -16,7 +16,8 @@ public enum VoteNote: Sendable, CaseIterable {
     /// `vote_results_dont_add_up`, once, under the state of a `verified` or `unconfirmed` check (``inResults`` and
     /// ``inResultsConflict``, ``didntVote``, ``unconfirmed``) when the app's observer check of the results it submitted
     /// failed outside the four inputs the vault checks (VAULT-MESSAGING 0.83.2 §10.19.6 step 1; ANDROID-PLAN 0.1.116 §4
-    /// "Votes"). A warning, never the error colour.
+    /// "Votes"). A warning, never the error colour (the warning: chosen; not in the spec, which says only "no error
+    /// colour").
     case resultsDontAddUp
     case unconfirmed, didntVote, checkPending
     /// A check the vault leaves `pending` with reason `input`, or the app's own check of the results failed: never "failed".
@@ -226,7 +227,9 @@ public enum VoteRules {
                 out.append(.inResults)
                 if s.conflictEvidence { out.append(.inResultsConflict) }
             }
-            // The state, then the line, once (VAULT-MESSAGING 0.83.2 §10.19.6 step 1); not the results-problem text.
+            // The state, then the line, once (VAULT-MESSAGING 0.83.2 §10.19.6 step 1); not the results-problem text. Under
+            // any verified check, a ballot without a receipt's too, as its numbers are left out as well (chosen; not in
+            // the spec).
             if dontAddUp { out.append(.resultsDontAddUp) }
         case .unconfirmed?:
             out.append(.unconfirmed)

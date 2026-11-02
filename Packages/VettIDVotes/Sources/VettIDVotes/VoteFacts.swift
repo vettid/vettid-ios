@@ -85,7 +85,8 @@ public struct VoteFacts: Equatable, Sendable {
             if d.extensions > 0, let closes = summary.closesAt { f.extended = VoteStrings.voteExtended(VoteFormat.full(closes)) }
             f.yourChoice = s.choiceLabel.map { VoteStrings.voteYourChoice(AccountNames.isolateOrNull($0) ?? "") }
             // Results that don't add up show no number (VAULT-MESSAGING 0.83.2 §10.19.6 step 1; ANDROID-PLAN 0.1.116 §4
-            // "Votes", screen 2 item 5): the line under the state says why.
+            // "Votes", screen 2 item 5): the line under the state says why. Left out whenever the flag is set, whatever
+            // the check (chosen; not in the spec: before a verified or unconfirmed check there are no numbers anyway).
             f.results = s.hint.resultsDontAddUp ? nil : results(d, service)
             f.choices = d.choices.map { AccountNames.isolateOrNull($0.label) ?? $0.id }
         }

@@ -194,6 +194,18 @@ struct VoteRowsTests {
         }
     }
 
+    /// The member's tag on two rows: the rows' order is the problem, and the first of them is the row, with its proof.
+    @Test func aTagOnTwoRowsGivesTheFirst() throws {
+        let all = try rows()
+        let changed = try rowsDoc([all[0], all[1], all[1]])
+        let tag = try all[1].base64("record_tag", 32)
+        let checked = try VoteRows.ownRow(results: try results(rows: changed), rows: changed, recordTag: tag)
+        #expect(checked.problem == ResultsProblem("rows_order"))
+        #expect(checked.own.index == 1 && checked.own.treeSize == 3)
+        let root = try VoteMerkle.root(leaves(changed))
+        #expect(VoteMerkle.verify(root: root, leaf: try leaves(changed)[1], index: 1, size: 3, path: checked.own.path))
+    }
+
     /// What the member's row needs of `results.json` (`rows_root`, `counts.eligible`): without it there is nothing to
     /// submit. Without `rows_hash` the row is still had.
     @Test func resultsWithoutWhatTheRowNeedsAreAProblemWithNoRow() throws {
