@@ -293,7 +293,7 @@ import VettIDUI
         let tries = ProofExportCoordinator.presentTries
         // Free on the last try: presented once (the test's presentation takes nothing, so the backstop then tells it).
         let late = try await run(busyFor: tries - 1)
-        #expect(late.asked == tries && late.presented == 1)
+        #expect(late.asked == tries && late.presented == 1 && late.failed == 1 && late.files == 0)
         // Busy on every try: never presented, told once, the file gone.
         let never = try await run(busyFor: .max)
         #expect(never.asked == tries && never.presented == 0 && never.failed == 1 && never.files == 0)
@@ -307,7 +307,7 @@ import VettIDUI
         let controller = try #require(window.rootViewController)
         let c = ProofExportCoordinator()
         c.root = root
-        c.retryDelay = 0.05
+        c.retryDelay = 0.2
         var asked = 0, presented = 0, failed = 0
         c.busy = { _ in asked += 1; return true }
         c.presentPicker = { _, _ in presented += 1 }
