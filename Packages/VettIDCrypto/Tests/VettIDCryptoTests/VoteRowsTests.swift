@@ -290,13 +290,17 @@ struct VoteRowsTests {
             "{" + JsonBuilder.quote("record_tag") + ":" + (all[empty]["record_tag"]?.raw ?? "") + "}",
             rebuild(all[empty], [:]).dropLast() + #","note":1}"#,
             rebuild(all[at], ["ballot": String(rebuild(ballot, [:]).dropLast()) + #","note":1}"#]),
+            rebuild(all[at], ["ballot": rebuild(ballot, ["vk": JsonBuilder.quote(Base64s.encodeStd(rep(1, 31)))])]),
+            rebuild(all[at], ["ballot": rebuild(ballot, ["choice_id": "7"])]),
         ]
         for (i, variant) in variants.enumerated() {
             var changed = all
             changed[i == 0 || i == 1 ? empty : at] = try StrictJson.parseObject(variant)
             let bytes = try rowsDoc(changed)
+            // The published root kept as it was: the helper must not read the bad row itself.
+            let published = try results(["rows_root": JsonBuilder.quote(Base64s.encodeStd(rep(1, 32)))], rows: bytes)
             #expect(throws: ResultsProblem("rows"), "\(variant)") {
-                try VoteRows.ownRow(results: try results(rows: bytes), rows: bytes, recordTag: tag)
+                try VoteRows.ownRow(results: published, rows: bytes, recordTag: tag)
             }
         }
     }

@@ -185,9 +185,16 @@ public enum VoteRows {
 
     /// `ballot_leaf` (§5): `record_tag || lp(vk) || lp(choice_id) || lp(ballot_sig)`, `lp(x) = u16(len x) || x`.
     static func leaf(tag: [UInt8], ballot b: JsonObject) throws -> [UInt8] {
-        let vk = try b.base64("vk", keySize)
-        let sig = try b.base64("ballot_sig", sigSize)
-        let id = try b.string("choice_id")
+        let vk: [UInt8]
+        let sig: [UInt8]
+        let id: String
+        do {
+            vk = try b.base64("vk", keySize)
+            sig = try b.base64("ballot_sig", sigSize)
+            id = try b.string("choice_id")
+        } catch {
+            throw ResultsProblem("rows")
+        }
         // [a-z0-9-]{1,32}, as vettid-vault's ValidChoiceID: a row with another id is not one the vault would accept.
         if !validChoice(id) { throw ResultsProblem("rows") }
         return Bytes.concat(tag, lp(vk), lp(Array(id.utf8)), lp(sig))
