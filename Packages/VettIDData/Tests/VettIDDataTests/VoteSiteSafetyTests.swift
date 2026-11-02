@@ -520,4 +520,57 @@ struct VoteSiteSafetyTests: VotesTestCase {
     }
 }
 
+// The work a lock or the app leaving cuts off.
+extension VoteSiteSafetyTests {
+    @Test func aRunTheAppLeavingCutOffDoesNotStartTheThrottle() async throws {
+        serve(1)
+        let (_, m) = opened()
+        try await m.refresh()
+        m.startSync()
+        #expect(await eventually { sleeper.waits.count == 1 })
+        // Eleven minutes on, the member's own run: its vault call is cut off by the app leaving and then fails as a lost
+        // connection, not as a cancellation.
+        clock.advance(11 * 60_000)
+        let gate = TestDeferred<Void>()
+        let reached = TestDeferred<Void>()
+        vault.syncHold = {
+            await reached.complete(())
+            try? await gate.value()
+            throw URLError(.networkConnectionLost)
+        }
+        let run = Task { try await m.syncOnce() }
+        #expect(await eventually { reached.isCompleted })
+        m.pauseSync()
+        gate.complete(())
+        await #expect(throws: CancellationError.self) { try await run.value }
+        vault.syncHold = nil
+        site.clearReads()
+        // Back a minute later: the last run that was not cut off is twelve minutes old, so a run now.
+        clock.advance(60_000)
+        m.resumeSync()
+        #expect(await eventually { sleeper.waits.count == 2 })
+        #expect(sleeper.waits[1] == .seconds(3600))
+        #expect(await eventually { site.reads.contains("services.json") })
+    }
+
+    @Test func aVoteScreenCheckTheAppLeavingCutOffEndsAsACancellation() async throws {
+        VoteResultsFixture.publish(site, pid)
+        serve(1)
+        let m = manager(closedOps())
+        try await m.refresh()
+        let gate = TestDeferred<Void>()
+        let reached = TestDeferred<Void>()
+        vault.syncHold = {
+            await reached.complete(())
+            try? await gate.value()
+            throw URLError(.networkConnectionLost)
+        }
+        let check = Task { try await m.siteCheck(key) }
+        #expect(await eventually { reached.isCompleted })
+        m.pauseSync()
+        gate.complete(())
+        await #expect(throws: CancellationError.self) { try await check.value }
+    }
+}
+
 // swiftlint:enable line_length

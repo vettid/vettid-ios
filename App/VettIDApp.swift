@@ -233,8 +233,8 @@ struct AppRoot: View {
         Task { try? await vault.refresh() }
     }
 
-    /// IOS-PLAN §6.6: what is in flight (a lock's first attempt, the outbox) is finished in a background task, within the
-    /// time iOS gives it, then the collection stops (not when the app came back meanwhile). At the task's expiration the
+    /// IOS-PLAN §6.6: what is in flight (a lock's first attempt, the outbox, a vote window's lock) is finished in a
+    /// background task, within the time iOS gives it, then the collection stops (not when the app came back meanwhile). At the task's expiration the
     /// work is cancelled and the task ended. Nothing assumes it ran longer.
     private func leaveForeground() {
         let app = UIApplication.shared
