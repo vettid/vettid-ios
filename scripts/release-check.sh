@@ -139,11 +139,24 @@ check_app() {
 # App Attest service (IOS-PLAN §6.2) are linked.
 HARDWARE_KEYS=("SecureEnclavePhoneSecretSource" "DeviceCheckAppAttestService")
 
+# check_votes_host <app> <expected>: the site the app reads votes from (IOS-PLAN §4.16) is exactly the environment's own, as
+# configured (VettIDVotesHost); a text naming it elsewhere in the app does not stand in for it.
+check_votes_host() {
+  local app=$1 expected=$2 actual
+  actual=$(/usr/libexec/PlistBuddy -c 'Print :VettIDVotesHost' "${app}/Info.plist" 2>/dev/null || true)
+  if [[ "${actual}" != "${expected}" ]]; then
+    echo "${app}: VettIDVotesHost '${actual}', expected ${expected}" >&2
+    return 1
+  fi
+  echo "${app}: VettIDVotesHost ${expected}"
+}
+
 check_release() {
   # Only Staging sets texts aside: a value in the caller's environment does not reach Release.
   local ALLOWED_TEXTS=
   check_app "$1" com.vettid.app "${PRODUCTION_HOSTS[@]}" "${HARDWARE_KEYS[@]}" "${DOCUMENT_TYPES[@]}" \
-    -- "${TEST_MARKERS[@]}" "${DEV_ONLY[@]}" "${STAGING_HOSTS[@]}" "${STAGING_KEYS[@]}" "${TEST_MANIFEST_KEY[@]}"
+    -- "${TEST_MARKERS[@]}" "${DEV_ONLY[@]}" "${STAGING_HOSTS[@]}" "${STAGING_KEYS[@]}" "${TEST_MANIFEST_KEY[@]}" &&
+    check_votes_host "$1" votes.vettid.org
 }
 
 # The two owner-approved texts of the Votes screens that name the production site for the member (vote_checking_list and
@@ -155,7 +168,8 @@ VettID is checking this vote. It is waiting for the vote's documents from votes.
 check_staging() {
   ALLOWED_TEXTS="${STAGING_ALLOWED_TEXTS}" check_app "$1" com.vettid.app.staging "${STAGING_REQUIRED_HOSTS[@]}" "${HARDWARE_KEYS[@]}" "${DOCUMENT_TYPES[@]}" \
     -- "${TEST_MARKERS[@]}" "${DEV_ONLY[@]}" "${PRODUCTION_HOSTS[@]}" "https://votes.vettid.org" "<string>votes.vettid.org</string>" \
-    "${TEST_MANIFEST_KEY[@]}"
+    "${TEST_MANIFEST_KEY[@]}" &&
+    check_votes_host "$1" votes.staging.vettid.org
 }
 
 app_of() { echo "${OUT}/$1.xcarchive/Products/Applications/VettID.app"; }
@@ -385,6 +399,25 @@ if [[ ${SELF_TEST} -eq 1 ]]; then
     fi
     echo "self-test: ${config} refuses a planted '${planted}'"
   }
+  # plant_votes_host <config> <checker> <value>: the check must refuse a copy of the app whose VettIDVotesHost is <value>
+  # (the approved texts naming the production site do not make up for a missing or wrong configured host).
+  plant_votes_host() {
+    local config=$1 checker=$2 value=$3
+    local copy="${OUT}/planted/${config}/VettID.app"
+    rm -rf "${OUT}/planted/${config}"
+    mkdir -p "$(dirname "${copy}")"
+    cp -R "$(app_of "${config}")" "${copy}"
+    /usr/libexec/PlistBuddy -c "Set :VettIDVotesHost ${value}" "${copy}/Info.plist"
+    if "${checker}" "${copy}" >/dev/null 2>&1; then
+      echo "self-test FAILED: ${config} accepted VettIDVotesHost '${value}'" >&2
+      exit 1
+    fi
+    echo "self-test: ${config} refuses VettIDVotesHost '${value}'"
+  }
+  plant_votes_host Release check_release ""
+  plant_votes_host Release check_release "votes.staging.vettid.org"
+  plant_votes_host Staging check_staging ""
+  plant_votes_host Staging check_staging "votes.vettid.org"
   plant Release check_release "VettIDTesting"
   plant Release check_release "VettIDDataTesting"
   plant Release check_release "VETTID TEST ONLY: the repository-level fake"
