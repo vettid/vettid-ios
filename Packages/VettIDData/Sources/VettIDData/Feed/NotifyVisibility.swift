@@ -29,12 +29,40 @@ public final class NotifyVisibility {
 @Observable
 public final class NotificationOpenInbox: CustomStringConvertible, CustomDebugStringConvertible {
     public private(set) var itemID: String?
+    /// The wait for the tapped item to reach the feed is over (it came, or the time ran out): the shell decides again, with
+    /// what is in front then.
+    public private(set) var waitOver = false
+    @ObservationIgnored private var waiting = false
 
     public init() {}
 
-    public func offer(_ itemID: String) { self.itemID = itemID }
+    public func offer(_ itemID: String) {
+        // The same item tapped again while it waits: the wait under way stands.
+        guard itemID != self.itemID else { return }
+        self.itemID = itemID
+        waitOver = false
+        waiting = false
+    }
 
-    public func consume() { itemID = nil }
+    /// True once per tap: the caller starts the one wait for its item.
+    public func startWaiting() -> Bool {
+        guard itemID != nil, !waiting, !waitOver else { return false }
+        waiting = true
+        return true
+    }
+
+    /// The wait for [itemID] ended; ignored when another tap has replaced it or it was taken.
+    public func waitEnded(for itemID: String) {
+        guard self.itemID == itemID, waiting else { return }
+        waiting = false
+        waitOver = true
+    }
+
+    public func consume() {
+        itemID = nil
+        waitOver = false
+        waiting = false
+    }
 
     public nonisolated var description: String { "NotificationOpenInbox(…)" }
     public nonisolated var debugDescription: String { description }

@@ -63,10 +63,10 @@ public final class SystemNotificationPoster: NotificationPoster {
         let id = n.id
         adding[id] = sweeps
         removedWhileAdding.remove(id)
-        let center = center
-        Task { @MainActor [weak self] in
-            try? await center.add(request)
-            self?.added(id)
+        // Asked now, in this main-actor job, so that a removal made after it (a lock, "Nothing") reaches the center after the
+        // add; the answer comes on the center's own queue and hops back.
+        center.add(request) { @Sendable _ in
+            Task { @MainActor [weak self] in self?.added(id) }
         }
     }
 

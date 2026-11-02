@@ -137,6 +137,7 @@ struct ShellNotificationsHook: ViewModifier {
                 if now == .active { notifications.refreshAllowed() }
             }
             .onChange(of: notifications.taps.itemID) { _, _ in openTapped() }
+            .onChange(of: notifications.taps.waitOver) { _, _ in openTapped() }
     }
 
     private func update() {
@@ -150,21 +151,32 @@ struct ShellNotificationsHook: ViewModifier {
         notifications.visibility.set(scenePhase == .active && inFront ? model.notifyVisible : nil)
     }
 
+    /// The tapped item opens only while the shell is in front, decided again after any wait: a wait for the item never
+    /// acts by itself, it only asks the shell to decide again (``NotificationOpenInbox/waitOver``).
     private func openTapped() {
-        guard inFront, let id = notifications.taps.itemID else { return }
-        notifications.taps.consume()
+        let taps = notifications.taps
+        guard inFront, let id = taps.itemID else { return }
+        let item = feed.items.first { $0.itemID == id }
+        guard item != nil || taps.waitOver else {
+            if taps.startWaiting() { wait(for: id) }
+            return
+        }
+        taps.consume()
+        if item != nil { feed.markReadQuietly(id) }
+        model.openNotified(item)
+    }
+
+    /// Waits up to ``itemWait`` for [id] to reach the feed (after a start, as vettid-android does), then ends the wait.
+    private func wait(for id: String) {
         let feed = feed
-        let model = model
+        let taps = notifications.taps
         Task { @MainActor in
             let clock = ContinuousClock()
             let end = clock.now.advanced(by: Self.itemWait)
-            var item = feed.items.first { $0.itemID == id }
-            while item == nil, clock.now < end, !Task.isCancelled {
+            while !feed.items.contains(where: { $0.itemID == id }), clock.now < end, taps.itemID == id {
                 try? await Task.sleep(for: .milliseconds(250))
-                item = feed.items.first { $0.itemID == id }
             }
-            if item != nil { feed.markReadQuietly(id) }
-            model.openNotified(item)
+            taps.waitEnded(for: id)
         }
     }
 }
