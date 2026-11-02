@@ -4,6 +4,7 @@ import UIKit
 import UserNotifications
 import VettIDData
 import VettIDNotify
+import VettIDOnboarding
 import VettIDShell
 import VettIDUI
 
@@ -20,6 +21,10 @@ final class AppNotifications: NSObject, UNUserNotificationCenterDelegate {
     let taps = NotificationOpenInbox()
     /// Whether the app lock covers the app now, read live (the shell's environment value can lag the lock by an update).
     var appCovered: @MainActor () -> Bool = { false }
+    /// Whether the open app's shell is shown now, read live with the inputs of the daily check's gate
+    /// (``OwnerCheckGateView``, which compares the deadline with the clock only on its tick): the vault open, no check
+    /// after a cancelled recovery, and the check not past its deadline (VAULT-MESSAGING §3.6.5).
+    var shellOpen: @MainActor () -> Bool = { false }
     private(set) var notifier: FeedNotifier?
     /// The member allowed notifications for VettID (read at launch, on each return to the foreground and after the ask).
     private var allowed = false
@@ -63,6 +68,13 @@ final class AppNotifications: NSObject, UNUserNotificationCenterDelegate {
         vault.feed.onCleared = { [weak notifier] in notifier?.cleared() }
         notifier.start()
         refreshAllowed()
+        shellOpen = { [weak vault] in
+            guard let vault else { return false }
+            let checks = vault.ownerChecks
+            return Self.shellOpen(
+                unlocked: vault.phase == .unlocked, checkAfterCancel: checks.checkAfterCancel, check: checks.ownerCheck, now: Date()
+            )
+        }
         // Leaving the foreground (owner decision of 2026-11-02): every item notification goes before the app is suspended.
         background = NotificationCenter.default.addObserver(
             forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main
@@ -72,7 +84,27 @@ final class AppNotifications: NSObject, UNUserNotificationCenterDelegate {
     }
 
     /// The app left the foreground: no item notification outlives the open session.
-    func enteredBackground() { notifier?.backgrounded() }
+    /// Within a short background task, so that the removals reach the notification center before the app is suspended.
+    func enteredBackground() {
+        let app = UIApplication.shared
+        let task = BackgroundTask()
+        task.id = app.beginBackgroundTask(withName: "notifications-clear") {
+            MainActor.assumeIsolated { task.end(app) }
+        }
+        notifier?.backgrounded()
+        Task { @MainActor in
+            try? await Task.sleep(for: Self.clearTime)
+            task.end(app)
+        }
+    }
+
+    /// How long the background clear keeps the app awake (chosen; not in the spec).
+    static let clearTime: Duration = .seconds(2)
+
+    /// The shell is shown: the vault open, no check after a cancelled recovery, the check not past its deadline at [now].
+    static func shellOpen(unlocked: Bool, checkAfterCancel: Bool, check: OwnerCheckView?, now: Date) -> Bool {
+        unlocked && !checkAfterCancel && !OwnerCheckGate.of(check, now: now).gated
+    }
 
     /// Reads whether the member allows notifications (they may have changed it in the iPhone's Settings).
     func refreshAllowed() {
@@ -155,6 +187,7 @@ struct ShellNotificationsHook: ViewModifier {
                 notifications.refreshAllowed()
                 openTapped()
             }
+            .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in openTapped() }
             .onChange(of: notifications.taps.itemID) { _, _ in openTapped() }
             .onChange(of: notifications.taps.waitOver) { _, _ in openTapped() }
     }
@@ -190,7 +223,8 @@ struct ShellNotificationsHook: ViewModifier {
         let item = feed.items.first { $0.itemID == id }
         switch decision(
             stale: taps.isStale, active: UIApplication.shared.applicationState == .active,
-            inFront: model.inFront(appLocked: notifications.appCovered()), found: item != nil, waitOver: taps.waitOver
+            inFront: model.inFront(appLocked: notifications.appCovered()) && notifications.shellOpen(), found: item != nil,
+            waitOver: taps.waitOver
         ) {
         case .drop:
             taps.consume()
