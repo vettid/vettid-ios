@@ -160,3 +160,19 @@ import VettIDDataTesting
         #expect(m.state.withdrawn && !m.state.busy && !m.state.gone)
     }
 }
+
+/// A withdrawn request offers the mute only for a connection with names, and only until its asks are muted: the mute
+/// names whom it mutes, as in History.
+@Suite struct WithdrawnMuteOfferTests {
+    @Test func theMuteIsOfferedOnlyWithANameAndUntilMuted() {
+        let a = Samples.auth("a1")
+        var s = ApprovalDetailState(key: "a1")
+        #expect(!s.offersMute(a), "no name")
+        s.connectionName = "   "
+        #expect(!s.offersMute(a), "a blank name is no name")
+        s.connectionName = "Ada Lovelace"
+        #expect(s.offersMute(a))
+        s.asksMuted = true
+        #expect(!s.offersMute(a), "already muted")
+    }
+}

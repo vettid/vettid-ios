@@ -74,6 +74,12 @@ public struct ApprovalDetailState: Equatable, Sendable, CustomStringConvertible,
     public var limit: VaultLimit?
     /// The requesting connection's "First Last", when the request names a connection that has names.
     public var connectionName: String?
+
+    /// A withdrawn request's notice offers "Mute requests from <name>": the request names a connection with names and its
+    /// asks are not muted. Without a name it is not offered, as in History (a mute names whom it mutes).
+    public func offersMute(_ a: PendingApproval) -> Bool {
+        !asksMuted && a.connectionID != nil && AccountNames.isolateOrNull(connectionName) != nil
+    }
     /// A session request's device: when its current access session ends (VAULT-MESSAGING 0.78.0 §6.8 step 3), passed or
     /// not, as the device list read when the screen opened says (and the events since); nil for a device with none, for
     /// any other request, and while that read has not been answered. ``renewalUntil(at:)`` says whether it renews.
