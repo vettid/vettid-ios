@@ -97,6 +97,13 @@ public final class FeedNotifier {
         poster.removeLeftovers()
     }
 
+    /// The member chose what notifications show: "Nothing" removes the item notifications already showing, which name
+    /// people; the next ones follow the choice.
+    public func previewsChanged(_ p: NotificationPreviews) {
+        guard p == .nothing else { return }
+        cleared()
+    }
+
     private func notifiable(_ item: FeedItem) -> Bool {
         allowed() && open() && item.status == FeedManager.statusActive && !shownOnScreen(item)
     }

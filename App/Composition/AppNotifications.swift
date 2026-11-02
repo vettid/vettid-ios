@@ -5,6 +5,7 @@ import UserNotifications
 import VettIDData
 import VettIDNotify
 import VettIDShell
+import VettIDUI
 
 /// The feed's notifications on this iPhone (IOS-PLAN §6.7; ANDROID-PLAN §4 Notification modes 7 and 8): the notifier over
 /// the vault manager's feed, the notification center's delegate, and whether the member allowed notifications. Before
@@ -52,6 +53,7 @@ final class AppNotifications: NSObject, UNUserNotificationCenterDelegate {
             }
         )
         self.notifier = notifier
+        previews.onSet = { [weak notifier] in notifier?.previewsChanged($0) }
         vault.feed.onArrival = { [weak notifier] in notifier?.arrived($0) }
         vault.feed.onItems = { [weak notifier] in notifier?.itemsChanged($0) }
         vault.feed.onCleared = { [weak notifier] in notifier?.cleared() }
@@ -85,11 +87,18 @@ final class AppNotifications: NSObject, UNUserNotificationCenterDelegate {
         }
     }
 
-    /// In the foreground: a banner (the notifier posts nothing about the screen in front).
+    /// A wipe: "Show in notifications" back to its default, and no tap waiting.
+    func reset() {
+        previews.reset()
+        taps.consume()
+    }
+
+    /// In the foreground: a banner (the notifier posts nothing about the screen in front); Vault activity and an update in
+    /// place go to the list only.
     nonisolated func userNotificationCenter(
         _ center: UNUserNotificationCenter, willPresent notification: UNNotification
     ) async -> UNNotificationPresentationOptions {
-        [.banner, .list, .sound]
+        SystemNotificationPoster.presentation(notification.request.content.interruptionLevel)
     }
 
     /// A tap: the item, for the open app's shell (after the app lock, the unlock and the daily check).
@@ -101,25 +110,28 @@ final class AppNotifications: NSObject, UNUserNotificationCenterDelegate {
 }
 
 /// The open app's part (IOS-PLAN §4.12, the tap rule): the screen in front for the notifier, the tap's item opened once the
-/// shell is shown (it is only after the app lock, the unlock and the daily check), and the permission asked the first
-/// time. Waits up to 10 seconds for the tapped item after a start, as vettid-android does; the item is marked read.
+/// shell is really in front, and the permission asked the first time. The shell exists only while the vault is open and
+/// no check past the deadline takes its place; it stays mounted under the app lock's cover and under an asked daily
+/// check, so nothing here acts then (``ShellModel/inFront(appLocked:)``): a tap waits for the unlock or the check. Waits up
+/// to 10 seconds for the tapped item after a start, as vettid-android does; the item is marked read.
 struct ShellNotificationsHook: ViewModifier {
     let notifications: AppNotifications
     let model: ShellModel
     let feed: FeedManager
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.vettIDLocked) private var appLocked
 
     static let itemWait: Duration = .seconds(10)
 
+    private var inFront: Bool { model.inFront(appLocked: appLocked) }
+
     func body(content: Content) -> some View {
         content
-            .onAppear {
-                notifications.askOnce()
-                show()
-                openTapped()
-            }
+            .onAppear(perform: update)
             .onDisappear { notifications.visibility.set(nil) }
             .onChange(of: model.notifyVisible) { _, _ in show() }
+            .onChange(of: appLocked) { _, _ in update() }
+            .onChange(of: model.asked) { _, _ in update() }
             .onChange(of: scenePhase) { _, now in
                 show()
                 if now == .active { notifications.refreshAllowed() }
@@ -127,12 +139,19 @@ struct ShellNotificationsHook: ViewModifier {
             .onChange(of: notifications.taps.itemID) { _, _ in openTapped() }
     }
 
+    private func update() {
+        show()
+        guard inFront else { return }
+        notifications.askOnce()
+        openTapped()
+    }
+
     private func show() {
-        notifications.visibility.set(scenePhase == .active ? model.notifyVisible : nil)
+        notifications.visibility.set(scenePhase == .active && inFront ? model.notifyVisible : nil)
     }
 
     private func openTapped() {
-        guard let id = notifications.taps.itemID else { return }
+        guard inFront, let id = notifications.taps.itemID else { return }
         notifications.taps.consume()
         let feed = feed
         let model = model

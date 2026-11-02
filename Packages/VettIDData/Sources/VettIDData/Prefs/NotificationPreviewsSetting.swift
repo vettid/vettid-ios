@@ -20,6 +20,8 @@ public final class NotificationPreviewsSetting {
 
     public private(set) var previews: NotificationPreviews
     @ObservationIgnored private let defaults: UserDefaults
+    /// Told of each choice the member makes (the notifications showing follow it).
+    @ObservationIgnored public var onSet: @MainActor (NotificationPreviews) -> Void = { _ in }
 
     public init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
@@ -30,5 +32,12 @@ public final class NotificationPreviewsSetting {
     public func set(_ p: NotificationPreviews) {
         previews = p
         defaults.set(p.rawValue, forKey: Self.key)
+        onSet(p)
+    }
+
+    /// A wipe: the default again, and nothing stored.
+    public func reset() {
+        previews = .names
+        defaults.removeObject(forKey: Self.key)
     }
 }

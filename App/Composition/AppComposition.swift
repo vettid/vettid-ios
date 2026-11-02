@@ -105,16 +105,18 @@ final class AppComposition {
         resetOnWipe()
     }
 
-    /// A wipe resets what lives in memory: the app lock, a setup link waiting for the welcome screen, and a canary
-    /// manifest waiting for its dialog or shown in it.
+    /// A wipe resets what lives in memory: the app lock, a setup link waiting for the welcome screen, a canary manifest
+    /// waiting for its dialog or shown in it, "Show in notifications" and a notification's tap waiting for the shell.
     private func resetOnWipe() {
         let lock = appLock
         let inbox = inbox
         let canaryInbox = canaryInbox
+        let notifications = notifications
         vault.onWipe {
             lock.reset()
             inbox.consume()
             canaryInbox.reset()
+            notifications.reset()
         }
     }
 

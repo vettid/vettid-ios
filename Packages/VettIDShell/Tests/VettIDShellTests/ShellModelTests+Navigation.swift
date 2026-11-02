@@ -221,6 +221,18 @@ import VettIDVault
         #expect(m.path == [.notifications(archived: false)])
     }
 
+    /// A notification's tap, the screen in front and the permission wait while the shell is not really in front: under the
+    /// app lock's cover or an asked daily check.
+    @Test func theShellIsInFrontOnlyWithoutTheAppLockOrAnAskedCheck() {
+        let m = model
+        #expect(m.inFront(appLocked: false))
+        #expect(!m.inFront(appLocked: true))
+        m.ownerCheck(holdOff: false)
+        #expect(!m.inFront(appLocked: false))
+        m.ownerCheckDone()
+        #expect(m.inFront(appLocked: false))
+    }
+
     /// The screen in front as the notifications see it (vettid-android `visibleOf`): the Notifications list, a
     /// conversation, an approval, a connection or a vote; nothing for any other screen.
     @Test func theScreenInFrontForTheNotifications() {

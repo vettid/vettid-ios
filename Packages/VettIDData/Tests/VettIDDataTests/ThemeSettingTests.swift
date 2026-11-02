@@ -82,4 +82,18 @@ import Testing
         d.set("garbled", forKey: NotificationPreviewsSetting.key)
         #expect(NotificationPreviewsSetting(defaults: d).previews == .names)
     }
+
+    /// Each choice is told (the notifications showing follow it); a wipe's reset is the default, stored nowhere.
+    @Test func aChoiceIsToldAndAResetIsTheDefault() throws {
+        let name = "previews-tests-\(UUID().uuidString)"
+        let d = try #require(UserDefaults(suiteName: name))
+        defer { d.removePersistentDomain(forName: name) }
+        let s = NotificationPreviewsSetting(defaults: d)
+        var told: [NotificationPreviews] = []
+        s.onSet = { told.append($0) }
+        s.set(.nothing)
+        #expect(told == [.nothing])
+        s.reset()
+        #expect(s.previews == .names && d.string(forKey: NotificationPreviewsSetting.key) == nil && told == [.nothing])
+    }
 }

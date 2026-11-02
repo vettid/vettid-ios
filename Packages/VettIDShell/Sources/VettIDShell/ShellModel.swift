@@ -102,6 +102,11 @@ public final class ShellModel {
         if t == .sheet { openNotifications() } else { openFeedTarget(t) }
     }
 
+    /// Whether the shell is really in front for a notification's tap, the screen in front and the permission: not under
+    /// the app lock's cover ([appLocked]; the shell stays mounted under it) nor under an asked daily check (``asked``).
+    /// The vault's own lock and a check past the deadline take the shell away altogether.
+    public func inFront(appLocked: Bool) -> Bool { !appLocked && asked == nil }
+
     /// The screen in front as the notifications see it: the Notifications list, a conversation, an approval, a
     /// connection or a vote; nil for any other screen. Mirrors vettid-android `visibleOf`.
     public var notifyVisible: NotifyVisible? {

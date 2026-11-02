@@ -134,6 +134,16 @@ import VettIDVault
         #expect(w.notifier.posted == ["f4"])
     }
 
+    /// "Nothing" chosen: the item notifications already showing, which name people, go; another choice keeps them.
+    @Test func choosingNothingRemovesWhatIsShowing() {
+        let w = World()
+        w.arrive(item("f1"))
+        w.notifier.previewsChanged(.namesAndText)
+        #expect(Set(w.poster.shown.keys) == ["f1"])
+        w.notifier.previewsChanged(.nothing)
+        #expect(w.poster.shown.isEmpty && w.poster.leftoverSweeps == 1 && w.notifier.posted.isEmpty)
+    }
+
     @Test func nothingWithoutTheMembersPermission() {
         let w = World()
         w.allowed = false
@@ -199,3 +209,25 @@ import VettIDVault
         #expect(!String(describing: n).contains("Sam") && !String(reflecting: n).contains("secret"))
     }
 }
+
+#if os(iOS)
+import UserNotifications
+
+/// The system poster's pure parts: the foreground presentation by level, and which delivered notifications are the feed's.
+@Suite struct SystemNotificationPosterTests {
+    @Test func passiveNotificationsGoToTheListOnly() {
+        #expect(SystemNotificationPoster.presentation(.passive) == [.list])
+        for level in [UNNotificationInterruptionLevel.active, .timeSensitive] {
+            #expect(SystemNotificationPoster.presentation(level) == [.banner, .list, .sound])
+        }
+    }
+
+    @Test func onlyFeedItemNotificationsAreLeftovers() {
+        let delivered: [(String, [AnyHashable: Any])] = [
+            ("f1", [SystemNotificationPoster.itemKey: "f1"]), ("other", [:]), ("x", ["something": "else"]),
+        ]
+        #expect(SystemNotificationPoster.itemIDs(delivered) == ["f1"])
+        #expect(SystemNotificationPoster.itemID([SystemNotificationPoster.itemKey: "f2"]) == "f2")
+    }
+}
+#endif
