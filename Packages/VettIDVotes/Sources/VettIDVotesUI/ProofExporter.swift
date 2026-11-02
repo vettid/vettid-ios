@@ -4,8 +4,8 @@ import UIKit
 import UniformTypeIdentifiers
 import VettIDVotes
 
-/// The vault's evidence of a vote as a file for the system's document picker (owner decision, 2026-11-01: the file exporter;
-/// IOS-PLAN §4.16 names the share sheet). SwiftUI's `fileExporter` writes its document to the app's `tmp/` with the default
+/// The vault's evidence of a vote as a file for the system's document picker (owner decision, 2026-11-01;
+/// IOS-PLAN §4.16 (0.1.54)). SwiftUI's `fileExporter` writes its document to the app's `tmp/` with the default
 /// file protection and leaves it there after a save and after a cancel (checked on the simulator), so the file is made here
 /// instead: in a directory of its own with complete file protection, handed to
 /// `UIDocumentPickerViewController(forExporting:asCopy: true)`, and removed on every path (a pick, a cancel, a failure, the
@@ -79,29 +79,55 @@ final class ProofExportCoordinator: NSObject, UIDocumentPickerDelegate {
     var onFailed: @MainActor () -> Void = {}
     /// The temporary file while the picker is up.
     private(set) var temp: ProofTempFile?
-    private weak var picker: UIDocumentPickerViewController?
+    /// Held while the file is, so that it is not released before it is presented.
+    private var picker: UIDocumentPickerViewController?
     /// The directory the files are made in (tests set it).
     var root = FileManager.default.temporaryDirectory
 
-    /// [file] set: the picker opens (once for this file); nil: whatever is up closes.
+    /// [file] set: the picker opens (once for this file); nil: whatever is up closes. A picker that cannot be presented (no
+    /// window, or another presentation under way) is told as a failure, and its file goes.
     func update(_ file: ProofFile?, host: UIViewController) {
         guard let file else {
             close()
             return
         }
         guard temp == nil else { return }
+        let t: ProofTempFile
         do {
-            let t = try ProofTempFile.write(file, in: root)
-            temp = t
-            let picker = UIDocumentPickerViewController(forExporting: [t.url], asCopy: true)
-            picker.delegate = self
-            picker.shouldShowFileExtensions = true
-            self.picker = picker
-            // After the update that asked for it: the host is on screen by then.
-            DispatchQueue.main.async { [weak host] in host?.present(picker, animated: true) }
+            t = try ProofTempFile.write(file, in: root)
         } catch {
-            onFailed()
+            fail()
+            return
         }
+        temp = t
+        let picker = UIDocumentPickerViewController(forExporting: [t.url], asCopy: true)
+        picker.delegate = self
+        picker.shouldShowFileExtensions = true
+        self.picker = picker
+        // After the update that asked for it: the host is on screen by then.
+        DispatchQueue.main.async { [weak self, weak host, weak picker] in
+            guard let self, let picker, self.picker === picker, temp?.url == t.url else { return }
+            guard let presenter = host.flatMap(Self.topmost), presenter.viewIfLoaded?.window != nil, !presenter.isBeingDismissed,
+                  !presenter.isBeingPresented else {
+                self.fail()
+                return
+            }
+            presenter.present(picker, animated: true)
+        }
+    }
+
+    /// The controller a presentation starts from: the topmost one already presented over [host]'s.
+    static func topmost(_ host: UIViewController) -> UIViewController {
+        var top = host
+        while let next = top.presentedViewController, !next.isBeingDismissed { top = next }
+        return top
+    }
+
+    /// The picker could not be opened: the file goes and the failure is told, after the update that asked for it.
+    private func fail() {
+        picker = nil
+        removeTemp()
+        DispatchQueue.main.async { [weak self] in self?.onFailed() }
     }
 
     /// The picker is gone without an answer (the screen left, or the file was taken away): the file goes.

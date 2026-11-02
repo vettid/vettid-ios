@@ -140,6 +140,8 @@ check_app() {
 HARDWARE_KEYS=("SecureEnclavePhoneSecretSource" "DeviceCheckAppAttestService")
 
 check_release() {
+  # Only Staging sets texts aside: a value in the caller's environment does not reach Release.
+  local ALLOWED_TEXTS=
   check_app "$1" com.vettid.app "${PRODUCTION_HOSTS[@]}" "${HARDWARE_KEYS[@]}" "${DOCUMENT_TYPES[@]}" \
     -- "${TEST_MARKERS[@]}" "${DEV_ONLY[@]}" "${STAGING_HOSTS[@]}" "${STAGING_KEYS[@]}" "${TEST_MANIFEST_KEY[@]}"
 }

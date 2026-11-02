@@ -173,7 +173,7 @@ import VettIDUI
     }
 
     /// The file is removed on every path: a pick, a cancel, the screen leaving, the file taken away, and the next file.
-    @Test func theTemporaryFileGoesOnEveryPath() throws {
+    @Test func theTemporaryFileGoesOnEveryPath() async throws {
         let root = try scratch()
         defer { try? FileManager.default.removeItem(at: root) }
         let file = ProofFile(bytes: Data("evidence".utf8), name: "p.json")
@@ -204,7 +204,48 @@ import VettIDUI
         c.onFailed = { failed += 1 }
         c.root = root.appendingPathComponent("missing/deeper")
         c.update(file, host: host)
+        #expect(failed == 0, "told after the update that asked, not during it")
+        try await Task.sleep(for: .seconds(0.1))
         #expect(failed == 1 && c.temp == nil)
+    }
+
+    /// A picker that cannot be presented (no window) leaves no file and is told as a failure, once.
+    @Test func aPickerThatCannotBePresentedRemovesTheFileAndIsTold() async throws {
+        let root = try scratch()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let c = ProofExportCoordinator()
+        c.root = root
+        var failed = 0
+        var answered: [Bool] = []
+        c.onFailed = { failed += 1 }
+        c.onAnswered = { answered.append($0) }
+        c.update(ProofFile(bytes: Data("evidence".utf8), name: "p.json"), host: UIViewController())
+        #expect(entries(root).count == 1 && failed == 0)
+        try await Task.sleep(for: .seconds(0.1))
+        #expect(entries(root).isEmpty && c.temp == nil && failed == 1 && answered.isEmpty)
+    }
+
+    /// A close between the update and the hop opens no picker for a deleted file and tells nothing.
+    @Test func aCloseBeforeThePresentationOpensNothing() async throws {
+        let root = try scratch()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let c = ProofExportCoordinator()
+        c.root = root
+        var failed = 0
+        c.onFailed = { failed += 1 }
+        let window = windowed(UIViewController())
+        let controller = try #require(window.rootViewController)
+        c.update(ProofFile(bytes: Data("evidence".utf8), name: "p.json"), host: controller)
+        c.leave()
+        try await Task.sleep(for: .seconds(0.2))
+        #expect(entries(root).isEmpty && failed == 0 && controller.presentedViewController == nil)
+    }
+
+    /// The presentation starts from the controller itself when nothing is presented over it (a modal over a test window needs a
+    /// scene, which a unit test host does not give, so the chain is not built here).
+    @Test func thePresentationStartsFromTheHostWhenNothingIsPresented() {
+        let host = UIViewController()
+        #expect(ProofExportCoordinator.topmost(host) === host)
     }
 
     /// The vote screen holds no exporter of its own: nothing is written until the evidence is ready.
@@ -216,7 +257,7 @@ import VettIDUI
 
     // MARK: Capture and secrets
 
-    /// IOS-PLAN §4.16 "Screen privacy", decision A (2026-10-31): the vote screen and its sheets are on the secure layer, always,
+    /// IOS-PLAN §4.16 Screen privacy (ANDROID-PLAN decision A, 2026-10-31): the vote screen and its sheets are on the secure layer, always,
     /// whatever "Allow screenshots" says (as Android's `FLAG_SECURE` and the recovery screen).
     @Test func theVoteIsKeptOutOfCapturesWhateverTheAllowanceSays() {
         guard SecureLayer.isAvailable else { return }
@@ -274,6 +315,16 @@ import VettIDUI
         window.isHidden = false
         window.layoutIfNeeded()
         RunLoop.main.run(until: Date().addingTimeInterval(0.2))
+        return window
+    }
+
+    /// A window with [controller] as its root, on screen.
+    private func windowed(_ controller: UIViewController) -> UIWindow {
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
+        window.rootViewController = controller
+        window.isHidden = false
+        window.makeKeyAndVisible()
+        window.layoutIfNeeded()
         return window
     }
 

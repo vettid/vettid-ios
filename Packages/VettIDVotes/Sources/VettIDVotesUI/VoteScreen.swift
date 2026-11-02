@@ -41,7 +41,7 @@ public struct VoteActions {
 
 /// One vote (ANDROID-PLAN 0.1.102 to 0.1.108 §4 "Votes", screens 2 to 7). The service's words are shown as plain text; the
 /// disclosure sentence is the app's own and fixed. The screen and its sheets are always kept out of screenshots and screen
-/// recordings (IOS-PLAN §4.16 "Screen privacy", decision A): the vote's choice is shown here. Mirrors vettid-android
+/// recordings (IOS-PLAN §4.16 Screen privacy, ANDROID-PLAN decision A): the vote's choice is shown here. Mirrors vettid-android
 /// `VoteScreen`.
 public struct VoteScreen: View {
     @Environment(\.scenePhase) private var scenePhase
@@ -57,7 +57,7 @@ public struct VoteScreen: View {
     }
 
     public var body: some View {
-        // Always protected, whatever "Allow screenshots" says (decision A, 2026-10-31: the vote screen joins the SecureWindow list, as
+        // Always protected, whatever "Allow screenshots" says (IOS-PLAN §4.16 Screen privacy, ANDROID-PLAN decision A, 2026-10-31: the vote screen joins the SecureWindow list, as
         // Android's FLAG_SECURE does).
         SecureContainer(isSecure: true) {
             DetailScaffold(onBack: actions.onBack) { content }
@@ -81,7 +81,7 @@ public struct VoteScreen: View {
             onConfirm: actions.onFetchProof
         )
         // The system's document picker writes the vault's evidence, unchanged, only where the member chooses (owner decision,
-        // 2026-11-01; IOS-PLAN §4.16 names the share sheet). It is Android's "Save to…" and History's export. The temporary file
+        // 2026-11-01; IOS-PLAN §4.16 (0.1.54)). It is Android's "Save to…" and History's export. The temporary file
         // it needs is made and removed here (``ProofTempFile``), not left in tmp/ as SwiftUI's `fileExporter` leaves it.
         .background(ProofExporter(file: proof, onAnswered: actions.onProofExporterAnswered, onFailed: actions.onProofExporterFailed))
         // The result of a save is announced, once.
