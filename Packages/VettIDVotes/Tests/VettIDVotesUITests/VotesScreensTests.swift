@@ -232,13 +232,47 @@ import VettIDUI
         let c = ProofExportCoordinator()
         c.root = root
         var failed = 0
+        var presented = 0
         c.onFailed = { failed += 1 }
+        c.presentPicker = { _, _ in presented += 1 }
         let window = windowed(UIViewController())
         let controller = try #require(window.rootViewController)
         c.update(ProofFile(bytes: Data("evidence".utf8), name: "p.json"), host: controller)
         c.leave()
         try await Task.sleep(for: .seconds(0.2))
-        #expect(entries(root).isEmpty && failed == 0 && controller.presentedViewController == nil)
+        #expect(entries(root).isEmpty && failed == 0 && presented == 0)
+    }
+
+    /// With the host on screen and nothing over it, the picker is presented from the host, once; a presentation UIKit does
+    /// not take (it only logs one made while another is under way) removes the file and is told, once.
+    @Test func aPresentationUIKitDoesNotTakeRemovesTheFileAndIsTold() async throws {
+        let root = try scratch()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let c = ProofExportCoordinator()
+        c.root = root
+        var failed = 0
+        var answered: [Bool] = []
+        var presenters: [UIViewController] = []
+        c.onFailed = { failed += 1 }
+        c.onAnswered = { answered.append($0) }
+        c.presentPicker = { presenter, picker in
+            presenters.append(presenter)
+            #expect(picker is UIDocumentPickerViewController)
+        }
+        let window = windowed(UIViewController())
+        let controller = try #require(window.rootViewController)
+        c.update(ProofFile(bytes: Data("evidence".utf8), name: "p.json"), host: controller)
+        #expect(entries(root).count == 1)
+        try await Task.sleep(for: .seconds(0.2))
+        #expect(presenters.count == 1 && presenters.first === controller)
+        #expect(entries(root).isEmpty && c.temp == nil && failed == 1 && answered.isEmpty)
+    }
+
+    /// A host with nothing over it and no transition is free to present.
+    @Test func aHostWithNothingOverItIsNotBusy() {
+        let window = windowed(UIViewController())
+        let controller = window.rootViewController!
+        #expect(!ProofExportCoordinator.isBusy(controller))
     }
 
     /// The presentation starts from the controller itself when nothing is presented over it (a modal over a test window needs a

@@ -85,7 +85,8 @@ final class ProofExportCoordinator: NSObject, UIDocumentPickerDelegate {
     var root = FileManager.default.temporaryDirectory
 
     /// [file] set: the picker opens (once for this file); nil: whatever is up closes. A picker that cannot be presented (no
-    /// window, or another presentation under way) is told as a failure, and its file goes.
+    /// window, another presentation still under way after a few tries, or refused by UIKit) is told as a failure, and its
+    /// file goes.
     func update(_ file: ProofFile?, host: UIViewController) {
         guard let file else {
             close()
@@ -105,15 +106,41 @@ final class ProofExportCoordinator: NSObject, UIDocumentPickerDelegate {
         picker.shouldShowFileExtensions = true
         self.picker = picker
         // After the update that asked for it: the host is on screen by then.
-        DispatchQueue.main.async { [weak self, weak host, weak picker] in
-            guard let self, let picker, self.picker === picker, temp?.url == t.url else { return }
-            guard let presenter = host.flatMap(Self.topmost), presenter.viewIfLoaded?.window != nil, !presenter.isBeingDismissed,
-                  !presenter.isBeingPresented else {
-                self.fail()
+        DispatchQueue.main.async { [weak self, weak host] in
+            self?.present(picker, for: t, from: host, triesLeft: Self.presentTries)
+        }
+    }
+
+    /// How many times a presentation is tried while another one (an alert closing, say) is still under way.
+    static let presentTries = 4
+    /// The wait between those tries (tests shorten it).
+    var retryDelay: TimeInterval = 0.35
+    /// The presentation itself (tests replace it).
+    var presentPicker: @MainActor (_ presenter: UIViewController, _ picker: UIViewController) -> Void = {
+        $0.present($1, animated: true)
+    }
+
+    /// Presents [picker] if it and its file are still current. While another presentation is under way it waits and tries
+    /// again; when it cannot present at all, or UIKit does not take the presentation, the file goes and the failure is told.
+    private func present(_ picker: UIDocumentPickerViewController, for t: ProofTempFile, from host: UIViewController?, triesLeft: Int) {
+        guard self.picker === picker, temp?.url == t.url else { return }
+        guard let presenter = host.map(Self.topmost), presenter.viewIfLoaded?.window != nil else {
+            fail()
+            return
+        }
+        if Self.isBusy(presenter) {
+            guard triesLeft > 1 else {
+                fail()
                 return
             }
-            presenter.present(picker, animated: true)
+            DispatchQueue.main.asyncAfter(deadline: .now() + retryDelay) { [weak self, weak host] in
+                self?.present(picker, for: t, from: host, triesLeft: triesLeft - 1)
+            }
+            return
         }
+        presentPicker(presenter, picker)
+        // UIKit sets this at once when it takes a presentation; one it refuses only logs, and no delegate call would come.
+        if picker.presentingViewController == nil { fail() }
     }
 
     /// The controller a presentation starts from: the topmost one already presented over [host]'s.
@@ -121,6 +148,13 @@ final class ProofExportCoordinator: NSObject, UIDocumentPickerDelegate {
         var top = host
         while let next = top.presentedViewController, !next.isBeingDismissed { top = next }
         return top
+    }
+
+    /// Whether a presentation from [presenter] would be refused now: something over it is still leaving, it is itself
+    /// arriving or leaving, or a transition is running.
+    static func isBusy(_ presenter: UIViewController) -> Bool {
+        presenter.presentedViewController != nil || presenter.isBeingDismissed || presenter.isBeingPresented
+            || presenter.transitionCoordinator != nil
     }
 
     /// The picker could not be opened: the file goes and the failure is told, after the update that asked for it.
