@@ -342,6 +342,10 @@ public final class AppLock {
         backgroundAt = now()
     }
 
+    /// The app left the foreground and the check of its return has not run yet: what the app shows may still be covered
+    /// by the lock once it does, so nothing acts on the member's behalf meanwhile.
+    public var foregroundCheckPending: Bool { backgroundAt != nil }
+
     public func onForeground() {
         if authenticating { return }
         guard let at = backgroundAt else { return }

@@ -131,7 +131,8 @@ final class AppComposition {
         if firstRun.isOpen { vault.resumePendingWipe() }
         startAppLock()
         let lock = appLock
-        notifications.appCovered = { lock.state == .locked || lock.state == .pending }
+        // Covered too while the return's check has not run: a tap decided from UIKit's "became active" can come before it.
+        notifications.appCovered = { lock.state == .locked || lock.state == .pending || lock.foregroundCheckPending }
         notifications.start(vault: vault)
     }
 
