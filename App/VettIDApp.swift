@@ -313,7 +313,9 @@ struct AppRoot: View {
                     history: vault.history, historyExport: vault.historyExport, items: vault.items, sharing: vault.sharing,
                     votes: vault.votes, move: move
                 ) { openPortal() }
-                .modifier(OptionalNotificationsHook(notifications: notifications, model: shell, feed: vault.feed))
+                .modifier(OptionalNotificationsHook(
+                    notifications: notifications, model: shell, feed: vault.feed, checks: vault.ownerChecks
+                ))
             }
         }
     }
@@ -324,10 +326,11 @@ struct OptionalNotificationsHook: ViewModifier {
     let notifications: AppNotifications?
     let model: ShellModel
     let feed: FeedManager
+    let checks: OwnerCheckManager
 
     func body(content: Content) -> some View {
         if let notifications {
-            content.modifier(ShellNotificationsHook(notifications: notifications, model: model, feed: feed))
+            content.modifier(ShellNotificationsHook(notifications: notifications, model: model, feed: feed, checks: checks))
         } else {
             content
         }

@@ -163,6 +163,9 @@ struct ShellNotificationsHook: ViewModifier {
     let notifications: AppNotifications
     let model: ShellModel
     let feed: FeedManager
+    /// The daily check: a tap that waited on a check due by the clock is decided again when the check changes (passed
+    /// here or on another device) without the shell having left.
+    let checks: OwnerCheckManager
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.vettIDLocked) private var appLocked
 
@@ -190,6 +193,7 @@ struct ShellNotificationsHook: ViewModifier {
             .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in openTapped() }
             .onChange(of: notifications.taps.itemID) { _, _ in openTapped() }
             .onChange(of: notifications.taps.waitOver) { _, _ in openTapped() }
+            .onChange(of: checks.ownerCheck) { _, _ in openTapped() }
     }
 
     private func update() {
