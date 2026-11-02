@@ -65,3 +65,57 @@ import Testing
         #expect(ThemeSetting(defaults: d).theme == .light)
     }
 }
+
+/// Settings → App → "Show in notifications" (ANDROID-PLAN §4 Notification modes 8): names until chosen (Android's
+/// default), then the stored choice read back at the next start; a value that does not read is the default.
+@MainActor
+@Suite struct NotificationPreviewsSettingTests {
+    @Test func namesUntilChosenThenStoredAndReadBack() throws {
+        let name = "previews-tests-\(UUID().uuidString)"
+        let d = try #require(UserDefaults(suiteName: name))
+        defer { d.removePersistentDomain(forName: name) }
+        #expect(NotificationPreviews.allCases == [.names, .namesAndText, .nothing])
+        let first = NotificationPreviewsSetting(defaults: d)
+        #expect(first.previews == .names)
+        first.set(.nothing)
+        #expect(first.previews == .nothing && NotificationPreviewsSetting(defaults: d).previews == .nothing)
+        d.set("garbled", forKey: NotificationPreviewsSetting.key)
+        #expect(NotificationPreviewsSetting(defaults: d).previews == .names)
+    }
+
+    /// Each choice is told (the notifications showing follow it); a wipe's reset is the default, stored nowhere, and told
+    /// too, so that a later narrower choice is seen as one.
+    @Test func aChoiceIsToldAndAResetIsTheDefault() throws {
+        let name = "previews-tests-\(UUID().uuidString)"
+        let d = try #require(UserDefaults(suiteName: name))
+        defer { d.removePersistentDomain(forName: name) }
+        let s = NotificationPreviewsSetting(defaults: d)
+        var told: [NotificationPreviews] = []
+        s.onSet = { told.append($0) }
+        s.set(.nothing)
+        #expect(told == [.nothing])
+        s.reset()
+        #expect(s.previews == .names && d.string(forKey: NotificationPreviewsSetting.key) == nil && told == [.nothing, .names])
+    }
+}
+
+/// A notification's tap waits at most ``NotificationOpenInbox/maxWait`` for the shell (chosen; not in the spec).
+@MainActor
+@Suite struct NotificationOpenInboxStaleTests {
+    @Test func aTapOlderThanTenMinutesIsStale() {
+        var t = Date(timeIntervalSince1970: 1_000)
+        let inbox = NotificationOpenInbox(now: { t })
+        #expect(!inbox.isStale)
+        inbox.offer("f1")
+        t += 600
+        #expect(!inbox.isStale)
+        t += 1
+        #expect(inbox.isStale)
+        // Tapped again: it waits from the new tap.
+        inbox.offer("f1")
+        #expect(!inbox.isStale)
+        inbox.consume()
+        t += 10_000
+        #expect(!inbox.isStale && inbox.itemID == nil)
+    }
+}

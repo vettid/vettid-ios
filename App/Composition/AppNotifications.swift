@@ -1,0 +1,290 @@
+import Foundation
+import SwiftUI
+import UIKit
+import UserNotifications
+import VettIDData
+import VettIDNotify
+import VettIDOnboarding
+import VettIDShell
+import VettIDUI
+
+/// The feed's notifications on this iPhone (IOS-PLAN §6.7; ANDROID-PLAN §4 Notification modes 7 and 8): the notifier over
+/// the vault manager's feed, the notification center's delegate, and whether the member allowed notifications. Before
+/// Apple push (IOS-PLAN ID12) the feed is collected only while the app is in the foreground, so these show as banners
+/// while the app is open on another screen. The permission is asked once, when the open app is first shown (never on
+/// the onboarding screens); the iPhone's Settings keep the answer, and turn notifications off. Nothing here is stored.
+@MainActor
+final class AppNotifications: NSObject, UNUserNotificationCenterDelegate {
+    let previews = NotificationPreviewsSetting()
+    let visibility = NotifyVisibility()
+    /// A tap waiting for the open app's shell.
+    let taps = NotificationOpenInbox()
+    /// Whether the app lock covers the app now, read live (the shell's environment value can lag the lock by an update).
+    var appCovered: @MainActor () -> Bool = { false }
+    /// Whether the open app's shell is shown now, read live with the inputs of the daily check's gate
+    /// (``OwnerCheckGateView``, which compares the deadline with the clock only on its tick): the vault open, no check
+    /// after a cancelled recovery, and the check not past its deadline (VAULT-MESSAGING §3.6.5).
+    var shellOpen: @MainActor () -> Bool = { false }
+    private(set) var notifier: FeedNotifier?
+    /// The member allowed notifications for VettID (read at launch, on each return to the foreground and after the ask).
+    private var allowed = false
+    private var background: (any NSObjectProtocol)?
+
+    /// Hooks the notifier to [vault]'s feed and sets this as the notification center's delegate.
+    func start(vault: VaultManager) {
+        let center = UNUserNotificationCenter.current()
+        center.delegate = self
+        center.setNotificationCategories(SystemNotificationPoster.categories)
+        let previews = previews
+        let visibility = visibility
+        let notifier = FeedNotifier(
+            poster: SystemNotificationPoster(center: center),
+            previews: { previews.previews },
+            // The vault open as the shell shows it (unlocked, no check due or past its deadline, no check after a cancelled
+            // recovery), and the app lock not covering the app: no name shows over the app lock.
+            open: { [weak self, weak vault] in Self.mayPost(covered: self?.appCovered() ?? true, shellOpen: Self.shellOpen(vault)) },
+            active: { UIApplication.shared.applicationState == .active },
+            visible: { UIApplication.shared.applicationState == .active ? visibility.visible : nil },
+            allowed: { [weak self] in self?.allowed ?? false },
+            names: { [weak vault] in
+                guard let vault else { return FeedNames() }
+                return FeedNames(
+                    connections: vault.connections.connections, items: vault.items.names ?? [:],
+                    approvals: vault.approvals.approvals, votes: vault.votes.votes
+                )
+            },
+            messageText: { [weak vault] connectionID, messageID in
+                guard let m = vault?.messages.messages(connectionID).first(where: { $0.messageID == messageID && !$0.outgoing }) else {
+                    return nil
+                }
+                return NotificationContent.messageText(m.text, photo: m.attachment != nil)
+            }
+        )
+        self.notifier = notifier
+        previews.onSet = { [weak notifier] in notifier?.previewsChanged($0) }
+        vault.feed.onArrival = { [weak notifier] in notifier?.arrived($0) }
+        vault.feed.onItems = { [weak notifier] in notifier?.itemsChanged($0) }
+        vault.feed.onCleared = { [weak notifier] in notifier?.cleared() }
+        notifier.start()
+        refreshAllowed()
+        shellOpen = { [weak vault] in Self.shellOpen(vault) }
+        // Leaving the foreground (owner decision of 2026-11-02): every item notification goes before the app is suspended.
+        background = NotificationCenter.default.addObserver(
+            forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.enteredBackground() }
+        }
+    }
+
+    /// The app left the foreground: no item notification outlives the open session.
+    /// Within a short background task, so that the removals reach the notification center before the app is suspended.
+    func enteredBackground() {
+        let app = UIApplication.shared
+        let task = BackgroundTask()
+        task.id = app.beginBackgroundTask(withName: "notifications-clear") {
+            MainActor.assumeIsolated { task.end(app) }
+        }
+        notifier?.backgrounded()
+        Task { @MainActor in
+            try? await Task.sleep(for: Self.clearTime)
+            task.end(app)
+        }
+    }
+
+    /// How long the background clear keeps the app awake (chosen; not in the spec).
+    static let clearTime: Duration = .seconds(2)
+
+    /// Whether a feed item's notification may post: the shell is open and the app lock does not cover the app (IOS-PLAN
+    /// §6.7).
+    static func mayPost(covered: Bool, shellOpen: Bool) -> Bool { shellOpen && !covered }
+
+    /// ``shellOpen(unlocked:checkAfterCancel:check:now:)`` for [vault] now; false without one.
+    static func shellOpen(_ vault: VaultManager?) -> Bool {
+        guard let vault else { return false }
+        let checks = vault.ownerChecks
+        return shellOpen(
+            unlocked: vault.phase == .unlocked, checkAfterCancel: checks.checkAfterCancel, check: checks.ownerCheck, now: Date()
+        )
+    }
+
+    /// The shell is shown: the vault open, no check after a cancelled recovery, the check not past its deadline at [now].
+    static func shellOpen(unlocked: Bool, checkAfterCancel: Bool, check: OwnerCheckView?, now: Date) -> Bool {
+        unlocked && !checkAfterCancel && !OwnerCheckGate.of(check, now: now).gated
+    }
+
+    /// Reads whether the member allows notifications (they may have changed it in the iPhone's Settings).
+    func refreshAllowed() {
+        Task { @MainActor [weak self] in
+            let status = await UNUserNotificationCenter.current().notificationSettings().authorizationStatus
+            self?.allowed = Self.allows(status)
+        }
+    }
+
+    nonisolated static func allows(_ status: UNAuthorizationStatus) -> Bool {
+        switch status {
+        case .authorized, .provisional, .ephemeral: true
+        default: false
+        }
+    }
+
+    /// The permission, asked once: the iPhone asks only while the member has not answered.
+    func askOnce() {
+        Task { @MainActor [weak self] in
+            let center = UNUserNotificationCenter.current()
+            if await center.notificationSettings().authorizationStatus == .notDetermined {
+                _ = try? await center.requestAuthorization(options: [.alert, .sound])
+            }
+            self?.refreshAllowed()
+        }
+    }
+
+    /// The app lock covers the app: every item notification goes, as when the app leaves the foreground.
+    func covered() { notifier?.cleared() }
+
+    /// A wipe: "Show in notifications" back to its default, and no tap waiting.
+    func reset() {
+        previews.reset()
+        taps.consume()
+    }
+
+    /// In the foreground: a banner (the notifier posts nothing about the screen in front); Vault activity and an update in
+    /// place go to the list only.
+    nonisolated func userNotificationCenter(
+        _ center: UNUserNotificationCenter, willPresent notification: UNNotification
+    ) async -> UNNotificationPresentationOptions {
+        SystemNotificationPoster.presentation(notification.request.content.interruptionLevel)
+    }
+
+    /// A tap: the item, for the open app's shell (after the app lock, the unlock and the daily check).
+    nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse) async {
+        guard response.actionIdentifier == UNNotificationDefaultActionIdentifier,
+              let id = SystemNotificationPoster.itemID(response.notification.request.content.userInfo) else { return }
+        await MainActor.run { taps.offer(id) }
+    }
+}
+
+/// The open app's part (IOS-PLAN §4.12, the tap rule): the screen in front for the notifier, the tap's item opened once the
+/// shell is really in front, and the permission asked the first time. The shell exists only while the vault is open and
+/// no check past the deadline takes its place; it stays mounted under the app lock's cover and under an asked daily
+/// check, so nothing here acts then (``ShellModel/inFront(appLocked:)``): a tap waits for the unlock or the check. Waits up
+/// to 10 seconds for the tapped item after a start, as vettid-android does; the item is marked read.
+struct ShellNotificationsHook: ViewModifier {
+    let notifications: AppNotifications
+    let model: ShellModel
+    let feed: FeedManager
+    /// The daily check: a tap that waited on a check due by the clock is decided again when the check changes (passed
+    /// here or on another device) without the shell having left.
+    let checks: OwnerCheckManager
+    @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.vettIDLocked) private var appLocked
+
+    static let itemWait: Duration = .seconds(10)
+
+    private var inFront: Bool { model.inFront(appLocked: appLocked) }
+
+    func body(content: Content) -> some View {
+        content
+            .onAppear(perform: update)
+            .onDisappear {
+                notifications.visibility.set(nil)
+                // The vault locked or a check took the shell's place: the tap's item is waited for again after it.
+                notifications.taps.rearm()
+            }
+            .onChange(of: model.notifyVisible) { _, _ in show() }
+            .onChange(of: appLocked) { _, locked in
+                // The app lock's cover went up: no item notification naming anyone stays to be seen over it.
+                if locked { notifications.covered() }
+                update()
+            }
+            .onChange(of: model.asked) { _, _ in update() }
+            .onChange(of: scenePhase) { _, now in
+                show()
+                guard now == .active else { return }
+                notifications.refreshAllowed()
+                openTapped()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in openTapped() }
+            .onChange(of: notifications.taps.itemID) { _, _ in openTapped() }
+            .onChange(of: notifications.taps.waitOver) { _, _ in openTapped() }
+            .onChange(of: checks.ownerCheck) { _, _ in openTapped() }
+    }
+
+    private func update() {
+        show()
+        guard inFront else { return }
+        notifications.askOnce()
+        openTapped()
+    }
+
+    private func show() {
+        notifications.visibility.set(scenePhase == .active && inFront ? model.notifyVisible : nil)
+    }
+
+    /// The tapped item opens only while the shell is in front, decided again after any wait: a wait for the item never
+    /// acts by itself, it only asks the shell to decide again (``NotificationOpenInbox/waitOver``). The decision runs on
+    /// the next main-actor turn, with the app lock's state and the app's state read then: a return to the foreground
+    /// locks the app lock in the same update that reports it, so the values seen in that update can be stale.
+    private func openTapped() {
+        guard notifications.taps.itemID != nil else { return }
+        let notifications = notifications
+        let model = model
+        let feed = feed
+        Task { @MainActor in
+            Self.decide(notifications: notifications, model: model, feed: feed)
+        }
+    }
+
+    private static func decide(notifications: AppNotifications, model: ShellModel, feed: FeedManager) {
+        let taps = notifications.taps
+        guard let id = taps.itemID else { return }
+        let item = feed.items.first { $0.itemID == id }
+        switch decision(
+            stale: taps.isStale, active: UIApplication.shared.applicationState == .active,
+            inFront: model.inFront(appLocked: notifications.appCovered()) && notifications.shellOpen(), found: item != nil,
+            waitOver: taps.waitOver
+        ) {
+        case .drop:
+            taps.consume()
+        case .later:
+            break
+        case .wait:
+            if let token = taps.startWaiting() { wait(for: id, token: token, feed: feed, taps: taps) }
+        case .open:
+            taps.consume()
+            if item != nil { feed.markReadQuietly(id) }
+            model.openNotified(item)
+        }
+    }
+
+    /// What a tap waiting does now.
+    enum TapDecision: Equatable {
+        /// Older than ``NotificationOpenInbox/maxWait``: dropped.
+        case drop
+        /// The app is not active or the shell not in front (the app lock, an asked check): it waits for them.
+        case later
+        /// Its item is not in the feed yet: waited for.
+        case wait
+        /// Its item's screen, or the Notifications screen when the item did not come.
+        case open
+    }
+
+    /// The tap's decision from what holds now: a stale tap goes; otherwise it waits for the app and the shell to be in
+    /// front, then for its item until the wait is over.
+    static func decision(stale: Bool, active: Bool, inFront: Bool, found: Bool, waitOver: Bool) -> TapDecision {
+        if stale { return .drop }
+        guard active, inFront else { return .later }
+        return found || waitOver ? .open : .wait
+    }
+
+    /// Waits up to ``itemWait`` for [id] to reach the feed (after a start, as vettid-android does), then ends the wait.
+    private static func wait(for id: String, token: Int, feed: FeedManager, taps: NotificationOpenInbox) {
+        Task { @MainActor in
+            let clock = ContinuousClock()
+            let end = clock.now.advanced(by: itemWait)
+            while !feed.items.contains(where: { $0.itemID == id }), clock.now < end, taps.isWaiting(token) {
+                try? await Task.sleep(for: .milliseconds(250))
+            }
+            taps.waitEnded(token)
+        }
+    }
+}

@@ -36,6 +36,7 @@ let package = Package(
                 .product(name: "VettIDData", package: "VettIDData"),
                 .product(name: "VettIDOnboarding", package: "VettIDOnboarding"),
                 .product(name: "VettIDConnections", package: "VettIDConnections"),
+                .product(name: "VettIDVault", package: "VettIDVault"),
             ]
         ),
         // The shell's views (iOS only: VettIDUI is UIKit-based; on macOS this target compiles empty).
@@ -65,6 +66,7 @@ let package = Package(
                 .product(name: "VettIDData", package: "VettIDData"),
                 .product(name: "VettIDDataTesting", package: "VettIDData"),
                 .product(name: "VettIDOnboarding", package: "VettIDOnboarding"),
+                .product(name: "VettIDVault", package: "VettIDVault"),
             ]
         ),
         .testTarget(

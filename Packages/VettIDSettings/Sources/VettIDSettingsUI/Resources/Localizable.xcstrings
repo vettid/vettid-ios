@@ -5020,6 +5020,83 @@
           }
         }
       }
+    },
+    "settings_notify_show": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show in notifications"
+          }
+        }
+      }
+    },
+    "settings_notify_show_names": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Names"
+          }
+        }
+      }
+    },
+    "settings_notify_show_names_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Who it is from and what it is, never message text or item names"
+          }
+        }
+      }
+    },
+    "settings_notify_show_nothing": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nothing"
+          }
+        }
+      }
+    },
+    "settings_notify_show_nothing_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "“New activity in VettID” for everything"
+          }
+        }
+      }
+    },
+    "settings_notify_show_text": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Names and message text"
+          }
+        }
+      }
+    },
+    "settings_notify_show_text_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Also the message text and item names, never values or secrets"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

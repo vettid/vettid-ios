@@ -56,6 +56,50 @@
         }
       }
     },
+    "notify_newer_app": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open VettID on a newer version"
+          }
+        }
+      }
+    },
+    "notify_photo": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Photo"
+          }
+        }
+      }
+    },
+    "notify_photo_caption": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Photo: %@"
+          }
+        }
+      }
+    },
+    "notify_public_activity": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New activity in VettID"
+          }
+        }
+      }
+    },
     "notify_public_attention": {
       "extractionState": "manual",
       "localizations": {

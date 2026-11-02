@@ -3,6 +3,7 @@ import Observation
 import VettIDConnections
 import VettIDData
 import VettIDOnboarding
+import VettIDVault
 
 /// What the shell shows and where the member is: the destination, the screens pushed over it, the drawer, the avatar
 /// sheet, and the owner check the member asked for. Owned above the owner check's gate (VAULT-MESSAGING §3.6.5), so that
@@ -89,6 +90,33 @@ public final class ShellModel {
         case .voteList: navigate(.votes)
         case .sheet: break
         default: if let r = Self.screen(t) { pushOnce(r) }
+        }
+    }
+
+    /// A notification's tap (ANDROID-PLAN §4 Notification modes 7): the item's screen, or the Notifications screen when
+    /// it has none (its sheet is the Notifications screen's own) or the item is not in the feed. Mirrors the tap of
+    /// vettid-android's `AppShell`.
+    public func openNotified(_ item: FeedItem?) {
+        guard let item else { return openNotifications() }
+        let t = FeedKinds.target(item)
+        if t == .sheet { openNotifications() } else { openFeedTarget(t) }
+    }
+
+    /// Whether the shell is really in front for a notification's tap, the screen in front and the permission: not under
+    /// the app lock's cover ([appLocked]; the shell stays mounted under it) nor under an asked daily check (``asked``).
+    /// The vault's own lock and a check past the deadline take the shell away altogether.
+    public func inFront(appLocked: Bool) -> Bool { !appLocked && asked == nil }
+
+    /// The screen in front as the notifications see it: the Notifications list, a conversation, an approval, a
+    /// connection or a vote; nil for any other screen. Mirrors vettid-android `visibleOf`.
+    public var notifyVisible: NotifyVisible? {
+        switch path.last {
+        case .notifications: .notifications
+        case .conversation(let id): .target(.conversation(id))
+        case .approval(let key): .target(.approval(key: key))
+        case .connection(let id): .target(.connection(id))
+        case .vote(let c, let p): .target(.vote(connectionID: c, proposalID: p))
+        default: nil
         }
     }
 

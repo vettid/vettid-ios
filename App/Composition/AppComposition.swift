@@ -36,6 +36,8 @@ final class AppComposition {
     let releaseNotes: any ReleaseNotesRepository
     /// A request to open the update screen (fed by the "Vault updates" notification with phase P, IOS-PLAN §6.7).
     let releaseInbox = ReleaseUpdateInbox()
+    /// The feed's notifications (IOS-PLAN §6.7): the notifier, the taps, "Show in notifications".
+    let notifications = AppNotifications()
 
     /// The app's own wiring: the Secure Enclave and App Attest (or ``NoSecureHardware``), and the build's pinned trust.
     convenience init(environment: AppEnvironment) {
@@ -103,16 +105,18 @@ final class AppComposition {
         resetOnWipe()
     }
 
-    /// A wipe resets what lives in memory: the app lock, a setup link waiting for the welcome screen, and a canary
-    /// manifest waiting for its dialog or shown in it.
+    /// A wipe resets what lives in memory: the app lock, a setup link waiting for the welcome screen, a canary manifest
+    /// waiting for its dialog or shown in it, "Show in notifications" and a notification's tap waiting for the shell.
     private func resetOnWipe() {
         let lock = appLock
         let inbox = inbox
         let canaryInbox = canaryInbox
+        let notifications = notifications
         vault.onWipe {
             lock.reset()
             inbox.consume()
             canaryInbox.reset()
+            notifications.reset()
         }
     }
 
@@ -126,6 +130,10 @@ final class AppComposition {
         // A wipe a crash interrupted is finished before anything reads a local file (the app lock's included).
         if firstRun.isOpen { vault.resumePendingWipe() }
         startAppLock()
+        let lock = appLock
+        // Covered too while the return's check has not run: a tap decided from UIKit's "became active" can come before it.
+        notifications.appCovered = { lock.state == .locked || lock.state == .pending || lock.foregroundCheckPending }
+        notifications.start(vault: vault)
     }
 
     /// Reads the app lock's preferences once the first-run cleanup ran (before it, nothing is read); tried again when the

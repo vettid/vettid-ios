@@ -192,6 +192,18 @@ final class FaultyAppLockKeys: AppLockKeys, @unchecked Sendable {
         #expect(l.state == .locked)
     }
 
+    /// From leaving the foreground until the return's check runs, the check is pending (what the app shows may be covered).
+    @Test func theReturnsCheckIsPendingUntilItRuns() async throws {
+        let l = try await enabled()
+        try l.setTimeout(.oneMinute)
+        #expect(!l.foregroundCheckPending)
+        l.onBackground()
+        #expect(l.foregroundCheckPending && l.state == .unlocked)
+        clock.t += 5
+        l.onForeground()
+        #expect(!l.foregroundCheckPending && l.state == .unlocked)
+    }
+
     /// iOS's prompt makes the app inactive and, for the passcode, may send it to the background: not leaving the app.
     @Test func promptsDoNotCountAsLeavingTheApp() async throws {
         let l = try await enabled()

@@ -228,6 +228,22 @@ final class FakeFeedOps: FeedOps, @unchecked Sendable {
         #expect(arrived == ["recovery.completed", "recovery.generation_closed"] && f.items.count == 3 && f.badge.urgent)
     }
 
+    /// The notifications' hooks (IOS-PLAN §6.7): the items after each change, and the clear at a lock, a hold or a wipe.
+    @Test func theItemsAfterEachChangeAndTheClearAreTold() async throws {
+        ops.add("message.received", at: now)
+        let f = manager()
+        var seen: [[String]] = []
+        var cleared = 0
+        f.onItems = { seen.append($0.map(\.status)) }
+        f.onCleared = { cleared += 1 }
+        try await f.refresh()
+        #expect(seen == [["active"]])
+        f.markReadQuietly(f.items[0].itemID)
+        #expect(await eventually { seen.last == ["read"] })
+        f.clear()
+        #expect(cleared == 1 && seen.last == [])
+    }
+
     @Test func kindsTargetsAndAsks() throws {
         let item = { (kind: String, conn: String?, ref: String?) in FeedItem(itemID: "i", seq: 1, kind: kind, at: "", status: "active", connectionID: conn, ref: ref) }
         #expect(FeedKinds.classify("grant.request") == .shown && FeedKinds.classify("leash.item.run") == .later)

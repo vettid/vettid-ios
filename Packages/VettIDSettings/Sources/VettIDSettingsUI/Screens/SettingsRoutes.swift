@@ -49,6 +49,8 @@ public struct SettingsRoute: View {
     @Environment(ScreenshotAllowance.self) private var screenshots: ScreenshotAllowance?
     /// The app's theme choice (Settings → App → Theme), from the environment; absent in a preview or a test.
     @Environment(ThemeSetting.self) private var theme: ThemeSetting?
+    /// What notifications show (Settings → App → "Show in notifications"), from the environment; absent in a preview.
+    @Environment(NotificationPreviewsSetting.self) private var previews: NotificationPreviewsSetting?
     @State private var model: SettingsViewModel?
     @State private var ownerCheck: OwnerCheckSettingsViewModel?
 
@@ -88,7 +90,7 @@ public struct SettingsRoute: View {
                         account: account.account, appLockOn: appLock.state.isOn, appLockMethod: appLock.method,
                         appLockTimeout: appLock.timeout, screenshotsAllowed: screenshots?.allowed ?? false,
                         screenshotsStayOn: screenshots?.staysOn ?? false, phoneSecret: vault.usesPhoneSecret, update: updates?.offer,
-                        theme: theme?.theme ?? .system
+                        theme: theme?.theme ?? .system, notificationPreviews: previews?.previews
                     ),
                     ownerCheck: OwnerCheckSettingsState(view: ownerChecks.ownerCheck), accountPhoto: accountPhoto
                 )
@@ -98,7 +100,7 @@ public struct SettingsRoute: View {
             if model == nil {
                 model = SettingsViewModel(
                     account: account, vault: vault, appLock: appLock, promptReason: promptReason, screenshots: screenshots,
-                    updates: updates, theme: theme
+                    updates: updates, theme: theme, previews: previews
                 )
                 ownerCheck = OwnerCheckSettingsViewModel(repo: ownerChecks)
             }
@@ -125,6 +127,7 @@ public struct SettingsRoute: View {
         a.setAppLockMethod = { m.setAppLockMethod($0) }
         a.setTimeout = { m.setAppLockTimeout($0) }
         a.setTheme = { m.setTheme($0) }
+        a.setNotificationPreviews = { m.setNotificationPreviews($0) }
         a.acknowledgeInvalidated = { m.acknowledgeInvalidated() }
         a.dismissAppLockUnavailable = { m.dismissAppLockUnavailable() }
         a.dismissError = { m.dismissError() }
