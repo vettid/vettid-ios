@@ -11,7 +11,7 @@ import VettIDVotes
 /// `UIDocumentPickerViewController(forExporting:asCopy: true)`, and removed on every path (a pick, a cancel, a failure, the
 /// screen leaving, the next file). Nothing of it is logged.
 struct ProofTempFile {
-    static let prefix = "vettid-proof-"
+    static var prefix: String { ProofLeftovers.prefix }
 
     let directory: URL
     let url: URL
@@ -38,10 +38,7 @@ struct ProofTempFile {
     /// Proof directories left in [root] (by an app that was killed while the picker was up): removed.
     @discardableResult
     static func removeLeftovers(in root: URL = FileManager.default.temporaryDirectory) -> Int {
-        let names = (try? FileManager.default.contentsOfDirectory(atPath: root.path)) ?? []
-        let mine = names.filter { $0.hasPrefix(prefix) }
-        for n in mine { try? FileManager.default.removeItem(at: root.appendingPathComponent(n)) }
-        return mine.count
+        ProofLeftovers.remove(in: root)
     }
 }
 
@@ -83,16 +80,22 @@ final class ProofExportCoordinator: NSObject, UIDocumentPickerDelegate, UIAdapti
     private var picker: UIDocumentPickerViewController?
     /// The directory the files are made in (tests set it).
     var root = FileManager.default.temporaryDirectory
+    /// Whether the file now offered was already taken up: it is presented, answered or failed once, and only an update
+    /// without a file starts the next one. Updates that still carry it after an answer or a failure (the failure is told
+    /// after a hop) open nothing again.
+    private var taken = false
 
     /// [file] set: the picker opens (once for this file); nil: whatever is up closes. A picker that cannot be presented (no
     /// window, another presentation still under way after a few tries, or refused by UIKit) is told as a failure, and its
     /// file goes.
     func update(_ file: ProofFile?, host: UIViewController) {
         guard let file else {
+            taken = false
             close()
             return
         }
-        guard temp == nil else { return }
+        guard !taken else { return }
+        taken = true
         let t: ProofTempFile
         do {
             t = try ProofTempFile.write(file, in: root)
@@ -144,7 +147,8 @@ final class ProofExportCoordinator: NSObject, UIDocumentPickerDelegate, UIAdapti
         }
         presentPicker(presenter, picker)
         // UIKit sets this at once when it takes a presentation; one it refuses only logs, and no delegate call would come.
-        if picker.presentingViewController == nil { fail() }
+        // A picker already answered or closed meanwhile is not failed as well.
+        if self.picker === picker, picker.presentingViewController == nil { fail() }
     }
 
     /// The controller a presentation starts from: the topmost one already presented over [host]'s.
@@ -175,7 +179,10 @@ final class ProofExportCoordinator: NSObject, UIDocumentPickerDelegate, UIAdapti
         removeTemp()
     }
 
-    func leave() { close() }
+    func leave() {
+        taken = false
+        close()
+    }
 
     private func removeTemp() {
         temp?.remove()
