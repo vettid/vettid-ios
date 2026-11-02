@@ -133,7 +133,16 @@ struct Composer: View {
     let actions: ConversationActions
 
     var body: some View {
-        if state.connection != nil && !state.active {
+        if state.serviceForbidden {
+            Text(ServiceTexts.forbidden)
+                .vettIDFont(.bodyMedium)
+                .foregroundStyle(colors.onSurfaceVariant)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: .infinity)
+                .padding(Spacing.l)
+                .announcedOnce(ServiceTexts.forbidden, .assertive)
+                .accessibilityIdentifier("service_forbidden")
+        } else if state.connection != nil && !state.active {
             Text(MessagesStrings.inactive(name))
                 .vettIDFont(.bodyMedium)
                 .foregroundStyle(colors.onSurfaceVariant)

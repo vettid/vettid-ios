@@ -40,6 +40,9 @@ struct FakeSocial {
         var firstName: String
         var lastName: String
         var name: String?
+        /// The invitation's `peer_kind` (VAULT-MESSAGING 0.69.0 §6.4): `"service"` for a service, nil for a person. Sent in
+        /// the accept's answer, the outgoing request and the connection, never on an incoming request.
+        var peerKind: String?
 
         var hsInitProfile: String {
             var b = JsonBuilder().string("first_name", firstName).string("last_name", lastName)
@@ -71,6 +74,7 @@ struct FakeSocial {
 
         var json: String {
             var b = JsonBuilder().string("id", id).string("kind", "connection").string("state", "active").string("name", peer.name ?? "").base64("ik", peer.ik)
+            if let k = peer.peerKind { b = b.string("peer_kind", k) }
             if let profile { b = b.raw("profile", profile) }
             b = b.string("created_at", Timestamps.formatMillis(created)).uint("version", version)
             if !alias.isEmpty { b = b.string("alias", alias) }
@@ -184,6 +188,7 @@ extension FakeVaultService {
         social.requests[r.id] = r
         var answer = JsonBuilder().string("connection_id", r.id).string("state", "waiting").bool("remote", r.remote).string("exp", Timestamps.formatMillis(r.exp))
         if let n = r.name { answer = answer.string("name", n) }
+        if let k = r.peer.peerKind { answer = answer.string("peer_kind", k) }
         try reply(m.type, answer.build(), re: m.id)
         if !social.holdHandshakes { try handshakeRan(r.id) }
     }
@@ -237,6 +242,7 @@ extension FakeVaultService {
             b = b.bool("remote", r.remote).string("state", r.sas == nil ? "waiting" : (r.approved ? "approved" : "pending")).bool("peer_approved", r.peerApproved)
             b = b.string("created_at", Timestamps.formatMillis(r.created)).string("exp", Timestamps.formatMillis(r.exp))
             if let n = r.name { b = b.string("name", n) }
+            if let k = r.peer.peerKind { b = b.string("peer_kind", k) }
             return b.build()
         }
         return #"{"incoming":\#(JsonBuilder.array(incoming)),"outgoing":\#(JsonBuilder.array(outgoing))}"#

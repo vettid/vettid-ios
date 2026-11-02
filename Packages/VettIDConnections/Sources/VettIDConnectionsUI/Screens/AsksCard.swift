@@ -12,6 +12,8 @@ struct AsksCard: View {
     /// The connection's first name, bidi-isolated; nil before the names arrived.
     let name: String?
     let busy: Bool
+    /// A service: what it can ask is said by its own card ("What this service can ask"), not by the person's line.
+    var service = false
     let onMute: @MainActor (Bool) -> Void
     let onResume: @MainActor () -> Void
 
@@ -47,7 +49,7 @@ struct AsksCard: View {
                 .accessibilityIdentifier("asks_muted")
             Text(ConnectStrings.asksMuted(who))
         }
-        if !view.paused && !view.muted {
+        if !view.paused && !view.muted && !service {
             Text(ConnectStrings.asksNormal(who)).accessibilityIdentifier("asks_normal")
         }
         if view.cooldowns > 0 && !view.paused {

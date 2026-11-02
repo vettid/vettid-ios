@@ -207,7 +207,9 @@ public final class ConnectionsManager: ConnectionsRepository, ConnectionRequests
         do {
             let a = try await ops().inviteAccept(link)
             let name = a.name.flatMap { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : $0 }
-            return AcceptedConnection(connectionID: a.connectionID, name: name, exp: ConnectionParser.instant(a.exp))
+            return AcceptedConnection(
+                connectionID: a.connectionID, name: name, exp: ConnectionParser.instant(a.exp), isService: a.peerKind == "service"
+            )
         } catch let e as VaultOpError where e.code == "exists" {
             guard let id = e.body.flatMap({ VaultJSON.string(VaultJSON.object($0), "connection_id") }) else { throw e }
             return AcceptedConnection(connectionID: id, exists: true)
@@ -218,9 +220,11 @@ public final class ConnectionsManager: ConnectionsRepository, ConnectionRequests
     /// arrived (it follows `hs.resp`): it is kept then.
     private func addWaiting(_ r: AcceptedConnection) {
         if !open.contains(where: { $0.id == r.connectionID }) {
-            open.append(.outgoing(OutgoingRequest(
+            var w = OutgoingRequest(
                 connectionID: r.connectionID, sas: nil, remote: false, name: r.name, state: .waiting, receivedAt: now(), exp: r.exp
-            )))
+            )
+            w.isService = r.isService
+            open.append(.outgoing(w))
         }
         requestEnds[r.connectionID] = nil
         if let n = r.name { rememberNames([(r.connectionID, n)]) }

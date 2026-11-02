@@ -2377,6 +2377,28 @@
           }
         }
       }
+    },
+    "connections_connected_body_service": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You're connected to %@. It can ask you to sign in, vote and update your profile."
+          }
+        }
+      }
+    },
+    "connections_connected_body_service_unnamed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You're connected. The service can ask you to sign in, vote and update your profile."
+          }
+        }
+      }
     }
   },
   "version": "1.0"

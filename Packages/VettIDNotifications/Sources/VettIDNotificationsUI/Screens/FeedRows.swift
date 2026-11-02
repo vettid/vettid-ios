@@ -90,10 +90,12 @@ struct FeedRow: View {
 
     private func texts(_ red: TagColor) -> some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text(FeedKinds.title(item, names))
-                .vettIDFont(.bodyLarge, weight: unread ? .semibold : .regular)
-                .foregroundStyle(attention ? red.onContainer : lineColor)
-                .lineLimit(2)
+            ServiceNamed(service: Self.namesService(item, names)) {
+                Text(FeedKinds.title(item, names))
+                    .vettIDFont(.bodyLarge, weight: unread ? .semibold : .regular)
+                    .foregroundStyle(attention ? red.onContainer : lineColor)
+                    .lineLimit(2)
+            }
             if let line = FeedKinds.supporting(item, names) {
                 Text(line).vettIDFont(.bodyMedium).foregroundStyle(attention ? red.onContainer : colors.onSurfaceVariant)
                     .lineLimit(Self.lineLimit(item))
@@ -118,6 +120,12 @@ struct FeedRow: View {
     private var lineColor: ThemeColor {
         if item.priority == "low" && !unread { return colors.onSurfaceVariant }
         return unread ? colors.onSurface : colors.onSurfaceVariant
+    }
+
+    /// The item names a connection that is a service (VAULT-MESSAGING §6.4): its row carries the label "Service" (IOS-PLAN
+    /// §4.13).
+    static func namesService(_ item: FeedItem, _ names: FeedNames) -> Bool {
+        item.connectionID.flatMap { names.connections[$0] }?.isService ?? false
     }
 
     /// The second line's lines in the list (owner decision of 2026-10-20, IOS-PLAN 0.1.14): up to 3 for an urgent item

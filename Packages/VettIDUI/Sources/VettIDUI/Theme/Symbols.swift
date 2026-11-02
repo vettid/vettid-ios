@@ -106,6 +106,7 @@ public enum VettIDSymbol: String, CaseIterable, Sendable {
     case block = "nosign" // Block
     case location = "mappin.and.ellipse" // LocationOn
     case agent = "cpu" // SmartToy
+    case service = "building.2" // a service connection (IOS-PLAN §4.13; outline)
     case accountCircle = "person.crop.circle" // AccountCircle
     case eventNote = "list.bullet.rectangle" // EventNote
     case moreVert = "ellipsis.circle" // MoreVert

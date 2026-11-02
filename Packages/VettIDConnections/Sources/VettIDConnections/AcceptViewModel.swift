@@ -34,6 +34,12 @@ public struct AcceptState: Equatable, Sendable, CustomStringConvertible, CustomD
     public var remote = false
     public var end: RequestEnd?
     public var connectionName: String?
+    /// The invitation declared a service (`peer_kind`, VAULT-MESSAGING §6.4): the request says so before the member
+    /// approves. From the accept answer or the outgoing request; never inferred from a name.
+    public var service = false
+    /// ``AcceptStep/connected``: the new connection is a service (it cannot message the member). Mirrors vettid-android
+    /// `connectedService`.
+    public var connectedService = false
     public var busy = false
     public var error: FailureKind?
 
@@ -117,6 +123,7 @@ public final class AcceptViewModel {
         if let active {
             state.step = .connected
             state.connectionName = active.displayName.isEmpty ? nil : active.displayName
+            state.connectedService = active.isService
         } else if let end, request == nil {
             state.step = .ended
             state.end = end
@@ -124,6 +131,7 @@ public final class AcceptViewModel {
             state.sas = request.sas ?? state.sas
             state.name = state.name ?? request.name
             state.remote = request.remote
+            state.service = state.service || request.isService
             state.step = switch request.state {
             case .waiting: .waiting
             case .pending: state.step == .approved ? .approved : .compare
@@ -158,6 +166,7 @@ public final class AcceptViewModel {
                 state.step = .waiting
                 state.connectionID = r.connectionID
                 state.name = r.name
+                state.service = r.isService
                 // The code may have arrived already (the handshake is quick): show it.
                 onSources(sources)
                 try? await requests.refreshRequests()

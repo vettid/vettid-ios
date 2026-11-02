@@ -81,13 +81,16 @@ public struct ConversationState: Equatable, Sendable, CustomStringConvertible, C
     public var photoDraft: PhotoDraft?
     /// Changes at every clear of the attachment memory: the bubbles drop their decoded thumbnails.
     public var photoGeneration = 0
+    /// The vault answered `forbidden` to a message sent to a service (VAULT-MESSAGING §6.4): "Services can't do that." in
+    /// place of the composer, which goes.
+    public var serviceForbidden = false
 
     public init(connectionID: String) { self.connectionID = connectionID }
 
     public var active: Bool { connection?.state == .active }
 
     public var canSend: Bool {
-        active && !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !sending && !tooLong
+        active && !serviceForbidden && !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !sending && !tooLong
     }
 
     public var description: String {
@@ -242,10 +245,20 @@ public final class ConversationViewModel {
                 self?.local.draft = ""
                 self?.local.tooLong = false
             } catch {
-                self?.local.sending = false
-                self?.local.error = failureKind(error)
+                guard let self else { return }
+                local.sending = false
+                if Self.serviceForbade(error, state.connection) {
+                    local.serviceForbidden = true
+                } else {
+                    local.error = failureKind(error)
+                }
             }
         }
+    }
+
+    /// The vault refused something sent to a service (`forbidden`, VAULT-MESSAGING §6.4): the app removes the action.
+    static func serviceForbade(_ error: any Error, _ connection: ConnectionInfo?) -> Bool {
+        connection?.isService == true && failureKind(error) == .vaultCode("forbidden")
     }
 
     /// The member reached the top: the next older page (§10.5.2), one at a time. A failure (`response_too_large` among

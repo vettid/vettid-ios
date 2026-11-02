@@ -6,6 +6,8 @@ public struct HistoryRow: Equatable, Sendable {
     public var title: String
     public var supporting: String
     public var category: AuditCategory
+    /// The row names a service connection (VAULT-MESSAGING §6.4): it carries the label "Service" (IOS-PLAN §4.13).
+    public var service = false
 }
 
 public extension HistoryState {
@@ -45,7 +47,8 @@ public extension HistoryState {
         return HistoryRow(
             title: HistoryText.title(r.kind, e.ref, names: names),
             supporting: HistoryText.supporting([item, connection, device], fallback: AuditKinds.categoryLabel(r.category)),
-            category: r.category
+            category: r.category,
+            service: e.connectionID.map(serviceIDs.contains) ?? false
         )
     }
 

@@ -71,13 +71,24 @@ public struct Invite: Equatable, Sendable {
 }
 
 /// `connection.invite.accept`'s answer (§10.4, 0.10.3): an outgoing request in state `waiting`, whose safety code follows
-/// in `connection.request.outgoing` once the handshake has run. [name] is the bundle's `hint.name`.
+/// in `connection.request.outgoing` once the handshake has run. [name] is the bundle's `hint.name`; [peerKind] the
+/// invitation's `peer_kind` (0.69.0 §6.4 "Service connections"): `"service"` for a service, nil for a person.
 public struct AcceptedInvite: Equatable, Sendable {
     public let connectionID: String
     public let state: String
     public let remote: Bool
     public let exp: String?
     public let name: String?
+    public var peerKind: String?
+
+    public init(connectionID: String, state: String, remote: Bool, exp: String?, name: String?, peerKind: String? = nil) {
+        self.connectionID = connectionID
+        self.state = state
+        self.remote = remote
+        self.exp = exp
+        self.name = name
+        self.peerKind = peerKind
+    }
 }
 
 /// What `connection.update` changes (§10.4): at least one member; `""` clears [alias] or [note]; [tags] replaces the list.

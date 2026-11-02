@@ -37,6 +37,16 @@ public struct ApprovalsState: Equatable, Sendable, CustomStringConvertible, Cust
         return AccountNames.cleaned(connections[id]?.displayName)
     }
 
+    /// Whether [a] comes from a service (VAULT-MESSAGING §6.4): its connection says so, or an outgoing request's invitation
+    /// did. A request whose connection is not in the list is a person's.
+    public func isService(_ a: PendingApproval) -> Bool {
+        if case .connection(.outgoing(let r)) = a { return r.isService }
+        return isService(a.connectionID)
+    }
+
+    /// Whether the connection [id] is a service.
+    public func isService(_ id: String?) -> Bool { id.flatMap { connections[$0] }?.isService ?? false }
+
     public var description: String {
         "ApprovalsState(loading: \(loading), approvals: \(approvals.count), paused: \(paused.count), "
             + "error: \(error.map { "\($0)" } ?? "nil"))"

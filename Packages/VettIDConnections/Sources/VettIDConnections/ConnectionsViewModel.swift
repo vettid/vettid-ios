@@ -6,8 +6,11 @@ import VettIDData
 /// `ConnectionsUiState`; the connection requests are listed under Approvals (ANDROID-PLAN §4 Approvals).
 public struct ConnectionsState: Equatable, Sendable, CustomStringConvertible, CustomDebugStringConvertible, CustomReflectable {
     public var loading = true
-    /// Favourites first, then by name; while searching, only the matching ones.
+    /// The people: favourites first, then by name; while searching, only the matching ones. Never a service.
     public var connections: [ConnectionInfo] = []
+    /// The services (VAULT-MESSAGING §6.4 `peer_kind: "service"`), in the same order: their own section below the people,
+    /// shown only when there is one (IOS-PLAN §4.13).
+    public var services: [ConnectionInfo] = []
     public var invites: [OutstandingInvite] = []
     /// The invitation the member asked to cancel (confirmed first).
     public var cancelling: OutstandingInvite?
@@ -24,10 +27,14 @@ public struct ConnectionsState: Equatable, Sendable, CustomStringConvertible, Cu
     public var searching: Bool { !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
 
     /// Nothing at all to show: the empty state.
-    public var isEmpty: Bool { connections.isEmpty && invites.isEmpty && peerDeclines.isEmpty }
+    public var isEmpty: Bool { connections.isEmpty && services.isEmpty && invites.isEmpty && peerDeclines.isEmpty }
+
+    /// No connection matches, people or services.
+    public var noneListed: Bool { connections.isEmpty && services.isEmpty }
 
     public var description: String {
-        "ConnectionsState(loading: \(loading), connections: \(connections.count), invites: \(invites.count), "
+        "ConnectionsState(loading: \(loading), connections: \(connections.count), services: \(services.count), "
+            + "invites: \(invites.count), "
             + "error: \(error.map { "\($0)" } ?? "nil"))"
     }
     public var debugDescription: String { description }
@@ -114,7 +121,9 @@ public final class ConnectionsViewModel {
     public var state: ConnectionsState {
         var s = local
         let all = connections.connections
-        s.connections = Self.listed(all, query: s.query)
+        let listed = Self.listed(all, query: s.query)
+        s.connections = listed.filter { !$0.isService }
+        s.services = listed.filter(\.isService)
         s.searchable = !all.isEmpty
         s.peerDeclines = requests.peerDeclines
         return s
