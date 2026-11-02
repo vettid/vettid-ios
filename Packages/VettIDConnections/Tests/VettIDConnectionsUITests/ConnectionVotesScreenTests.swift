@@ -62,5 +62,6 @@ import VettIDUI
         state.votes = ConnectionVotes(reconnect: true)
         #expect(!DetailContent.showsVotes(service, state, hooked))
     }
+}
 // swiftlint:enable line_length
 #endif
