@@ -65,6 +65,13 @@ struct NotificationShellOpenTests {
         #expect(ShellNotificationsHook.decision(stale: false, active: true, inFront: inFront, found: true, waitOver: false) == .later)
     }
 
+    /// No feed item notification posts while the app lock covers the app, so no name shows over it.
+    @Test func nothingPostsWhileTheAppLockCoversTheApp() {
+        #expect(AppNotifications.mayPost(covered: false, shellOpen: true))
+        #expect(!AppNotifications.mayPost(covered: true, shellOpen: true))
+        #expect(!AppNotifications.mayPost(covered: false, shellOpen: false))
+    }
+
     @Test func withoutTheVaultTheShellIsNotOpen() {
         #expect(!AppNotifications().shellOpen())
     }

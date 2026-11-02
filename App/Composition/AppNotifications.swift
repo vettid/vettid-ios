@@ -40,9 +40,9 @@ final class AppNotifications: NSObject, UNUserNotificationCenterDelegate {
         let notifier = FeedNotifier(
             poster: SystemNotificationPoster(center: center),
             previews: { previews.previews },
-            // The vault open as the shell shows it: unlocked, no check due or past its deadline, and no check after a
-            // cancelled recovery (whose screen takes the shell's place).
-            open: { [weak vault] in Self.shellOpen(vault) },
+            // The vault open as the shell shows it (unlocked, no check due or past its deadline, no check after a cancelled
+            // recovery), and the app lock not covering the app: no name shows over the app lock.
+            open: { [weak self, weak vault] in Self.mayPost(covered: self?.appCovered() ?? true, shellOpen: Self.shellOpen(vault)) },
             active: { UIApplication.shared.applicationState == .active },
             visible: { UIApplication.shared.applicationState == .active ? visibility.visible : nil },
             allowed: { [weak self] in self?.allowed ?? false },
@@ -94,6 +94,10 @@ final class AppNotifications: NSObject, UNUserNotificationCenterDelegate {
     /// How long the background clear keeps the app awake (chosen; not in the spec).
     static let clearTime: Duration = .seconds(2)
 
+    /// Whether a feed item's notification may post: the shell is open and the app lock does not cover the app (IOS-PLAN
+    /// §6.7).
+    static func mayPost(covered: Bool, shellOpen: Bool) -> Bool { shellOpen && !covered }
+
     /// ``shellOpen(unlocked:checkAfterCancel:check:now:)`` for [vault] now; false without one.
     static func shellOpen(_ vault: VaultManager?) -> Bool {
         guard let vault else { return false }
@@ -135,6 +139,9 @@ final class AppNotifications: NSObject, UNUserNotificationCenterDelegate {
     }
 
     /// A wipe: "Show in notifications" back to its default, and no tap waiting.
+    /// The app lock covers the app: every item notification goes, as when the app leaves the foreground.
+    func covered() { notifier?.cleared() }
+
     func reset() {
         previews.reset()
         taps.consume()
@@ -184,7 +191,11 @@ struct ShellNotificationsHook: ViewModifier {
                 notifications.taps.rearm()
             }
             .onChange(of: model.notifyVisible) { _, _ in show() }
-            .onChange(of: appLocked) { _, _ in update() }
+            .onChange(of: appLocked) { _, locked in
+                // The app lock's cover went up: no item notification naming anyone stays to be seen over it.
+                if locked { notifications.covered() }
+                update()
+            }
             .onChange(of: model.asked) { _, _ in update() }
             .onChange(of: scenePhase) { _, now in
                 show()

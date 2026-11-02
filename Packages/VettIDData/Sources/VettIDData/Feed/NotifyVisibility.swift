@@ -41,7 +41,7 @@ public final class NotificationOpenInbox: CustomStringConvertible, CustomDebugSt
     @ObservationIgnored private let now: @MainActor () -> Date
 
     /// How long a tap waits for the shell (an app lock or a vault unlock left for later): after it, it is dropped, so
-    /// that a tap from long before never opens a screen by itself (chosen; not in the spec).
+    /// that a tap from long before never opens a screen by itself (IOS-PLAN §4.12).
     public static let maxWait: TimeInterval = 600
 
     public init(now: @escaping @MainActor () -> Date = { Date() }) {
