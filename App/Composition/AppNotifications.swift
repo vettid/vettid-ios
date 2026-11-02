@@ -18,6 +18,8 @@ final class AppNotifications: NSObject, UNUserNotificationCenterDelegate {
     let visibility = NotifyVisibility()
     /// A tap waiting for the open app's shell.
     let taps = NotificationOpenInbox()
+    /// Whether the app lock covers the app now, read live (the shell's environment value can lag the lock by an update).
+    var appCovered: @MainActor () -> Bool = { false }
     private(set) var notifier: FeedNotifier?
     /// The member allowed notifications for VettID (read at launch, on each return to the foreground and after the ask).
     private var allowed = false
@@ -158,14 +160,26 @@ struct ShellNotificationsHook: ViewModifier {
     }
 
     /// The tapped item opens only while the shell is in front, decided again after any wait: a wait for the item never
-    /// acts by itself, it only asks the shell to decide again (``NotificationOpenInbox/waitOver``).
+    /// acts by itself, it only asks the shell to decide again (``NotificationOpenInbox/waitOver``). The decision runs on
+    /// the next main-actor turn, with the app lock's state and the app's state read then: a return to the foreground
+    /// locks the app lock in the same update that reports it, so the values seen in that update can be stale.
     private func openTapped() {
+        guard notifications.taps.itemID != nil else { return }
+        let notifications = notifications
+        let model = model
+        let feed = feed
+        Task { @MainActor in
+            Self.decide(notifications: notifications, model: model, feed: feed)
+        }
+    }
+
+    private static func decide(notifications: AppNotifications, model: ShellModel, feed: FeedManager) {
         let taps = notifications.taps
-        // Only in the foreground: a wait that ends in the background leaves the tap for the return.
-        guard inFront, scenePhase == .active, let id = taps.itemID else { return }
+        guard UIApplication.shared.applicationState == .active, model.inFront(appLocked: notifications.appCovered()),
+              let id = taps.itemID else { return }
         let item = feed.items.first { $0.itemID == id }
         guard item != nil || taps.waitOver else {
-            if taps.startWaiting() { wait(for: id) }
+            if let token = taps.startWaiting() { wait(for: id, token: token, feed: feed, taps: taps) }
             return
         }
         taps.consume()
@@ -174,16 +188,14 @@ struct ShellNotificationsHook: ViewModifier {
     }
 
     /// Waits up to ``itemWait`` for [id] to reach the feed (after a start, as vettid-android does), then ends the wait.
-    private func wait(for id: String) {
-        let feed = feed
-        let taps = notifications.taps
+    private static func wait(for id: String, token: Int, feed: FeedManager, taps: NotificationOpenInbox) {
         Task { @MainActor in
             let clock = ContinuousClock()
-            let end = clock.now.advanced(by: Self.itemWait)
-            while !feed.items.contains(where: { $0.itemID == id }), clock.now < end, taps.itemID == id {
+            let end = clock.now.advanced(by: itemWait)
+            while !feed.items.contains(where: { $0.itemID == id }), clock.now < end, taps.isWaiting(token) {
                 try? await Task.sleep(for: .milliseconds(250))
             }
-            taps.waitEnded(for: id)
+            taps.waitEnded(token)
         }
     }
 }

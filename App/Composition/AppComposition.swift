@@ -130,6 +130,8 @@ final class AppComposition {
         // A wipe a crash interrupted is finished before anything reads a local file (the app lock's included).
         if firstRun.isOpen { vault.resumePendingWipe() }
         startAppLock()
+        let lock = appLock
+        notifications.appCovered = { lock.state == .locked || lock.state == .pending }
         notifications.start(vault: vault)
     }
 

@@ -32,7 +32,10 @@ public final class NotificationOpenInbox: CustomStringConvertible, CustomDebugSt
     /// The wait for the tapped item to reach the feed is over (it came, or the time ran out): the shell decides again, with
     /// what is in front then.
     public private(set) var waitOver = false
-    @ObservationIgnored private var waiting = false
+    /// The wait under way, by its token; nil when none is. Each wait gets a new token, so an earlier wait's end (a tap
+    /// replaced, the shell gone and back) changes nothing.
+    @ObservationIgnored private var waiting: Int?
+    @ObservationIgnored private var tokens = 0
 
     public init() {}
 
@@ -41,20 +44,24 @@ public final class NotificationOpenInbox: CustomStringConvertible, CustomDebugSt
         guard itemID != self.itemID else { return }
         self.itemID = itemID
         waitOver = false
-        waiting = false
+        waiting = nil
     }
 
-    /// True once per tap: the caller starts the one wait for its item.
-    public func startWaiting() -> Bool {
-        guard itemID != nil, !waiting, !waitOver else { return false }
-        waiting = true
-        return true
+    /// A token once per tap (and again after ``rearm()``): the caller starts the one wait for its item; nil otherwise.
+    public func startWaiting() -> Int? {
+        guard itemID != nil, waiting == nil, !waitOver else { return nil }
+        tokens += 1
+        waiting = tokens
+        return tokens
     }
 
-    /// The wait for [itemID] ended; ignored when another tap has replaced it or it was taken.
-    public func waitEnded(for itemID: String) {
-        guard self.itemID == itemID, waiting else { return }
-        waiting = false
+    /// Whether the wait [token] is still the one under way.
+    public func isWaiting(_ token: Int) -> Bool { waiting == token }
+
+    /// The wait [token] ended; ignored when it is no longer the one under way.
+    public func waitEnded(_ token: Int) {
+        guard waiting == token else { return }
+        waiting = nil
         waitOver = true
     }
 
@@ -62,13 +69,13 @@ public final class NotificationOpenInbox: CustomStringConvertible, CustomDebugSt
     /// waited for again when the shell is back, since the feed is read again then.
     public func rearm() {
         waitOver = false
-        waiting = false
+        waiting = nil
     }
 
     public func consume() {
         itemID = nil
         waitOver = false
-        waiting = false
+        waiting = nil
     }
 
     public nonisolated var description: String { "NotificationOpenInbox(…)" }
