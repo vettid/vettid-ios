@@ -140,3 +140,24 @@ extension VoteViewModelTests {
         #expect(m.state.windowNotClosed == nil && m.state.windowCloseProblem == nil)
     }
 }
+
+/// The launch cleanup (IOS-PLAN §4.16): proof directories left by a killed app go, and nothing else in the directory does.
+@Suite struct ProofLeftoversTests {
+    @Test func onlyProofDirectoriesAreRemoved() throws {
+        let fm = FileManager.default
+        let root = fm.temporaryDirectory.appendingPathComponent("leftovers-\(UUID().uuidString)", isDirectory: true)
+        try fm.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? fm.removeItem(at: root) }
+        #expect(ProofLeftovers.remove(in: root) == 0)
+        for n in ["a", "b"] {
+            let dir = root.appendingPathComponent(ProofLeftovers.prefix + n, isDirectory: true)
+            try fm.createDirectory(at: dir, withIntermediateDirectories: false)
+            try Data("x".utf8).write(to: dir.appendingPathComponent("vettid-vote-p.json"))
+        }
+        try Data().write(to: root.appendingPathComponent("other.txt"))
+        try fm.createDirectory(at: root.appendingPathComponent("vettid-other"), withIntermediateDirectories: false)
+        #expect(ProofLeftovers.remove(in: root) == 2)
+        #expect(try fm.contentsOfDirectory(atPath: root.path).sorted() == ["other.txt", "vettid-other"])
+        #expect(ProofLeftovers.remove(in: root.appendingPathComponent("missing")) == 0)
+    }
+}

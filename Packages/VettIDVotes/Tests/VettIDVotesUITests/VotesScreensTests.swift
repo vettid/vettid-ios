@@ -229,10 +229,52 @@ import VettIDUI
         c.documentPickerWasCancelled(picker)
         c.documentPicker(picker, didPickDocumentsAt: [])
         #expect(answers == [false], "told once")
-        // The presentation hook sees the coordinator as the picker's presentation delegate.
+        // The presentation hook sees the coordinator as the picker's presentation delegate (the next file, after the answer
+        // took the last one away).
+        c.update(nil, host: controller)
         c.update(ProofFile(bytes: Data("evidence".utf8), name: "p.json"), host: controller)
         try await Task.sleep(for: .seconds(0.2))
         #expect(delegateIsCoordinator)
+        c.leave()
+    }
+
+    /// After a failure or an answer, updates that still carry the same file (the failure is told after a hop, and SwiftUI
+    /// may update in between) open nothing again: no second file, no second presentation, no second failure. The file
+    /// taken away and offered again opens the picker again.
+    @Test func aFileIsTakenUpOnceUntilItIsTakenAway() async throws {
+        let root = try scratch()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let window = windowed(UIViewController())
+        let controller = try #require(window.rootViewController)
+        let file = ProofFile(bytes: Data("evidence".utf8), name: "p.json")
+        let c = ProofExportCoordinator()
+        c.root = root
+        var presented = 0, failed = 0
+        var answers: [Bool] = []
+        c.presentPicker = { _, _ in presented += 1 }
+        c.onFailed = { failed += 1 }
+        c.onAnswered = { answers.append($0) }
+        // The test's presentation takes nothing, so the backstop fails it; the file is still offered meanwhile.
+        c.update(file, host: controller)
+        try await Task.sleep(for: .seconds(0.1))
+        #expect(presented == 1 && failed == 1 && entries(root).isEmpty)
+        c.update(file, host: controller)
+        c.update(file, host: controller)
+        try await Task.sleep(for: .seconds(0.1))
+        #expect(presented == 1 && failed == 1 && entries(root).isEmpty, "the same file is not taken up again")
+        // Taken away, then offered again: a new picker, and after its answer the same file opens nothing more.
+        c.update(nil, host: controller)
+        c.presentPicker = { _, picker in
+            presented += 1
+            c.documentPickerWasCancelled(UIDocumentPickerViewController(forOpeningContentTypes: [.json]))
+            _ = picker
+        }
+        c.update(file, host: controller)
+        try await Task.sleep(for: .seconds(0.1))
+        #expect(presented == 2 && answers == [false] && entries(root).isEmpty)
+        c.update(file, host: controller)
+        try await Task.sleep(for: .seconds(0.1))
+        #expect(presented == 2 && answers == [false] && failed == 1 && entries(root).isEmpty)
         c.leave()
     }
 
