@@ -29,6 +29,7 @@ public enum VoteTexts {
         case .recorded: return VoteStrings.voteStateRecorded(service)
         case .inResults: return VoteStrings.voteStateInResults
         case .inResultsConflict: return VoteStrings.voteConflictAfterVerified(service)
+        case .resultsDontAddUp: return VoteStrings.voteResultsDontAddUp
         case .unconfirmed: return VoteStrings.voteStateUnconfirmed(service)
         case .didntVote: return VoteStrings.voteStateDidntVote
         case .checkPending: return VoteStrings.voteCheckPending

@@ -51,7 +51,8 @@ public struct VoteFacts: Equatable, Sendable {
     public var checkOutcome: VoteMessage?
     /// "Your choice: …", once cast.
     public var yourChoice: String?
-    /// The verified results' lines (a title, then rows, turnout, quorum and the unhandled messages); nil before the check.
+    /// The verified results' lines (a title, then rows, turnout, quorum and the unhandled messages); nil before the check,
+    /// and when the rest of the published results don't add up.
     public var results: [String]?
     /// The choices in the order sent, with their labels as sent.
     public var choices: [String] = []
@@ -83,12 +84,14 @@ public struct VoteFacts: Equatable, Sendable {
             f.closes = summary.closesAt.map { VoteStrings.voteClosesLine(VoteFormat.full($0)) }
             if d.extensions > 0, let closes = summary.closesAt { f.extended = VoteStrings.voteExtended(VoteFormat.full(closes)) }
             f.yourChoice = s.choiceLabel.map { VoteStrings.voteYourChoice(AccountNames.isolateOrNull($0) ?? "") }
-            f.results = results(d, service)
+            // Results that don't add up show no number (VAULT-MESSAGING 0.83.2 §10.19.6 step 1; ANDROID-PLAN 0.1.116 §4
+            // "Votes", screen 2 item 5): the line under the state says why.
+            f.results = s.hint.resultsDontAddUp ? nil : results(d, service)
             f.choices = d.choices.map { AccountNames.isolateOrNull($0.label) ?? $0.id }
         }
         f.notes = VoteRules.notes(
             summary, gaveUp: s.hint.gaveUp, resultsProblem: s.hint.resultsProblem, notListedLate: s.hint.notListedLate(now),
-            resultsTooLarge: s.hint.resultsTooLarge
+            resultsTooLarge: s.hint.resultsTooLarge, resultsDontAddUp: s.hint.resultsDontAddUp
         ).map { n in
             let why = n == .rejected ? VoteRules.rejectedWhy(summary.reason) : nil
             return VoteNoteLine(note: n, heading: VoteTexts.title(n), text: VoteTexts.text(n, service: service, time: time, rejected: why))

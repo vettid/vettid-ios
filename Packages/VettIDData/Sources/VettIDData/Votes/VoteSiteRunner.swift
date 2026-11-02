@@ -349,7 +349,10 @@ final class VoteSiteRunner {
 
     /// The results of a closed vote, fetched, checked as an observer does (BALLOT-PROTOCOL §8.4 items 2 to 4: the rows'
     /// hash, order and trees, every ballot's signature and choice, the tally and the member's row) and handed to the vault
-    /// (the member's **Check again**, and the run's retry). The vault alone judges. An attempt already on its way for the
+    /// (the member's **Check again**, and the run's retry) whenever what the vault itself checks can hold: the results
+    /// parse, their signature is one the vault reads, the bundle is an object, and the member's row has a proof to
+    /// `rows_root` with `tree_size` = `counts.eligible` (VAULT-MESSAGING 0.83.2 §10.19.6 step 1); any other failure of
+    /// the check is ``VoteHint/resultsDontAddUp`` and does not stop the submit. The vault alone judges. An attempt already on its way for the
     /// vote is joined, not repeated.
     func checkResults(_ key: VoteKey, quietly: Bool) async throws -> ResultsOutcome {
         guard site.configured else { return .siteUnreachable }
@@ -386,15 +389,31 @@ final class VoteSiteRunner {
         let doc = files.doc
         let rows = files.rows
         let sig = files.sig
-        let own: OwnRow
+        let checked: VoteRows.Checked
         do {
-            own = try await Task.detached { try VoteRows.ownRow(results: doc, rows: rows, recordTag: tag) }.value
+            checked = try await Task.detached { try VoteRows.ownRow(results: doc, rows: rows, recordTag: tag) }.value
         } catch {
+            // No row with a proof: nothing to submit.
             return fail(key, .problem)
         }
-        guard let body = Self.submitBody(key, doc: doc, sig: sig, bundle: bundle, own: own) else { return fail(key, .problem) }
+        guard let body = Self.submitBody(key, doc: doc, sig: sig, bundle: bundle, own: checked.own) else { return fail(key, .problem) }
         try Task.checkCancellation()
-        let answer = try await guarded { try await self.ops(quietly).voteResultsSubmit(body: body) }
+        // A failure of the observer's check outside the four inputs does not hold the row back (VAULT-MESSAGING 0.83.2
+        // §10.19.6 step 1): the vault judges it, and the member is told the rest doesn't add up whatever it answers.
+        return try await submit(key, body, dontAddUp: checked.problem != nil, quietly: quietly)
+    }
+
+    /// Hands [body] to the vault and keeps what it answered, and whether the rest of the results [dontAddUp], for
+    /// the screens.
+    private func submit(_ key: VoteKey, _ body: [UInt8], dontAddUp: Bool, quietly: Bool) async throws -> ResultsOutcome {
+        guard let votes else { throw CancellationError() }
+        let answer: JsonObject
+        do {
+            answer = try await guarded { try await self.ops(quietly).voteResultsSubmit(body: body) }
+        } catch {
+            if !Task.isCancelled, !(error is CancellationError) { votes.hint(key) { $0.resultsDontAddUp = dontAddUp } }
+            throw error
+        }
         try Task.checkCancellation()
         var state = CheckState.unknown
         var reason: String?
@@ -408,6 +427,7 @@ final class VoteSiteRunner {
             $0.gaveUp = nil
             $0.resultsProblem = input
             $0.resultsTooLarge = false
+            $0.resultsDontAddUp = dontAddUp
         }
         votes.refreshQuietly()
         return .submitted(state)

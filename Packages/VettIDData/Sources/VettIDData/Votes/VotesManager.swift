@@ -25,13 +25,21 @@ public struct VoteHint: Equatable, Sendable {
     public var resultsProblem = false
     /// The site's results are larger than the vault could ever take: no retry will help.
     public var resultsTooLarge = false
+    /// The app submitted the member's row from results whose observer's check (BALLOT-PROTOCOL §8.4) failed outside the
+    /// four inputs the vault checks (VAULT-MESSAGING 0.83.2 §10.19.6 step 1): set whatever the vault answered, and kept
+    /// until a later attempt's observer check passes.
+    public var resultsDontAddUp = false
     /// When the app first saw the vote missing from the public site.
     public var notListedSince: Date?
 
-    public init(gaveUp: GaveUpWhy? = nil, resultsProblem: Bool = false, resultsTooLarge: Bool = false, notListedSince: Date? = nil) {
+    public init(
+        gaveUp: GaveUpWhy? = nil, resultsProblem: Bool = false, resultsTooLarge: Bool = false, resultsDontAddUp: Bool = false,
+        notListedSince: Date? = nil
+    ) {
         self.gaveUp = gaveUp
         self.resultsProblem = resultsProblem
         self.resultsTooLarge = resultsTooLarge
+        self.resultsDontAddUp = resultsDontAddUp
         self.notListedSince = notListedSince
     }
 

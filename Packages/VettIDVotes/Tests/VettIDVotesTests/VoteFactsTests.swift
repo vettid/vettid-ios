@@ -191,6 +191,36 @@ import Testing
         #expect(plain.notes.map(\.note) == [.closed, .recorded, .inResults] && !plain.saveProof)
     }
 
+    /// Results whose observer's check failed outside the four inputs, the member's row submitted (VAULT-MESSAGING 0.83.2
+    /// §10.19.6 step 1; ANDROID-PLAN 0.1.116 §4 "Votes"): with `verified` or `unconfirmed` the state, then the owner's
+    /// line once, no number and no error colour; `failed` only its own texts; before the vault judged, the problem with
+    /// the published results.
+    @Test func resultsThatDoNotAddUpShowTheStateTheLineAndNoNumber() {
+        let hint = VoteHint(resultsDontAddUp: true)
+        let line = "The rest of the published results don't add up. The service may have published them wrongly."
+        func facts(_ s: VoteSummary) -> VoteFacts {
+            var d = Samples.detail(s, choiceID: "yes")
+            d.tally = ["yes": 3, "no": 1]
+            d.counts = VoteCounts(eligible: 9, ballots: 4, unhandled: 2)
+            d.minBallots = 2
+            return Samples.facts(Samples.screen(s, detail: d) { $0.hint = hint })
+        }
+        let verified = facts(Samples.closed(VoteBallot(state: .recorded), check: VoteCheck(state: .verified)))
+        #expect(verified.notes.map(\.note) == [.closed, .recorded, .inResults, .resultsDontAddUp])
+        #expect(texts(verified).suffix(2) == ["The published results include your vote.", line])
+        #expect(verified.notes.last?.note.severity == .warning && verified.results == nil)
+        #expect(texts(verified).filter { $0 == line }.count == 1)
+        let conflict = facts(Samples.closed(VoteBallot(state: .recorded), check: VoteCheck(state: .verified), conflict: true))
+        #expect(conflict.notes.map(\.note) == [.closed, .recorded, .inResults, .inResultsConflict, .resultsDontAddUp])
+        let unconfirmed = facts(Samples.closed(VoteBallot(state: .waiting), check: VoteCheck(state: .unconfirmed)))
+        #expect(unconfirmed.notes.map(\.note).suffix(2) == [.unconfirmed, .resultsDontAddUp] && unconfirmed.results == nil)
+        let failed = facts(Samples.closed(VoteBallot(state: .recorded), check: VoteCheck(state: .failed)))
+        #expect(!texts(failed).contains(line) && failed.notes.map(\.note).contains(.failed))
+        let pending = facts(Samples.closed(VoteBallot(state: .recorded), check: VoteCheck(state: .pending)))
+        #expect(texts(pending).last == "VettID could not check the published results of this vote yet. They may be incomplete or not valid. It will try again.")
+        #expect(!texts(pending).contains(line))
+    }
+
     /// Owner behaviour 5: the hints of Votes 2 show as Android shows them.
     @Test func theAppsOwnHintsShowAsAndroidShowsThem() {
         let pending = Samples.closed(VoteBallot(state: .recorded), check: VoteCheck(state: .pending, reason: "input"))

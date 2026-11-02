@@ -22,12 +22,17 @@ public struct ResultsProblem: Error, Equatable, Sendable {
 }
 
 /// The observer's check (BALLOT-PROTOCOL §8.4, items 2 to 4) the app does from the site's bytes before
-/// `vote.results.submit` (VAULT-MESSAGING §10.19.6 step 1): the hash of `rows.json`; the tags in order, unique, as many as
-/// `eligible`, and their tree against the proposal's `record_root`; the rows' tree against `rows_root`; every ballot's
-/// `ballot_sig` under its `vk` and its choice one of the proposal's; the tally and `ballots` recomputed; and the member's
-/// row. Results that fail any of these are not submitted, and the member is told of a problem with the published results.
-/// The signatures of the documents, the anchor and the verdict are the vault's; it never relies on this. Builds on
-/// vettid-android `VoteRows` (the hash, order and tree), with the signatures, the tally and `record_root` added.
+/// `vote.results.submit` (VAULT-MESSAGING 0.83.2 §10.19.6 step 1), in two parts. The member's row: `results.json` parses
+/// (its `rows_root` and `counts.eligible`), `rows.json` gives as many leaves as `eligible`, their tree is `rows_root`, and
+/// the member's tag has a row there with its proof; when any of these fails the vault would not take the row (step 3:
+/// input that does not verify), so there is nothing to submit (a thrown ``ResultsProblem``). The rest, every other
+/// failure of the observer's check: the hash of `rows.json`, the rows' order and schema, the proposal and its choices,
+/// `eligible` against the proposal's, the tags' tree against the proposal's `record_root`, every ballot's `ballot_sig`
+/// under its `vk` and its choice one of the proposal's (the member's own included), and the tally and `ballots`
+/// recomputed; when one of these fails the row is still returned with the problem (``Checked/problem``): it is
+/// submitted, the vault judges it, and the member is told the rest of the published results don't add up. The results'
+/// signature and bundle, the anchor and the verdict are the vault's; it never relies on this. Builds on vettid-android
+/// `VoteRows` (the hash, order and tree), with the signatures, the tally and `record_root` added.
 public enum VoteRows {
     /// The most rows read: far above any electorate a vote is held for, and small enough to bound the work on a hostile
     /// `rows.json` (the app fetches at most about 256 bytes a row of it).
@@ -40,11 +45,21 @@ public enum VoteRows {
     private static let sigSize = 64
     private static let maxId = 32
 
-    /// What the app reads of `results.json` and the proposal it carries.
+    /// The member's row with its proof, and the first problem the rest of the check found in the published results
+    /// (nil when they all hold).
+    public struct Checked: Sendable {
+        public let own: OwnRow
+        public let problem: ResultsProblem?
+    }
+
+    /// What the app needs of `results.json` for the member's row.
     private struct Published {
-        let rowsHash: [UInt8]
         let rowsRoot: [UInt8]
         let eligible: UInt64
+    }
+
+    /// The rest of `results.json` and the proposal it carries, for the observer's check of everything else.
+    private struct Observed {
         let ballots: UInt64
         let tally: [String: UInt64]
         let proposalHash: [UInt8]
@@ -54,60 +69,90 @@ public enum VoteRows {
     }
 
     /// The most bytes a row takes in `rows.json` (a full ballot is about 250), and the most the rest of it takes: a
-    /// larger `rows.json` is not the one the results name, and is refused before it is parsed.
+    /// larger `rows.json` is not the one the results name, and is refused before it is hashed or parsed. The app's own
+    /// bound on the work a hostile site can cause, not one of the vault's inputs (VAULT-MESSAGING 0.83.2 §10.19.6 step
+    /// 1): such rows could make no tree the app would build anyway.
     private static let rowBytes = 256
     private static let rowsOverhead = 4_096
 
-    /// One row of `rows.json`: its tag, and its ballot (`vk`, `choice_id`, `ballot_sig`) as the site has it, or nil.
+    /// One row of `rows.json`: its tag, its ballot (`vk`, `choice_id`, `ballot_sig`) as the site has it or nil, and its
+    /// leaf in the rows' tree.
     private struct Row {
         let tag: [UInt8]
         let ballot: JsonObject?
+        let leaf: [UInt8]
     }
 
-    /// Checks [rowsBytes] against [resultsBytes] and returns the row of [recordTag] with its proof. Throws
-    /// ``ResultsProblem`` for anything that does not hold, including a tag that has no row.
-    public static func ownRow(results resultsBytes: [UInt8], rows rowsBytes: [UInt8], recordTag: [UInt8]) throws -> OwnRow {
-        let published = try read(resultsBytes)
+    /// The rows of `rows.json`, the first problem with their order or schema (which do not stop the tree), and the
+    /// `proposal_id` it names (nil when it names none).
+    private struct ReadRows {
+        let rows: [Row]
+        let problem: ResultsProblem?
+        let proposalID: String?
+    }
+
+    /// Checks [rowsBytes] against [resultsBytes] and returns the row of [recordTag] with its proof, and what the rest of
+    /// the check found. Throws ``ResultsProblem`` when the row or its proof cannot be had, a tag that has no row included.
+    public static func ownRow(results resultsBytes: [UInt8], rows rowsBytes: [UInt8], recordTag: [UInt8]) throws -> Checked {
+        let results = try parse(resultsBytes)
+        let published = try read(results)
         // Bounded before anything else is done with them: as many rows as `eligible`, each of at most ``rowBytes``.
         if UInt64(rowsBytes.count) > published.eligible * UInt64(rowBytes) + UInt64(rowsOverhead) { throw ResultsProblem("rows") }
-        if !Bytes.constantTimeEquals(Bytes.sha256(rowsBytes), published.rowsHash) { throw ResultsProblem("rows_hash") }
-        let rows = try readRows(rowsBytes, eligible: published.eligible, proposalID: published.proposalID)
-        // The tags are the electorate the signed proposal fixed before anyone voted (§8.1, §8.2: record leaves in order).
-        if !Bytes.constantTimeEquals(VoteMerkle.root(rows.map(\.tag)), published.recordRoot) {
+        let read = try readRows(rowsBytes, eligible: published.eligible)
+        let rows = read.rows
+        // The cheap tree check first: a hostile `rows.json` costs no signature checks unless it is the published tree.
+        let leaves = rows.map(\.leaf)
+        if !Bytes.constantTimeEquals(VoteMerkle.root(leaves), published.rowsRoot) { throw ResultsProblem("rows_root") }
+        guard let found = rows.lastIndex(where: { Bytes.constantTimeEquals($0.tag, recordTag) }) else { throw ResultsProblem("no_row") }
+        guard let path = VoteMerkle.proof(leaves, found) else { throw ResultsProblem("rows") }
+        let own = OwnRow(ballot: rows[found].ballot, index: UInt64(found), treeSize: UInt64(leaves.count), path: path)
+        do {
+            try observe(results, rowsBytes, read, eligible: published.eligible)
+            return Checked(own: own, problem: nil)
+        } catch let p as ResultsProblem {
+            return Checked(own: own, problem: p)
+        }
+    }
+
+    /// §8.4 items 2 to 4 beyond the member's row: the proposal, the tags against its `record_root` (the electorate it
+    /// fixed before anyone voted, §8.1, §8.2: record leaves in order), every ballot, the tally and `ballots`.
+    private static func observe(_ results: JsonObject, _ rowsBytes: [UInt8], _ read: ReadRows, eligible: UInt64) throws {
+        let rowsHash: [UInt8]
+        do {
+            rowsHash = try results.base64("rows_hash", VoteMerkle.hashSize)
+        } catch {
+            throw ResultsProblem("results")
+        }
+        if !Bytes.constantTimeEquals(Bytes.sha256(rowsBytes), rowsHash) { throw ResultsProblem("rows_hash") }
+        if let p = read.problem { throw p }
+        let rows = read.rows
+        let observed = try readObserved(results, eligible: eligible)
+        // §8.5: the rows are of the proposal the results carry (the vault never reads `rows.json`, so not one of its
+        // inputs).
+        if read.proposalID != observed.proposalID { throw ResultsProblem("rows") }
+        if !Bytes.constantTimeEquals(VoteMerkle.root(rows.map(\.tag)), observed.recordRoot) {
             throw ResultsProblem("record_root")
         }
-        // The cheap tree check first: a hostile `rows.json` costs no signature checks unless it is the published tree.
-        var leaves: [[UInt8]] = []
-        leaves.reserveCapacity(rows.count)
-        var found: Int?
-        for (i, row) in rows.enumerated() {
-            leaves.append(try row.ballot.map { try leaf(tag: row.tag, ballot: $0) } ?? row.tag)
-            if Bytes.constantTimeEquals(row.tag, recordTag) { found = i }
-        }
-        if !Bytes.constantTimeEquals(VoteMerkle.root(leaves), published.rowsRoot) { throw ResultsProblem("rows_root") }
-        try checkTally(rows, published)
-        guard let found else { throw ResultsProblem("no_row") }
-        guard let path = VoteMerkle.proof(leaves, found) else { throw ResultsProblem("rows") }
-        return OwnRow(ballot: rows[found].ballot, index: UInt64(found), treeSize: UInt64(leaves.count), path: path)
+        try checkTally(rows, observed)
     }
 
     /// §8.4 items 3 and 4: every ballot verifies and names one of the proposal's choices, and every choice's count and
     /// the number of ballots are the rows', exactly.
-    private static func checkTally(_ rows: [Row], _ published: Published) throws {
+    private static func checkTally(_ rows: [Row], _ observed: Observed) throws {
         var counted: [String: UInt64] = [:]
         for row in rows {
             guard let b = row.ballot else { continue }
-            counted[try ballotChoice(row.tag, b, published), default: 0] += 1
+            counted[try ballotChoice(row.tag, b, observed), default: 0] += 1
         }
-        if counted.values.reduce(0, +) != published.ballots { throw ResultsProblem("ballots") }
-        for choice in published.choices where counted[choice, default: 0] != published.tally[choice] {
+        if counted.values.reduce(0, +) != observed.ballots { throw ResultsProblem("ballots") }
+        for choice in observed.choices where counted[choice, default: 0] != observed.tally[choice] {
             throw ResultsProblem("tally")
         }
     }
 
     /// A ballot's choice, once its choice is one of the proposal's and its `ballot_sig` verifies under its `vk` for
     /// `ballot_msg = proposal_hash || record_tag || lp(choice_id)` (§5, §8.4 item 3), by the strict rules of §2.
-    private static func ballotChoice(_ tag: [UInt8], _ b: JsonObject, _ p: Published) throws -> String {
+    private static func ballotChoice(_ tag: [UInt8], _ b: JsonObject, _ p: Observed) throws -> String {
         let vk: [UInt8]
         let sig: [UInt8]
         let choice: String
@@ -124,19 +169,38 @@ public enum VoteRows {
         return choice
     }
 
-    /// `results.json` (§8.5) and its proposal: the hash, the roots, the counts and the tally, the proposal's hash, its
-    /// `record_root` and its choice ids. A tally that names other choices than the proposal's, or not every one, is a
-    /// problem.
-    private static func read(_ bytes: [UInt8]) throws -> Published {
+    /// `results.json` (§8.5) as an object.
+    private static func parse(_ bytes: [UInt8]) throws -> JsonObject {
         do {
-            let results = try StrictJson.parseObject(bytes)
-            let counts = try results.obj("counts")
-            let eligible = try counts.uint("eligible", min: 1, max: UInt64(maxRows))
-            let ballots = try counts.uint("ballots", min: 0, max: eligible)
+            return try StrictJson.parseObject(bytes)
+        } catch {
+            throw ResultsProblem("results")
+        }
+    }
+
+    /// What the member's row needs of `results.json`: `rows_root` and `counts.eligible`.
+    private static func read(_ results: JsonObject) throws -> Published {
+        do {
+            return Published(
+                rowsRoot: try results.base64("rows_root", VoteMerkle.hashSize),
+                eligible: try results.obj("counts").uint("eligible", min: 1, max: UInt64(maxRows))
+            )
+        } catch {
+            throw ResultsProblem("results")
+        }
+    }
+
+    /// The rest of `results.json` (§8.5) and its proposal: `ballots`, the tally, the proposal's hash, its `eligible` (the
+    /// results' own), its `record_root` and its choice ids. A tally that names other choices than the proposal's, or not
+    /// every one, is a problem.
+    private static func readObserved(_ results: JsonObject, eligible: UInt64) throws -> Observed {
+        do {
+            let ballots = try results.obj("counts").uint("ballots", min: 0, max: eligible)
             let proposalBytes = try results.obj("proposal").base64("doc")
             let proposal = try StrictJson.parseObject(proposalBytes)
             if try proposal.uint("eligible", min: 1, max: UInt64(maxRows)) != eligible { throw ResultsProblem("results") }
-            // §8.5: the results are of the proposal they carry.
+            // §8.5: the results are of the proposal they carry. The vault holds its proposal and compares it byte for byte
+            // (step 2), so this is the observer's find, not one of the four inputs.
             let proposalID = try proposal.string("proposal_id")
             if try results.string("proposal_id") != proposalID { throw ResultsProblem("results") }
             var choices = Set<String>()
@@ -150,10 +214,8 @@ public enum VoteRows {
             }
             // Names are unique (a strict parse), so equal sets are the same choices, each once.
             if Set(tally.keys) != choices { throw ResultsProblem("tally") }
-            return Published(
-                rowsHash: try results.base64("rows_hash", VoteMerkle.hashSize),
-                rowsRoot: try results.base64("rows_root", VoteMerkle.hashSize),
-                eligible: eligible, ballots: ballots, tally: tally, proposalHash: Bytes.sha256(proposalBytes),
+            return Observed(
+                ballots: ballots, tally: tally, proposalHash: Bytes.sha256(proposalBytes),
                 recordRoot: try proposal.base64("record_root", VoteMerkle.hashSize), choices: choices, proposalID: proposalID
             )
         } catch let p as ResultsProblem {
@@ -163,25 +225,31 @@ public enum VoteRows {
         }
     }
 
-    /// The rows of `rows.json` (§8.5: exactly `v` 1, the results' `proposal_id` and `rows`, nested no deeper than a
-    /// ballot): as many as [eligible], sorted by tag and each tag once (§8.2: another order is not the tree the roots were
-    /// made over).
-    private static func readRows(_ bytes: [UInt8], eligible: UInt64, proposalID: String) throws -> [Row] {
+    /// The rows of `rows.json`: as many as [eligible] (the tree's size is `counts.eligible`), each with its tag and a
+    /// leaf. Rows out of order or repeated (§8.2: another order is not the tree the roots were made over), or with members
+    /// other than §8.5's, still make their leaves (the proof is checked against the signed root all the same) and are
+    /// the problem returned, and so is a document that is not exactly `v` 1, `proposal_id` and `rows` (§8.5); a row
+    /// whose leaf can't be made at all, or a document nested deeper than a ballot, is thrown.
+    private static func readRows(_ bytes: [UInt8], eligible: UInt64) throws -> ReadRows {
         do {
             let top = try StrictJson.parseObject(bytes, maxDepth: 4)
-            guard only(top, ["v", "proposal_id", "rows"]), try top.uint("v", min: 1, max: 1) == 1,
-                  try top.string("proposal_id") == proposalID
-            else { throw ResultsProblem("rows") }
             let items = try top.array("rows")
             if UInt64(items.count) != eligible { throw ResultsProblem("rows_count") }
             var out: [Row] = []
             out.reserveCapacity(items.count)
+            var problem: ResultsProblem?
+            if !only(top, ["v", "proposal_id", "rows"]) || (try? top.uint("v", min: 1, max: 1)) != 1 {
+                problem = ResultsProblem("rows")
+            }
             for e in items {
-                let row = try readRow(e)
-                if let previous = out.last?.tag, !previous.lexicographicallyPrecedes(row.tag) { throw ResultsProblem("rows_order") }
+                let (row, rowProblem) = try readRow(e)
+                if let previous = out.last?.tag, !previous.lexicographicallyPrecedes(row.tag) {
+                    problem = problem ?? ResultsProblem("rows_order")
+                }
+                problem = problem ?? rowProblem
                 out.append(row)
             }
-            return out
+            return ReadRows(rows: out, problem: problem, proposalID: try? top.string("proposal_id"))
         } catch let p as ResultsProblem {
             throw p
         } catch {
@@ -189,19 +257,20 @@ public enum VoteRows {
         }
     }
 
-    /// One row (§8.5: exactly `record_tag` and `ballot`, a ballot exactly `vk`, `choice_id` and `ballot_sig`; a verifier
-    /// refuses unknown or missing fields).
-    private static func readRow(_ e: JsonValue) throws -> Row {
+    /// One row with its leaf, and its problem when it is not exactly `record_tag` and `ballot`, a ballot exactly `vk`,
+    /// `choice_id` and `ballot_sig` (§8.5: a verifier refuses unknown or missing fields), or a ballot the vault would not
+    /// read. Throws when no leaf can be made of it.
+    private static func readRow(_ e: JsonValue) throws -> (Row, ResultsProblem?) {
         let row = try e.asObject()
-        if !only(row, ["record_tag", "ballot"]) { throw ResultsProblem("rows") }
         let tag = try row.base64("record_tag", VoteMerkle.hashSize)
+        var problem = only(row, ["record_tag", "ballot"]) ? nil : ResultsProblem("rows")
         switch row["ballot"] {
-        case .null?: return Row(tag: tag, ballot: nil)
+        case .null?, nil: return (Row(tag: tag, ballot: nil, leaf: tag), problem)
         case let v?:
             let ballot = try v.asObject()
-            if !only(ballot, ["vk", "choice_id", "ballot_sig"]) { throw ResultsProblem("rows") }
-            return Row(tag: tag, ballot: ballot)
-        case nil: throw ResultsProblem("rows")
+            let strict = try? leaf(tag: tag, ballot: ballot)
+            if !only(ballot, ["vk", "choice_id", "ballot_sig"]) || strict == nil { problem = problem ?? ResultsProblem("rows") }
+            return (Row(tag: tag, ballot: ballot, leaf: try strict ?? looseLeaf(tag: tag, ballot: ballot)), problem)
         }
     }
 
@@ -220,6 +289,24 @@ public enum VoteRows {
         // [a-z0-9-]{1,32}, as vettid-vault's ValidChoiceID: a row with another id is not one the vault would accept.
         if !validChoice(id) { throw ResultsProblem("rows") }
         return Bytes.concat(tag, lp(vk), lp(Array(id.utf8)), lp(sig))
+    }
+
+    /// The same leaf for a ballot of other rows than the vault reads (a key or signature of another length, a choice id
+    /// outside `[a-z0-9-]{1,32}`): still a leaf of the published tree. Throws when its members are no base64 or string
+    /// (chosen; not in the spec: such a ballot has no bytes to make a leaf of, so there is no tree and nothing to submit).
+    static func looseLeaf(tag: [UInt8], ballot b: JsonObject) throws -> [UInt8] {
+        let vk: [UInt8]
+        let sig: [UInt8]
+        let id: [UInt8]
+        do {
+            vk = try b.base64("vk")
+            sig = try b.base64("ballot_sig")
+            id = Array(try b.string("choice_id").utf8)
+        } catch {
+            throw ResultsProblem("rows")
+        }
+        guard [vk, sig, id].allSatisfy({ $0.count <= 0xFFFF }) else { throw ResultsProblem("rows") }
+        return Bytes.concat(tag, lp(vk), lp(id), lp(sig))
     }
 
     /// Whether [o] has exactly the members [names] (names are unique: a strict parse).

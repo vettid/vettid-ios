@@ -13,6 +13,11 @@ public enum VoteNote: Sendable, CaseIterable {
     case sending, waiting, recorded, inResults
     /// `vote_conflict_after_verified`, under ``inResults``: the check is `verified` and the vault holds conflict evidence.
     case inResultsConflict
+    /// `vote_results_dont_add_up`, once, under the state of a `verified` or `unconfirmed` check (``inResults`` and
+    /// ``inResultsConflict``, ``didntVote``, ``unconfirmed``) when the app's observer check of the results it submitted
+    /// failed outside the four inputs the vault checks (VAULT-MESSAGING 0.83.2 §10.19.6 step 1; ANDROID-PLAN 0.1.116 §4
+    /// "Votes"). A warning, never the error colour.
+    case resultsDontAddUp
     case unconfirmed, didntVote, checkPending
     /// A check the vault leaves `pending` with reason `input`, or the app's own check of the results failed: never "failed".
     case checkResultsProblem
@@ -31,7 +36,8 @@ public enum VoteNote: Sendable, CaseIterable {
     public var severity: Severity {
         switch self {
         case .inResultsConflict: .note
-        case .unconfirmed, .checkResultsProblem, .checkResultsTooLarge, .checkGaveUpSite, .checkGaveUpUnpublished, .checkGaveUp,
+        case .unconfirmed, .resultsDontAddUp, .checkResultsProblem, .checkResultsTooLarge, .checkGaveUpSite, .checkGaveUpUnpublished,
+             .checkGaveUp,
              .refusedLate, .refusedNotActive, .refusedEnded, .notSignedIn, .closingSoon, .noConnection, .cannotCastOther,
              .notListedLate:
             .warning
@@ -149,16 +155,17 @@ public enum VoteRules {
 
     /// The notes of a vote screen, in the order they are said. [gaveUp] is why the app's last attempt at the results
     /// failed, when it knows; [resultsProblem] a problem the app found itself in the site's results, kept until the next
-    /// attempt; [notListedLate] the app has seen the vote missing from the site for 10 minutes or more.
+    /// attempt; [notListedLate] the app has seen the vote missing from the site for 10 minutes or more;
+    /// [resultsDontAddUp] the app submitted the member's row from results the rest of whose observer's check failed.
     public static func notes(
         _ s: VoteSummary, gaveUp: GaveUpWhy? = nil, resultsProblem: Bool = false, notListedLate: Bool = false,
-        resultsTooLarge: Bool = false
+        resultsTooLarge: Bool = false, resultsDontAddUp: Bool = false
     ) -> [VoteNote] {
         var out: [VoteNote] = []
         if s.state == .closed { out.append(.closed) }
         if s.state == .rejected { out.append(.rejected) }
         ballotNotes(s, &out)
-        checkNotes(s, gaveUp, resultsProblem, &out)
+        checkNotes(s, gaveUp, resultsProblem, resultsDontAddUp, &out)
         siteNotes(s, notListedLate, &out)
         if s.ballot == nil, s.state != .closed, s.state != .rejected, let n = cannotCastNote(s) { out.append(n) }
         if s.ballot == nil, s.state == .checking, !out.contains(where: checkingNotes.contains) { out.append(checkingNote(s.reason)) }
@@ -203,9 +210,13 @@ public enum VoteRules {
     }
 
     // swiftlint:disable cyclomatic_complexity
-    private static func checkNotes(_ s: VoteSummary, _ gaveUp: GaveUpWhy?, _ resultsProblem: Bool, _ out: inout [VoteNote]) {
+    private static func checkNotes(
+        _ s: VoteSummary, _ gaveUp: GaveUpWhy?, _ resultsProblem: Bool, _ dontAddUp: Bool, _ out: inout [VoteNote]
+    ) {
         let check = s.check
         let recorded = s.ballot?.state == .recorded
+        // Before the vault's check passed, the app's find reads as a problem with the published results.
+        let resultsProblem = resultsProblem || dontAddUp
         switch check?.state {
         case .verified?:
             if s.ballot == nil {
@@ -215,7 +226,12 @@ public enum VoteRules {
                 out.append(.inResults)
                 if s.conflictEvidence { out.append(.inResultsConflict) }
             }
-        case .unconfirmed?: out.append(.unconfirmed)
+            // The state, then the line, once (VAULT-MESSAGING 0.83.2 §10.19.6 step 1); not the results-problem text.
+            if dontAddUp { out.append(.resultsDontAddUp) }
+        case .unconfirmed?:
+            out.append(.unconfirmed)
+            if dontAddUp { out.append(.resultsDontAddUp) }
+        // Only the failed texts (ANDROID-PLAN 0.1.116 §4 "Votes").
         case .failed?: out.append(.failed)
         case .gaveUp?:
             switch gaveUp {

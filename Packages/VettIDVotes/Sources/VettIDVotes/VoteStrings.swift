@@ -138,6 +138,12 @@ public enum VoteStrings {
         String(localized: "vote_conflict_after_verified", defaultValue: "**Your vote is in the published results.** \(a1) also once showed a different vote under your code. Save the proof and show it to the organisation.", bundle: .module)
     }
 
+    /// The rest of the published results failed the app's observer's check (BALLOT-PROTOCOL §8.4) under a `verified` or
+    /// `unconfirmed` check (ANDROID-PLAN 0.1.116 §4 "Votes", the owner's text; not yet in vettid-android's `strings.xml`).
+    public static var voteResultsDontAddUp: String {
+        String(localized: "vote_results_dont_add_up", defaultValue: "The rest of the published results don't add up. The service may have published them wrongly.", bundle: .module)
+    }
+
     public static func voteStateUnconfirmed(_ a1: String) -> String {
         String(localized: "vote_state_unconfirmed", defaultValue: "Not confirmed. \(a1) sent no receipt for your vote, and the published results don't settle whether it counted.", bundle: .module)
     }
