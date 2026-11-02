@@ -53,10 +53,22 @@ import VettIDDataTesting
     @Test func withoutVotesThereIsNothing() async {
         fake.connections = [service()]
         let withNone = await model()
-        #expect(withNone.state.votes == ConnectionVotes())
+        // The vault has the feature (it answered `vote.list`), with no vote of this connection's.
+        #expect(withNone.state.votes == ConnectionVotes(feature: true))
         let m = ConnectionDetailViewModel(connectionID: "c1", connections: fake)
         await m.settle()
         #expect(m.state.votes == ConnectionVotes())
+    }
+
+    /// "What this service can ask" names votes only where the vault has the feature.
+    @Test func theFeatureIsTheVaultsAnswer() async {
+        fake.connections = [service()]
+        votes.availability = .unsupported
+        #expect(await model().state.votes.feature == false)
+        votes.availability = .unknown
+        #expect(await model().state.votes.feature == false)
+        votes.availability = .available
+        #expect(await model().state.votes.feature)
     }
 
     @Test func aGoneConnectionShowsNoVotes() async {

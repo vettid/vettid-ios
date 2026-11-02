@@ -113,11 +113,13 @@ public struct ApprovalsScreen: View {
     @ViewBuilder private func row(_ e: ApprovalEntry) -> some View {
         switch e {
         case .one(let a):
-            ApprovalRow(approval: a, name: state.connectionName(a.connectionID), onOpen: actions.onOpen)
+            ApprovalRow(
+                approval: a, name: state.connectionName(a.connectionID), service: state.isService(a), onOpen: actions.onOpen
+            )
         case .batch(let connectionID, let asks):
             BatchRow(
                 key: e.key, asks: asks, receivedAt: e.receivedAt, name: state.connectionName(connectionID),
-                open: expanded.contains(e.key), onOpen: actions.onOpen
+                service: state.isService(connectionID), open: expanded.contains(e.key), onOpen: actions.onOpen
             ) {
                 if expanded.contains(e.key) { expanded.remove(e.key) } else { expanded.insert(e.key) }
             }
@@ -125,10 +127,12 @@ public struct ApprovalsScreen: View {
     }
 }
 
-/// One request's row: its kind, who asks and what, when; bold while it waits for this member's decision.
+/// One request's row: its kind, who asks and what, when; bold while it waits for this member's decision. A service's
+/// request carries the label "Service" (IOS-PLAN §4.13).
 struct ApprovalRow: View {
     let approval: PendingApproval
     let name: String?
+    var service = false
     let onOpen: @MainActor (String) -> Void
 
     var body: some View {
@@ -139,6 +143,7 @@ struct ApprovalRow: View {
             meta: ApprovalTimes.short(approval.receivedAt),
             tileName: AccountNames.cleaned(who) ?? "?",
             emphasized: approval.needsDecision,
+            service: service,
             onTap: { onOpen(approval.key) }
         )
         .accessibilityIdentifier("approval_\(approval.key)")
@@ -152,6 +157,7 @@ struct BatchRow: View {
     let asks: [PendingApproval]
     let receivedAt: Date
     let name: String?
+    var service = false
     let open: Bool
     let onOpen: @MainActor (String) -> Void
     let onToggle: @MainActor () -> Void
@@ -164,6 +170,7 @@ struct BatchRow: View {
                 meta: ApprovalTimes.short(receivedAt),
                 tileName: AccountNames.cleaned(name) ?? ApprovalsStrings.aConnection,
                 emphasized: true,
+                service: service,
                 onTap: onToggle
             )
             NoticeAction(
@@ -173,7 +180,7 @@ struct BatchRow: View {
             .padding(.leading, Spacing.gutter)
             if open {
                 ForEach(asks, id: \.key) { a in
-                    ApprovalRow(approval: a, name: name, onOpen: onOpen).padding(.leading, Spacing.xl)
+                    ApprovalRow(approval: a, name: name, service: service, onOpen: onOpen).padding(.leading, Spacing.xl)
                 }
             }
         }

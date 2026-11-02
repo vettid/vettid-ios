@@ -46,6 +46,9 @@ public struct OutgoingRequest: Equatable, Sendable {
     public var introducedBy: String?
     public var receivedAt: Date
     public var exp: Date?
+    /// The invitation declared a service (`peer_kind: "service"`, VAULT-MESSAGING 0.69.0 §6.4); absent or any other value
+    /// is a person. An incoming request never carries it (an accepter declares nothing).
+    public var isService = false
 
     public init(connectionID: String, sas: String?, remote: Bool, name: String?, state: RequestState, receivedAt: Date, exp: Date?) {
         self.connectionID = connectionID
@@ -142,12 +145,13 @@ public enum PendingConnection: Equatable, Sendable {
     }
 
     /// [newer] (a request event, or the list) over this one: an event never takes back what a decision already moved on
-    /// (approved stays approved), and an outgoing request keeps its name and its code.
+    /// (approved stays approved), and an outgoing request keeps its name, its code and its service marker.
     func merged(_ newer: PendingConnection) -> PendingConnection {
         let next = newer.with(state: max(state, newer.state), peerApproved: peerApproved || newer.peerApproved)
         if case .outgoing(var n) = next, case .outgoing(let old) = self {
             n.name = n.name ?? old.name
             n.sas = n.sas ?? old.sas
+            n.isService = n.isService || old.isService
             return .outgoing(n)
         }
         return next

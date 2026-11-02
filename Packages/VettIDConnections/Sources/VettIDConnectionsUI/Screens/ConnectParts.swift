@@ -98,20 +98,25 @@ enum PeerDeclineText {
 }
 
 /// The connection is made. "Send a message" when the messages are there to open ([onMessage]); otherwise "Done" alone
-/// (the iPhone's messages come with IOS-PLAN §8 I2.2; chosen; not in the spec). Mirrors vettid-android `Connected`.
+/// (the iPhone's messages come with IOS-PLAN §8 I2.2; chosen; not in the spec). A [service] (it declared itself one,
+/// VAULT-MESSAGING §6.4) cannot message the member: its sentence says what it can do instead, and "Done" alone (vettid-android
+/// #237). Mirrors vettid-android `Connected`.
 struct ConnectedScreen: View {
     @Environment(\.vettIDColors) private var colors
     let name: String?
     let onMessage: (@MainActor () -> Void)?
     let onDone: @MainActor () -> Void
+    var service = false
 
     var body: some View {
+        let message = service ? nil : onMessage
+        let labels = Self.buttons(hasMessages: onMessage != nil, service: service)
         FormScaffold(
             title: ConnectStrings.connectedTitle,
-            message: Self.body(name),
-            primaryLabel: onMessage == nil ? ConnectStrings.done : ConnectStrings.sendMessage,
-            secondaryLabel: onMessage == nil ? nil : ConnectStrings.done,
-            onPrimary: onMessage ?? onDone,
+            message: Self.body(name, service: service),
+            primaryLabel: labels[0],
+            secondaryLabel: labels.dropFirst().first,
+            onPrimary: message ?? onDone,
             onSecondary: onDone,
             header: {
                 VettIDSymbol.checkCircle.image.font(.system(size: 56)).foregroundStyle(colors.success)
@@ -122,8 +127,16 @@ struct ConnectedScreen: View {
         .accessibilityIdentifier("connected")
     }
 
-    static func body(_ name: String?) -> String {
-        AccountNames.isolateOrNull(name).map(ConnectStrings.connectedBody) ?? ConnectStrings.connectedBodyUnnamed
+    static func body(_ name: String?, service: Bool = false) -> String {
+        let shown = AccountNames.isolateOrNull(name)
+        if service { return shown.map(ConnectStrings.connectedBodyService) ?? ConnectStrings.connectedBodyServiceUnnamed }
+        return shown.map(ConnectStrings.connectedBody) ?? ConnectStrings.connectedBodyUnnamed
+    }
+
+    /// The buttons' labels, primary first: "Send a message" and "Done" for a person once the messages are there, "Done"
+    /// alone otherwise and always for a service.
+    static func buttons(hasMessages: Bool, service: Bool) -> [String] {
+        hasMessages && !service ? [ConnectStrings.sendMessage, ConnectStrings.done] : [ConnectStrings.done]
     }
 }
 
@@ -202,6 +215,27 @@ struct ConnectionRequestContent: View {
                 .vettIDFont(.bodyMedium).padding(.top, Spacing.s)
             Text(ConnectStrings.selfAsserted).vettIDFont(.bodySmall).foregroundStyle(colors.onSurfaceVariant)
         }
+    }
+}
+
+/// A service's request before the member approves (VAULT-MESSAGING §6.4 "Service connections"): its name labelled "Name
+/// given by the service" (never the name on a VettID account), then "This is a service, not a person." and its small
+/// print, above the code. The request carries no `ik`, so no fingerprint is shown here (the connection's page has it).
+struct ServiceRequestHeader: View {
+    let name: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Spacing.s) {
+            VStack(alignment: .leading, spacing: Spacing.xs) {
+                Text(ServiceTexts.nameLabel).vettIDFont(.labelLarge)
+                Text(AccountNames.cleaned(name) ?? ConnectStrings.requestNoName)
+                    .vettIDFont(.titleLarge)
+                    .accessibilityIdentifier("request_name")
+            }
+            .accessibilityElement(children: .combine)
+            ServiceRequestLines()
+        }
+        .padding(.bottom, Spacing.l)
     }
 }
 #endif

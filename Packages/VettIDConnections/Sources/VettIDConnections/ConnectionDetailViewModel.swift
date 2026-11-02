@@ -9,16 +9,20 @@ public enum DetailConfirm: Equatable, Sendable {
 
 /// What the Votes feature knows of one connection (ANDROID-PLAN 0.1.102 "Votes"): [count] votes from it (a service
 /// connection gets the row "Votes from <name>"), whether one is [unfinished] (removing the connection asks first), and
-/// whether VettID's service list names this person connection as a service ([reconnect]: "Connect again to vote").
+/// whether VettID's service list names this person connection as a service ([reconnect]: "Connect again to vote"), and
+/// whether the vault has the vote feature at all ([feature]: it answered `vote.list`), which a service's "What this
+/// service can ask" says.
 public struct ConnectionVotes: Equatable, Sendable {
     public var count = 0
     public var unfinished = false
     public var reconnect = false
+    public var feature = false
 
-    public init(count: Int = 0, unfinished: Bool = false, reconnect: Bool = false) {
+    public init(count: Int = 0, unfinished: Bool = false, reconnect: Bool = false, feature: Bool = false) {
         self.count = count
         self.unfinished = unfinished
         self.reconnect = reconnect
+        self.feature = feature
     }
 
     /// The votes of [connectionID] in the Votes list now; nothing where the vault has none.
@@ -28,7 +32,8 @@ public struct ConnectionVotes: Equatable, Sendable {
         let mine = votes.votes.filter { $0.connectionID == connectionID }
         return ConnectionVotes(
             count: mine.count, unfinished: mine.contains(where: VoteRules.unfinished),
-            reconnect: votes.reconnect.contains { $0.connectionID == connectionID }
+            reconnect: votes.reconnect.contains { $0.connectionID == connectionID },
+            feature: votes.availability == .available
         )
     }
 }
@@ -120,6 +125,8 @@ public final class ConnectionDetailViewModel {
     @ObservationIgnored private let follows = TaskBag()
     /// The connection was in the repository's list: once it is not, it is gone.
     @ObservationIgnored private var listed = false
+    /// The sharing was asked for before the connection was known: read once it is, unless it is a service.
+    @ObservationIgnored private var sharingAfterLoad = false
     private var local: ConnectionDetailState
 
     public init(
@@ -164,8 +171,13 @@ public final class ConnectionDetailViewModel {
         work.launch { [weak self] in
             do {
                 let c = try await connections.connection(id)
-                self?.local.loading = false
-                self?.local.connection = c
+                guard let self else { return }
+                local.loading = false
+                local.connection = c
+                if sharingAfterLoad {
+                    sharingAfterLoad = false
+                    loadSharing()
+                }
             } catch {
                 let kind = failureKind(error)
                 self?.local.loading = false
@@ -176,9 +188,16 @@ public final class ConnectionDetailViewModel {
     }
 
     /// Reads both directions again (`share.rule.list` for this connection, `grant.list`), e.g. when the screen comes back from
-    /// the rule editor. Only grants in force count; a failure leaves the rest of the screen as it is.
+    /// the rule editor. Only grants in force count; a failure leaves the rest of the screen as it is. Never for a service,
+    /// which shares nothing and is asked for nothing (VAULT-MESSAGING §6.4): its page has no sharing cards. Before the
+    /// connection is known, it is read once the connection is.
     public func loadSharing() {
         guard let sharing else { return }
+        guard let c = state.connection else {
+            sharingAfterLoad = true
+            return
+        }
+        guard !c.isService else { return }
         let id = local.connectionID
         work.launch { [weak self] in
             do {

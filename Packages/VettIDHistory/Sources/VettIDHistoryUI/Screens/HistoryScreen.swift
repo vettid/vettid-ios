@@ -174,7 +174,9 @@ struct HistoryEntryList: View {
                     VettIDListRow(
                         title: row.title, supporting: row.supporting, meta: e.at.map { HistoryTimes.short($0) },
                         tileName: row.title, tileIcon: HistoryVisuals.symbol(row.category),
-                        tileColors: HistoryVisuals.colors(row.category, scheme), onTap: { actions.onOpen(e.seq) }
+                        tileColors: HistoryVisuals.colors(row.category, scheme), service: row.titleNamesService,
+                        supportingService: row.supportingNamesService,
+                        onTap: { actions.onOpen(e.seq) }
                     )
                     .accessibilityIdentifier("history_entry_\(e.seq)")
                     .onAppear { if i >= shown.count - Self.loadAhead, !state.end { actions.onLoadMore() } }

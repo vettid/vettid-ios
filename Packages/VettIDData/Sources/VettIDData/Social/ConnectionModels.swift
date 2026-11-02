@@ -179,12 +179,15 @@ public struct AcceptedConnection: Equatable, Sendable {
     public var name: String?
     public var exists = false
     public var exp: Date?
+    /// The invitation declared a service (`peer_kind: "service"` in the answer, VAULT-MESSAGING 0.69.0 §6.4).
+    public var isService = false
 
-    public init(connectionID: String, name: String? = nil, exists: Bool = false, exp: Date? = nil) {
+    public init(connectionID: String, name: String? = nil, exists: Bool = false, exp: Date? = nil, isService: Bool = false) {
         self.connectionID = connectionID
         self.name = name
         self.exists = exists
         self.exp = exp
+        self.isService = isService
     }
 }
 

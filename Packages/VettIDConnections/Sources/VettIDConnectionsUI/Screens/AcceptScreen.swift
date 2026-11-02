@@ -46,7 +46,8 @@ public struct AcceptScreen: View {
             ConnectedScreen(
                 name: state.connectionName,
                 onMessage: opening(actions.onMessage, state.connectionID),
-                onDone: actions.onBack
+                onDone: actions.onBack,
+                service: state.connectedService
             )
         case .exists: exists
         case .ended: ended
@@ -116,11 +117,7 @@ public struct AcceptScreen: View {
             onPrimary: approved ? actions.onBack : actions.onApprove,
             onSecondary: actions.onDecline,
             onBack: actions.onBack
-        ) {
-            if let sas = state.sas { LabeledSas(sas: sas) }
-            if approved { WaitingRow(text: ConnectStrings.waitingPeer(who)).padding(.top, Spacing.xl) }
-            FailureLine(kind: state.error)
-        }
+        ) { CompareContent(state: state, who: who) }
         .accessibilityIdentifier(approved ? "accept_approved" : "accept_compare")
     }
 
@@ -160,6 +157,22 @@ public struct AcceptScreen: View {
         case .declined: ConnectStrings.endedDeclined
         case .expired: ConnectStrings.endedExpired
         default: ConnectStrings.endedFailed
+        }
+    }
+}
+
+/// Under the comparison's sentence: a service's name, line and small print (VAULT-MESSAGING §6.4), the safety code, the
+/// wait for the inviter's approval, the failure.
+struct CompareContent: View {
+    let state: AcceptState
+    let who: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            if state.service { ServiceRequestHeader(name: state.name ?? state.connectionName) }
+            if let sas = state.sas { LabeledSas(sas: sas) }
+            if state.step == .approved { WaitingRow(text: ConnectStrings.waitingPeer(who)).padding(.top, Spacing.xl) }
+            FailureLine(kind: state.error)
         }
     }
 }

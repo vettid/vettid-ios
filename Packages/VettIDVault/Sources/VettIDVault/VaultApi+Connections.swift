@@ -43,7 +43,7 @@ extension VaultApi {
         guard let id = VaultJSON.string(o, "connection_id") else { throw VaultStateError(message: "accept without connection_id") }
         return AcceptedInvite(
             connectionID: id, state: VaultJSON.string(o, "state") ?? "waiting", remote: VaultJSON.bool(o, "remote") ?? false,
-            exp: VaultJSON.string(o, "exp"), name: VaultJSON.string(o, "name")
+            exp: VaultJSON.string(o, "exp"), name: VaultJSON.string(o, "name"), peerKind: VaultJSON.string(o, "peer_kind")
         )
     }
 

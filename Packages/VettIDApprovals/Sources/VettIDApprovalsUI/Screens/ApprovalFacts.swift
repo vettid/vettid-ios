@@ -23,6 +23,19 @@ struct FactValue: View {
     var body: some View { Text(text).vettIDFont(.bodyLarge).padding(.bottom, Spacing.m) }
 }
 
+/// The "From" fact's value: the connection's name, with the label "Service" beside it for a service (IOS-PLAN §4.13),
+/// read together.
+struct FromValue: View {
+    let text: String
+    let service: Bool
+
+    var body: some View {
+        ServiceNamed(service: service) { Text(text).vettIDFont(.bodyLarge) }
+            .padding(.bottom, Spacing.m)
+            .accessibilityIdentifier("approval_from")
+    }
+}
+
 /// A small explanatory line.
 struct FactNote: View {
     @Environment(\.vettIDColors) private var colors
@@ -38,6 +51,8 @@ struct Facts: View {
     @Environment(\.vettIDColors) private var colors
     let approval: PendingApproval
     let name: String?
+    /// The requesting connection is a service (VAULT-MESSAGING §6.4): "Service" beside its name.
+    var service = false
     /// A renewal request (0.78.0 §6.8 step 3): its notice says what a deny does instead of the decline-only line.
     var renewal = false
 
@@ -53,7 +68,7 @@ struct Facts: View {
                     MatchCodeBlock(code: code)
                 } else {
                     FactLabel(ApprovalsStrings.from)
-                    FactValue(AccountNames.isolateOrNull(name) ?? ApprovalsStrings.aConnectionInline)
+                    FromValue(text: AccountNames.isolateOrNull(name) ?? ApprovalsStrings.aConnectionInline, service: service)
                 }
                 // The challenger's claim (§10.4), in full whatever the purpose; a fixed line when a purpose comes without one.
                 if let c = ApprovalTexts.contextNote(x) {
@@ -65,7 +80,7 @@ struct Facts: View {
                     Text(ApprovalsStrings.authSigninBody).vettIDFont(.bodyMedium).accessibilityIdentifier("auth_signin_body")
                 }
                 expires(x.exp)
-            case .critical(let c): CriticalFacts(use: c, name: name)
+            case .critical(let c): CriticalFacts(use: c, name: name, service: service)
             case .device(let d):
                 FactLabel(ApprovalsStrings.device)
                 FactValue(ApprovalTexts.deviceLine(d))
@@ -95,12 +110,21 @@ struct Facts: View {
         expires(r.exp)
     }
 
+    /// An invitation this member accepted. From a service (its invitation said `peer_kind: "service"`, VAULT-MESSAGING
+    /// §6.4): its name is "Name given by the service", and "This is a service, not a person." with its small print comes
+    /// under the name and above the code. The request carries no `ik`: the fingerprint is on the connection's page.
     @ViewBuilder private func outgoing(_ r: OutgoingRequest) -> some View {
-        FactLabel(ApprovalsStrings.outgoingName)
+        FactLabel(Self.outgoingNameLabel(r))
         Text(AccountNames.isolateOrNull(r.name) ?? ApprovalsStrings.nameNotShared).vettIDFont(.titleLarge, weight: .semibold)
+        if r.isService { ServiceRequestLines().padding(.top, Spacing.s) }
         if let code = r.sas { sas(code) }
         if r.state == .approved { waiting(r.name) }
         expires(r.exp)
+    }
+
+    /// "Invitation from", or for a service "Name given by the service".
+    static func outgoingNameLabel(_ r: OutgoingRequest) -> String {
+        r.isService ? ServiceTexts.nameLabel : ApprovalsStrings.outgoingName
     }
 
     private func sas(_ code: String) -> some View {
@@ -135,10 +159,11 @@ struct CriticalFacts: View {
     @Environment(\.vettIDColors) private var colors
     let use: CriticalUse
     let name: String?
+    var service = false
 
     var body: some View {
         FactLabel(ApprovalsStrings.from)
-        FactValue(AccountNames.isolateOrNull(name) ?? ApprovalsStrings.aConnectionInline)
+        FromValue(text: AccountNames.isolateOrNull(name) ?? ApprovalsStrings.aConnectionInline, service: service)
         if let item = ApprovalTexts.criticalItem(use) {
             FactLabel(ApprovalsStrings.criticalItem)
             FactValue(item)

@@ -49,6 +49,7 @@ public enum ConnectionParser {
         )
         r.peerApproved = VaultJSON.bool(o, "peer_approved") ?? false
         r.introducedBy = VaultJSON.string(o, "introduced_by")
+        r.isService = VaultJSON.string(o, "peer_kind") == "service"
         return r
     }
 

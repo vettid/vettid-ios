@@ -64,14 +64,14 @@ public struct ConnectionsScreen: View {
     }
 
     @ViewBuilder private var content: some View {
-        if state.loading && state.connections.isEmpty {
+        if state.loading && state.noneListed {
             ProgressView().tint(colors.primary.color).frame(maxWidth: .infinity, maxHeight: .infinity)
                 .accessibilityIdentifier("connections_loading")
         } else if let error = state.error, state.isEmpty {
             ConnectionsError(kind: error, actionLabel: ConnectStrings.retry, action: actions.onRetry)
                 .padding(Spacing.xl)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else if state.searching && state.connections.isEmpty {
+        } else if state.searching && state.noneListed {
             EmptyState(icon: .search, title: ConnectStrings.noMatchTitle, message: ConnectStrings.noMatchBody)
                 .accessibilityIdentifier("connections_no_match")
         } else if state.isEmpty {
@@ -83,8 +83,9 @@ public struct ConnectionsScreen: View {
     }
 }
 
-/// The list itself: a failure notice, then (unless searching) the declines and the invitations, then the connections.
-/// The connection requests are listed under Approvals (ANDROID-PLAN §4 Approvals).
+/// The list itself: a failure notice, then (unless searching) the declines and the invitations, then the people, then
+/// the services in their own section "Services" when there is one (IOS-PLAN §4.13; the list's sections are headers in
+/// its stack, as the invitations' are). The connection requests are listed under Approvals (ANDROID-PLAN §4 Approvals).
 struct ConnectionList: View {
     let state: ConnectionsState
     let actions: ConnectionsActions
@@ -98,11 +99,18 @@ struct ConnectionList: View {
                 }
                 if !state.searching { pending }
                 ForEach(state.connections) { c in ConnectionItem(connection: c, actions: actions) }
+                if Self.showsServices(state) {
+                    SectionHeader(text: ServiceTexts.sectionTitle).accessibilityIdentifier("services_section")
+                    ForEach(state.services) { c in ConnectionItem(connection: c, actions: actions) }
+                }
             }
             .padding(.bottom, 96)
         }
         .accessibilityIdentifier("connections")
     }
+
+    /// The section "Services" only when there is a service to list.
+    static func showsServices(_ state: ConnectionsState) -> Bool { !state.services.isEmpty }
 
     @ViewBuilder private var pending: some View {
         ForEach(state.peerDeclines, id: \.requestID) { d in
@@ -134,6 +142,7 @@ struct ConnectionItem: View {
             supporting: Self.supporting(c),
             meta: c.lastActiveAt.map { ConnectTimes.short($0) },
             photo: ProfilePhotos.decode(c.photo),
+            service: c.isService,
             onFavoriteChange: { actions.onFavorite(c.id, $0) },
             onTap: { actions.onOpen(c.id) }
         )

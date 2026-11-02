@@ -6,6 +6,10 @@ public struct HistoryRow: Equatable, Sendable {
     public var title: String
     public var supporting: String
     public var category: AuditCategory
+    /// The title names a service connection (VAULT-MESSAGING §6.4): the label "Service" goes at its end (IOS-PLAN §4.13).
+    public var titleNamesService = false
+    /// The second line names it and the title does not: the label goes at the second line's end.
+    public var supportingNamesService = false
 }
 
 public extension HistoryState {
@@ -42,11 +46,20 @@ public extension HistoryState {
             item: itemID.flatMap { itemNames?[$0] },
             vote: AuditKinds.voteTitle(r.kind, e.ref, connectionID: e.connectionID, in: voteTitles)
         )
-        return HistoryRow(
+        var row = HistoryRow(
             title: HistoryText.title(r.kind, e.ref, names: names),
             supporting: HistoryText.supporting([item, connection, device], fallback: AuditKinds.categoryLabel(r.category)),
             category: r.category
         )
+        // The label goes beside the name: on the title when the title names the connection, else on the second line,
+        // which names it whenever the entry has a connection.
+        if let id = e.connectionID, serviceIDs.contains(id) {
+            var unnamed = names
+            unnamed.connection = nil
+            row.titleNamesService = names.connection != nil && row.title != HistoryText.title(r.kind, e.ref, names: unnamed)
+            row.supportingNamesService = !row.titleNamesService
+        }
+        return row
     }
 
     /// The list's filters in words for the export's confirm step ("Messages and calls · Alice Moreau · Last 7 days ·

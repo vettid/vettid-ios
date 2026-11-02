@@ -422,6 +422,105 @@
           }
         }
       }
+    },
+    "service_label": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Service"
+          }
+        }
+      }
+    },
+    "services_section_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Services"
+          }
+        }
+      }
+    },
+    "service_request_line": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This is a service, not a person."
+          }
+        }
+      }
+    },
+    "service_request_caveat": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The invitation says so. VettID has not checked who runs it."
+          }
+        }
+      }
+    },
+    "service_name_label": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Name given by the service"
+          }
+        }
+      }
+    },
+    "service_detail_can_ask_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "What this service can ask"
+          }
+        }
+      }
+    },
+    "service_detail_can_ask_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "It can ask you to confirm a sign-in or approve an action. It can't message or call you, and it can't ask for your data."
+          }
+        }
+      }
+    },
+    "service_detail_can_ask_body_votes": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "It can ask you to confirm a sign-in, approve an action or vote. It can't message or call you, and it can't ask for your data."
+          }
+        }
+      }
+    },
+    "service_forbidden": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Services can't do that."
+          }
+        }
+      }
     }
   },
   "version": "1.0"

@@ -115,7 +115,9 @@ public struct ApprovalDetailScreen: View {
         let who = AccountNames.isolateOrNull(state.connectionName) ?? ApprovalsStrings.aConnection
         return FormScaffold(
             title: ApprovalTexts.title(a, name: state.connectionName), primaryLabel: ApprovalsStrings.withdrawnClose,
-            onPrimary: actions.onBack, onBack: actions.onBack
+            onPrimary: actions.onBack, onBack: actions.onBack,
+            titleAccessibilityLabel: Self.titleSpoken(a, state),
+            header: { TitleServiceLabel(shown: Self.labelsTitle(a, state)) }
         ) {
             VStack(alignment: .leading, spacing: Spacing.m) {
                 NoticeCard(.info, title: ApprovalsStrings.withdrawnNotice(who), announce: .polite)
@@ -127,7 +129,7 @@ public struct ApprovalDetailScreen: View {
                 if let text = state.muteError.map({ ApprovalTexts.failure($0, retryUntil: nil, limit: nil, now: Date()) }) {
                     Text(text).vettIDFont(.bodyMedium).announced(text, .assertive).accessibilityIdentifier("withdrawn_error")
                 }
-                Facts(approval: a, name: state.connectionName)
+                Facts(approval: a, name: state.connectionName, service: state.connectionIsService)
             }
         }
         .confirmDialog(
@@ -143,6 +145,18 @@ public struct ApprovalDetailScreen: View {
     }
 
     private enum Step { case decision, result, notHeld, gone, withdrawn }
+
+    /// A sign-in of a service with a match code has no "From" line (its title names the service, IOS-PLAN §4.14): the label
+    /// "Service" goes over the title instead (chosen; not in the spec).
+    static func labelsTitle(_ a: PendingApproval, _ state: ApprovalDetailState) -> Bool {
+        guard state.connectionIsService, case .authentication(let x) = a else { return false }
+        return x.matchCode != nil
+    }
+
+    /// With the label over the title, VoiceOver reads them as one: the title, then "Service" (the label itself is hidden).
+    static func titleSpoken(_ a: PendingApproval, _ state: ApprovalDetailState) -> String? {
+        labelsTitle(a, state) ? "\(ApprovalTexts.title(a, name: state.connectionName)), \(ServiceTexts.label)" : nil
+    }
 
     /// Which of the screen's steps shows, apart from an expiry while open (``live(_:now:)``).
     private var step: Step {
@@ -175,7 +189,9 @@ public struct ApprovalDetailScreen: View {
             secondaryLabel: ApprovalTexts.denyLabel(a),
             onPrimary: actions.onApprove,
             onSecondary: actions.onDeny,
-            onBack: actions.onBack
+            onBack: actions.onBack,
+            titleAccessibilityLabel: Self.titleSpoken(a, state),
+            header: { TitleServiceLabel(shown: Self.labelsTitle(a, state)) }
         ) {
             DecisionContent(approval: a, state: state, actions: actions, now: now)
         }
@@ -190,6 +206,18 @@ public struct ApprovalDetailScreen: View {
         .endAccessConfirmation(state, actions)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("approval_detail")
+    }
+}
+
+/// The label "Service" over a decision's title, leading like the title.
+struct TitleServiceLabel: View {
+    let shown: Bool
+
+    var body: some View {
+        // Read with the title (``ApprovalDetailScreen/titleSpoken(_:_:)``), not on its own.
+        if shown {
+            ServiceLabel().frame(maxWidth: .infinity, alignment: .leading).padding(.top, Spacing.s).accessibilityHidden(true)
+        }
     }
 }
 
@@ -208,7 +236,11 @@ struct DecisionContent: View {
             case .share(let d):
                 ShareFacts(decision: d, excluded: state.shareExcluded, name: state.connectionName, onToggle: actions.onToggleShareItem)
             case .grant(let g): GrantFacts(request: g, state: state, actions: actions)
-            default: Facts(approval: approval, name: state.connectionName, renewal: state.renewalUntil(at: now) != nil)
+            default:
+                Facts(
+                    approval: approval, name: state.connectionName, service: state.connectionIsService,
+                    renewal: state.renewalUntil(at: now) != nil
+                )
             }
             if state.needs == .password {
                 SecretField(

@@ -89,14 +89,19 @@ struct FeedRow: View {
     }
 
     private func texts(_ red: TagColor) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Text(FeedKinds.title(item, names))
-                .vettIDFont(.bodyLarge, weight: unread ? .semibold : .regular)
-                .foregroundStyle(attention ? red.onContainer : lineColor)
-                .lineLimit(2)
+        let place = Self.serviceLabel(item, names)
+        return VStack(alignment: .leading, spacing: 0) {
+            ServiceRowLine(service: place == .title) {
+                Text(FeedKinds.title(item, names))
+                    .vettIDFont(.bodyLarge, weight: unread ? .semibold : .regular)
+                    .foregroundStyle(attention ? red.onContainer : lineColor)
+                    .lineLimit(2)
+            }
             if let line = FeedKinds.supporting(item, names) {
-                Text(line).vettIDFont(.bodyMedium).foregroundStyle(attention ? red.onContainer : colors.onSurfaceVariant)
-                    .lineLimit(Self.lineLimit(item))
+                ServiceRowLine(service: place == .supporting) {
+                    Text(line).vettIDFont(.bodyMedium).foregroundStyle(attention ? red.onContainer : colors.onSurfaceVariant)
+                        .lineLimit(Self.lineLimit(item))
+                }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -118,6 +123,20 @@ struct FeedRow: View {
     private var lineColor: ThemeColor {
         if item.priority == "low" && !unread { return colors.onSurfaceVariant }
         return unread ? colors.onSurface : colors.onSurfaceVariant
+    }
+
+    /// Where the row names its connection, when that connection is a service (VAULT-MESSAGING §6.4).
+    enum ServiceLabelPlace: Equatable { case none, title, supporting }
+
+    /// The label "Service" goes beside the service's name (IOS-PLAN §4.13): at the end of the line whose text names the
+    /// connection (the title first), and nowhere when neither line names it ("A new vote" with the vote's title under it).
+    static func serviceLabel(_ item: FeedItem, _ names: FeedNames) -> ServiceLabelPlace {
+        guard let id = item.connectionID, names.connections[id]?.isService == true else { return .none }
+        var without = names
+        without.connections[id] = nil
+        if FeedKinds.title(item, names) != FeedKinds.title(item, without) { return .title }
+        if FeedKinds.supporting(item, names) != FeedKinds.supporting(item, without) { return .supporting }
+        return .none
     }
 
     /// The second line's lines in the list (owner decision of 2026-10-20, IOS-PLAN 0.1.14): up to 3 for an urgent item

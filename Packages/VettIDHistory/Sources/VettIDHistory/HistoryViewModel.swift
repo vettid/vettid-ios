@@ -11,6 +11,8 @@ public struct HistoryState: Equatable, Sendable, CustomStringConvertible, Custom
     /// id → "First Last" of the member's connections ("" before the names arrived: ``connectionLabel(_:)`` says "Name not
     /// shared yet"), for the rows and the connection filter.
     public var connectionNames: [String: String] = [:]
+    /// The member's connections that are services (VAULT-MESSAGING §6.4): their rows carry the label "Service".
+    public var serviceIDs: Set<String> = []
     /// id → name of the member's items (the Vault list), for the rows of item entries (§10.9); nil while the app holds no
     /// list (the Vault screens come with IOS-PLAN §8 I3.1): no item is then named, rather than every one called deleted
     /// (chosen; not in the spec).
@@ -142,6 +144,7 @@ public final class HistoryViewModel {
         local.connectionNames = Dictionary(
             list.map { ($0.id, AccountNames.cleaned($0.displayName) ?? "") }, uniquingKeysWith: { a, _ in a }
         )
+        local.serviceIDs = Set(list.filter(\.isService).map(\.id))
     }
 
     /// The daily check passed (or the hold ended): a list refused because it was due reads again by itself.

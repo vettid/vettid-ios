@@ -62,7 +62,8 @@ public struct InviteScreen: View {
             ConnectedScreen(
                 name: state.connectionName,
                 onMessage: opening(actions.onMessage, state.connectionID),
-                onDone: actions.onBack
+                onDone: actions.onBack,
+                service: state.connectedService
             )
         case .expired:
             FormScaffold(

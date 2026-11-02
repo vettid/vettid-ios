@@ -42,7 +42,8 @@ public extension ConversationSummary {
 }
 
 /// Messages (ANDROID-PLAN §4, Proton's inbox): one row per connection with its latest message, newest first; the Unread
-/// chip and the search filter it. Mirrors vettid-android `MessagesViewModel`.
+/// chip and the search filter it. A service (VAULT-MESSAGING §6.4) is never listed: it has no conversation (IOS-PLAN
+/// §4.13). Mirrors vettid-android `MessagesViewModel`.
 @MainActor
 @Observable
 public final class MessagesViewModel {
@@ -76,7 +77,7 @@ public final class MessagesViewModel {
 
     public var state: MessagesState {
         var s = local
-        let all = messages.conversations
+        let all = messages.conversations.filter { !$0.connection.isService }
         s.conversations = all.filter { (!s.unreadOnly || $0.unread > 0) && $0.matches(s.query) }
         s.noConnections = !all.contains { $0.connection.state == .active }
         s.searchable = !all.isEmpty
@@ -125,7 +126,8 @@ public struct NewMessageState: Equatable, Sendable, CustomStringConvertible, Cus
     public var customMirror: Mirror { Mirror(self, children: [:]) }
 }
 
-/// The compose button: pick an active connection to write to. Mirrors vettid-android `NewMessageViewModel`.
+/// The compose button: pick an active connection to write to; never a service (IOS-PLAN §4.13). Mirrors vettid-android
+/// `NewMessageViewModel`.
 @MainActor
 @Observable
 public final class NewMessageViewModel {
@@ -155,9 +157,9 @@ public final class NewMessageViewModel {
         return s
     }
 
-    /// The active ones, favourites first, then by the title lower-cased (vettid-android's order; a stable sort).
+    /// The active people, favourites first, then by the title lower-cased (vettid-android's order; a stable sort).
     static func listed(_ all: [ConnectionInfo]) -> [ConnectionInfo] {
-        all.filter { $0.state == .active }.enumerated().sorted { a, b in
+        all.filter { $0.state == .active && !$0.isService }.enumerated().sorted { a, b in
             if a.element.favorite != b.element.favorite { return a.element.favorite }
             let (x, y) = (sortKey(a.element), sortKey(b.element))
             return x != y ? x < y : a.offset < b.offset

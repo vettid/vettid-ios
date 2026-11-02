@@ -17,8 +17,9 @@ public struct RowAction {
 
 /// List row (Proton mailbox): initial tile, name and preview lines, date on the first line's end and an optional
 /// trailing action under it. [emphasized] marks unread rows (bold, full-contrast text); [tileStyle] marks favourites;
-/// [tileColors] colours the tile (a tag's colour). [below] goes under the preview line (an item's tags).
-/// Mirrors vettid-android `VettIdListRow`.
+/// [tileColors] colours the tile (a tag's colour). [below] goes under the preview line (an item's tags). [service] puts
+/// the small ``ServiceLabel`` at the end of the title, [supportingService] at the end of the second line: on the line that
+/// names a service connection, read with it (IOS-PLAN §4.13). Mirrors vettid-android `VettIdListRow`.
 public struct VettIDListRow<Below: View>: View {
     @Environment(\.vettIDColors) private var colors
     let title: String
@@ -31,6 +32,8 @@ public struct VettIDListRow<Below: View>: View {
     let tilePhoto: UIImage?
     let tileIcon: VettIDSymbol?
     let tileColors: TagColor?
+    let service: Bool
+    let supportingService: Bool
     let onTap: (@MainActor () -> Void)?
     let below: Below
 
@@ -45,6 +48,8 @@ public struct VettIDListRow<Below: View>: View {
         tilePhoto: UIImage? = nil,
         tileIcon: VettIDSymbol? = nil,
         tileColors: TagColor? = nil,
+        service: Bool = false,
+        supportingService: Bool = false,
         onTap: (@MainActor () -> Void)? = nil,
         @ViewBuilder below: () -> Below = { EmptyView() }
     ) {
@@ -58,6 +63,8 @@ public struct VettIDListRow<Below: View>: View {
         self.tilePhoto = tilePhoto
         self.tileIcon = tileIcon
         self.tileColors = tileColors
+        self.service = service
+        self.supportingService = supportingService
         self.onTap = onTap
         self.below = below()
     }
@@ -70,11 +77,13 @@ public struct VettIDListRow<Below: View>: View {
             Spacer().frame(width: Spacing.l)
             VStack(alignment: .leading, spacing: 0) {
                 HStack(alignment: .firstTextBaseline, spacing: 0) {
-                    Text(title)
-                        .vettIDFont(.bodyLarge, weight: weight)
-                        .foregroundStyle(lineColor)
-                        .lineLimit(1)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                    ServiceRowLine(service: service) {
+                        Text(title)
+                            .vettIDFont(.bodyLarge, weight: weight)
+                            .foregroundStyle(lineColor)
+                            .lineLimit(1)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     if let meta {
                         Text(meta)
                             .vettIDFont(.bodySmall, weight: weight)
@@ -85,11 +94,13 @@ public struct VettIDListRow<Below: View>: View {
                 }
                 HStack(spacing: 0) {
                     if let supporting {
-                        Text(supporting)
-                            .vettIDFont(.bodyMedium)
-                            .foregroundStyle(lineColor)
-                            .lineLimit(1)
-                            .frame(maxWidth: .infinity, alignment: .leading)
+                        ServiceRowLine(service: supportingService) {
+                            Text(supporting)
+                                .vettIDFont(.bodyMedium)
+                                .foregroundStyle(lineColor)
+                                .lineLimit(1)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     } else {
                         Spacer()
                     }
@@ -128,10 +139,13 @@ public struct ConnectionRow: View {
     let meta: String?
     let emphasized: Bool
     let photo: UIImage?
+    let service: Bool
     let onFavoriteChange: @MainActor (Bool) -> Void
     let onTap: (@MainActor () -> Void)?
 
     /// [labelName]: the name as it sits in the star's spoken sentence (bidi-isolated by the caller); [name] when absent.
+    /// [service]: a service connection (IOS-PLAN §4.13): the service icon in place of the initial tile and the "Service"
+    /// label after the name.
     public init(
         name: String,
         labelName: String? = nil,
@@ -140,6 +154,7 @@ public struct ConnectionRow: View {
         meta: String? = nil,
         emphasized: Bool = false,
         photo: UIImage? = nil,
+        service: Bool = false,
         onFavoriteChange: @escaping @MainActor (Bool) -> Void,
         onTap: (@MainActor () -> Void)? = nil
     ) {
@@ -150,6 +165,7 @@ public struct ConnectionRow: View {
         self.meta = meta
         self.emphasized = emphasized
         self.photo = photo
+        self.service = service
         self.onFavoriteChange = onFavoriteChange
         self.onTap = onTap
     }
@@ -172,7 +188,9 @@ public struct ConnectionRow: View {
                 label: Self.favoriteLabel(labelName, favorite: favorite),
                 active: favorite
             ) { onFavoriteChange(!favorite) },
-            tilePhoto: photo,
+            tilePhoto: service ? nil : photo,
+            tileIcon: service ? .service : nil,
+            service: service,
             onTap: onTap
         )
     }

@@ -125,15 +125,34 @@ struct ConversationBody: View {
     }
 }
 
-/// The reply field and Send; for a connection that is not active, why nothing can be sent.
+/// The reply field and Send; for a connection that is not active, why nothing can be sent. A service has no composer and
+/// no photo button: "Services can't do that." in their place (VAULT-MESSAGING §6.4), said aloud when a send was refused.
 struct Composer: View {
     @Environment(\.vettIDColors) private var colors
     let state: ConversationState
     let name: String
     let actions: ConversationActions
 
+    /// What stands in place of the composer; nil: the composer.
+    static func note(_ state: ConversationState, name: String) -> String? {
+        if state.noComposer { return ServiceTexts.forbidden }
+        if state.connection != nil && !state.active { return MessagesStrings.inactive(name) }
+        return nil
+    }
+
     var body: some View {
-        if state.connection != nil && !state.active {
+        if state.noComposer {
+            let text = Text(ServiceTexts.forbidden)
+                .vettIDFont(.bodyMedium)
+                .foregroundStyle(colors.onSurfaceVariant)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: .infinity)
+                .padding(Spacing.l)
+            Group {
+                if state.serviceForbidden { text.announcedOnce(ServiceTexts.forbidden, .assertive) } else { text }
+            }
+            .accessibilityIdentifier("service_forbidden")
+        } else if state.connection != nil && !state.active {
             Text(MessagesStrings.inactive(name))
                 .vettIDFont(.bodyMedium)
                 .foregroundStyle(colors.onSurfaceVariant)

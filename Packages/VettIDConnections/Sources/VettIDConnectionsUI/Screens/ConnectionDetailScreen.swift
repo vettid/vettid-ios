@@ -52,7 +52,9 @@ public struct DetailActions {
 /// never verified; the extras as self-asserted); sharing both ways, "You share with <First>" and "<First> shares with you"
 /// (two cards, active connections only); when it connected and was last active; and the vault key fingerprint,
 /// the lasting identity check. The safety code belongs to the moment of connecting and is not shown here; nor are the
-/// owner's alias and note. The pill holds favourite and remove (confirmed). Mirrors vettid-android
+/// owner's alias and note. The pill holds favourite and remove (confirmed). A service (VAULT-MESSAGING §6.4, IOS-PLAN
+/// §4.13) is titled with the label "Service", its names are "Name given by the service", "What this service can ask"
+/// follows its profile, and it has no message, sharing or other person-only action. Mirrors vettid-android
 /// `ConnectionDetailScreen`.
 public struct ConnectionDetailScreen: View {
     @Environment(\.vettIDColors) private var colors
@@ -112,12 +114,12 @@ public struct ConnectionDetailScreen: View {
         .accessibilityIdentifier("connection_detail")
     }
 
-    /// Message (once the messages are there), favourite, History, remove.
+    /// Message (once the messages are there; never for a service, which has no conversation), favourite, History, remove.
     func pill(_ c: ConnectionInfo) -> [PillAction] {
         // The connection's own name, as vettid-android's pill (its name from the shown connection).
         let named = AccountNames.isolateOrNull(c.displayName) ?? ConnectStrings.nameNotShared
         var list: [PillAction] = []
-        if let onMessage = actions.onMessage, c.state == .active {
+        if let onMessage = actions.onMessage, c.state == .active, !c.isService {
             list.append(PillAction(.messages, label: ConnectStrings.detailMessage(named), action: onMessage))
         }
         list.append(PillAction(c.favorite ? .star : .starOutline, label: ConnectionRow.favoriteLabel(named, favorite: c.favorite),
@@ -158,6 +160,7 @@ struct DetailContent: View {
                         .accessibilityIdentifier("vote_reconnect")
                 }
                 ProfileCard(connection: c)
+                if Self.showsCanAsk(c) { ServiceCanAskCard(votes: state.votes.feature) }
                 if Self.showsVotes(c, state, actions), let open = actions.onOpenVotes { votesRow(open) }
                 if Self.showsSharing(c, actions) { sharingCards(c) }
                 if let asks, !asks.prominent { asksCard(asks, asksName) }
@@ -197,8 +200,14 @@ struct DetailContent: View {
         c.isService && state.votes.count > 0 && actions.onOpenVotes != nil
     }
 
-    /// Whether the page shows the sharing cards: an active connection, with every sharing hook of the host.
-    static func showsSharing(_ c: ConnectionInfo, _ actions: DetailActions) -> Bool { c.state == .active && actions.hasSharing }
+    /// Whether the page has "What this service can ask": a service's only.
+    static func showsCanAsk(_ c: ConnectionInfo) -> Bool { c.isService }
+
+    /// Whether the page shows the sharing cards: an active person connection, with every sharing hook of the host. A
+    /// service shares nothing and is asked for nothing (VAULT-MESSAGING §6.4).
+    static func showsSharing(_ c: ConnectionInfo, _ actions: DetailActions) -> Bool {
+        c.state == .active && !c.isService && actions.hasSharing
+    }
 
     /// Two directions, two cards: what goes out of the vault, what comes in (owner request 2026-10-08, as vettid-android).
     @ViewBuilder private func sharingCards(_ c: ConnectionInfo) -> some View {
@@ -214,19 +223,28 @@ struct DetailContent: View {
     }
 
     private func asksCard(_ asks: AsksView, _ name: String?) -> some View {
-        AsksCard(view: asks, name: name, busy: state.busy, onMute: actions.onMuteAsks, onResume: actions.onResumeAsks)
+        AsksCard(
+            view: asks, name: name, busy: state.busy, service: connection.isService, onMute: actions.onMuteAsks,
+            onResume: actions.onResumeAsks
+        )
     }
 
     private var header: some View {
         let c = connection
         return VStack(spacing: 0) {
-            InitialTile(title, size: 72, style: c.favorite ? .favorite : .connection, photo: ProfilePhotos.decode(c.photo))
+            // A service's logo, if it shared one; else the service icon in place of the initial.
+            InitialTile(
+                title, size: 72, style: c.favorite ? .favorite : .connection, photo: ProfilePhotos.decode(c.photo),
+                icon: c.isService ? .service : nil
+            )
             Spacer().frame(height: Spacing.m)
-            Text(title)
-                .vettIDFont(.headlineSmall)
-                .multilineTextAlignment(.center)
-                .accessibilityAddTraits(.isHeader)
-                .accessibilityIdentifier("detail_name")
+            ServiceNamed(service: c.isService, alignment: .center) {
+                Text(title)
+                    .vettIDFont(.headlineSmall)
+                    .multilineTextAlignment(.center)
+            }
+            .accessibilityAddTraits(.isHeader)
+            .accessibilityIdentifier("detail_name")
             if let display = c.secondaryName {
                 Text(display).foregroundStyle(colors.onSurfaceVariant).multilineTextAlignment(.center)
                     .accessibilityIdentifier("detail_display_name")
@@ -280,8 +298,9 @@ struct ProfileCard: View {
                 Text(ConnectStrings.detailProfileNone).foregroundStyle(colors.onSurfaceVariant)
             }
             if let account = AccountNames.cleaned(c.accountName) {
-                InfoLine(label: ConnectStrings.detailAccountName, value: account)
-                note(ConnectStrings.namesNote).padding(.bottom, Spacing.s)
+                // A service's names are the ones it gave, not the names on a VettID account (VAULT-MESSAGING §6.4).
+                InfoLine(label: Self.accountNameLabel(c), value: account)
+                if !c.isService { note(ConnectStrings.namesNote).padding(.bottom, Spacing.s) }
             }
             if hasName || !c.sharedItems.isEmpty {
                 if let profileName { InfoLine(label: ConnectStrings.detailProfileName, value: profileName) }
@@ -312,6 +331,28 @@ struct ProfileCard: View {
     private func note(_ text: String) -> some View {
         Text(text).vettIDFont(.bodySmall).foregroundStyle(colors.onSurfaceVariant)
     }
+
+    /// The names' label: "VettID account name", or for a service "Name given by the service".
+    static func accountNameLabel(_ c: ConnectionInfo) -> String {
+        c.isService ? ServiceTexts.nameLabel : ConnectStrings.detailAccountName
+    }
+}
+
+/// "What this service can ask" (VAULT-MESSAGING §6.4): the vault's rule for this release; with votes where the vault has
+/// the vote feature (ANDROID-PLAN §4 "Votes", 0.1.102).
+struct ServiceCanAskCard: View {
+    let votes: Bool
+
+    var body: some View {
+        DetailCard {
+            CardTitle(text: ServiceTexts.canAskTitle)
+            Text(Self.body(votes: votes)).accessibilityIdentifier("service_can_ask_body")
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("service_can_ask")
+    }
+
+    static func body(votes: Bool) -> String { votes ? ServiceTexts.canAskBodyVotes : ServiceTexts.canAskBody }
 }
 
 /// The fingerprint of the peer vault's pinned identity key (VAULT-MESSAGING §10.8): identifies the vault, not a person.

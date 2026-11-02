@@ -30,6 +30,9 @@ public struct InviteState: Equatable, Sendable, CustomStringConvertible, CustomD
     public var request: ConnectionRequest?
     public var connectionID: String?
     public var connectionName: String?
+    /// ``InviteStep/connected``: the new connection declared itself a service (it cannot message the member;
+    /// VAULT-MESSAGING §6.4). Mirrors vettid-android `connectedService`.
+    public var connectedService = false
     /// ``InviteStep/declined``: the name the request showed.
     public var declinedName: String?
     public var busy = false
@@ -126,6 +129,7 @@ public final class InviteViewModel {
         state.step = .connected
         state.connectionID = added.id
         state.connectionName = added.displayName.isEmpty ? nil : added.displayName
+        state.connectedService = added.isService
     }
 
     public func setTtl(_ ttl: InviteTtl) { state.ttl = ttl }

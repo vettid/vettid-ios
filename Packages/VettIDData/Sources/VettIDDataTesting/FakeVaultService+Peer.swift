@@ -23,11 +23,17 @@ extension FakeVaultService {
     // MARK: - Another member invites this one
 
     /// Another member's invitation (§6.4): the bare link, on its own relay, whose claim this vault can fetch once. Its
-    /// bundle's `hint.name` is [name]; [remote] for a lifetime above 10 minutes.
-    public func peerInvite(first: String = "Morgan", last: String = "Lee", name: String? = "Morgan", remote: Bool = false, ttl: TimeInterval = 600) throws -> String {
+    /// bundle's `hint.name` is [name]; [remote] for a lifetime above 10 minutes; [peerKind] the invitation's `peer_kind`
+    /// (`"service"`: a service, VAULT-MESSAGING 0.69.0 §6.4).
+    public func peerInvite(
+        first: String = "Morgan", last: String = "Lee", name: String? = "Morgan", remote: Bool = false, ttl: TimeInterval = 600,
+        peerKind: String? = nil
+    ) throws -> String {
         try locked {
             let claim = Self.claimID()
-            social.claims[claim] = (Self.newPeer(first: first, last: last, name: name), remote)
+            var peer = Self.newPeer(first: first, last: last, name: name)
+            peer.peerKind = peerKind
+            social.claims[claim] = (peer, remote)
             return try Self.inviteLink(relay: "https://relay.peer.example", claimID: claim, exp: Date().addingTimeInterval(ttl))
         }
     }
@@ -61,6 +67,7 @@ extension FakeVaultService {
         social.requests[id] = r
         var b = JsonBuilder().string("connection_id", r.id).string("sas", r.sas ?? "").bool("remote", r.remote).string("exp", Timestamps.formatMillis(r.exp))
         if let n = r.name { b = b.string("name", n) }
+        if let k = r.peer.peerKind { b = b.string("peer_kind", k) }
         try reply("connection.request.outgoing", b.build())
     }
 
