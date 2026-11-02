@@ -138,10 +138,10 @@ final class AppNotifications: NSObject, UNUserNotificationCenterDelegate {
         }
     }
 
-    /// A wipe: "Show in notifications" back to its default, and no tap waiting.
     /// The app lock covers the app: every item notification goes, as when the app leaves the foreground.
     func covered() { notifier?.cleared() }
 
+    /// A wipe: "Show in notifications" back to its default, and no tap waiting.
     func reset() {
         previews.reset()
         taps.consume()
