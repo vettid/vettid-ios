@@ -97,3 +97,24 @@ import Testing
         #expect(s.previews == .names && d.string(forKey: NotificationPreviewsSetting.key) == nil && told == [.nothing])
     }
 }
+
+/// A notification's tap waits at most ``NotificationOpenInbox/maxWait`` for the shell (chosen; not in the spec).
+@MainActor
+@Suite struct NotificationOpenInboxStaleTests {
+    @Test func aTapOlderThanTenMinutesIsStale() {
+        var t = Date(timeIntervalSince1970: 1_000)
+        let inbox = NotificationOpenInbox(now: { t })
+        #expect(!inbox.isStale)
+        inbox.offer("f1")
+        t += 600
+        #expect(!inbox.isStale)
+        t += 1
+        #expect(inbox.isStale)
+        // Tapped again: it waits from the new tap.
+        inbox.offer("f1")
+        #expect(!inbox.isStale)
+        inbox.consume()
+        t += 10_000
+        #expect(!inbox.isStale && inbox.itemID == nil)
+    }
+}

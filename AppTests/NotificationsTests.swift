@@ -31,3 +31,19 @@ struct NotificationsTests {
         #expect(SystemNotificationPoster.presentation(.active) == [.banner, .list, .sound])
     }
 }
+
+/// A notification's tap, decided from what holds now (``ShellNotificationsHook/decision(stale:active:inFront:found:waitOver:)``).
+@MainActor
+struct NotificationTapDecisionTests {
+    typealias Decision = ShellNotificationsHook.TapDecision
+
+    @Test func aTapWaitsForTheAppAndTheShellThenForItsItem() {
+        let d = ShellNotificationsHook.decision
+        #expect(d(true, true, true, true, false) == Decision.drop, "stale: dropped whatever holds")
+        #expect(d(false, false, true, true, false) == Decision.later, "the app not active")
+        #expect(d(false, true, false, true, false) == Decision.later, "under the app lock or an asked check")
+        #expect(d(false, true, true, false, false) == Decision.wait, "the item not in the feed yet")
+        #expect(d(false, true, true, true, false) == Decision.open)
+        #expect(d(false, true, true, false, true) == Decision.open, "the wait is over: the Notifications screen")
+    }
+}

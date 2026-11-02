@@ -30,20 +30,25 @@ public final class FeedNotifier {
     private let poster: any NotificationPoster
     private let previews: @MainActor () -> NotificationPreviews
     private let open: @MainActor () -> Bool
+    private let active: @MainActor () -> Bool
     private let visible: @MainActor () -> NotifyVisible?
     private let allowed: @MainActor () -> Bool
     private let names: @MainActor () -> FeedNames
     private let messageText: @MainActor (_ connectionID: String, _ messageID: String) -> String?
     /// The item notifications this process posted that may still show.
     private(set) var posted = Set<String>()
+    /// The choice the notifications showing were built with (read at start, then each choice told).
+    private var shownWith: NotificationPreviews
 
-    /// [open]: the vault is open on this phone and not held or due (§3.6.3). [visible]: the screen in front; nil when the
+    /// [open]: the vault is open on this phone and not held or due (§3.6.3). [active]: the app is in the foreground and
+    /// active; nothing is posted otherwise (owner decision of 2026-11-02). [visible]: the screen in front; nil when the
     /// app is not active. [allowed]: the member allowed notifications for VettID (the iPhone's Settings decide, and turn
     /// them off). [names] and [messageText]: from the app's in-memory caches.
     public init(
         poster: any NotificationPoster,
         previews: @escaping @MainActor () -> NotificationPreviews,
         open: @escaping @MainActor () -> Bool,
+        active: @escaping @MainActor () -> Bool = { true },
         visible: @escaping @MainActor () -> NotifyVisible?,
         allowed: @escaping @MainActor () -> Bool,
         names: @escaping @MainActor () -> FeedNames,
@@ -52,10 +57,12 @@ public final class FeedNotifier {
         self.poster = poster
         self.previews = previews
         self.open = open
+        self.active = active
         self.visible = visible
         self.allowed = allowed
         self.names = names
         self.messageText = messageText
+        shownWith = previews()
     }
 
     /// At launch the vault is not open yet: every item notification still showing outlived the open vault of an earlier
@@ -73,7 +80,9 @@ public final class FeedNotifier {
         } else {
             nil
         }
-        var n = NotificationContent.of(item, category: category, previews: p, names: names(), messageText: text)
+        // Nothing names anyone with "Nothing": the names are not read.
+        let names = p == .nothing ? FeedNames() : names()
+        var n = NotificationContent.of(item, category: category, previews: p, names: names, messageText: text)
         n.update = posted.contains(item.itemID)
         posted.insert(item.itemID)
         poster.post(n)
@@ -97,15 +106,28 @@ public final class FeedNotifier {
         poster.removeLeftovers()
     }
 
-    /// The member chose what notifications show: "Nothing" removes the item notifications already showing, which name
-    /// people; the next ones follow the choice.
+    /// The app left the foreground (owner decision of 2026-11-02): every item notification goes, as at a lock, so that
+    /// nothing naming anyone outlives the open session; nothing is posted until it is active again.
+    public func backgrounded() { cleared() }
+
+    /// The member chose what notifications show. A narrower choice (names and text to names, anything to nothing) removes
+    /// the item notifications already showing, which show more than it allows; the next ones follow the choice.
     public func previewsChanged(_ p: NotificationPreviews) {
-        guard p == .nothing else { return }
-        cleared()
+        let before = shownWith
+        shownWith = p
+        if Self.rank(p) < Self.rank(before) { cleared() }
+    }
+
+    private static func rank(_ p: NotificationPreviews) -> Int {
+        switch p {
+        case .nothing: 0
+        case .names: 1
+        case .namesAndText: 2
+        }
     }
 
     private func notifiable(_ item: FeedItem) -> Bool {
-        allowed() && open() && item.status == FeedManager.statusActive && !shownOnScreen(item)
+        allowed() && active() && open() && item.status == FeedManager.statusActive && !shownOnScreen(item)
     }
 
     /// The Notifications screen, or the screen the item opens, is in front: the bell and the screen show it.

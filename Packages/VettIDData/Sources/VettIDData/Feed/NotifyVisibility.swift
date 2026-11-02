@@ -36,15 +36,31 @@ public final class NotificationOpenInbox: CustomStringConvertible, CustomDebugSt
     /// replaced, the shell gone and back) changes nothing.
     @ObservationIgnored private var waiting: Int?
     @ObservationIgnored private var tokens = 0
+    /// When the tap waiting was made.
+    @ObservationIgnored private var offeredAt: Date?
+    @ObservationIgnored private let now: @MainActor () -> Date
 
-    public init() {}
+    /// How long a tap waits for the shell (an app lock or a vault unlock left for later): after it, it is dropped, so
+    /// that a tap from long before never opens a screen by itself (chosen; not in the spec).
+    public static let maxWait: TimeInterval = 600
+
+    public init(now: @escaping @MainActor () -> Date = { Date() }) {
+        self.now = now
+    }
 
     public func offer(_ itemID: String) {
-        // The same item tapped again while it waits: the wait under way stands.
+        // The same item tapped again while it waits: the wait under way stands, from this tap.
+        offeredAt = now()
         guard itemID != self.itemID else { return }
         self.itemID = itemID
         waitOver = false
         waiting = nil
+    }
+
+    /// The tap waiting is older than ``maxWait``.
+    public var isStale: Bool {
+        guard itemID != nil, let offeredAt else { return false }
+        return now().timeIntervalSince(offeredAt) > Self.maxWait
     }
 
     /// A token once per tap (and again after ``rearm()``): the caller starts the one wait for its item; nil otherwise.
@@ -73,6 +89,7 @@ public final class NotificationOpenInbox: CustomStringConvertible, CustomDebugSt
     }
 
     public func consume() {
+        offeredAt = nil
         itemID = nil
         waitOver = false
         waiting = nil

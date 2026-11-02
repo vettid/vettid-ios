@@ -23,6 +23,7 @@ final class AppNotifications: NSObject, UNUserNotificationCenterDelegate {
     private(set) var notifier: FeedNotifier?
     /// The member allowed notifications for VettID (read at launch, on each return to the foreground and after the ask).
     private var allowed = false
+    private var background: (any NSObjectProtocol)?
 
     /// Hooks the notifier to [vault]'s feed and sets this as the notification center's delegate.
     func start(vault: VaultManager) {
@@ -38,6 +39,7 @@ final class AppNotifications: NSObject, UNUserNotificationCenterDelegate {
                 guard let vault, vault.phase == .unlocked else { return false }
                 return vault.ownerChecks.ownerCheck?.gated(Date()) != true
             },
+            active: { UIApplication.shared.applicationState == .active },
             visible: { UIApplication.shared.applicationState == .active ? visibility.visible : nil },
             allowed: { [weak self] in self?.allowed ?? false },
             names: { [weak vault] in
@@ -61,7 +63,16 @@ final class AppNotifications: NSObject, UNUserNotificationCenterDelegate {
         vault.feed.onCleared = { [weak notifier] in notifier?.cleared() }
         notifier.start()
         refreshAllowed()
+        // Leaving the foreground (owner decision of 2026-11-02): every item notification goes before the app is suspended.
+        background = NotificationCenter.default.addObserver(
+            forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.enteredBackground() }
+        }
     }
+
+    /// The app left the foreground: no item notification outlives the open session.
+    func enteredBackground() { notifier?.backgrounded() }
 
     /// Reads whether the member allows notifications (they may have changed it in the iPhone's Settings).
     func refreshAllowed() {
@@ -175,16 +186,43 @@ struct ShellNotificationsHook: ViewModifier {
 
     private static func decide(notifications: AppNotifications, model: ShellModel, feed: FeedManager) {
         let taps = notifications.taps
-        guard UIApplication.shared.applicationState == .active, model.inFront(appLocked: notifications.appCovered()),
-              let id = taps.itemID else { return }
+        guard let id = taps.itemID else { return }
         let item = feed.items.first { $0.itemID == id }
-        guard item != nil || taps.waitOver else {
+        switch decision(
+            stale: taps.isStale, active: UIApplication.shared.applicationState == .active,
+            inFront: model.inFront(appLocked: notifications.appCovered()), found: item != nil, waitOver: taps.waitOver
+        ) {
+        case .drop:
+            taps.consume()
+        case .later:
+            break
+        case .wait:
             if let token = taps.startWaiting() { wait(for: id, token: token, feed: feed, taps: taps) }
-            return
+        case .open:
+            taps.consume()
+            if item != nil { feed.markReadQuietly(id) }
+            model.openNotified(item)
         }
-        taps.consume()
-        if item != nil { feed.markReadQuietly(id) }
-        model.openNotified(item)
+    }
+
+    /// What a tap waiting does now.
+    enum TapDecision: Equatable {
+        /// Older than ``NotificationOpenInbox/maxWait``: dropped.
+        case drop
+        /// The app is not active or the shell not in front (the app lock, an asked check): it waits for them.
+        case later
+        /// Its item is not in the feed yet: waited for.
+        case wait
+        /// Its item's screen, or the Notifications screen when the item did not come.
+        case open
+    }
+
+    /// The tap's decision from what holds now: a stale tap goes; otherwise it waits for the app and the shell to be in
+    /// front, then for its item until the wait is over.
+    static func decision(stale: Bool, active: Bool, inFront: Bool, found: Bool, waitOver: Bool) -> TapDecision {
+        if stale { return .drop }
+        guard active, inFront else { return .later }
+        return found || waitOver ? .open : .wait
     }
 
     /// Waits up to ``itemWait`` for [id] to reach the feed (after a start, as vettid-android does), then ends the wait.

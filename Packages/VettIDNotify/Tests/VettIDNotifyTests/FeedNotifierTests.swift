@@ -32,6 +32,8 @@ import VettIDVault
         var previews = NotificationPreviews.names
         var open = true
         var allowed = true
+        var active = true
+        var namesRead = 0
         var visible: NotifyVisible?
         var names: FeedNames = {
             var sam = ConnectionInfo(id: "c1", name: "", state: .active)
@@ -42,7 +44,11 @@ import VettIDVault
         var text: String? = "See you at 6"
         lazy var notifier = FeedNotifier(
             poster: poster, previews: { [unowned self] in previews }, open: { [unowned self] in open },
-            visible: { [unowned self] in visible }, allowed: { [unowned self] in allowed }, names: { [unowned self] in names },
+            active: { [unowned self] in active }, visible: { [unowned self] in visible }, allowed: { [unowned self] in allowed },
+            names: { [unowned self] in
+                namesRead += 1
+                return names
+            },
             messageText: { [unowned self] _, _ in text }
         )
         var items: [FeedItem] = []
@@ -144,6 +150,46 @@ import VettIDVault
         #expect(w.poster.shown.isEmpty && w.poster.leftoverSweeps == 1 && w.notifier.posted.isEmpty)
     }
 
+    /// A narrower choice removes what is showing (it shows more than the choice allows); a wider one keeps it.
+    @Test func narrowingWhatNotificationsShowRemovesWhatIsShowing() {
+        let w = World()
+        w.previews = .namesAndText
+        w.arrive(item("f1"))
+        w.notifier.previewsChanged(.namesAndText)
+        #expect(Set(w.poster.shown.keys) == ["f1"])
+        w.notifier.previewsChanged(.names)
+        #expect(w.poster.shown.isEmpty && w.poster.leftoverSweeps == 1)
+        w.arrive(item("f2"))
+        w.notifier.previewsChanged(.namesAndText)
+        #expect(Set(w.poster.shown.keys) == ["f2"], "wider: kept")
+    }
+
+    /// With "Nothing" no name is read.
+    @Test func nothingReadsNoNames() {
+        let w = World()
+        w.previews = .nothing
+        w.arrive(item("f1"))
+        #expect(w.poster.shown["f1"] != nil && w.namesRead == 0)
+        w.previews = .names
+        w.arrive(item("f2"))
+        #expect(w.namesRead == 1)
+    }
+
+    /// Owner decision of 2026-11-02: leaving the foreground removes every item notification, and nothing is posted while
+    /// the app is not active (an arrival in the background's grace period).
+    @Test func leavingTheForegroundRemovesEverythingAndNothingPostsMeanwhile() {
+        let w = World()
+        w.arrive(item("f1"))
+        w.active = false
+        w.notifier.backgrounded()
+        #expect(w.poster.shown.isEmpty && w.poster.leftoverSweeps == 1 && w.notifier.posted.isEmpty)
+        w.arrive(item("f2"))
+        #expect(w.poster.shown.isEmpty, "nothing posts while not active")
+        w.active = true
+        w.arrive(item("f3"))
+        #expect(Set(w.poster.shown.keys) == ["f3"])
+    }
+
     @Test func nothingWithoutTheMembersPermission() {
         let w = World()
         w.allowed = false
@@ -228,6 +274,89 @@ import UserNotifications
         ]
         #expect(SystemNotificationPoster.itemIDs(delivered) == ["f1"])
         #expect(SystemNotificationPoster.itemID([SystemNotificationPoster.itemKey: "f2"]) == "f2")
+    }
+}
+
+/// The poster's bookkeeping over a fake center whose adds land when the test says.
+@MainActor
+@Suite struct SystemNotificationPosterOrderTests {
+    @MainActor
+    final class FakeCenter: NotificationCenterOps {
+        var landings: [(String, @Sendable () -> Void)] = []
+        var removedPending: [String] = []
+        var removedDelivered: [String] = []
+        var shown: [String] = []
+
+        func add(_ request: UNNotificationRequest, landed: @escaping @Sendable () -> Void) {
+            landings.append((request.identifier, landed))
+        }
+
+        func removePending(_ ids: [String]) { removedPending += ids }
+
+        func removeDelivered(_ ids: [String]) { removedDelivered += ids }
+
+        func delivered() async -> [(String, [AnyHashable: Any])] {
+            shown.map { ($0, [SystemNotificationPoster.itemKey: $0]) }
+        }
+
+        /// The first add still under way lands.
+        func land() async {
+            let (id, landed) = landings.removeFirst()
+            shown.append(id)
+            landed()
+            for _ in 0..<5 { await Task.yield() }
+        }
+    }
+
+    private func note(_ id: String) -> LocalNotification {
+        LocalNotification(id: id, category: .messages, title: "t", publicTitle: "p", itemID: id)
+    }
+
+    @Test func postRemoveLandRemovesItOnceItLands() async {
+        let c = FakeCenter()
+        let p = SystemNotificationPoster(center: c)
+        p.post(note("f1"))
+        p.remove(["f1"])
+        c.removedDelivered = []
+        c.removedPending = []
+        await c.land()
+        #expect(c.removedDelivered == ["f1"] && c.removedPending == ["f1"])
+    }
+
+    @Test func postSweepLandRemovesItOnceItLands() async {
+        let c = FakeCenter()
+        let p = SystemNotificationPoster(center: c)
+        p.post(note("f1"))
+        p.removeLeftovers()
+        for _ in 0..<5 { await Task.yield() }
+        #expect(c.removedDelivered.isEmpty, "the sweep leaves an add under way to the add")
+        await c.land()
+        #expect(c.removedDelivered == ["f1"] && c.removedPending == ["f1"])
+    }
+
+    @Test func postRemovePostAgainThenTheFirstLandsKeepsTheSecond() async {
+        let c = FakeCenter()
+        let p = SystemNotificationPoster(center: c)
+        p.post(note("f1"))
+        p.remove(["f1"])
+        p.post(note("f1"))
+        c.removedDelivered = []
+        c.removedPending = []
+        await c.land()
+        #expect(c.removedDelivered.isEmpty && c.removedPending.isEmpty, "the first add's landing leaves the second")
+        await c.land()
+        #expect(c.removedDelivered.isEmpty)
+    }
+
+    @Test func aSweepKeepsWhatWasPostedAfterItBegan() async {
+        let c = FakeCenter()
+        let p = SystemNotificationPoster(center: c)
+        c.shown = ["old"]
+        p.removeLeftovers()
+        p.post(note("new"))
+        await c.land()
+        for _ in 0..<5 { await Task.yield() }
+        #expect(c.removedDelivered.contains("old") && !c.removedDelivered.contains("new"))
     }
 }
 #endif
