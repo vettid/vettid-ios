@@ -138,13 +138,14 @@ import VettIDDataTesting
         #expect(m.state.withdrawn && m.state.error == nil && m.state.retryUntil == nil)
     }
 
-    /// A connection not yet known (the connections not read) may be a service: its mute is confirmed too.
-    @Test func anUnknownConnectionsMuteIsConfirmed() async {
+    /// A connection not in the list has no names: its mute is not offered, and asking for it does nothing.
+    @Test func anUnknownConnectionsMuteIsNotOffered() async {
         fake.listed = [Samples.auth("a1", conn: "c9")]
         let m = await model()
         fake.withdraw("auth:a1")
         m.askMute(true)
-        #expect(!m.state.connectionKnown && m.state.confirmMute && !connections.calls.contains { $0.hasPrefix("asksMute") })
+        m.mute()
+        #expect(!m.state.connectionKnown && !m.state.confirmMute && !connections.calls.contains { $0.hasPrefix("asksMute") })
     }
 
     /// "Not me" in flight answered `not_found` waits for the flag as an approve does.
@@ -174,5 +175,10 @@ import VettIDDataTesting
         #expect(s.offersMute(a))
         s.asksMuted = true
         #expect(!s.offersMute(a), "already muted")
+        s.asksMuted = false
+        for invisible in ["\u{200B}", "\u{2068}\u{2069}"] {
+            s.connectionName = invisible
+            #expect(!s.offersMute(a), "a name of invisible characters is no name")
+        }
     }
 }

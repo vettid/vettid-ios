@@ -43,7 +43,7 @@ public struct ApprovalDetailState: Equatable, Sendable, CustomStringConvertible,
     public var connectionKnown = false
     /// The requesting connection's asks are muted (§10.4.1): the withdrawn notice no longer offers the mute.
     public var asksMuted = false
-    /// The mute's confirmation is showing (a service connection's, or one not yet known).
+    /// The mute's confirmation is showing (a service connection's).
     public var confirmMute = false
     /// The mute is on its way: the notice stays, its action waits.
     public var muting = false
@@ -333,20 +333,22 @@ public final class ApprovalDetailViewModel {
 
     public func askBlock(_ show: Bool) { local.confirmBlock = show }
 
-    /// "Mute requests from …" on a withdrawn request (ANDROID-PLAN 0.1.101): a service connection's is confirmed first
-    /// (superseded sign-ins are routine for a service), a person's is muted at once. One whose kind is not known yet (the
-    /// connections not read) is confirmed too (chosen; not in the spec).
+    /// "Mute requests from …" on a withdrawn request (ANDROID-PLAN 0.1.101), only while it is offered
+    /// (``ApprovalDetailState/offersMute(_:)``): a service connection's is confirmed first (superseded sign-ins are routine
+    /// for a service), a person's is muted at once.
     public func askMute(_ show: Bool) {
         guard show else { return local.confirmMute = false }
         let s = state
-        if s.connectionIsService || !s.connectionKnown { local.confirmMute = true } else { mute() }
+        guard let a = s.approval, s.offersMute(a) else { return }
+        if s.connectionIsService { local.confirmMute = true } else { mute() }
     }
 
     /// Mutes the requesting connection's asks (`connection.asks.mute`, §10.4.1), as its detail does. Its own progress, not
     /// the decision's: the withdrawn notice stays meanwhile.
     public func mute() {
         local.confirmMute = false
-        guard let id = state.approval.flatMap(Self.connectionID), let connections, !local.muting else { return }
+        let s = state
+        guard let a = s.approval, s.offersMute(a), let id = Self.connectionID(a), let connections, !local.muting else { return }
         local.muting = true
         local.muteError = nil
         work.launch { [weak self] in
