@@ -158,7 +158,7 @@ struct DetailContent: View {
                         .accessibilityIdentifier("vote_reconnect")
                 }
                 ProfileCard(connection: c)
-                if c.isService, state.votes.count > 0, let open = actions.onOpenVotes { votesRow(open) }
+                if Self.showsVotes(c, state, actions), let open = actions.onOpenVotes { votesRow(open) }
                 if Self.showsSharing(c, actions) { sharingCards(c) }
                 if let asks, !asks.prominent { asksCard(asks, asksName) }
                 DetailCard {
@@ -190,6 +190,11 @@ struct DetailContent: View {
             .accessibilityAddTraits(.isButton)
         }
         .accessibilityIdentifier("detail_votes")
+    }
+
+    /// Whether the page has the row "Votes from <name>": a service connection with votes, once the app has the Votes.
+    static func showsVotes(_ c: ConnectionInfo, _ state: ConnectionDetailState, _ actions: DetailActions) -> Bool {
+        c.isService && state.votes.count > 0 && actions.onOpenVotes != nil
     }
 
     /// Whether the page shows the sharing cards: an active connection, with every sharing hook of the host.

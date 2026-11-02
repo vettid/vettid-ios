@@ -48,16 +48,19 @@ import VettIDUI
         #expect(page(ConnectionVotes(count: 1, unfinished: true), service: true, confirm: .remove, actions: actions) > 0)
     }
 
-    @Test func theVotesRowAndTheReconnectCardAddToThePage() {
-        var actions = DetailActions()
-        actions.onOpenVotes = {}
-        let none = page(ConnectionVotes(), service: true, actions: actions)
-        #expect(page(ConnectionVotes(count: 2), service: true, actions: actions) > none)
-        // Without a hook (the app has no Votes) there is no row; a person connection never gets the row.
-        #expect(page(ConnectionVotes(count: 2), service: true) == none)
-        #expect(page(ConnectionVotes(count: 2), service: false, actions: actions) == none)
-        #expect(page(ConnectionVotes(reconnect: true), service: false, actions: actions) > none)
+    @Test func theVotesRowIsForAServiceWithVotesAndTheHook() {
+        var service = ConnectionInfo(id: "c1", name: "Example", state: .active)
+        service.isService = true
+        let person = ConnectionInfo(id: "c2", name: "Ada", state: .active)
+        var state = ConnectionDetailState(connectionID: "c1")
+        var hooked = DetailActions()
+        hooked.onOpenVotes = {}
+        state.votes = ConnectionVotes(count: 2)
+        #expect(DetailContent.showsVotes(service, state, hooked))
+        // Without the hook (the app has no Votes), for a person, and without votes there is no row.
+        #expect(!DetailContent.showsVotes(service, state, DetailActions()) && !DetailContent.showsVotes(person, state, hooked))
+        state.votes = ConnectionVotes(reconnect: true)
+        #expect(!DetailContent.showsVotes(service, state, hooked))
     }
-}
 // swiftlint:enable line_length
 #endif
