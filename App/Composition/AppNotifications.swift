@@ -40,10 +40,9 @@ final class AppNotifications: NSObject, UNUserNotificationCenterDelegate {
         let notifier = FeedNotifier(
             poster: SystemNotificationPoster(center: center),
             previews: { previews.previews },
-            open: { [weak vault] in
-                guard let vault, vault.phase == .unlocked else { return false }
-                return vault.ownerChecks.ownerCheck?.gated(Date()) != true
-            },
+            // The vault open as the shell shows it: unlocked, no check due or past its deadline, and no check after a
+            // cancelled recovery (whose screen takes the shell's place).
+            open: { [weak vault] in Self.shellOpen(vault) },
             active: { UIApplication.shared.applicationState == .active },
             visible: { UIApplication.shared.applicationState == .active ? visibility.visible : nil },
             allowed: { [weak self] in self?.allowed ?? false },
@@ -68,13 +67,7 @@ final class AppNotifications: NSObject, UNUserNotificationCenterDelegate {
         vault.feed.onCleared = { [weak notifier] in notifier?.cleared() }
         notifier.start()
         refreshAllowed()
-        shellOpen = { [weak vault] in
-            guard let vault else { return false }
-            let checks = vault.ownerChecks
-            return Self.shellOpen(
-                unlocked: vault.phase == .unlocked, checkAfterCancel: checks.checkAfterCancel, check: checks.ownerCheck, now: Date()
-            )
-        }
+        shellOpen = { [weak vault] in Self.shellOpen(vault) }
         // Leaving the foreground (owner decision of 2026-11-02): every item notification goes before the app is suspended.
         background = NotificationCenter.default.addObserver(
             forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main
@@ -100,6 +93,15 @@ final class AppNotifications: NSObject, UNUserNotificationCenterDelegate {
 
     /// How long the background clear keeps the app awake (chosen; not in the spec).
     static let clearTime: Duration = .seconds(2)
+
+    /// ``shellOpen(unlocked:checkAfterCancel:check:now:)`` for [vault] now; false without one.
+    static func shellOpen(_ vault: VaultManager?) -> Bool {
+        guard let vault else { return false }
+        let checks = vault.ownerChecks
+        return shellOpen(
+            unlocked: vault.phase == .unlocked, checkAfterCancel: checks.checkAfterCancel, check: checks.ownerCheck, now: Date()
+        )
+    }
 
     /// The shell is shown: the vault open, no check after a cancelled recovery, the check not past its deadline at [now].
     static func shellOpen(unlocked: Bool, checkAfterCancel: Bool, check: OwnerCheckView?, now: Date) -> Bool {

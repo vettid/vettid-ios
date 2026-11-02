@@ -168,8 +168,8 @@ public struct SettingsContent: View {
             SettingsGroup {
                 SettingsRow(SettingsStrings.appTheme, icon: .darkMode, supporting: Self.themeLabel(state.theme)) { picker = .theme }
                     .accessibilityIdentifier("theme")
-                // What notifications show (ANDROID-PLAN §4 Notification modes 8; on the iPhone a row here, as there is no
-                // notification mode to choose before Apple push: chosen; not in the spec).
+                // What notifications show (ANDROID-PLAN §4 Notification modes 8): on the iPhone a row of Settings → App until
+                // Apple push (IOS-PLAN ID12).
                 if let p = state.notificationPreviews {
                     SettingsDivider()
                     SettingsRow(SettingsStrings.notifyShow, icon: .notifications, supporting: Self.previewsLabel(p)) { picker = .previews }
