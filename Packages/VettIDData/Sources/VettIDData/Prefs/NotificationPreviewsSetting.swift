@@ -35,9 +35,11 @@ public final class NotificationPreviewsSetting {
         onSet(p)
     }
 
-    /// A wipe: the default again, and nothing stored.
+    /// A wipe: the default again, and nothing stored. Told like a choice, so that what the notifications were built with
+    /// follows it.
     public func reset() {
         previews = .names
         defaults.removeObject(forKey: Self.key)
+        onSet(.names)
     }
 }
