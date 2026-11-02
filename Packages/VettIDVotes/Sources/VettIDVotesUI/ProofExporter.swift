@@ -74,7 +74,7 @@ struct ProofExporter: UIViewControllerRepresentable {
 }
 
 @MainActor
-final class ProofExportCoordinator: NSObject, UIDocumentPickerDelegate {
+final class ProofExportCoordinator: NSObject, UIDocumentPickerDelegate, UIAdaptivePresentationControllerDelegate {
     var onAnswered: @MainActor (Bool) -> Void = { _ in }
     var onFailed: @MainActor () -> Void = {}
     /// The temporary file while the picker is up.
@@ -104,6 +104,8 @@ final class ProofExportCoordinator: NSObject, UIDocumentPickerDelegate {
         let picker = UIDocumentPickerViewController(forExporting: [t.url], asCopy: true)
         picker.delegate = self
         picker.shouldShowFileExtensions = true
+        // A swipe down that dismisses the picker counts as a cancel, whether or not the picker reports one itself.
+        picker.presentationController?.delegate = self
         self.picker = picker
         // After the update that asked for it: the host is on screen by then.
         DispatchQueue.main.async { [weak self, weak host] in
@@ -181,15 +183,23 @@ final class ProofExportCoordinator: NSObject, UIDocumentPickerDelegate {
     }
 
     func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
-        removeTemp()
-        picker = nil
-        onAnswered(true)
+        answer(true)
     }
 
     func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
+        answer(false)
+    }
+
+    func presentationControllerDidDismiss(_ presentationController: UIPresentationController) {
+        answer(false)
+    }
+
+    /// The member's answer, told once for the picker that is up: its file goes first.
+    private func answer(_ saved: Bool) {
+        guard picker != nil else { return }
         removeTemp()
         picker = nil
-        onAnswered(false)
+        onAnswered(saved)
     }
 }
 #endif

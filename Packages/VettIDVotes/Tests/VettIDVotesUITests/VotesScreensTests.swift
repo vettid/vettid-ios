@@ -209,6 +209,33 @@ import VettIDUI
         #expect(failed == 1 && c.temp == nil)
     }
 
+    /// A swipe down that dismisses the picker is a cancel: the file goes and the answer is told once, even if the picker
+    /// then reports a cancel of its own; the picker's presentation reports to the coordinator.
+    @Test func aSwipeDownIsACancelToldOnce() async throws {
+        let root = try scratch()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let c = ProofExportCoordinator()
+        c.root = root
+        var answers: [Bool] = []
+        c.onAnswered = { answers.append($0) }
+        var delegateIsCoordinator = false
+        c.presentPicker = { _, picker in delegateIsCoordinator = picker.presentationController?.delegate === c }
+        let window = windowed(UIViewController())
+        let controller = try #require(window.rootViewController)
+        c.update(ProofFile(bytes: Data("evidence".utf8), name: "p.json"), host: controller)
+        let picker = UIDocumentPickerViewController(forOpeningContentTypes: [.json])
+        c.presentationControllerDidDismiss(UIPresentationController(presentedViewController: picker, presenting: controller))
+        #expect(entries(root).isEmpty && c.temp == nil && answers == [false])
+        c.documentPickerWasCancelled(picker)
+        c.documentPicker(picker, didPickDocumentsAt: [])
+        #expect(answers == [false], "told once")
+        // The presentation hook sees the coordinator as the picker's presentation delegate.
+        c.update(ProofFile(bytes: Data("evidence".utf8), name: "p.json"), host: controller)
+        try await Task.sleep(for: .seconds(0.2))
+        #expect(delegateIsCoordinator)
+        c.leave()
+    }
+
     /// A picker that cannot be presented (no window) leaves no file and is told as a failure, once.
     @Test func aPickerThatCannotBePresentedRemovesTheFileAndIsTold() async throws {
         let root = try scratch()
