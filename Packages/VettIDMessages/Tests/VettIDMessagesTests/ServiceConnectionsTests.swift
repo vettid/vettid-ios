@@ -45,17 +45,43 @@ import VettIDDataTesting
         #expect(m.state.connections.map(\.id) == ["c1"])
     }
 
-    /// `forbidden` to a message sent to a service: the text, once, in place of the composer; nothing more can be sent.
-    @Test func forbiddenRemovesTheComposer() async {
+    /// A service's conversation opened anyway (a notification, a link): nothing can be sent, before any refusal.
+    @Test func aServicesConversationHasNoComposer() async {
         let messages = FakeMessages()
         let connections = FakeConnections()
         connections.connections = [Self.service("s1")]
         messages.connections = connections.connections
         let m = ConversationViewModel(connectionID: "s1", messages: messages, connections: connections)
         await m.settle()
+        m.setDraft("Hello")
+        #expect(m.state.noComposer && !m.state.serviceForbidden && !m.state.canSend)
+        m.send()
+        await m.settle()
+        #expect(!messages.calls.contains("send:s1"))
+        // A person's, with the same draft, can send.
+        connections.connections = [Samples.connection("c1")]
+        messages.connections = connections.connections
+        let p = ConversationViewModel(connectionID: "c1", messages: messages, connections: connections)
+        await p.settle()
+        p.setDraft("Hello")
+        #expect(!p.state.noComposer && p.state.canSend)
+    }
+
+    /// `forbidden` to a message sent to a connection that turns out to be a service (the list said so only once the send
+    /// was on its way): the text, in place of the composer; nothing more is sent.
+    @Test func forbiddenRemovesTheComposer() async {
+        let messages = FakeMessages()
+        let connections = FakeConnections()
+        var s1 = Self.service("s1")
+        s1.isService = false
+        connections.connections = [s1]
+        messages.connections = connections.connections
+        let m = ConversationViewModel(connectionID: "s1", messages: messages, connections: connections)
+        await m.settle()
         messages.fail["send"] = VaultFailure(.vaultCode("forbidden"))
         m.setDraft("Hello")
         m.send()
+        connections.connections = [Self.service("s1")]
         await m.settle()
         #expect(m.state.serviceForbidden && m.state.error == nil && !m.state.canSend && !m.state.sending)
         m.send()

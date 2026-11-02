@@ -28,6 +28,11 @@ import VettIDUI
         return r
     }
 
+    /// The view's ideal width (unconstrained).
+    private func width(_ view: some View) -> CGFloat {
+        UIHostingController(rootView: view.fixedSize().vettIDTheme(.light)).sizeThatFits(in: CGSize(width: 10_000, height: 4_000)).width
+    }
+
     private func height(_ view: some View) -> CGFloat {
         UIHostingController(rootView: view.vettIDTheme(.light)).sizeThatFits(in: CGSize(width: 390, height: 4_000)).height
     }
@@ -52,10 +57,11 @@ import VettIDUI
         #expect(!s.isService(Samples.auth("a2", conn: "c2")) && !s.isService(Samples.auth("a3", conn: "gone")))
         #expect(s.isService(.connection(.outgoing(Self.outgoing(service: true)))))
         #expect(!s.isService(.connection(.outgoing(Self.outgoing(service: false)))) && !s.isService(.connection(Samples.incoming())))
-        let labelled = height(ApprovalRow(approval: Samples.auth(), name: "Example Bank", service: true, onOpen: { _ in }))
-        #expect(labelled > 0)
-        #expect(height(ApprovalRow(approval: Samples.auth(), name: "Example Bank", service: true, onOpen: { _ in })
-            .environment(\.dynamicTypeSize, .accessibility5)) > labelled)
+        // The row puts the label on its title line: wider at its ideal size than the same row without it.
+        let row = { (service: Bool) in
+            ApprovalRow(approval: Samples.auth(), name: "Example Bank", service: service, onOpen: { _ in })
+        }
+        #expect(width(row(true)) > width(row(false)) + 20)
     }
 
     /// On the decision screen the label sits beside the "From" name; with a match code (no "From" line) over the title.
@@ -68,6 +74,15 @@ import VettIDUI
         #expect(!ApprovalDetailScreen.labelsTitle(signin, state) && ApprovalDetailScreen.labelsTitle(coded, state))
         state.connectionIsService = false
         #expect(!ApprovalDetailScreen.labelsTitle(coded, state))
+        // The label over the title is read with it, once.
+        state.connectionIsService = true
+        state.approval = coded
+        let title = ApprovalTexts.title(coded, name: "Example Bank")
+        #expect(ApprovalDetailScreen.titleSpoken(coded, state) == "\(title), Service")
+        #expect(ApprovalDetailScreen.titleSpoken(signin, state) == nil)
+        // Beside the "From" name: wider than the name alone.
+        #expect(width(FromValue(text: "Example Bank", service: true)) > width(FromValue(text: "Example Bank", service: false)) + 20)
+        // Rendering the screens is a smoke check only.
         for a in [signin, coded, Samples.auth("a3", purpose: .approval), Samples.critical()] {
             for service in [false, true] {
                 state.approval = a
@@ -75,8 +90,6 @@ import VettIDUI
                 #expect(height(ApprovalDetailScreen(state: state, actions: DecisionActions())) > 0)
             }
         }
-        let from = height(FromValue(text: "Example Bank", service: true))
-        #expect(from > height(FromValue(text: "Example Bank", service: false)) - 1 && from > 0)
     }
 }
 #endif

@@ -59,6 +59,8 @@ import VettIDDataTesting
 
     // MARK: - Being accepted by a service
 
+    /// Only that the flag is passed through, as vettid-android's invite flow does: an accepter declares nothing (§6.4), so
+    /// the inviter always sees one as a person and this is not a case a vault produces.
     @Test func aServiceUsingTheInvitationIsConnectedAsAService() async {
         let m = InviteViewModel(connections: fake, requests: fake)
         await m.settle()
@@ -96,5 +98,34 @@ import VettIDDataTesting
         // Services alone are not "No connections yet".
         fake.connections = [Self.service("s1", "Example")]
         #expect(await until { m.state.services.count == 1 && m.state.connections.isEmpty && !m.state.isEmpty })
+    }
+
+    // MARK: - A service's page
+
+    /// A service shares nothing and is asked for nothing (§6.4): its page never reads `share.rule.list` or `grant.list`,
+    /// whether the connection was listed when the page opened or read just after.
+    @Test func aServicesPageReadsNoSharing() async {
+        let sharing = FakeSharing()
+        fake.connections = [Self.service("s1", "Example")]
+        let listed = ConnectionDetailViewModel(connectionID: "s1", connections: fake, sharing: sharing)
+        await listed.settle()
+        listed.loadSharing()
+        await listed.settle()
+        #expect(sharing.calls.isEmpty && listed.state.connection?.isService == true)
+        fake.connections = []
+        let read = ConnectionDetailViewModel(connectionID: "s1", connections: fake, sharing: sharing)
+        fake.connections = [Self.service("s1", "Example")]
+        await read.settle()
+        #expect(read.state.connection?.isService == true && sharing.calls.isEmpty)
+    }
+
+    /// A person's page reads its sharing, also when the connection was read only after the page opened.
+    @Test func aPersonsPageReadsItsSharing() async {
+        let sharing = FakeSharing()
+        let m = ConnectionDetailViewModel(connectionID: "p1", connections: fake, sharing: sharing)
+        fake.connections = [Samples.active("p1")]
+        await m.settle()
+        #expect(await until { m.state.sharing.loaded })
+        #expect(!sharing.calls.isEmpty)
     }
 }

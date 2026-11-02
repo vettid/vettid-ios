@@ -115,7 +115,9 @@ public struct ApprovalDetailScreen: View {
         let who = AccountNames.isolateOrNull(state.connectionName) ?? ApprovalsStrings.aConnection
         return FormScaffold(
             title: ApprovalTexts.title(a, name: state.connectionName), primaryLabel: ApprovalsStrings.withdrawnClose,
-            onPrimary: actions.onBack, onBack: actions.onBack, header: { TitleServiceLabel(shown: Self.labelsTitle(a, state)) }
+            onPrimary: actions.onBack, onBack: actions.onBack,
+            titleAccessibilityLabel: Self.titleSpoken(a, state),
+            header: { TitleServiceLabel(shown: Self.labelsTitle(a, state)) }
         ) {
             VStack(alignment: .leading, spacing: Spacing.m) {
                 NoticeCard(.info, title: ApprovalsStrings.withdrawnNotice(who), announce: .polite)
@@ -151,6 +153,11 @@ public struct ApprovalDetailScreen: View {
         return x.matchCode != nil
     }
 
+    /// With the label over the title, VoiceOver reads them as one: the title, then "Service" (the label itself is hidden).
+    static func titleSpoken(_ a: PendingApproval, _ state: ApprovalDetailState) -> String? {
+        labelsTitle(a, state) ? "\(ApprovalTexts.title(a, name: state.connectionName)), \(ServiceTexts.label)" : nil
+    }
+
     /// Which of the screen's steps shows, apart from an expiry while open (``live(_:now:)``).
     private var step: Step {
         if state.approval == nil || state.gone { return state.notHeld ? .notHeld : .gone }
@@ -183,6 +190,7 @@ public struct ApprovalDetailScreen: View {
             onPrimary: actions.onApprove,
             onSecondary: actions.onDeny,
             onBack: actions.onBack,
+            titleAccessibilityLabel: Self.titleSpoken(a, state),
             header: { TitleServiceLabel(shown: Self.labelsTitle(a, state)) }
         ) {
             DecisionContent(approval: a, state: state, actions: actions, now: now)
@@ -206,7 +214,10 @@ struct TitleServiceLabel: View {
     let shown: Bool
 
     var body: some View {
-        if shown { ServiceLabel().frame(maxWidth: .infinity, alignment: .leading).padding(.top, Spacing.s) }
+        // Read with the title (``ApprovalDetailScreen/titleSpoken(_:_:)``), not on its own.
+        if shown {
+            ServiceLabel().frame(maxWidth: .infinity, alignment: .leading).padding(.top, Spacing.s).accessibilityHidden(true)
+        }
     }
 }
 

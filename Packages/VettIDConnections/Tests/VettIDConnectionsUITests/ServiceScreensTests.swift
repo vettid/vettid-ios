@@ -48,6 +48,7 @@ import VettIDUI
         #expect(ConnectedScreen.body(nil, service: true) == "You're connected. The service can ask you to sign in, vote and update your profile.")
         #expect(!ConnectedScreen.body("VettID Member Service", service: true).contains("message each other"))
         #expect(ConnectedScreen.buttons(hasMessages: true, service: true) == ["Done"])
+        // A smoke check only: the screen renders.
         #expect(height(ConnectedScreen(name: "VettID Member Service", onMessage: {}, onDone: {}, service: true)) > 0)
     }
 
@@ -77,36 +78,29 @@ import VettIDUI
         // At the largest text size the lines are there in full.
         let big = height(ServiceRequestHeader(name: "Example Bank").environment(\.dynamicTypeSize, .accessibility5))
         #expect(big > lines && compare(true, size: .accessibility5) >= compare(false, size: .accessibility5) + big - 1)
+        // A smoke check only: the whole screen renders.
         #expect(height(AcceptScreen(state: state(true), actions: AcceptActions())) > 0)
     }
 
-    /// The Services section is there only with a service; each service row is labelled.
-    @Test func theServicesSectionRendersOnlyWithAService() {
+    /// The Services section is there only with a service. Rendering the screens is a smoke check only.
+    @Test func theServicesSectionIsThereOnlyWithAService() {
         var people = ConnectionsState()
         people.loading = false
         people.connections = [ConnectionsScreensTests.connection("p1")]
         var both = people
         both.services = [Self.service("s1", favorite: true), Self.service("s2")]
-        let withServices = height(ConnectionsScreen(state: both, chrome: chrome, actions: ConnectionsActions()), fit: false)
-        let without = height(ConnectionsScreen(state: people, chrome: chrome, actions: ConnectionsActions()), fit: false)
-        #expect(withServices > 0 && without > 0)
         #expect(ConnectionList.showsServices(both) && !ConnectionList.showsServices(people))
         var onlyServices = ConnectionsState()
         onlyServices.loading = false
         onlyServices.services = [Self.service()]
-        #expect(!onlyServices.isEmpty && height(ConnectionList(state: onlyServices, actions: ConnectionsActions())) > 0)
+        #expect(!onlyServices.isEmpty && ConnectionList.showsServices(onlyServices))
+        for s in [people, both, onlyServices] {
+            #expect(height(ConnectionsScreen(state: s, chrome: chrome, actions: ConnectionsActions()), fit: false) > 0)
+        }
     }
 
-    /// A service's row keeps its name, its label and its star at the largest text size.
-    @Test func aServiceRowFitsAtLargeSizes() {
-        let row = ConnectionRow(name: "Example Bank", favorite: true, service: true, onFavoriteChange: { _ in })
-        let big = height(row.environment(\.dynamicTypeSize, .accessibility5))
-        let plain = height(ConnectionRow(name: "Example Bank", favorite: true, onFavoriteChange: { _ in }).environment(\.dynamicTypeSize, .accessibility5))
-        #expect(big > 0 && big >= plain)
-    }
-
-    /// A service's page: no message, no sharing cards, "What this service can ask" with or without votes, and its names
-    /// labelled as the service's.
+    /// A service's page: no message, no sharing cards, "What this service can ask" (with or without votes), and its
+    /// names labelled as the service's; a person's page has all of them and no such card.
     @Test func aServicesPageHasNoPersonOnlyActions() {
         var actions = DetailActions()
         actions.onMessage = {}
@@ -122,21 +116,32 @@ import VettIDUI
         state.loading = false
         let screen = ConnectionDetailScreen(state: state, actions: actions)
         #expect(screen.pill(s).map(\.label) == ["Add \u{2068}Example Bank\u{2069} to favourites", "History", "Remove"])
-        #expect(!DetailContent.showsSharing(s, actions))
+        #expect(!DetailContent.showsSharing(s, actions) && DetailContent.showsCanAsk(s))
         #expect(ProfileCard.accountNameLabel(s) == "Name given by the service")
         #expect(ServiceCanAskCard.body(votes: false) == ServiceTexts.canAskBody && ServiceCanAskCard.body(votes: true) == ServiceTexts.canAskBodyVotes)
-        // The same connection as a person has all of them.
         var person = s
         person.isService = false
         #expect(screen.pill(person).first?.label == "Message \u{2068}Example Bank\u{2069}")
-        #expect(DetailContent.showsSharing(person, actions) && ProfileCard.accountNameLabel(person) == "VettID account name")
-        // The page renders, with its card, at every size; the card adds to the page.
-        for votes in [false, true] {
-            state.votes = ConnectionVotes(feature: votes)
-            #expect(tall(ConnectionDetailScreen(state: state, actions: actions)) > 0)
+        #expect(DetailContent.showsSharing(person, actions) && !DetailContent.showsCanAsk(person))
+        #expect(ProfileCard.accountNameLabel(person) == "VettID account name")
+        // The card has its title and body (the votes one at least as long), at every size.
+        for size in [DynamicTypeSize.large, .accessibility5] {
+            let plain = height(ServiceCanAskCard(votes: false).environment(\.dynamicTypeSize, size))
+            #expect(plain > 60 && height(ServiceCanAskCard(votes: true).environment(\.dynamicTypeSize, size)) >= plain)
         }
-        #expect(tall(ServiceCanAskCard(votes: false)) > 0)
-        #expect(tall(ConnectionDetailScreen(state: state, actions: actions).environment(\.dynamicTypeSize, .accessibility5)) > 0)
+        // Rendering the whole page is a smoke check only.
+        #expect(height(ConnectionDetailScreen(state: state, actions: actions)) > 0)
+    }
+
+    /// The asks card leaves out the person's "can ask you for things" line for a service, whose own card says what it
+    /// can ask; the paused and muted states are said as for a person.
+    @Test func aServicesAsksCardHasNoPersonsLine() {
+        let usual = AsksView.of(AskState())!
+        #expect(AsksCard.showsUsualLine(usual, service: false) && !AsksCard.showsUsualLine(usual, service: true))
+        let card = { (service: Bool) in
+            AsksCard(view: usual, name: "Example", busy: false, service: service, onMute: { _ in }, onResume: {})
+        }
+        #expect(height(card(false)) > height(card(true)) + 20)
     }
 
     private var chrome: ShellChrome { ShellChrome(accountName: "Ada Lovelace", onMenu: {}, onAvatar: {}) }
@@ -146,9 +151,6 @@ import VettIDUI
         return UIHostingController(rootView: view.vettIDTheme(.light)).sizeThatFits(in: size).height
     }
 
-    private func tall(_ view: some View) -> CGFloat {
-        UIHostingController(rootView: view.vettIDTheme(.light)).sizeThatFits(in: CGSize(width: 390, height: 20_000)).height
-    }
 }
 // swiftlint:enable line_length
 #endif

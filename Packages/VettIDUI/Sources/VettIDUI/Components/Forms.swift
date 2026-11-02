@@ -391,6 +391,7 @@ public struct FormScaffold<Header: View, Content: View, TopActions: View>: View 
     let header: Header
     let content: Content
     let topActions: TopActions
+    let titleAccessibilityLabel: String?
 
     public init(
         title: String,
@@ -403,6 +404,7 @@ public struct FormScaffold<Header: View, Content: View, TopActions: View>: View 
         onPrimary: @escaping @MainActor () -> Void,
         onSecondary: @escaping @MainActor () -> Void = {},
         onBack: (@MainActor () -> Void)? = nil,
+        titleAccessibilityLabel: String? = nil,
         @ViewBuilder header: () -> Header = { EmptyView() },
         @ViewBuilder topActions: () -> TopActions = { EmptyView() },
         @ViewBuilder content: () -> Content
@@ -420,6 +422,7 @@ public struct FormScaffold<Header: View, Content: View, TopActions: View>: View 
         self.header = header()
         self.content = content()
         self.topActions = topActions()
+        self.titleAccessibilityLabel = titleAccessibilityLabel
     }
 
     public var body: some View {
@@ -437,6 +440,8 @@ public struct FormScaffold<Header: View, Content: View, TopActions: View>: View 
                         .padding(.top, Spacing.s)
                         .padding(.bottom, Spacing.m)
                         .accessibilityAddTraits(.isHeader)
+                        // What VoiceOver reads for the title when the header shows part of it (a service's label).
+                        .accessibilityLabel(titleAccessibilityLabel.map { Text($0) } ?? Text(title))
                     if let message {
                         Text(message).vettIDFont(.bodyLarge).foregroundStyle(colors.onSurfaceVariant)
                         Spacer().frame(height: Spacing.xl)

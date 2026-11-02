@@ -125,6 +125,8 @@ public final class ConnectionDetailViewModel {
     @ObservationIgnored private let follows = TaskBag()
     /// The connection was in the repository's list: once it is not, it is gone.
     @ObservationIgnored private var listed = false
+    /// The sharing was asked for before the connection was known: read once it is, unless it is a service.
+    @ObservationIgnored private var sharingAfterLoad = false
     private var local: ConnectionDetailState
 
     public init(
@@ -169,8 +171,13 @@ public final class ConnectionDetailViewModel {
         work.launch { [weak self] in
             do {
                 let c = try await connections.connection(id)
-                self?.local.loading = false
-                self?.local.connection = c
+                guard let self else { return }
+                local.loading = false
+                local.connection = c
+                if sharingAfterLoad {
+                    sharingAfterLoad = false
+                    loadSharing()
+                }
             } catch {
                 let kind = failureKind(error)
                 self?.local.loading = false
@@ -181,9 +188,16 @@ public final class ConnectionDetailViewModel {
     }
 
     /// Reads both directions again (`share.rule.list` for this connection, `grant.list`), e.g. when the screen comes back from
-    /// the rule editor. Only grants in force count; a failure leaves the rest of the screen as it is.
+    /// the rule editor. Only grants in force count; a failure leaves the rest of the screen as it is. Never for a service,
+    /// which shares nothing and is asked for nothing (VAULT-MESSAGING §6.4): its page has no sharing cards. Before the
+    /// connection is known, it is read once the connection is.
     public func loadSharing() {
         guard let sharing else { return }
+        guard let c = state.connection else {
+            sharingAfterLoad = true
+            return
+        }
+        guard !c.isService else { return }
         let id = local.connectionID
         work.launch { [weak self] in
             do {

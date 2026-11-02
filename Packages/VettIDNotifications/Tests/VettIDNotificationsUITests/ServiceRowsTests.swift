@@ -7,30 +7,35 @@ import VettIDData
 @testable import VettIDNotificationsUI
 import VettIDUI
 
-/// A notification naming a service connection carries the label "Service" beside its title (VAULT-MESSAGING §6.4,
-/// IOS-PLAN §4.13); the name is as always.
+/// A notification that names a service connection carries the label "Service" on the line that names it (VAULT-MESSAGING
+/// §6.4, IOS-PLAN §4.13): the title when the title is the name, the second line when that one names it ("A new vote" with
+/// "<service>: <vote>" under it); never on a line that does not.
 @MainActor
 @Suite struct ServiceRowsTests {
-    @Test func aRowNamingAServiceIsLabelled() {
+    static let names: FeedNames = {
         var bank = ConnectionInfo(id: "c1", name: "", state: .active)
         bank.firstName = "Example"
         bank.lastName = "Bank"
         bank.isService = true
         var sam = ConnectionInfo(id: "c2", name: "", state: .active)
         sam.firstName = "Sam"
-        let names = FeedNames(connections: ["c1": bank, "c2": sam])
-        let fromBank = NotificationsScreensTests.item("a", "connection.authenticate.request", connection: "c1")
-        #expect(FeedRow.namesService(fromBank, names))
-        #expect(!FeedRow.namesService(NotificationsScreensTests.item("b", connection: "c2"), names))
-        #expect(!FeedRow.namesService(NotificationsScreensTests.item("c", connection: "gone"), names))
-        #expect(!FeedRow.namesService(NotificationsScreensTests.item("d", "device.paired"), names))
-        for size in [DynamicTypeSize.large, .accessibility5] {
-            let row = FeedRow(
-                item: fromBank, names: names, archived: false, attention: false, unread: true, actions: NotificationsActions()
-            )
-            .environment(\.dynamicTypeSize, size)
-            #expect(UIHostingController(rootView: row.vettIDTheme(.light)).sizeThatFits(in: CGSize(width: 390, height: 2_000)).height > 0)
-        }
+        return FeedNames(connections: ["c1": bank, "c2": sam])
+    }()
+
+    @Test func theLabelGoesOnTheLineThatNamesTheService() {
+        let message = NotificationsScreensTests.item("a", "message.received", connection: "c1")
+        #expect(FeedKinds.title(message, Self.names).contains("Example Bank"))
+        #expect(FeedRow.serviceLabel(message, Self.names) == .title)
+        let vote = NotificationsScreensTests.item("v", "vote.open", connection: "c1", ref: "p1")
+        #expect(!FeedKinds.title(vote, Self.names).contains("Example Bank"))
+        #expect(FeedKinds.supporting(vote, Self.names)?.contains("Example Bank") == true)
+        #expect(FeedRow.serviceLabel(vote, Self.names) == .supporting)
+    }
+
+    @Test func noLabelForAPersonOrWithoutAConnection() {
+        #expect(FeedRow.serviceLabel(NotificationsScreensTests.item("b", connection: "c2"), Self.names) == .none)
+        #expect(FeedRow.serviceLabel(NotificationsScreensTests.item("c", connection: "gone"), Self.names) == .none)
+        #expect(FeedRow.serviceLabel(NotificationsScreensTests.item("d", "device.paired"), Self.names) == .none)
     }
 }
 #endif

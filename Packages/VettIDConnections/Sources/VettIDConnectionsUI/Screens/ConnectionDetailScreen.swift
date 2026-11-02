@@ -160,7 +160,7 @@ struct DetailContent: View {
                         .accessibilityIdentifier("vote_reconnect")
                 }
                 ProfileCard(connection: c)
-                if c.isService { ServiceCanAskCard(votes: state.votes.feature) }
+                if Self.showsCanAsk(c) { ServiceCanAskCard(votes: state.votes.feature) }
                 if Self.showsVotes(c, state, actions), let open = actions.onOpenVotes { votesRow(open) }
                 if Self.showsSharing(c, actions) { sharingCards(c) }
                 if let asks, !asks.prominent { asksCard(asks, asksName) }
@@ -199,6 +199,9 @@ struct DetailContent: View {
     static func showsVotes(_ c: ConnectionInfo, _ state: ConnectionDetailState, _ actions: DetailActions) -> Bool {
         c.isService && state.votes.count > 0 && actions.onOpenVotes != nil
     }
+
+    /// Whether the page has "What this service can ask": a service's only.
+    static func showsCanAsk(_ c: ConnectionInfo) -> Bool { c.isService }
 
     /// Whether the page shows the sharing cards: an active person connection, with every sharing hook of the host. A
     /// service shares nothing and is asked for nothing (VAULT-MESSAGING §6.4).

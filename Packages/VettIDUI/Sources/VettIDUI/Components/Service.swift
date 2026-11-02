@@ -85,8 +85,9 @@ public struct ServiceLabel: View {
     }
 }
 
-/// A name and, for a service, its ``ServiceLabel`` on the same line: one element for VoiceOver. Large Dynamic Type sizes
-/// put the label under the name rather than truncate either.
+/// A page's name (a connection's title, an approval's "From") and, for a service, its ``ServiceLabel``: one element for
+/// VoiceOver. On one line when both fit at their full width; otherwise the label goes under the name, so neither is cut.
+/// List rows use ``ServiceRowLine`` instead, which keeps rows one line high.
 public struct ServiceNamed<Name: View>: View {
     let service: Bool
     let alignment: HorizontalAlignment
@@ -108,6 +109,31 @@ public struct ServiceNamed<Name: View>: View {
             .accessibilityElement(children: .combine)
         } else {
             name
+        }
+    }
+}
+
+/// A list row's line that names a service, with its ``ServiceLabel`` at the trailing end (IOS-PLAN §4.13: in the row's
+/// trailing view): one line, the text truncating before the label, which is never cut. One element for VoiceOver
+/// ("Example Bank, Service"). Without [service], the line alone.
+public struct ServiceRowLine<Line: View>: View {
+    let service: Bool
+    let line: Line
+
+    public init(service: Bool, @ViewBuilder line: () -> Line) {
+        self.service = service
+        self.line = line()
+    }
+
+    public var body: some View {
+        if service {
+            HStack(alignment: .firstTextBaseline, spacing: Spacing.s) {
+                line.layoutPriority(0)
+                ServiceLabel().layoutPriority(1)
+            }
+            .accessibilityElement(children: .combine)
+        } else {
+            line
         }
     }
 }

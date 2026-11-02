@@ -89,8 +89,12 @@ public struct ConversationState: Equatable, Sendable, CustomStringConvertible, C
 
     public var active: Bool { connection?.state == .active }
 
+    /// Nothing can be sent here: the connection is a service (VAULT-MESSAGING §6.4: it has no conversation; the screen
+    /// can still be opened from a notification or a link), or the vault refused a message to one.
+    public var noComposer: Bool { serviceForbidden || connection?.isService == true }
+
     public var canSend: Bool {
-        active && !serviceForbidden && !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !sending && !tooLong
+        active && !noComposer && !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !sending && !tooLong
     }
 
     public var description: String {

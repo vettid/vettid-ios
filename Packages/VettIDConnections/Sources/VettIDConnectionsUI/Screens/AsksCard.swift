@@ -49,7 +49,7 @@ struct AsksCard: View {
                 .accessibilityIdentifier("asks_muted")
             Text(ConnectStrings.asksMuted(who))
         }
-        if !view.paused && !view.muted && !service {
+        if Self.showsUsualLine(view, service: service) {
             Text(ConnectStrings.asksNormal(who)).accessibilityIdentifier("asks_normal")
         }
         if view.cooldowns > 0 && !view.paused {
@@ -57,6 +57,9 @@ struct AsksCard: View {
         }
         Text(ConnectStrings.asksNeutral(who)).vettIDFont(.bodySmall).foregroundStyle(colors.onSurfaceVariant)
     }
+
+    /// The person's line of what it can ask, in the usual state; never for a service, whose own card says it.
+    static func showsUsualLine(_ view: AsksView, service: Bool) -> Bool { !view.paused && !view.muted && !service }
 
     private func run(_ a: AsksAction) {
         switch a {
