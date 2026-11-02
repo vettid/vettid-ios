@@ -168,6 +168,9 @@ public struct VoteDetail: Equatable, Sendable, CustomStringConvertible, CustomDe
 }
 
 public struct VoteChoice: Equatable, Sendable {
+    /// The reserved choice every proposal has (BALLOT-PROTOCOL §3.1): counted without choosing.
+    public static let abstain = "abstain"
+
     public let id: String
     public let label: String
 
@@ -327,9 +330,12 @@ public enum VoteWire {
         )
     }
 
-    /// The label as sent, in the order sent; cleaned like any received text. A label that shows nothing is its id.
+    /// The label as sent, in the order sent; cleaned like any received text. A label that shows nothing is its id. The
+    /// reserved `abstain` (BALLOT-PROTOCOL §3.1) is always the app's own "Abstain", whatever label the service sent, so a
+    /// service can't make abstaining read as something else (owner decision 2026-11-02).
     private static func choice(_ c: JsonObject) -> VoteChoice? {
         guard let id = id(c, "id") else { return nil }
+        if id == VoteChoice.abstain { return VoteChoice(id: id, label: DataStrings.voteChoiceAbstain) }
         return VoteChoice(id: id, label: AccountNames.cleaned(s(c, "label")) ?? id)
     }
 

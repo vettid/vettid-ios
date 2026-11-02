@@ -39,7 +39,7 @@ import Testing
         #expect(f.proposalText == "The board proposes the budget." && f.writtenBy == "Written by \(service)")
         #expect(f.binding == nil && f.quorum == nil, "the sample states neither")
         #expect(f.closes?.hasPrefix("Closes ") == true)
-        #expect(f.choices == ["\u{2068}Yes\u{2069}", "\u{2068}No\u{2069}", "\u{2068}Abstain\u{2069}"], "in the order sent, abstain as sent")
+        #expect(f.choices == ["\u{2068}Yes\u{2069}", "\u{2068}No\u{2069}", "\u{2068}Abstain\u{2069}"], "in the order sent")
         #expect(f.choosing && !f.castEnabled)
     }
 
