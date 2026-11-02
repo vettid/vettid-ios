@@ -115,6 +115,8 @@ final class ProofExportCoordinator: NSObject, UIDocumentPickerDelegate {
     static let presentTries = 4
     /// The wait between those tries (tests shorten it).
     var retryDelay: TimeInterval = 0.35
+    /// Whether a presentation from a controller would be refused now (tests replace it).
+    var busy: @MainActor (_ presenter: UIViewController) -> Bool = { ProofExportCoordinator.isBusy($0) }
     /// The presentation itself (tests replace it).
     var presentPicker: @MainActor (_ presenter: UIViewController, _ picker: UIViewController) -> Void = {
         $0.present($1, animated: true)
@@ -128,7 +130,7 @@ final class ProofExportCoordinator: NSObject, UIDocumentPickerDelegate {
             fail()
             return
         }
-        if Self.isBusy(presenter) {
+        if busy(presenter) {
             guard triesLeft > 1 else {
                 fail()
                 return

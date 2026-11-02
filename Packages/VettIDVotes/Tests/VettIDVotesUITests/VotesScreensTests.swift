@@ -245,7 +245,7 @@ import VettIDUI
 
     /// With the host on screen and nothing over it, the picker is presented from the host, once; a presentation UIKit does
     /// not take (it only logs one made while another is under way) removes the file and is told, once.
-    @Test func aPresentationUIKitDoesNotTakeRemovesTheFileAndIsTold() async throws {
+    @Test func aPresentationUIKitDidNotTakeRemovesTheFileAndIsTold() async throws {
         let root = try scratch()
         defer { try? FileManager.default.removeItem(at: root) }
         let c = ProofExportCoordinator()
@@ -266,6 +266,57 @@ import VettIDUI
         try await Task.sleep(for: .seconds(0.2))
         #expect(presenters.count == 1 && presenters.first === controller)
         #expect(entries(root).isEmpty && c.temp == nil && failed == 1 && answered.isEmpty)
+    }
+
+    /// While another presentation is under way the picker waits and is presented once it is free; busy past every try, the
+    /// file goes and the failure is told once, with nothing presented.
+    @Test func aBusyHostIsWaitedForThenGivenUpOn() async throws {
+        let root = try scratch()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let window = windowed(UIViewController())
+        let controller = try #require(window.rootViewController)
+        struct Outcome { var asked = 0, presented = 0, failed = 0, files = 0 }
+        func run(busyFor: Int) async throws -> Outcome {
+            let c = ProofExportCoordinator()
+            c.root = root
+            c.retryDelay = 0.01
+            var o = Outcome()
+            c.busy = { _ in o.asked += 1; return o.asked <= busyFor }
+            c.presentPicker = { _, _ in o.presented += 1 }
+            c.onFailed = { o.failed += 1 }
+            c.update(ProofFile(bytes: Data("evidence".utf8), name: "p.json"), host: controller)
+            try await Task.sleep(for: .seconds(0.4))
+            o.files = entries(root).count
+            c.leave()
+            return o
+        }
+        let tries = ProofExportCoordinator.presentTries
+        // Free on the last try: presented once (the test's presentation takes nothing, so the backstop then tells it).
+        let late = try await run(busyFor: tries - 1)
+        #expect(late.asked == tries && late.presented == 1)
+        // Busy on every try: never presented, told once, the file gone.
+        let never = try await run(busyFor: .max)
+        #expect(never.asked == tries && never.presented == 0 && never.failed == 1 && never.files == 0)
+    }
+
+    /// A close while the picker waits for a busy host ends the tries: nothing is presented or told.
+    @Test func aCloseWhileWaitingEndsTheTries() async throws {
+        let root = try scratch()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let window = windowed(UIViewController())
+        let controller = try #require(window.rootViewController)
+        let c = ProofExportCoordinator()
+        c.root = root
+        c.retryDelay = 0.05
+        var asked = 0, presented = 0, failed = 0
+        c.busy = { _ in asked += 1; return true }
+        c.presentPicker = { _, _ in presented += 1 }
+        c.onFailed = { failed += 1 }
+        c.update(ProofFile(bytes: Data("evidence".utf8), name: "p.json"), host: controller)
+        try await Task.sleep(for: .seconds(0.02))
+        c.leave()
+        try await Task.sleep(for: .seconds(0.4))
+        #expect(asked == 1 && presented == 0 && failed == 0 && entries(root).isEmpty)
     }
 
     /// A host with nothing over it and no transition is free to present.
