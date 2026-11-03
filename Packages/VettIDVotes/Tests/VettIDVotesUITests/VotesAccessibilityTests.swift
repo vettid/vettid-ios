@@ -59,17 +59,22 @@ import UIKit
     /// A release that went through is said when its sheet is gone, so that the sheet closing does not cut it off; a sheet
     /// that is cancelled says nothing.
     @Test func aReleaseIsSaidWhenItsSheetIsGone() {
-        func spoken(released: Bool) -> [String] {
+        func spoken(released: Bool, shownStale: Bool = false) -> [String] {
             let saved = Announcer.sink
             var log: [String] = []
             Announcer.sink = { e in if case .announcement(let t, _) = e { log.append(t) } }
             defer { Announcer.sink = saved }
             let state = Samples.screen(Samples.closed(VoteBallot(state: .conflict))) { $0.proofExported = true; $0.released = released }
-            VoteScreen.releaseSheetGone(state)
+            // The render's state may be older than the model's: the model's decides.
+            var stale = state
+            stale.released = false
+            VoteScreen.releaseSheetGone(shownStale ? stale : state, current: shownStale ? { state } : nil)
             return log
         }
         #expect(spoken(released: true) == [VoteStrings.voteReleased])
         #expect(spoken(released: false).isEmpty)
+        #expect(spoken(released: true, shownStale: true) == [VoteStrings.voteReleased])
+        #expect(spoken(released: false, shownStale: true).isEmpty)
     }
 
     /// The cards of the list and the vote wrap at the largest size, their action is a target, and nothing is wider than the

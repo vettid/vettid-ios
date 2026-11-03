@@ -139,7 +139,7 @@ struct DirectionCard<Content: View>: View {
             VStack(alignment: .leading, spacing: 0) {
                 HStack(spacing: Spacing.m) {
                     icon.image
-                        .font(.system(size: 20))
+                        .scaledIcon(size: 20)
                         .foregroundStyle(accent.color)
                         .frame(width: 36, height: 36)
                         .background(accent.color.opacity(0.14), in: VettIDShape.pill)

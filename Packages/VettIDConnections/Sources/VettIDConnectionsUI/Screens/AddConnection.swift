@@ -85,7 +85,7 @@ public struct AddConnectionSheet: View {
     ) -> some View {
         Button(action: action) {
             HStack(spacing: Spacing.l) {
-                symbol.image.font(.system(size: 22)).foregroundStyle(colors.primary).accessibilityHidden(true)
+                symbol.image.scaledIcon(size: 22).foregroundStyle(colors.primary).accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title).vettIDFont(.bodyLarge).fontWeight(.semibold).foregroundStyle(colors.onSurface)
                     Text(body).vettIDFont(.bodyMedium).foregroundStyle(colors.onSurfaceVariant)

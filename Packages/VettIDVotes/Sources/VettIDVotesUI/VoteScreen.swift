@@ -52,11 +52,17 @@ public struct VoteScreen: View {
     let state: VoteScreenState
     let proof: ProofFile?
     let actions: VoteActions
+    /// The model's state as it is when asked, for what runs after a render (a sheet that is gone): the state captured by
+    /// the last render may be older. Without it, the state given.
+    let current: (@MainActor () -> VoteScreenState)?
 
-    public init(state: VoteScreenState, proof: ProofFile? = nil, actions: VoteActions) {
+    public init(
+        state: VoteScreenState, proof: ProofFile? = nil, actions: VoteActions, current: (@MainActor () -> VoteScreenState)? = nil
+    ) {
         self.state = state
         self.proof = proof
         self.actions = actions
+        self.current = current
     }
 
     public var body: some View {
@@ -80,7 +86,7 @@ public struct VoteScreen: View {
         .sheet(
             isPresented: Binding(get: { state.releaseDialog && !covered }, set: { if !$0 && !covered { actions.onDismissRelease() } }),
             // Said when the sheet is gone, so that it is not cut off by the sheet closing: a release that went through.
-            onDismiss: { Self.releaseSheetGone(state) }
+            onDismiss: { Self.releaseSheetGone(state, current: current) }
         ) {
             ReleaseSheet(state: state, actions: actions).vettIDGrowingSheet()
         }
@@ -116,8 +122,9 @@ public struct VoteScreen: View {
 
     /// The release sheet is gone: a release that went through is said now, not while the sheet closes (a cancelled sheet says
     /// nothing).
-    static func releaseSheetGone(_ state: VoteScreenState) {
-        if state.released { Announcer.announce(VoteStrings.voteReleased, .polite) }
+    static func releaseSheetGone(_ shown: VoteScreenState, current: (@MainActor () -> VoteScreenState)? = nil) {
+        // The model's state now, not the one the last render captured: `released` may have arrived since.
+        if (current?() ?? shown).released { Announcer.announce(VoteStrings.voteReleased, .polite) }
     }
 
     /// While a cast is on its way the sheet it was started from stays, busy; the sheet shows the confirm step, then the

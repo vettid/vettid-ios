@@ -84,7 +84,7 @@ struct HeaderGlyph: View {
     let symbol: VettIDSymbol
 
     var body: some View {
-        symbol.image.font(.system(size: 36)).foregroundStyle(colors.primary).padding(.top, Spacing.l).accessibilityHidden(true)
+        symbol.image.scaledIcon(size: 36).foregroundStyle(colors.primary).padding(.top, Spacing.l).accessibilityHidden(true)
     }
 }
 

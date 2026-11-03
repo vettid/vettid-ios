@@ -100,7 +100,7 @@ public struct UnlockScreen: View {
             busy: state.busy || state.loading || state.erasing,
             onPrimary: { state.preflightError != nil && !state.returnAsksPin ? actions.retryPreflight() : submit() },
             header: {
-                VettIDSymbol.lock.image.font(.system(size: 36)).padding(.top, Spacing.l).accessibilityHidden(true)
+                VettIDSymbol.lock.image.scaledIcon(size: 36).padding(.top, Spacing.l).accessibilityHidden(true)
             }
         ) {
             VStack(alignment: .leading, spacing: Spacing.m) {

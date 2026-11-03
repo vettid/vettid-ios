@@ -65,13 +65,14 @@ public struct IconButton: View {
     public var body: some View {
         Button(action: action) {
             symbol.image
-                .font(.system(size: 20, weight: .regular))
+                .scaledIcon(size: 20, weight: .regular)
                 .foregroundStyle(tint ?? colors.onSurface)
                 .frame(width: Spacing.touchTarget, height: Spacing.touchTarget)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .accessibilityLabel(label)
+        .accessibilityShowsLargeContentViewer { Label { Text(label) } icon: { symbol.image } }
     }
 }
 
@@ -120,6 +121,8 @@ public struct VettIDTopAppBar<Actions: View>: View {
                 .truncationMode(.tail)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .accessibilityAddTraits(.isHeader)
+                // The bar stops growing at xxxLarge and the title is one line: the large content viewer shows it whole.
+                .accessibilityShowsLargeContentViewer()
             if let onSearch {
                 IconButton(.search, label: searchLabel ?? UIStrings.search, action: onSearch)
                     .accessibilityIdentifier("top_bar_search_open")
@@ -134,6 +137,7 @@ public struct VettIDTopAppBar<Actions: View>: View {
             .buttonStyle(.plain)
             .padding(.trailing, Spacing.s)
             .accessibilityLabel(UIStrings.account(accountName))
+            .accessibilityShowsLargeContentViewer { Text(UIStrings.account(accountName)) }
             .accessibilityIdentifier("top_bar_account")
         }
         .padding(.horizontal, Spacing.xs)

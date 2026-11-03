@@ -212,17 +212,18 @@ public struct AppShell: View {
                 }
             } content: {
                 VStack(spacing: 0) {
-                    alarmBanner
-                    OwnerCheckBanners(
-                        gate: gate, now: now, onCheckNow: { model.ownerCheck(holdOff: false) },
-                        onHoldOn: { Task { await model.turnHoldOn() } }, onDismissNotices: { Task { await model.dismissNotices() } }
-                    )
-                    if let releaseUpdates, model.path.last != .releaseUpdate {
-                        ReleaseUpdateBanner(updates: releaseUpdates) { model.push(.releaseUpdate) }
+                    // Up to eight banners: a third of the screen at most, scrolling beyond that.
+                    BannerArea {
+                        alarmBanner
+                        OwnerCheckBanners(gate: gate, now: now, onCheckNow: { model.ownerCheck(holdOff: false) },
+                            onHoldOn: { Task { await model.turnHoldOn() } }, onDismissNotices: { Task { await model.dismissNotices() } })
+                        if let releaseUpdates, model.path.last != .releaseUpdate {
+                            ReleaseUpdateBanner(updates: releaseUpdates) { model.push(.releaseUpdate) }
+                        }
+                        changeCheckNotice
+                        renewPrompt
+                        rotateOffer
                     }
-                    changeCheckNotice
-                    renewPrompt
-                    rotateOffer
                     NavigationStack(path: $model.path) {
                         root
                             .toolbar(.hidden, for: .navigationBar)

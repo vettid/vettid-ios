@@ -74,7 +74,7 @@ struct WelcomePoint: View {
 
     var body: some View {
         HStack(spacing: Spacing.l) {
-            symbol.image.font(.system(size: 22)).foregroundStyle(colors.primary).frame(width: 24).accessibilityHidden(true)
+            symbol.image.scaledIcon(size: 22).foregroundStyle(colors.primary).scaledIconColumn(24).accessibilityHidden(true)
             Text(text).vettIDFont(.bodyLarge)
         }
         .frame(maxWidth: .infinity, alignment: .leading)

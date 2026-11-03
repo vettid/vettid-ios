@@ -119,7 +119,7 @@ public struct PasswordRuleLine: View {
         let color = refused ? colors.error : passes ? colors.success : colors.onSurfaceVariant
         let icon: VettIDSymbol = refused ? .errorOutline : passes ? .checkCircle : .info
         HStack(alignment: .top, spacing: Spacing.s) {
-            icon.image.font(.system(size: 16)).foregroundStyle(color).accessibilityHidden(true)
+            icon.image.scaledIcon(size: 16).foregroundStyle(color).accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 0) {
                 Text(text).vettIDFont(.bodyMedium).foregroundStyle(color)
                 if let hint { Text(hint).vettIDFont(.bodySmall).foregroundStyle(colors.onSurfaceVariant) }
@@ -174,7 +174,7 @@ public struct NoticeCard<Actions: View>: View {
         case .urgent: (colors.error, .reportProblem)
         }
         HStack(alignment: .top, spacing: Spacing.m) {
-            icon.image.font(.system(size: 20)).foregroundStyle(accent).frame(width: 24).accessibilityHidden(true)
+            icon.image.scaledIcon(size: 20).foregroundStyle(accent).scaledIconColumn(24).accessibilityHidden(true)
             VStack(alignment: .leading, spacing: Spacing.s) {
                 VStack(alignment: .leading, spacing: Spacing.xs) {
                     Text(title).vettIDFont(.titleSmall, weight: .semibold)

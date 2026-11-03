@@ -111,7 +111,10 @@ public struct VoteRoute: View {
     }
 
     public var body: some View {
-        VoteScreen(state: model?.state ?? VoteScreenState(key: key), proof: model?.proofFile, actions: actions)
+        VoteScreen(
+            state: model?.state ?? VoteScreenState(key: key), proof: model?.proofFile, actions: actions,
+            current: { model?.state ?? VoteScreenState(key: key) }
+        )
             .onAppear {
                 guard model == nil else {
                     model?.appeared()

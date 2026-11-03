@@ -82,7 +82,7 @@ public struct SettingsRow: View {
             } trailing: {
                 if showChevron {
                     VettIDSymbol.chevronForward.image
-                        .font(.system(size: 14, weight: .semibold))
+                        .scaledIcon(size: 14, weight: .semibold)
                         .foregroundStyle(colors.onSurfaceVariant)
                         .accessibilityHidden(true)
                 }
@@ -142,7 +142,7 @@ public struct SettingsAccountRow: View {
                 InitialTile(name, size: 40, style: .ownAccount, photo: photo)
             } trailing: {
                 VettIDSymbol.chevronForward.image
-                    .font(.system(size: 14, weight: .semibold))
+                    .scaledIcon(size: 14, weight: .semibold)
                     .foregroundStyle(colors.onSurfaceVariant)
                     .accessibilityHidden(true)
             }
@@ -186,9 +186,9 @@ private struct RowIcon: View {
 
     var body: some View {
         icon.image
-            .font(.system(size: 20))
+            .scaledIcon(size: 20)
             .foregroundStyle(tint ?? colors.onSurface)
-            .frame(width: 24)
+            .scaledIconColumn(24)
             .accessibilityHidden(true)
     }
 }

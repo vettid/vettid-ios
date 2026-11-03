@@ -84,7 +84,7 @@ private struct MenuChip: View {
     var body: some View {
         HStack(spacing: Spacing.xs) {
             Text(label).vettIDFont(.labelLarge).lineLimit(1)
-            Image(systemName: "chevron.down").font(.system(size: 11, weight: .semibold)).accessibilityHidden(true)
+            Image(systemName: "chevron.down").scaledIcon(size: 11, weight: .semibold).accessibilityHidden(true)
         }
         .fixedSize()
         .foregroundStyle(selected ? colors.onSecondaryContainer : colors.onSurfaceVariant)
@@ -111,7 +111,7 @@ private struct CategoryChip: View {
         Button(action: action) {
             HStack(spacing: Spacing.s) {
                 HistoryVisuals.symbol(category).image
-                    .font(.system(size: 11, weight: .semibold))
+                    .scaledIcon(size: 11, weight: .semibold)
                     .foregroundStyle(hue.onContainer)
                     .frame(width: 22, height: 22)
                     .background(hue.container, in: Circle())

@@ -33,7 +33,7 @@ public struct MoveNotices: View {
     }
 
     public var body: some View {
-        VStack(spacing: 0) {
+        BannerArea {
             if vault.finishMovePending, phase == .unlocked {
                 InfoBanner(
                     ShellMoveStrings.rootFinishMove, actionLabel: ShellMoveStrings.rootFinishMoveAction,

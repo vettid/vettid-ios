@@ -333,7 +333,7 @@ private struct CopyLabel: View {
 
     var body: some View {
         HStack(spacing: Spacing.s) {
-            VettIDSymbol.contentCopy.image.font(.system(size: 16))
+            VettIDSymbol.contentCopy.image.scaledIcon(size: 16)
             Text(text).vettIDFont(.labelLarge)
         }
         .foregroundStyle(colors.onSurface)

@@ -179,7 +179,7 @@ struct DetailContent: View {
 
     /// "Votes from <name>": the votes of this service connection.
     private func votesRow(_ open: @escaping @MainActor () -> Void) -> some View {
-        DetailCard {
+        DetailCard(interactive: true) {
             Button(action: open) {
                 HStack {
                     Text(ConnectStrings.voteRow(sharedName)).vettIDFont(.bodyLarge).foregroundStyle(colors.onSurface)

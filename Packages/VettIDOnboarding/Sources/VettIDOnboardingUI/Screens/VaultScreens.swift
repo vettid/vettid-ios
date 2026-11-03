@@ -202,7 +202,7 @@ private struct ChoiceCard: View {
         Button(action: onSelect) {
             HStack(alignment: .top, spacing: Spacing.m) {
                 (selected ? VettIDSymbol.radioChecked : VettIDSymbol.radioUnchecked).image
-                    .font(.system(size: 22))
+                    .scaledIcon(size: 22)
                     .foregroundStyle(selected ? colors.primary : colors.onSurfaceVariant)
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: Spacing.xs) {
@@ -273,7 +273,7 @@ private struct CheckboxStyle: ToggleStyle {
         Button { configuration.isOn.toggle() } label: {
             HStack(spacing: Spacing.s) {
                 (configuration.isOn ? VettIDSymbol.checkBox : VettIDSymbol.checkBoxOutline).image
-                    .font(.system(size: 22))
+                    .scaledIcon(size: 22)
                     .foregroundStyle(configuration.isOn ? colors.primary : colors.onSurfaceVariant)
                     .accessibilityHidden(true)
                 configuration.label.foregroundStyle(colors.onSurface).multilineTextAlignment(.leading)

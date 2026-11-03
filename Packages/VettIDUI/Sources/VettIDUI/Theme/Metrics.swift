@@ -40,3 +40,52 @@ public enum VettIDShape {
     public static let large: CGFloat = 20
     public static let extraLarge: CGFloat = 28
 }
+
+/// An icon (a symbol drawn at a point size) that follows Dynamic Type with the body text, up to [capFactor] times its
+/// size so that a glyph in a row, a notice or a button never outgrows what is laid out around it (IOS-PLAN ID5).
+struct ScaledIconModifier: ViewModifier {
+    @ScaledMetric private var size: CGFloat
+    private let base: CGFloat
+    private let weight: Font.Weight
+    static let capFactor: CGFloat = 1.75
+
+    init(size: CGFloat, weight: Font.Weight) {
+        _size = ScaledMetric(wrappedValue: size, relativeTo: .body)
+        base = size
+        self.weight = weight
+    }
+
+    func body(content: Content) -> some View {
+        content.font(.system(size: Self.capped(size, base: base), weight: weight))
+    }
+
+    static func capped(_ scaled: CGFloat, base: CGFloat) -> CGFloat { min(scaled, base * capFactor) }
+}
+
+public extension View {
+    /// A symbol at [size] points at the default text size, scaling with Dynamic Type (not past ``ScaledIconModifier/capFactor``).
+    func scaledIcon(size: CGFloat, weight: Font.Weight = .regular) -> some View {
+        modifier(ScaledIconModifier(size: size, weight: weight))
+    }
+}
+
+/// The fixed-width column of an icon, scaled the same way as ``View/scaledIcon(size:weight:)``, so that rows keep their
+/// text aligned and the glyph stays inside its column.
+struct ScaledIconColumn: ViewModifier {
+    @ScaledMetric private var width: CGFloat
+    private let base: CGFloat
+
+    init(width: CGFloat) {
+        _width = ScaledMetric(wrappedValue: width, relativeTo: .body)
+        base = width
+    }
+
+    func body(content: Content) -> some View {
+        content.frame(width: ScaledIconModifier.capped(width, base: base))
+    }
+}
+
+public extension View {
+    /// A column [width] points wide at the default text size beside an icon, scaling with it.
+    func scaledIconColumn(_ width: CGFloat) -> some View { modifier(ScaledIconColumn(width: width)) }
+}

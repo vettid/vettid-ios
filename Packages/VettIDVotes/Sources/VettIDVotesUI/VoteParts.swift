@@ -37,7 +37,7 @@ struct NoteCard: View {
         case .info, .note: (colors.primary, .info)
         }
         HStack(alignment: .top, spacing: Spacing.m) {
-            icon.image.font(.system(size: 20)).foregroundStyle(accent).frame(width: 24).accessibilityHidden(true)
+            icon.image.scaledIcon(size: 20).foregroundStyle(accent).scaledIconColumn(24).accessibilityHidden(true)
             VStack(alignment: .leading, spacing: Spacing.xs) {
                 if let heading { Text(heading).vettIDFont(.titleSmall, weight: .semibold) }
                 Text(text).vettIDFont(.bodyMedium).foregroundStyle(colors.onSurfaceVariant)

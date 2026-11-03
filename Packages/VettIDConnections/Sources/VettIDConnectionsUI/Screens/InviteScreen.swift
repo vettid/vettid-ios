@@ -116,7 +116,7 @@ struct ChooseTtl: View {
         return Button { actions.onTtl(ttl) } label: {
             HStack(spacing: Spacing.m) {
                 (selected ? VettIDSymbol.radioChecked : VettIDSymbol.radioUnchecked).image
-                    .font(.system(size: 22))
+                    .scaledIcon(size: 22)
                     .foregroundStyle(selected ? colors.primary : colors.onSurfaceVariant)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(Self.label(ttl)).vettIDFont(.bodyLarge).foregroundStyle(colors.onSurface)
@@ -252,7 +252,7 @@ struct OutlinedLabel: View {
 
     var body: some View {
         HStack(spacing: Spacing.s) {
-            symbol.image.font(.system(size: 16))
+            symbol.image.scaledIcon(size: 16)
             Text(text).vettIDFont(.labelLarge)
         }
         .foregroundStyle(colors.onSurface)

@@ -66,7 +66,7 @@ struct TagChoice: View {
             HStack(spacing: Spacing.xs) {
                 if selected {
                     VettIDSymbol.check.image
-                        .font(.system(size: 14, weight: .semibold))
+                        .scaledIcon(size: 14, weight: .semibold)
                         .foregroundStyle(c.onContainer)
                         .accessibilityHidden(true)
                         .accessibilityIdentifier("rule_tag_check_\(tag)")

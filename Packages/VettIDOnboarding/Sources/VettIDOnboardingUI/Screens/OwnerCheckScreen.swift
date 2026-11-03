@@ -154,7 +154,7 @@ public struct OwnerCheckScreen: View {
                 if state.lockOffered { actions.lockVault() } else { onCancel() }
             },
             header: {
-                VettIDSymbol.verifiedUser.image.font(.system(size: 36)).padding(.top, Spacing.l).accessibilityHidden(true)
+                VettIDSymbol.verifiedUser.image.scaledIcon(size: 36).padding(.top, Spacing.l).accessibilityHidden(true)
             },
             topActions: {
                 if state.cancelBesideLock {
@@ -424,7 +424,7 @@ public struct AppLockScreen: View {
             message: passcodeOnly ? OnboardingStrings.appLockBodyPasscode : OnboardingStrings.appLockBody,
             primaryLabel: OnboardingStrings.appLockUnlock,
             onPrimary: onUnlock,
-            header: { VettIDSymbol.lock.image.font(.system(size: 36)).padding(.top, Spacing.l).accessibilityHidden(true) }
+            header: { VettIDSymbol.lock.image.scaledIcon(size: 36).padding(.top, Spacing.l).accessibilityHidden(true) }
         ) {
             if lockedOut {
                 NoticeCard(.warning, title: OnboardingStrings.appLockTitle, message: OnboardingStrings.appLockLockedOut)

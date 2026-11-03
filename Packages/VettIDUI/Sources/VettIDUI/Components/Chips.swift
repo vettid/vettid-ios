@@ -108,7 +108,7 @@ public struct RemovableTagChip: View {
         Button(action: onRemove) {
             HStack(spacing: Spacing.s) {
                 Text(label).vettIDFont(.labelLarge).lineLimit(1)
-                VettIDSymbol.close.image.font(.system(size: 13, weight: .semibold))
+                VettIDSymbol.close.image.scaledIcon(size: 13, weight: .semibold)
             }
             .fixedSize()
             .foregroundStyle(c.onContainer)
@@ -141,7 +141,7 @@ public struct VettIDFilterChip: View {
         Button(action: action) {
             HStack(spacing: Spacing.s) {
                 if selected {
-                    Image(systemName: "checkmark").font(.system(size: 12, weight: .semibold)).accessibilityHidden(true)
+                    Image(systemName: "checkmark").scaledIcon(size: 12, weight: .semibold).accessibilityHidden(true)
                 }
                 Text(label).vettIDFont(.labelLarge).lineLimit(1)
             }
@@ -170,7 +170,7 @@ public struct ClearFiltersChip: View {
     public var body: some View {
         Button(action: action) {
             HStack(spacing: Spacing.s) {
-                VettIDSymbol.close.image.font(.system(size: 13, weight: .semibold))
+                VettIDSymbol.close.image.scaledIcon(size: 13, weight: .semibold)
                 Text(UIStrings.clear).vettIDFont(.labelLarge).lineLimit(1)
             }
             .fixedSize()
