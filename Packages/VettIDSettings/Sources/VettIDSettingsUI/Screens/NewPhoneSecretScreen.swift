@@ -74,11 +74,7 @@ public struct NewPhoneSecretContent: View {
                 .disabled(state.busy)
                 .accessibilityIdentifier("new_secret_password")
                 if let error = state.error {
-                    NoticeCard(
-                        .urgent, title: error.title(or: SecurityStrings.newSecret),
-                        message: WaitText.message(error, retryAt: state.errorRetryAt, timeScale: timeScale),
-                        announce: .assertive, spokenMessage: WaitText.spoken(error, retryAt: state.errorRetryAt)
-                    )
+                    WaitNotice(error, title: error.title(or: SecurityStrings.newSecret), retryAt: state.errorRetryAt)
                         .accessibilityIdentifier("error")
                 }
             }

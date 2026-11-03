@@ -263,18 +263,27 @@ struct WindowPasswordSheet: View {
     let state: CredentialState
     let actions: CredentialActions
 
+    private func windowField(at now: Date) -> some View {
+        SecretField(
+            CredentialStrings.passwordLabel, text: Binding(get: { state.windowPassword }, set: { actions.setWindowPassword($0) }),
+            error: state.windowError.map { WaitText.message($0, retryAt: state.windowRetryAt, timeScale: timeScale, now: now) },
+            spokenError: state.windowError.flatMap { WaitText.spoken($0, retryAt: state.windowRetryAt, now: now) },
+            errorPriority: .assertive, onSubmit: actions.openWindow
+        )
+        .disabled(state.busy)
+        .accessibilityIdentifier("dialog_password")
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: Spacing.m) {
             Text(CredentialStrings.windowDialogTitle).vettIDFont(.titleMedium).accessibilityAddTraits(.isHeader)
             Text(CredentialStrings.windowDialogBody).vettIDFont(.bodyMedium).foregroundStyle(colors.onSurfaceVariant)
-            SecretField(
-                CredentialStrings.passwordLabel, text: Binding(get: { state.windowPassword }, set: { actions.setWindowPassword($0) }),
-                error: state.windowError.map { WaitText.message($0, retryAt: state.windowRetryAt, timeScale: timeScale) },
-                spokenError: state.windowError.flatMap { WaitText.spoken($0, retryAt: state.windowRetryAt) },
-                errorPriority: .assertive, onSubmit: actions.openWindow
-            )
-            .disabled(state.busy)
-            .accessibilityIdentifier("dialog_password")
+            if WaitText.seconds(until: state.windowRetryAt) != nil {
+                // The wait counts down in the field's error.
+                TimelineView(.periodic(from: .now, by: 1)) { context in windowField(at: context.date) }
+            } else {
+                windowField(at: Date())
+            }
             HStack(spacing: Spacing.l) {
                 Spacer()
                 SheetButton(CredentialStrings.cancel, tint: colors.onSurface) { actions.showWindowDialog(false) }

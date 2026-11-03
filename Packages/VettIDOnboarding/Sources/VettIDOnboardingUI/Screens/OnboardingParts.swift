@@ -18,9 +18,15 @@ struct ErrorNotice: View {
             let text = override != nil && kind == override
                 ? overrideText ?? kind.message(timeScale: timeScale) : Self.message(kind, state.errorRetryAt, timeScale: timeScale)
             let spoken = kind == .rateLimited ? WaitText.spoken(kind, retryAt: state.errorRetryAt) : nil
-            NoticeCard(.urgent, title: OnboardingStrings.progressFailed, message: text, announce: .assertive, spokenMessage: spoken)
-                .padding(.top, Spacing.l)
-                .accessibilityIdentifier("error")
+            Group {
+                if kind == .rateLimited, WaitText.seconds(until: state.errorRetryAt) != nil {
+                    WaitNotice(kind, title: OnboardingStrings.progressFailed, retryAt: state.errorRetryAt)
+                } else {
+                    NoticeCard(.urgent, title: OnboardingStrings.progressFailed, message: text, announce: .assertive, spokenMessage: spoken)
+                }
+            }
+            .padding(.top, Spacing.l)
+            .accessibilityIdentifier("error")
         }
     }
 }

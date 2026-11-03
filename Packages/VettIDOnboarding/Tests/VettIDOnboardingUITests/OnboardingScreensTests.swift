@@ -30,6 +30,8 @@ import VettIDUI
             #expect(WaitText.message(kind, retryAt: soon, timeScale: 1).hasPrefix("Too many attempts. Try again in "))
             #expect(WaitText.spoken(kind, retryAt: soon)?.hasPrefix("Too many attempts. Try again in ") == true)
         }
+        // A long wait is h:mm:ss, not "120:00".
+        #expect(WaitText.clock(90) == "1:30" && WaitText.clock(3_599) == "59:59" && WaitText.clock(7_200) == "2:00:00")
         #expect(WaitText.message(.badPin, retryAt: soon, timeScale: 1) == FailureKind.badPin.message)
         #expect(WaitText.spoken(.badPin, retryAt: soon) == nil && WaitText.spoken(.rateLimited, retryAt: nil) == nil)
         #expect(WaitText.message(.backoff, retryAt: Date().addingTimeInterval(-1), timeScale: 1) == FailureKind.backoff.message)

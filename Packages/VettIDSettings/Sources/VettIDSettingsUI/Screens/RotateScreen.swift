@@ -56,11 +56,7 @@ public struct RotateContent: View {
                 )
                 .accessibilityIdentifier("rotate_password")
                 if let error = state.error {
-                    NoticeCard(
-                        .urgent, title: error.title(or: CredentialStrings.title),
-                        message: WaitText.message(error, retryAt: state.errorRetryAt, timeScale: timeScale),
-                        announce: .assertive, spokenMessage: WaitText.spoken(error, retryAt: state.errorRetryAt)
-                    )
+                    WaitNotice(error, title: error.title(or: CredentialStrings.title), retryAt: state.errorRetryAt)
                         .accessibilityIdentifier("error")
                 }
             }

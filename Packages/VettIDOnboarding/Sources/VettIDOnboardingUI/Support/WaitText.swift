@@ -19,14 +19,55 @@ public enum WaitText {
         kind == .rateLimited || kind == .backoff ? seconds(until: retryAt, now: now) : nil
     }
 
+    /// The wait as `m:ss`, and as `h:mm:ss` from an hour (not "120:00"; chosen, not in the spec).
+    public static func clock(_ seconds: Int64) -> String {
+        seconds >= 3_600
+            ? String(format: "%d:%02d:%02d", seconds / 3_600, seconds % 3_600 / 60, seconds % 60) : formatWait(seconds)
+    }
+
     public static func message(_ kind: FailureKind, retryAt: Date?, timeScale: UInt64, now: Date = Date()) -> String {
         guard let wait = waits(kind, retryAt, now: now) else { return kind.message(timeScale: timeScale) }
-        return RecoveryStrings.recoverRateLimitedWait(formatWait(wait))
+        return RecoveryStrings.recoverRateLimitedWait(clock(wait))
     }
 
     /// What VoiceOver speaks instead of ``message(_:retryAt:timeScale:now:)``, or nil when it is the same text.
     public static func spoken(_ kind: FailureKind, retryAt: Date?, now: Date = Date()) -> String? {
         waits(kind, retryAt, now: now).map { RecoveryStrings.recoverRateLimitedWait(spokenDuration($0)) }
+    }
+}
+
+/// A failure's notice that counts its wait down: the text is made again each second from the end of the wait, and VoiceOver
+/// is told the failure once (not every second).
+public struct WaitNotice: View {
+    @Environment(\.vettIDTimeScale) private var timeScale
+    private let kind: FailureKind
+    private let title: String
+    private let retryAt: Date?
+    private let notice: NoticeKind
+
+    public init(_ kind: FailureKind, title: String, retryAt: Date?, notice: NoticeKind = .urgent) {
+        self.kind = kind
+        self.title = title
+        self.retryAt = retryAt
+        self.notice = notice
+    }
+
+    public var body: some View {
+        if WaitText.seconds(until: retryAt) != nil, kind == .rateLimited || kind == .backoff {
+            TimelineView(.periodic(from: .now, by: 1)) { context in
+                card(at: context.date)
+            }
+        } else {
+            card(at: Date())
+        }
+    }
+
+    private func card(at now: Date) -> some View {
+        NoticeCard(
+            notice, title: title, message: WaitText.message(kind, retryAt: retryAt, timeScale: timeScale, now: now),
+            announce: .assertive, announcement: "\(title). \(kind.message(timeScale: timeScale))",
+            spokenMessage: WaitText.spoken(kind, retryAt: retryAt, now: now)
+        )
     }
 }
 #endif
