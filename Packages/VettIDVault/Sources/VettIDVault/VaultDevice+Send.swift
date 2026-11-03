@@ -411,8 +411,18 @@ extension VaultDevice {
 
     /// Drops the events kept for ``awaitEvent(_:timeout:match:)`` (the last ``inboxMax``): their bodies are vault content, which
     /// is not kept in memory once the vault is no longer open (IOS-PLAN §6.9). A wait that is under way is not ended.
+    /// Events of a type a call has announced it will wait for (``keepingEvents(_:_:)``) are kept: its answer may arrive, and a
+    /// hold begin, before its wait does.
     public func clearInbox() {
-        mem.withLock { inbox.removeAll() }
+        mem.withLock { inbox.removeAll { keptTypes[$0.type, default: 0] == 0 } }
+    }
+
+    /// Runs [body], during which ``clearInbox()`` keeps the events of [types]: for a call that sends a request and then waits
+    /// for the event that answers it (the answer to the request may come before the wait begins).
+    public func keepingEvents<T>(_ types: Set<String>, _ body: () async throws -> T) async rethrows -> T {
+        mem.withLock { for t in types { keptTypes[t, default: 0] += 1 } }
+        defer { mem.withLock { for t in types { keptTypes[t] = max(0, (keptTypes[t] ?? 1) - 1) } } }
+        return try await body()
     }
 
     /// The ids of the outbox's entries (tests).

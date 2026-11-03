@@ -106,12 +106,16 @@ extension VaultApi {
         let rk = try KemPrivateKey.generate()
         defer { rk.destroy() }
         let b = JsonBuilder().string("grant_id", grantID).base64("reply_key", rk.publicKey.bytes)
-        guard let fetchID = VaultJSON.string(try await sharingOp("grant.fetch", b), "fetch_id") else {
-            throw VaultStateError(message: "grant.fetch without fetch_id")
+        // The connection's answer may arrive, and an owner check's hold begin, between the request's answer and the wait: the
+        // `grant.value` events are kept through a hold while this call runs.
+        let (fetchID, ev) = try await device.keepingEvents(["grant.value"]) {
+            guard let fetchID = VaultJSON.string(try await sharingOp("grant.fetch", b), "fetch_id") else {
+                throw VaultStateError(message: "grant.fetch without fetch_id")
+            }
+            return (fetchID, try await device.awaitEvent("grant.value", timeout: timeout) {
+                VaultJSON.string($0.object, "fetch_id") == fetchID
+            }.object)
         }
-        let ev = try await device.awaitEvent("grant.value", timeout: timeout) {
-            VaultJSON.string($0.object, "fetch_id") == fetchID
-        }.object
         if let error = VaultJSON.string(ev, "error") {
             return GrantFetched(grantID: grantID, content: nil, usesLeft: nil, error: error, retryAfter: VaultJSON.int(ev, "retry_after"))
         }

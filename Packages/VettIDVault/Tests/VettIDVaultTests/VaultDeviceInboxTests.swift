@@ -12,6 +12,19 @@ extension VaultDeviceTests {
         #expect(d.inboxCount == 3)
         d.clearInbox()
         #expect(d.inboxCount == 0)
+        // The bound: only the last ``VaultDevice/inboxMax`` events are kept.
+        for i in 0..<(VaultDevice.inboxMax + 5) { try await d.handle(try v.seal("message.new", #"{"n":\#(i)}"#)) }
+        #expect(d.inboxCount == VaultDevice.inboxMax)
+        d.clearInbox()
+        #expect(d.inboxCount == 0)
+        // Events a running call waits for are kept through the clear (a hold between its request's answer and its wait).
+        try await d.keepingEvents(["grant.value"]) {
+            try await d.handle(try v.seal("grant.value", #"{"fetch_id":"f1"}"#))
+            try await d.handle(try v.seal("message.new", "{}"))
+            d.clearInbox()
+            #expect(d.inboxCount == 1)
+            _ = try await d.awaitEvent("grant.value", timeout: 1)
+        }
         await #expect(throws: VaultStateError.self) { _ = try await d.awaitEvent("message.new", timeout: 0.2) }
         // Events after the clear are kept again.
         try await d.handle(try v.seal("message.new", #"{"n":9}"#))

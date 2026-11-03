@@ -192,6 +192,8 @@ public final class VaultDevice: @unchecked Sendable {
     }
     var pending: [String: OneShot<Inner>] = [:]
     var inbox: [VaultMessage] = []
+    /// The types of event a call is about to wait for, with how many calls (``keepingEvents(_:_:)``): ``clearInbox()`` keeps them.
+    var keptTypes: [String: Int] = [:]
     var inboxWaiters: [OneShot<Bool>] = []
     let eventBroadcast = Broadcast<VaultMessage>()
     let timeDropBroadcast = Broadcast<String>()
