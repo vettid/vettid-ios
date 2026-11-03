@@ -266,8 +266,9 @@ public final class UnlockViewModel: UnlockActions {
         }
         state.returnAsksPin = false
         state.message = nil
-        // Refused before anything was sent (an update running, the owner check or a change first).
-        if !vault.returnToPreviousRelease(pin: pin) { state.message = .failed(.other, code: nil) }
+        // Refused before anything was sent (an update running, the owner check or a change first): "Nothing was used or
+        // changed. Try again" (the busy text; chosen, not in the spec; vettid-android shows its general message).
+        if !vault.returnToPreviousRelease(pin: pin) { state.message = .failed(.busy, code: nil) }
     }
 
     // MARK: - The lock and the move

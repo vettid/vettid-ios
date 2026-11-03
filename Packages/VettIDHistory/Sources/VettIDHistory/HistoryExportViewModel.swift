@@ -7,7 +7,8 @@ import VettIDVault
 public enum ExportRefusal: Equatable, Sendable {
     /// A clone alarm is open (`credential_frozen` / `rotation_required`, §3.5.9).
     case alarm
-    /// The vault release predates `audit.export` (VAULT-MESSAGING 0.22.0): `unsupported_type` or `bad_request`.
+    /// The vault release predates `audit.export` (VAULT-MESSAGING 0.22.0): `unsupported_type`. A `bad_request` is not taken for it: that is the request's own fault and is shown as the vault's code
+    /// (chosen; not in the spec, where `bad_request` is among the ordinary answers, §10.9).
     case oldVault
 }
 
@@ -309,7 +310,7 @@ public final class HistoryExportViewModel {
     static func refusal(_ e: VaultFailure?) -> ExportRefusal? {
         guard let e else { return nil }
         if e.kind == .credentialFrozen || e.kind == .rotationRequired { return .alarm }
-        if e.kind == .notSupported || e.code == "unsupported_type" || e.code == "bad_request" { return .oldVault }
+        if e.kind == .notSupported || e.code == "unsupported_type" { return .oldVault }
         return nil
     }
 

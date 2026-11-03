@@ -192,12 +192,7 @@ public final class TransferOutViewModel: TransferOutActions {
                 pending = try await move.awaitTransferPending(transferID: offer.transferID, until: offer.expiresAt)
             } catch {
                 guard !Task.isCancelled else { return }
-                if let vm = self {
-                    let f = Self.failure(of: error)
-                    vm.state.error = f.kind
-                    vm.state.errorCode = f.code
-                    vm.expire()
-                }
+                self?.waitFailed(error, transferID: offer.transferID)
                 return
             }
             guard !Task.isCancelled, let vm = self else { return }
@@ -251,6 +246,17 @@ public final class TransferOutViewModel: TransferOutActions {
             return false
         }
         return true
+    }
+
+    /// The wait for the new phone failed (not the code's end): back to the start with the failure said, not an "expired"
+    /// screen (chosen; not in the spec, where Android shows the expiry); the code is cancelled so it cannot be used.
+    private func waitFailed(_ error: any Error, transferID: String) {
+        ticker?.cancel()
+        fail(error, step: .intro)
+        state.offer = nil
+        state.pending = nil
+        state.deadline = nil
+        Task { @MainActor [move] in try? await move.transferReject(transferID: transferID) }
     }
 
     private func expire() {

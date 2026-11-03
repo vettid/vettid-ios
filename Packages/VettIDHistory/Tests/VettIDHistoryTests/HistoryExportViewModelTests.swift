@@ -157,7 +157,7 @@ import VettIDVault
     }
 
     @Test func anOlderVaultSaysSo() async {
-        for f in [VaultFailure(.notSupported, code: "unsupported_type"), VaultFailure(.vaultCode("bad_request"), code: "bad_request")] {
+        for f in [VaultFailure(.notSupported, code: "unsupported_type"), VaultFailure(.notSupported)] {
             log.preview = { throw f }
             let m = model()
             m.start(ctx)
