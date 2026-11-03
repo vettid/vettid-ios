@@ -77,6 +77,23 @@ extension VoteSiteTests {
         #expect(vault.submits.isEmpty)
     }
 
+    /// An unconfirmed vote whose check again failed on numbers other than the vault's: **Check again** fetches a copy
+    /// that holds together but has the other numbers, and the vault refuses the submission. The attempt's verdict needs
+    /// the vault's numbers too, so the numbers stay hidden.
+    @Test func anAttemptsVerdictAlsoNeedsTheVaultsNumbers() async throws {
+        let ops = FakeVoteOps()
+        ops.list = listing(summary(state: "closed", extra: #","ballot":{"state":"waiting"},"check":{"state":"unconfirmed"}"#))
+        ops.detail = verifiedDetail(tally: #"{"abstain":0,"no":1,"yes":0}"#)
+        let m = siteManager(ops)
+        try await m.refresh()
+        VoteResultsFixture.publish(site, pid)
+        #expect(try await m.recheckResults(key) == .dontAddUp)
+        vault.submitRefusal = "bad_request"
+        await #expect(throws: (any Error).self) { try await m.checkResults(key) }
+        #expect(vault.submits.count == 1)
+        #expect(m.hints[key]?.observerVerdict == false && m.hints[key]?.resultsDontAddUp == true)
+    }
+
     /// An attempt whose submission the vault answered `verified` or `unconfirmed` leaves its verdict for the screen, which
     /// does not check again before the next lock; one refused, lost or left pending does not, and the screen checks again.
     @Test func anAttemptsVerdictIsUsedWhenTheScreenOpensOnlyOnceTheVaultJudged() async throws {

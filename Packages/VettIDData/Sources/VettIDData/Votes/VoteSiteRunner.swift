@@ -407,9 +407,13 @@ final class VoteSiteRunner {
         // (VAULT-MESSAGING 0.81.6 §10.19.8, "Choice ids in results").
         guard let body = Self.submitBody(key, doc: doc, sig: sig, bundle: bundle, own: checked.own) else { return fail(key, .problem) }
         try Task.checkCancellation()
+        // The site's numbers must also be the ones the vault holds (`vote.get`), as for a check again: a verdict about
+        // another copy says nothing of the numbers the screen shows (chosen; not in the spec).
+        let sameNumbers = await Task.detached { Self.sameNumbers(doc, detail) }.value
+        try Task.checkCancellation()
         // A failure of the observer's check outside the four inputs does not hold the row back (VAULT-MESSAGING 0.83.2
         // §10.19.6 step 1): the vault judges it, and the member is told the rest doesn't add up whatever it answers.
-        return try await submit(key, body, dontAddUp: checked.problem != nil, quietly: quietly)
+        return try await submit(key, body, dontAddUp: checked.problem != nil || !sameNumbers, quietly: quietly)
     }
 
     /// Hands [body] to the vault and keeps what it answered, and whether the rest of the results [dontAddUp], for
