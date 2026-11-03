@@ -307,7 +307,7 @@ struct AppRoot: View {
         case .signedOut, .setup:
             OnboardingFlow(account: vault, vault: vault, inbox: inbox, routes: onboardingRoutes) { openPortal() }
         case .starting:
-            StartingScreen()
+            StartingScreen(onRetry: { Task { try? await vault.refresh() } })
         case .unreachable:
             UnreachableFlow(account: vault, timeScale: vault.timeScale) { openPortal() }
         case .locked:

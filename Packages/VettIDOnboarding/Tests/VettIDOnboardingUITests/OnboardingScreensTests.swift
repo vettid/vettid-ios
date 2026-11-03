@@ -13,6 +13,12 @@ import VettIDUI
 /// rule; here ``OnboardingState/canContinueBackup``, which the screen uses as is, is checked in the model's tests.)
 @MainActor
 @Suite struct OnboardingScreensTests {
+    /// "Opening VettID" renders with and without the way out it offers after a long read.
+    @Test func theStartingScreenRenders() {
+        #expect(height(StartingScreen()) > 0)
+        #expect(height(StartingScreen(stuckAfter: .zero, onRetry: {})) > 0)
+    }
+
     /// A rate-limited redeem says how long to wait (Android's text of the recovery); no wait left, the general text.
     @Test func aRateLimitedRedeemSaysTheWait() {
         let soon = Date().addingTimeInterval(90)

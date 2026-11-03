@@ -164,9 +164,37 @@ public struct UnreachableFlow: View {
 }
 
 /// The start, while the phase is read ("Opening VettID").
+///
+/// A read that takes longer than [stuckAfter] (a network that answers nothing) shows why it may be taking long, with "Try again"
+/// ([onRetry]) as the unreachable screen has; the read goes on and the screen leaves by itself when it ends (chosen; not in
+/// the spec, where vettid-android has the spinner only).
 public struct StartingScreen: View {
-    public init() {}
+    private let onRetry: (@MainActor () -> Void)?
+    private let stuckAfter: Duration
+    @State private var stuck = false
 
-    public var body: some View { FullScreenProgress(OnboardingStrings.rootStarting) }
+    public init(stuckAfter: Duration = .seconds(20), onRetry: (@MainActor () -> Void)? = nil) {
+        self.stuckAfter = stuckAfter
+        self.onRetry = onRetry
+    }
+
+    public var body: some View {
+        Group {
+            if stuck, let onRetry {
+                FormScaffold(
+                    title: OnboardingStrings.rootUnreachableTitle, message: FailureKind.network.message,
+                    primaryLabel: OnboardingStrings.rootRetry, onPrimary: onRetry
+                ) { EmptyView() }
+                    .accessibilityIdentifier("starting_stuck")
+            } else {
+                FullScreenProgress(OnboardingStrings.rootStarting)
+            }
+        }
+        .task {
+            guard onRetry != nil else { return }
+            try? await Task.sleep(for: stuckAfter)
+            if !Task.isCancelled { stuck = true }
+        }
+    }
 }
 #endif
