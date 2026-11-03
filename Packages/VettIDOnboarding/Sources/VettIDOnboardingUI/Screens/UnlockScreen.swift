@@ -195,13 +195,19 @@ public struct UnlockScreen: View {
         }
     }
 
+    /// "Try again" on the recover-only notice: the release check again, where a new check can change the answer.
+    private func checkAgain() -> (@MainActor () -> Void)? {
+        guard state.recheckOffered else { return nil }
+        let actions = actions
+        return { actions.retryPreflight() }
+    }
+
     /// An ended release or a rollback wins: no erase there, whatever else the last answers said.
     @ViewBuilder private var wayForward: some View {
         if state.recoverOnly {
-            let checkAgain: (@MainActor () -> Void)? = state.recheckOffered ? { [actions] in actions.retryPreflight() } : nil
             RecoverOnlyNotice(
                 onRecover: onOpenAccountSite, contactSupport: contactSupport,
-                onCheckAgain: checkAgain, checkAgainEnabled: state.retryAllowed
+                onCheckAgain: checkAgain(), checkAgainEnabled: state.retryAllowed
             )
         } else if state.notRecognised {
             NotRecognisedNotice(erasing: state.erasing, onErase: { actions.askErase() })
