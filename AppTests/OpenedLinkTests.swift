@@ -11,6 +11,18 @@ struct OpenedLinkTests {
     let link = String(repeating: "A", count: 120)
 
     /// A setup link on a phone that already has a vault is said to be unused, not queued for a later setup.
+    /// A link that came while the phase was being read is dropped once it is a phase with a vault, and not kept for a later setup.
+    @Test func aQueuedSetupLinkIsDroppedWhenTheVaultIsKnown() {
+        let inbox = SetupLinkInbox()
+        inbox.offer("link")
+        #expect(!AppRoot.dropSetupLink(phase: .starting, inbox: inbox) && inbox.link == "link")
+        #expect(!AppRoot.dropSetupLink(phase: .signedOut, inbox: inbox) && inbox.link == "link")
+        #expect(AppRoot.dropSetupLink(phase: .locked, inbox: inbox) && inbox.link == nil)
+        #expect(!AppRoot.dropSetupLink(phase: .unlocked, inbox: inbox))
+        // The vault deleted in the same run: nothing is left for the onboarding to redeem.
+        #expect(!AppRoot.dropSetupLink(phase: .signedOut, inbox: inbox) && inbox.link == nil)
+    }
+
     @Test func aSetupLinkIsUnusedOnAPhoneWithAVault() {
         for phase in [AppPhase.locked, .unlocked, .deleting] { #expect(AppRoot.hasVault(phase)) }
         for phase in [AppPhase.starting, .signedOut, .setup(.newVault)] { #expect(!AppRoot.hasVault(phase)) }

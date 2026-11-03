@@ -115,16 +115,21 @@ public struct VaultStatusContent: View {
 
     static func releaseText(_ r: ReleaseInfoView?) -> String {
         guard let r, let n = r.number else { return SettingsStrings.unknown }
-        // Only the vault's known words for a release are shown; another word is not.
+        // Only the vault's known words for a release are shown; another word is not (chosen; not in the spec, where
+        // vettid-android shows the status as it came).
         guard ["active", "deprecated", "retired"].contains(r.status) else { return SettingsStrings.statusReleaseLastValue(Int(n)) }
         return SettingsStrings.statusReleaseValue(Int(n), r.status)
     }
 
+    static let knownRecoveryStates: Set<String> = ["registered", "pending", "available", "completed"]
+
     static func recoveryText(_ v: VaultOverview) -> String {
         if !v.recoveryOffered { return SettingsStrings.recoveryNotOffered }
         if let r = v.recovery { return recoveryLine(RecoveryLine.of(r)) }
-        // A recovery state this app does not know is not shown as the vault wrote it.
-        return v.recoveryState == nil ? SettingsStrings.statusRecoveryNone : SettingsStrings.unknown
+        // The states of MEMBER-API are shown as vettid-android shows them (it has no words for them); any other word is not
+        // shown as it came (chosen; not in the spec).
+        guard let state = v.recoveryState else { return SettingsStrings.statusRecoveryNone }
+        return Self.knownRecoveryStates.contains(state) ? state : SettingsStrings.unknown
     }
 
     static func recoveryLine(_ l: RecoveryLine) -> String {

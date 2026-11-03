@@ -194,6 +194,7 @@ struct AppRoot: View {
                 // "Finish the move" locks and unlocks the vault under the screen that asked: the root stays as it was until
                 // the outcome (vettid-android `holdsRoot`).
                 if !vault.finishingMove { held = now }
+                if Self.dropSetupLink(phase: now, inbox: inbox) { setupLinkIgnored = true }
                 closeIfNotOpen()
             }
             .onChange(of: vault.finishingMove) { _, finishing in
@@ -208,7 +209,8 @@ struct AppRoot: View {
                 case .invite(let link): inviteInbox.offer(link)
                 case .setup(let link):
                     // A phone with a vault has no use for a setup link: said, not kept for a later setup.
-                    if Self.hasVault(vault.phase) { setupLinkIgnored = true } else { inbox.offer(link) }
+                    inbox.offer(link)
+                    if Self.dropSetupLink(phase: vault.phase, inbox: inbox) { setupLinkIgnored = true }
                 case .other: openFile(url)
                 }
             }
@@ -229,6 +231,15 @@ struct AppRoot: View {
         AcceptedScans.reset()
         // The vault is no longer open (locked, signed out, unreachable): the allowance ends.
         screenshots.vaultClosed()
+    }
+
+    /// A setup link waiting in [inbox] while [phase] has a vault is dropped, so that no later setup (after a Delete vault in the
+    /// same run) redeems it; true when one was dropped. A link that came while the phase was still being read is judged here
+    /// when the phase is known.
+    static func dropSetupLink(phase: AppPhase, inbox: SetupLinkInbox) -> Bool {
+        guard hasVault(phase), inbox.link != nil else { return false }
+        inbox.consume()
+        return true
     }
 
     /// A vault is set up on this phone (the setup flow has nothing to do).

@@ -168,6 +168,13 @@ import VettIDUI
         v.recoveryOffered = true
         v.recovery = nil
         #expect(VaultStatusContent.recoveryText(v) == "None")
+        // MEMBER-API's states are shown as vettid-android shows them; another word is not shown as it came.
+        for state in ["registered", "pending", "available", "completed"] {
+            v.recoveryState = state
+            #expect(VaultStatusContent.recoveryText(v) == state)
+        }
+        v.recoveryState = "Odd Word!"
+        #expect(VaultStatusContent.recoveryText(v) == "Unknown")
     }
 
     /// The counter unavailable for a day (§11.14.5; STAGING-TIME-SCALE 0.1.1 S8, S7; vettid-android
