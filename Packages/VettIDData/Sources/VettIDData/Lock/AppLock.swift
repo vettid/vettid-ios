@@ -153,7 +153,8 @@ public final class AppLock {
 
     @ObservationIgnored private let store: any AppLockStore
     @ObservationIgnored private let keys: any AppLockKeys
-    /// Seconds on a clock that counts while the iPhone sleeps and cannot be set IOS-PLAN §6.4 (chosen; not in the spec yet: the monotonic timeout and the 5 s set-back rule); the timeout runs on it.
+    /// Seconds on a clock that counts while the iPhone sleeps and cannot be set; the timeout runs on it (IOS-PLAN §6.4;
+    /// chosen, not in the spec yet: the monotonic timeout and the 5 s set-back rule).
     @ObservationIgnored private let uptime: @Sendable () -> TimeInterval
     /// The wall clock: only compared, to notice that it was set back.
     @ObservationIgnored private let wall: @Sendable () -> Date

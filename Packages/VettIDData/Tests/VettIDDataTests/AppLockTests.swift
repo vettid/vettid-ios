@@ -197,7 +197,8 @@ final class FaultyAppLockKeys: AppLockKeys, @unchecked Sendable {
         #expect(l.state == .locked)
     }
 
-    /// Setting the date back does not keep the app open IOS-PLAN §6.4 (chosen; not in the spec yet: the monotonic timeout and the 5 s set-back rule), and a date set forward does not lock early.
+    /// Setting the date back does not keep the app open, and a date set forward does not lock early (IOS-PLAN §6.4;
+    /// chosen, not in the spec yet: the monotonic timeout and the 5 s set-back rule).
     @Test func aWallClockSetBackLocks() async throws {
         let l = try await enabled()
         try l.setTimeout(.oneMinute)
