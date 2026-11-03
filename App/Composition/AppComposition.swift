@@ -96,6 +96,9 @@ final class AppComposition {
             environment: environment.kind.rawValue.uppercased()
         )
         config.attestStartOver = startOver
+        // IOS-PLAN §6.6: while the app is open the relay WebSocket collects (RELAY-PROTOCOL §6.4); the long-poll is its
+        // fallback, and the collection stops when the app leaves the foreground.
+        config.collectMode = .webSocket
         // The public votes site (IOS-PLAN §4.16): its own ephemeral session, no cookies, no cache, no redirects.
         config.votesSite = URLSessionVoteSite(base: environment.votesURL)
         config.backgroundTasks = SystemBackgroundTasks()

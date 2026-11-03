@@ -124,6 +124,8 @@ public struct MailboxCollector: Sendable {
     static let maxShift = 7
     static let maxDelay: TimeInterval = 30
     static let jitter: TimeInterval = 0.25
+    /// A session that closes normally sooner than this after it opened counts as a failed connection.
+    static let minSession: TimeInterval = 2
 
     let source: MailboxSource
     let mode: Mode
@@ -163,17 +165,36 @@ public struct MailboxCollector: Sendable {
     /// Runs until cancelled or a terminal relay error.
     public func run(_ handle: @Sendable (RelayMessage) async throws -> Void) async throws {
         var failures = 0
+        var socketRefusals = 0
         var pollUntil = Date.distantPast
         while true {
             try Task.checkCancellation()
             let useSocket = mode == .webSocket && now() > pollUntil
+            let started = now()
             do {
                 try await round(useSocket: useSocket, handle)
+                if useSocket, now().timeIntervalSince(started) < Self.minSession {
+                    // (chosen; not in the spec) A session the relay closes normally at once is not a connection: back
+                    // off, so that a relay that accepts and closes does not draw a reconnect loop.
+                    failures += 1
+                    try await sleep(retryDelay(failures, 0))
+                    continue
+                }
                 if failures > 0 { onRecovered() }
                 failures = 0
+                if useSocket { socketRefusals = 0 }
             } catch let e as RelayError {
                 guard e.retryable else { throw e }
                 failures += 1
+                if useSocket {
+                    // RELAY-PROTOCOL §7.2: a client whose upgrade is answered 429 collects by long-poll and tries the
+                    // WebSocket again no sooner than retry_after, with backoff (chosen; not in the spec: 5 s, the
+                    // relay's own retry_after, doubled per refusal up to the fallback period, when the answer names none).
+                    pollUntil = now().addingTimeInterval(socketPause(e, socketRefusals))
+                    socketRefusals += 1
+                    // The long-poll that follows at once is the wait; it backs off itself if it fails too.
+                    continue
+                }
                 try await sleep(retryDelay(failures, e.retryAfterSeconds))
             } catch is URLError {
                 // Transport failures only: a handler's own error (storage, decoding) ends the run, as in vettid-android.
@@ -183,6 +204,12 @@ public struct MailboxCollector: Sendable {
                 try await sleep(retryDelay(failures, 0))
             }
         }
+    }
+
+    /// How long the long-poll stands in for a WebSocket that a retryable relay answer ended.
+    func socketPause(_ e: RelayError, _ refusals: Int) -> TimeInterval {
+        let base = TimeInterval(e.retryAfterSeconds > 0 ? min(e.retryAfterSeconds, RelayError.maxRetryAfterSeconds) : 5)
+        return min(base * Double(1 << min(refusals, Self.maxShift)), fallback)
     }
 
     private func round(useSocket: Bool, _ handle: @Sendable (RelayMessage) async throws -> Void) async throws {

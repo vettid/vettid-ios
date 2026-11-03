@@ -499,6 +499,43 @@ enum SourceStep { case messages([RelayMessage]), error(Error) }
         #expect(src.streamOpens == 1 && got.all == ["01L"] && src.acks == ["01L"])
     }
 
+    /// RELAY-PROTOCOL §7.2: an upgrade answered 429 is collected by long-poll, and the socket is tried again only after
+    /// the pause.
+    @Test func aRefusedUpgradeFallsBackToLongPollUntilThePause() async throws {
+        final class Clock: @unchecked Sendable {
+            let lock = NSLock()
+            var t = Date(timeIntervalSince1970: 1_000_000)
+            var value: Date { lock.withLock { t } }
+            func advance(_ s: TimeInterval) { lock.withLock { t = t.addingTimeInterval(s) } }
+        }
+        let clock = Clock()
+        let refused = FakeStream([], end: RelayError(status: 429, code: "http_429", retryAfterSeconds: 7))
+        let src = FakeSource([.messages([Self.msg("01A")]), .messages([Self.msg("01B")])], stream: refused)
+        let got = Recorder<String>()
+        await #expect(throws: RelayError.self) {
+            try await MailboxCollector(
+                source: src, mode: .webSocket, now: { clock.value }, sleep: { clock.advance($0) }
+            ).run { got.add($0.msgID) }
+        }
+        // The refused upgrade, then long-polls while the 7 s pause lasts (no sleep: the poll is the wait).
+        #expect(src.streamOpens == 1 && got.all == ["01A", "01B"])
+        let c = MailboxCollector(source: src)
+        #expect(c.socketPause(RelayError(status: 429, code: "http_429", retryAfterSeconds: 7), 0) == 7)
+        #expect(c.socketPause(RelayError(status: 429, code: "http_429"), 0) == 5)
+        #expect(c.socketPause(RelayError(status: 429, code: "http_429"), 3) == 40)
+        #expect(c.socketPause(RelayError(status: 503, code: "http_503"), 20) == 300)
+    }
+
+    /// A session that the relay closes normally at once backs off instead of reconnecting in a loop.
+    @Test func aSessionClosedAtOnceBacksOff() async throws {
+        let src = FakeSource([.messages([Self.msg("01C")])], stream: FakeStream([], end: nil))
+        let waits = Recorder<TimeInterval>()
+        await #expect(throws: RelayError.self) {
+            try await MailboxCollector(source: src, mode: .webSocket, sleep: { waits.add($0) }).run { _ in }
+        }
+        #expect(waits.all.count == 2 && waits.all[0] > 0, "the closed session backed off, then the second open failed and backed off")
+    }
+
     @Test func theCloseCodes() {
         #expect(RelayStream.closeError(code: 1000, error: URLError(.unknown)) == nil)
         #expect(RelayStream.closeError(code: 4404, error: URLError(.unknown)) as? RelayError == RelayError(status: 404, code: RelayError.mailboxUnknown))
