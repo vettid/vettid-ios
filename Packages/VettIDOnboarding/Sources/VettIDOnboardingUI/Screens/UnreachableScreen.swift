@@ -173,7 +173,11 @@ public struct StartingScreen: View {
 
     /// Without [reread] ("Try again") the screen is the spinner alone.
     public init(reread: (@MainActor () async -> Void)? = nil, stuckAfter: Duration = .seconds(20)) {
-        make = reread.map { reread in { StartingViewModel(stuckAfter: stuckAfter, reread: reread) } }
+        if let reread {
+            make = { @MainActor in StartingViewModel(stuckAfter: stuckAfter, reread: reread) }
+        } else {
+            make = nil
+        }
     }
 
     /// For tests and previews: a model made by the caller (a short bound, a clock of its own).
