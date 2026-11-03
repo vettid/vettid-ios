@@ -342,6 +342,8 @@ public struct ProgressScreen: View {
             StepList(state.progress.map { ($0.step.label, $0.state.stepState) }).accessibilityIdentifier("progress")
             ErrorNotice(state: state)
         }
+        // The enrolment waits for the vault to start and answer: the screen stays on while it runs.
+        .keepsScreenOn(!failed)
     }
 }
 

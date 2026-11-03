@@ -20,6 +20,8 @@ public final class FakeVaultRepository: CustomStringConvertible {
     public var fail: [String: VaultFailure] = [:]
     /// What the unlocks answer, in order; an empty queue answers ``UnlockAttempt/success``.
     public var unlockResults: [UnlockAttempt] = []
+    /// Awaited by an unlock before it answers (a long wait; a cancelled one throws).
+    @ObservationIgnored public var unlockWait: (@Sendable () async throws -> Void)?
 
     // AccountRepository.
     public var phase: AppPhase

@@ -219,6 +219,18 @@ final class Box<T: Sendable>: @unchecked Sendable {
         await #expect(throws: MemberApiMalformed.self) { _ = try await a.slot("x") }
     }
 
+    /// The poll of an enrollment, an unlock or a recovery open ends at its deadline instead of at the slot's own 15 minutes.
+    @Test func aPollWithADeadlineEndsAtIt() async throws {
+        let clock = Box<TimeInterval>(0)
+        let a = api(appAuth(Box(Self.vid)), now: { Date(timeIntervalSince1970: clock.value) })
+        server.handle { _ in
+            clock.value += 70
+            return .json(200, #"{"status":"queued"}"#)
+        }
+        await #expect(throws: AltChannelFailure.self) { _ = try await a.poll("01JB2Z6V9K3M4N5P6Q7R8S9T30", deadline: 180) }
+        #expect(server.requests.count == 3, "polled at 0, 70 and 140 s, and stopped at 210 s")
+    }
+
     /// `release_starting` is waited for (at most 2 s a time, 10 minutes in all); `vault_unavailable` (also paused) is
     /// thrown at once with its retry_after.
     @Test func releaseStartingIsWaitedForBoundedlyAndPausedIsNot() async throws {

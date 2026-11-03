@@ -151,6 +151,8 @@ public struct RecoveryOpenContent: View {
             case .done: OpenDone(state: state, actions: actions, timeScale: timeScale)
             }
         }
+        // The open waits for the vault, which may be starting: the screen stays on until it answers.
+        .keepsScreenOn(state.step == .sending || side.busy)
     }
 }
 

@@ -195,7 +195,7 @@ public struct AltChannelFlow: Sendable {
             return (e, nil)
         }
         do {
-            return (nil, try await api.poll(requestID))
+            return (nil, try await api.poll(requestID, deadline: MemberApiClient.slotDeadline))
         } catch var e as MemberApiError {
             e.queued = true
             return (e, nil)
@@ -427,7 +427,7 @@ public struct AltChannelFlow: Sendable {
             let req = try await build(e, m)
             try await api.recoveryOpen(vaultID: vaultID, instanceID: info.instanceID, req)
             await onSent()
-            let s = try await api.poll(req.requestID)
+            let s = try await api.poll(req.requestID, deadline: MemberApiClient.slotDeadline)
             let r = try await open(try Self.answered(s, "recovery open"), req.requestID)
             if r.ok { try? attester?.confirmInUse() }
             if !r.ok, r.code == Self.codeAttestation, let attester, switched < Self.maxKeySwitches, try attester.nextCandidate() {

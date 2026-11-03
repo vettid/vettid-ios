@@ -237,6 +237,20 @@ struct UnlockNotices: View {
             }
             .accessibilityElement(children: .combine)
         }
+        if state.busy, state.slowUnlock {
+            // The unlock waits long for the vault: it may be starting (Android's text for the same wait of a recovery's
+            // registration). The member may stop waiting.
+            VStack(alignment: .leading, spacing: Spacing.m) {
+                HStack(spacing: Spacing.m) {
+                    ProgressView()
+                    Text(RecoveryScreenStrings.recoverRegisteringStarting).vettIDFont(.bodyMedium)
+                }
+                .accessibilityElement(children: .combine)
+                Button(MoveStrings.transferInCancel) { actions.cancelUnlock() }
+                    .accessibilityIdentifier("unlock_cancel_wait")
+            }
+            .keepsScreenOn()
+        }
         if state.keptTransfer {
             // Release R (§11.14.10): the old phone after a transfer's approval.
             NoticeCard(

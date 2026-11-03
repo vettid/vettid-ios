@@ -323,14 +323,24 @@ public final class MemberApiClient: Sendable {
         return Slot(status: try o.string("status"), envelope: envelope, code: try o.optString("code"))
     }
 
+    /// How long the app waits for the answer of an enrollment, an unlock or a recovery open before it stops asking: a cold
+    /// vault starts in a minute or two (chosen; not in the spec, which gives only the slot's own 15-minute lifetime,
+    /// VAULT-MESSAGING §11.5). The request may still be applied: the next start reads the phase.
+    public static let slotDeadline: TimeInterval = 180
+
     /// Polls a slot until it is no longer queued (the API allows 2 polls per second), or, with [atMost], until that much
-    /// time was spent waiting between polls: the slot is then returned still queued.
-    public func poll(_ requestID: String, atMost: TimeInterval? = nil) async throws -> Slot {
+    /// time was spent waiting between polls: the slot is then returned still queued. With [deadline] the wait ends after
+    /// that much time (by the client's clock, the requests included) with an ``AltChannelFailure``.
+    public func poll(_ requestID: String, atMost: TimeInterval? = nil, deadline: TimeInterval? = nil) async throws -> Slot {
         var waited: TimeInterval = 0
+        let began = now()
         while true {
             let s = try await slot(requestID)
             if s.status != Slot.queued { return s }
             if let atMost, waited >= atMost { return s }
+            if let deadline, now().timeIntervalSince(began) >= deadline {
+                throw AltChannelFailure(message: "no answer within \(Int(deadline)) s")
+            }
             try await sleep(pollInterval)
             waited += pollInterval
         }

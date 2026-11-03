@@ -93,6 +93,7 @@ extension FakeVaultRepository: VaultRepository {
 
     public func unlock(pin: String, approve: ReleaseView?, cancelRecovery: Bool) async throws -> UnlockAttempt {
         try call("unlock")
+        try await unlockWait?()
         lastPin = pin
         lastApproved = approve
         lastCancelRecovery = cancelRecovery
