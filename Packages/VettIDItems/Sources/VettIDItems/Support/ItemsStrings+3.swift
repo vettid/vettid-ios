@@ -424,5 +424,12 @@ public extension ItemsStrings {
         String(localized: "items_rule_name", defaultValue: "your “\(a)” rule", bundle: .module)
     }
 
+    static var impactUnavailable: String {
+        String(
+            localized: "ios_items_impact_unavailable",
+            defaultValue: "What saving would share could not be checked just now. Saving still works.",
+            bundle: .module
+        )
+    }
     static var impactTitle: String { String(localized: "items_impact_title", defaultValue: "Sharing", bundle: .module) }
 }

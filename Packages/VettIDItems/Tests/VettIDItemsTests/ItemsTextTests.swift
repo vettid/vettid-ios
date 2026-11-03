@@ -17,7 +17,7 @@ import VettIDData
             .appendingPathComponent("Sources/VettIDItems/Resources/Localizable.xcstrings")
         let doc = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
         let strings = try #require(doc["strings"] as? [String: Any])
-        let expected = 278 + 158 + 24 + 5
+        let expected = 278 + 158 + 24 + 6
         #expect(strings.count == expected)
         let missing = "\u{0}missing"
         for key in strings.keys {

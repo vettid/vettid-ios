@@ -49,6 +49,8 @@ public struct ItemEditState: Equatable, Sendable, CustomStringConvertible, Custo
     /// What saving does to sharing with the tags as they are now: the vault's dry run (§10.7, 0.21.0), or for an older
     /// vault the share rules the item newly matches.
     public var shareImpact: [ShareImpact] = []
+    /// The check of ``shareImpact`` failed: "shares nothing new" would be wrong, so the screen says it could not be checked.
+    public var shareImpactUnavailable = false
     public var dialog: EditDialog?
     /// The field whose value input takes the focus (once: just added).
     public var focusField: Int?

@@ -4963,6 +4963,17 @@
         }
       }
     },
+    "ios_items_impact_unavailable": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "What saving would share could not be checked just now. Saving still works."
+          }
+        }
+      }
+    },
     "items_impact_auto": {
       "extractionState": "manual",
       "localizations": {

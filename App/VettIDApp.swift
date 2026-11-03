@@ -227,6 +227,9 @@ struct AppRoot: View {
         if let doc = CanaryManifestFiles.receive(url) {
             // A file opened with VettID: only verified and shown; nothing is installed before the member confirms.
             canaryInbox.offer(doc)
+        } else if url.isFileURL {
+            // A file that cannot be read is said so, as Settings' "Load a manifest" does ("It could not be checked").
+            canaryInbox.offerUnreadable()
         }
     }
 
