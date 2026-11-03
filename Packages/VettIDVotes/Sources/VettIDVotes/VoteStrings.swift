@@ -140,8 +140,8 @@ public enum VoteStrings {
 
     /// The rest of the published results failed the app's observer's check (BALLOT-PROTOCOL §8.4) under a `verified` or
     /// `unconfirmed` check (ANDROID-PLAN 0.1.116 §4 "Votes", the owner's text; not yet in vettid-android's `strings.xml`).
-    /// DRAFT, for the owner to approve: the published results could not be checked again when the screen opened, so
-    /// their numbers are not shown (owner decision 2026-11-02). Not in ANDROID-PLAN.
+    /// The published results could not be checked again when the screen opened, so their numbers are not shown (owner
+    /// decision 2026-11-02; text approved by the owner 2026-11-03). Not yet in ANDROID-PLAN.
     public static var voteResultsNotRechecked: String {
         String(localized: "vote_results_not_rechecked", defaultValue: "VettID could not check the published results of this vote again just now, so their numbers are not shown. It will try again when you open this vote.", bundle: .module)
     }
