@@ -218,6 +218,7 @@ public final class ReleaseUpdateFlowViewModel {
         ticker?.cancel()
         state.waitSeconds = seconds
         let tick = tick
+        let deadline = WaitDeadline(seconds: seconds)
         ticker = Task { [weak self] in
             while let s = self, s.state.waitSeconds > 0 {
                 do {
@@ -226,7 +227,7 @@ public final class ReleaseUpdateFlowViewModel {
                     return
                 }
                 guard let s = self else { return }
-                s.state.waitSeconds = max(s.state.waitSeconds - 1, 0)
+                s.state.waitSeconds = deadline.left(after: s.state.waitSeconds)
             }
         }
     }

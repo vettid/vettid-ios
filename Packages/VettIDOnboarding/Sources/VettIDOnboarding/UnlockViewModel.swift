@@ -424,6 +424,7 @@ public final class UnlockViewModel: UnlockActions {
 
     private func countdown(_ field: WritableKeyPath<UnlockState, Int64> & Sendable) -> Task<Void, Never> {
         let tick = tick
+        let deadline = WaitDeadline(seconds: state[keyPath: field])
         let task = Task { @MainActor [weak self] in
             while (self?.state[keyPath: field] ?? 0) > 0 {
                 do {
@@ -432,7 +433,7 @@ public final class UnlockViewModel: UnlockActions {
                     return
                 }
                 guard let self else { return }
-                state[keyPath: field] = max(state[keyPath: field] - 1, 0)
+                state[keyPath: field] = deadline.left(after: state[keyPath: field])
             }
         }
         countdowns.add(task)

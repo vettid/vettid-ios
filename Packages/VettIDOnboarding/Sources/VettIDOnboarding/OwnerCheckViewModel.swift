@@ -509,6 +509,7 @@ public final class OwnerCheckViewModel: OwnerCheckActions {
         ticker?.cancel()
         state.waitSeconds = seconds
         let tick = tick
+        let deadline = WaitDeadline(seconds: seconds)
         ticker = Task { @MainActor [weak self] in
             while (self?.state.waitSeconds ?? 0) > 0 {
                 do {
@@ -517,7 +518,7 @@ public final class OwnerCheckViewModel: OwnerCheckActions {
                     return
                 }
                 guard let self else { return }
-                state.waitSeconds = max(state.waitSeconds - 1, 0)
+                state.waitSeconds = deadline.left(after: state.waitSeconds)
             }
         }
     }

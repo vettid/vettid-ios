@@ -384,6 +384,7 @@ public final class TransferOutViewModel: TransferOutActions {
     private func startBackoff(_ seconds: Int64) {
         backoff?.cancel()
         state.waitSeconds = seconds
+        let deadline = WaitDeadline(seconds: seconds)
         backoff = Task { @MainActor [weak self, sleep] in
             while !Task.isCancelled, (self?.state.waitSeconds ?? 0) > 0 {
                 do {
@@ -392,7 +393,7 @@ public final class TransferOutViewModel: TransferOutActions {
                     return
                 }
                 guard let vm = self else { return }
-                vm.state.waitSeconds = max(vm.state.waitSeconds - 1, 0)
+                vm.state.waitSeconds = deadline.left(after: vm.state.waitSeconds)
             }
         }
     }

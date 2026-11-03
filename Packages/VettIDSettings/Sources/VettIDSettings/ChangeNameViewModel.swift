@@ -271,6 +271,7 @@ public final class ChangeNameViewModel {
         ticker?.cancel()
         local.waitSeconds = seconds
         let tick = tick
+        let deadline = WaitDeadline(seconds: seconds)
         ticker = Task { @MainActor [weak self] in
             while (self?.local.waitSeconds ?? 0) > 0 {
                 do {
@@ -279,7 +280,7 @@ public final class ChangeNameViewModel {
                     return
                 }
                 guard let self else { return }
-                local.waitSeconds = max(local.waitSeconds - 1, 0)
+                local.waitSeconds = deadline.left(after: local.waitSeconds)
             }
         }
     }

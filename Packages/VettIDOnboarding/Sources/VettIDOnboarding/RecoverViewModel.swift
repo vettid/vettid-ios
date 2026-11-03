@@ -316,6 +316,7 @@ public final class RecoverViewModel: RecoverActions {
         retryTicker?.cancel()
         state.retrySeconds = seconds
         let tick = tick
+        let deadline = WaitDeadline(seconds: seconds)
         retryTicker = Task { @MainActor [weak self] in
             while (self?.state.retrySeconds ?? 0) > 0 {
                 do {
@@ -324,7 +325,7 @@ public final class RecoverViewModel: RecoverActions {
                     return
                 }
                 guard let self else { return }
-                state.retrySeconds = max(state.retrySeconds - 1, 0)
+                state.retrySeconds = deadline.left(after: state.retrySeconds)
             }
         }
     }
