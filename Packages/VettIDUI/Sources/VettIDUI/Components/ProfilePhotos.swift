@@ -1,3 +1,4 @@
+import CryptoKit
 import ImageIO
 import SwiftUI
 import UIKit
@@ -75,41 +76,54 @@ public enum ProfilePhotos {
     private static let png: [UInt8] = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]
 }
 
-/// Decoded profile photos for list rows, kept in memory only (IOS-PLAN §4.7; a photo is vault data, so the cache is emptied
-/// when the vault is no longer open, ``clear()``). A row asks for a photo with ``cached(_:)`` (at once, from the cache) or
-/// ``image(_:)`` (decoded off the main actor, down to the tile size by ``ProfilePhotos/decode(_:)``).
+/// Decoded profile photos for list rows, kept in memory only. A photo is vault content: IOS-PLAN §6.9's "no photo cache" means
+/// nothing persisted, and this cache is memory-only and emptied at the vault lock, at a hold and at a wipe (``clear()``). A row
+/// asks for a photo with ``cached(_:)`` (at once, from the cache) or ``image(_:)`` (decoded off the main actor, down to the
+/// tile size by ``ProfilePhotos/decode(_:)``).
 ///
-/// (Chosen; not in the spec: 128 photos at most, evicted by the system under memory pressure; vettid-android decodes once per
-/// distinct photo, `rememberProfilePhoto`.)
+/// (Chosen; not in the spec: the cache itself, bounded to 16 MiB of decoded pixels and 128 photos and evicted by the system
+/// under memory pressure, keyed by the SHA-256 of the photo; vettid-android decodes once per distinct photo,
+/// `rememberProfilePhoto`.)
 @MainActor
 public final class ProfilePhotoCache {
     public static let shared = ProfilePhotoCache()
 
     static let limit = 128
+    static let byteLimit = 16 * 1_024 * 1_024
 
-    private let store: NSCache<NSString, UIImage> = {
-        let cache = NSCache<NSString, UIImage>()
+    private let store: NSCache<NSData, UIImage> = {
+        let cache = NSCache<NSData, UIImage>()
         cache.countLimit = limit
+        cache.totalCostLimit = byteLimit
         return cache
     }()
-    /// Bumped by ``clear()``: a decode that was under way is not stored after it.
+    /// Bumped by ``clear()``: a decode that was under way is not stored after it, nor returned.
     private var generation = 0
+    /// TEST ONLY. Awaited after a decode ended, before the generation is looked at.
+    var afterDecode: (@Sendable () async -> Void)?
 
     init() {}
+
+    private func key(_ base64: String) -> NSData { Data(SHA256.hash(data: Data(base64.utf8))) as NSData }
 
     /// The photo [base64] decoded earlier, if it is still held.
     public func cached(_ base64: String?) -> UIImage? {
         guard let base64, !base64.isEmpty else { return nil }
-        return store.object(forKey: base64 as NSString)
+        return store.object(forKey: key(base64))
     }
 
-    /// The photo [base64], decoded off the main actor unless it is held; nil when it does not decode (the initial tile shows).
+    /// The photo [base64], decoded off the main actor unless it is held; nil when it does not decode (the initial tile shows),
+    /// and when the cache was cleared meanwhile.
     public func image(_ base64: String?) async -> UIImage? {
         guard let base64, !base64.isEmpty else { return nil }
-        if let held = store.object(forKey: base64 as NSString) { return held }
+        let k = key(base64)
+        if let held = store.object(forKey: k) { return held }
         let started = generation
         guard let image = await ProfilePhotos.decoded(base64) else { return nil }
-        if started == generation { store.setObject(image, forKey: base64 as NSString) }
+        await afterDecode?()
+        guard started == generation else { return nil }
+        let cost = image.cgImage.map { $0.bytesPerRow * $0.height } ?? 0
+        store.setObject(image, forKey: k, cost: cost)
         return image
     }
 

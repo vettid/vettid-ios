@@ -181,10 +181,17 @@ struct ProfilePhotoCacheTests {
         #expect(cache.cached(a) != nil)
         cache.clear()
         #expect(cache.cached(a) == nil)
+        let reached = AsyncStream<Void>.makeStream()
+        let release = AsyncStream<Void>.makeStream()
+        cache.afterDecode = {
+            reached.continuation.yield()
+            for await _ in release.stream { return }
+        }
         let late = Task { await cache.image(b) }
-        await Task.yield() // the decode has started
+        for await _ in reached.stream { break } // the decode has ended, and waits for the clear
         cache.clear()
-        _ = await late.value
+        release.continuation.yield()
+        #expect(await late.value == nil, "a decode that a clear overtook is not returned")
         #expect(cache.cached(b) == nil)
     }
 }

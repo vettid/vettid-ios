@@ -4,6 +4,7 @@ import VettIDAltChan
 import VettIDData
 import VettIDKeys
 import VettIDRelay
+import VettIDUI
 import VettIDVault
 
 /// The app's dependency wiring (vettid-android's Hilt `AppModule`): the build's environment (IOS-PLAN §5), the keys
@@ -112,6 +113,8 @@ final class AppComposition {
             ),
             keys: hardware.appLock
         )
+        // The photos decoded for the lists are vault content: dropped with the connections (lock, hold) and at a wipe.
+        vault.connections.onForgetAll = { ProfilePhotoCache.shared.clear() }
         resetOnWipe()
     }
 
@@ -127,6 +130,7 @@ final class AppComposition {
             inbox.consume()
             canaryInbox.reset()
             notifications.reset()
+            ProfilePhotoCache.shared.clear()
         }
     }
 
