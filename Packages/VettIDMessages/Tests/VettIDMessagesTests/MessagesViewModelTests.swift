@@ -81,12 +81,92 @@ enum Samples {
         #expect(m.state.conversations.count == 2 && !m.state.searching)
     }
 
+    /// A refresh that fails with conversations shown keeps them and says why.
+    @Test func aFailedRefreshKeepsTheConversations() async {
+        fake.connections = [Samples.connection("c1")]
+        fake.byConnection = ["c1": [Samples.message("m1", at: 100)]]
+        let m = await model()
+        fake.fail["refreshConversations"] = VaultFailure(.noResponse)
+        m.refresh()
+        await m.settle()
+        #expect(m.state.error == .noResponse && m.state.conversations.count == 1 && !m.state.loading)
+    }
+
+    /// Reads that overlap: only the latest one's answer is shown.
+    @Test func onlyTheLatestReadIsShown() async {
+        let m = await model()
+        // A newer success is not undone by an older failure that answers after it.
+        let first = TestHold()
+        fake.refreshHold = first
+        fake.fail["refreshConversations"] = VaultFailure(.network)
+        m.refresh()
+        m.refresh()
+        await waitFor { first.count == 2 }
+        first.release(1)
+        await waitFor { !m.state.loading }
+        first.release(0)
+        await m.settle()
+        #expect(m.state.error == nil && !m.state.loading)
+        // A newer failure is not cleared by an older success that answers after it.
+        let second = TestHold()
+        fake.refreshHold = second
+        m.refresh()
+        await waitFor { second.count == 1 }
+        fake.fail["refreshConversations"] = VaultFailure(.noResponse)
+        m.refresh()
+        await waitFor { second.count == 2 }
+        second.release(1)
+        await waitFor { !m.state.loading }
+        second.release(0)
+        await m.settle()
+        #expect(m.state.error == .noResponse && !m.state.loading)
+    }
+
+    /// Reads of the picker that overlap: only the latest one's answer is shown.
+    @Test func onlyThePickersLatestReadIsShown() async {
+        let fake = FakeConnections()
+        let m = NewMessageViewModel(connections: fake)
+        await m.settle()
+        // A newer success is not undone by an older failure that answers after it.
+        let first = TestHold()
+        fake.refreshHold = first
+        fake.fail["refresh"] = VaultFailure(.network)
+        m.reload()
+        m.reload()
+        await waitFor { first.count == 2 }
+        first.release(1)
+        await waitFor { !m.state.loading }
+        first.release(0)
+        await m.settle()
+        #expect(m.state.error == nil && !m.state.loading)
+        // A newer failure is not cleared by an older success that answers after it.
+        let second = TestHold()
+        fake.refreshHold = second
+        m.reload()
+        await waitFor { second.count == 1 }
+        fake.fail["refresh"] = VaultFailure(.noResponse)
+        m.reload()
+        await waitFor { second.count == 2 }
+        second.release(1)
+        await waitFor { !m.state.loading }
+        second.release(0)
+        await m.settle()
+        #expect(m.state.error == .noResponse && !m.state.loading)
+    }
+
+    /// Yields until [condition] holds (at most a few thousand turns of the main actor).
+    private func waitFor(_ condition: () -> Bool) async {
+        for _ in 0..<5000 where !condition() { await Task.yield() }
+        #expect(condition())
+    }
+
     @Test func aFailureIsShownAndRetried() async {
         fake.fail["refreshConversations"] = VaultFailure(.network)
         let m = await model()
         #expect(m.state.error == .network && !m.state.loading)
         m.refresh()
-        #expect(m.state.error == nil)
+        // Read again: under way, which is not the empty state.
+        #expect(m.state.error == nil && m.state.loading)
         await m.settle()
         #expect(m.state.error == nil && fake.calls.count == 2)
         fake.fail["refreshConversations"] = VaultFailure(.busy)
@@ -152,5 +232,10 @@ enum Samples {
         await m.settle()
         #expect(!m.state.loading && m.state.error == .network && m.state.connections.count == 1)
         #expect(!String(describing: m.state).contains("Ada"))
+        // "Try again" reads again.
+        m.reload()
+        #expect(m.state.loading && m.state.error == nil)
+        await m.settle()
+        #expect(!m.state.loading && m.state.error == nil && fake.calls == ["refresh", "refresh"])
     }
 }

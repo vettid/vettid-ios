@@ -70,9 +70,57 @@ import VettIDVault
         failed.error = .network
         var noMatch = loaded
         noMatch.filter = AuditFilter(category: .devices)
-        for s in [HistoryState(), loaded, full, more, broken, local, failed, noMatch] {
+        // A read that failed with entries shown: they stay, under the failure.
+        var stale = full
+        stale.end = false
+        stale.error = .noResponse
+        stale.refreshFailed = true
+        var nextPage = stale
+        nextPage.refreshFailed = false
+        for s in [HistoryState(), loaded, full, more, broken, local, failed, noMatch, stale, nextPage] {
             #expect(height(HistoryScreen(state: s, chrome: chrome, actions: HistoryActions())) > 0, "\(s)")
             #expect(height(HistoryScreen(state: s, chrome: nil, onBack: {}, actions: HistoryActions())) > 0, "\(s)")
+        }
+    }
+
+    /// A next page that failed is the footer's "Try again" (`history_retry`); a failed refresh is said above the entries,
+    /// with no "Try again" in the footer. Mirrors vettid-android's footer.
+    @Test func theFooterRetriesOnlyAFailedNextPage() {
+        var s = HistoryState()
+        s.loading = false
+        s.entries = [Self.rec(5, "message.sent")]
+        s.error = .noResponse
+        #expect(HistoryEntryList.footer(s) == .retry)
+        s.refreshFailed = true
+        #expect(HistoryEntryList.footer(s) == .none)
+        s.error = nil
+        s.refreshFailed = false
+        #expect(HistoryEntryList.footer(s) == .more)
+        s.end = true
+        #expect(HistoryEntryList.footer(s) == .end)
+        s.loadingMore = true
+        #expect(HistoryEntryList.footer(s) == .loading)
+    }
+
+    /// A vault on hold, whatever read it refused: said as held above the entries ("History is on hold", no "Try again",
+    /// not in the footer either), since the list reads again by itself once the daily check passes.
+    @Test func aHeldReadIsSaidAsHeld() {
+        #expect(HistoryStrings.heldTitle == "History is on hold")
+        #expect(HistoryStrings.heldBody == "Your daily check is due. They'll show again once it's done.")
+        #expect(HistoryFailureNotice.held(.ownerCheckRequired) && !HistoryFailureNotice.held(.network))
+        var s = HistoryState()
+        s.loading = false
+        s.entries = [Self.rec(5, "message.sent")]
+        s.error = .ownerCheckRequired
+        #expect(HistoryEntryList.footer(s) == .none && HistoryEntryList.saysAbove(s))
+        s.error = .network
+        #expect(HistoryEntryList.footer(s) == .retry && !HistoryEntryList.saysAbove(s))
+        var empty = HistoryState()
+        empty.loading = false
+        empty.error = .ownerCheckRequired
+        s.error = .ownerCheckRequired
+        for state in [s, empty] {
+            #expect(height(HistoryScreen(state: state, chrome: chrome, actions: HistoryActions())) > 0)
         }
     }
 

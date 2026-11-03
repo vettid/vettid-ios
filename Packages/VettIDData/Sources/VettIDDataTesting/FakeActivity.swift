@@ -139,7 +139,16 @@ public final class FakeApprovals: ApprovalsRepository {
 
     private func drop(_ key: String) { listed.removeAll { $0.key == key } }
 
-    public func refreshApprovals() async throws { try call("refreshApprovals", "") }
+    /// When set, each ``refreshApprovals()`` waits here before it answers (reads that overlap); a failure set in
+    /// ``fail`` is thrown after the wait.
+    public var refreshHold: TestHold?
+
+    public func refreshApprovals() async throws {
+        let failure = fail.removeValue(forKey: "refreshApprovals")
+        calls.append("refreshApprovals:")
+        if let refreshHold { await refreshHold.wait() }
+        if let failure { throw failure }
+    }
 
     public func loadCriticalUse(_ requestID: String) async throws {
         try call("loadCriticalUse", requestID)

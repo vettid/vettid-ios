@@ -12,11 +12,15 @@ public struct ConnectionSharingState: Equatable, Sendable, Failing {
     public var items: [String: ItemSummary] = [:]
     public var loading = true
     public var busy = false
+    /// Why the last revoke failed.
     public var error: FailureKind?
     /// The code an unmapped refusal names (shown with ``error``), or nil.
     public var errorCode: String?
     /// The limit a `limit` error named (VAULT-MESSAGING 0.21.0 §10.1).
     public var limit: VaultLimit?
+    /// Why the last read of the rules and grants failed: what the connection can see is unknown, so the screen says so with
+    /// "Try again", and not that nothing is shared.
+    public var loadFailure: LoadFailure?
     public var confirmRevoke: GrantView?
 
     public init(connectionID: String, connectionName: String? = nil) {
@@ -54,6 +58,9 @@ public final class ConnectionSharingViewModel {
     @ObservationIgnored private let items: any ItemsRepository
     @ObservationIgnored private let connections: any ConnectionsRepository
     @ObservationIgnored let work = Work()
+    /// Counts the reads started: only the latest one's answer is applied, so that an older answer never replaces a newer
+    /// one.
+    @ObservationIgnored private var reads = 0
     @ObservationIgnored private let follows = TaskBag()
 
     public init(
@@ -75,22 +82,25 @@ public final class ConnectionSharingViewModel {
     }
 
     public func load() {
+        reads += 1
+        let read = reads
         state.loading = true
-        state.error = nil
+        state.loadFailure = nil
         let id = state.connectionID
         work.launch { [weak self, sharing] in
             do {
                 let rules = try await sharing.rules(connectionID: id)
                 let given = try await sharing.grants().given.filter { $0.connectionID == id }
-                guard let self else { return }
+                guard let self, read == reads else { return }
                 state.rules = rules
                 state.given = grantOrder(given)
                 state.loading = false
+                state.loadFailure = nil
                 state.connectionName = connectionName(connections, id) ?? state.connectionName
             } catch {
-                guard let self else { return }
+                guard let self, read == reads else { return }
                 state.loading = false
-                state.fail(error)
+                state.loadFailure = LoadFailure(error)
             }
         }
     }
@@ -101,6 +111,7 @@ public final class ConnectionSharingViewModel {
         guard let g = state.confirmRevoke else { return }
         state.confirmRevoke = nil
         state.busy = true
+        state.error = nil
         work.launch { [weak self, sharing] in
             do {
                 try await sharing.revokeGrant(g.grantID)

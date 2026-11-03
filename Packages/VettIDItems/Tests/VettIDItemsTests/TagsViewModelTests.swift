@@ -153,13 +153,129 @@ func eventually(within: Duration = .seconds(20), _ condition: @MainActor () -> B
         if case .colour? = vm.state.dialog {} else { Issue.record("the picker stays") }
     }
 
+    /// Refused while the vault was on hold: the failure is kept, and "Try again" (the screen's refresh) reads again.
+    @Test func aHeldReadIsReadAgainOnTryAgain() async {
+        sharing.fail["refreshTags"] = VaultFailure(.ownerCheckRequired)
+        let vm = await loaded()
+        #expect(vm.state.loadFailure?.kind == .ownerCheckRequired)
+        vm.refresh()
+        await vm.settle()
+        #expect(vm.state.loadFailure == nil && vm.state.registry != nil)
+    }
+
+    /// Reads that overlap: only the latest one's answer is shown.
+    @Test func onlyTheLatestReadIsShown() async {
+        let vm = await loaded()
+        let first = TestHold()
+        sharing.holds["refreshTags"] = first
+        sharing.fail["refreshTags"] = VaultFailure(.network)
+        vm.refresh()
+        vm.refresh()
+        await waitFor { first.count == 2 }
+        first.release(1)
+        await waitFor { !vm.state.loading }
+        first.release(0)
+        await vm.settle()
+        #expect(vm.state.loadFailure == nil, "an older failure does not hide a newer success")
+        let second = TestHold()
+        sharing.holds["refreshTags"] = second
+        vm.refresh()
+        await waitFor { second.count == 1 }
+        sharing.fail["refreshTags"] = VaultFailure(.noResponse)
+        vm.refresh()
+        await waitFor { second.count == 2 }
+        second.release(1)
+        await waitFor { !vm.state.loading }
+        second.release(0)
+        await vm.settle()
+        #expect(vm.state.loadFailure?.kind == .noResponse, "an older success does not clear a newer failure")
+    }
+
+    /// A read already on its way when a change brings the new registry does not take the change back: the tag just made
+    /// stays shown.
+    @Test func aReadOnItsWayDoesNotDropATagJustMade() async {
+        let vm = await loaded()
+        let read = TestHold()
+        sharing.holds["refreshTags"] = read
+        vm.refresh()
+        await waitFor { read.count == 1 }
+        vm.askCreate()
+        vm.setName("trips")
+        vm.save()
+        await waitFor { !vm.state.busy && vm.state.dialog == nil }
+        #expect(vm.state.tags.contains { $0.tag == "trips" } && !vm.state.loading)
+        read.release(0)
+        await vm.settle()
+        #expect(vm.state.tags.contains { $0.tag == "trips" }, "the older read is not applied")
+        #expect(sharing.tags?.tags.contains { $0.tag == "trips" } == true, "nor published over the newer registry")
+    }
+
+    /// After a change refused as `conflict`, the next read is applied whatever its version (the vault's may have gone down,
+    /// a restore).
+    @Test func afterAConflictALowerVersionReadIsApplied() async {
+        let vm = await loaded()
+        #expect(vm.state.registry?.version == 3)
+        sharing.fail["setTag:trips"] = VaultFailure(.conflict, code: "conflict")
+        vm.askCreate()
+        vm.setName("trips")
+        vm.save()
+        await vm.settle()
+        #expect(vm.state.error == .conflict)
+        sharing.registry = TagRegistry(version: 1, tags: [TagView(tag: "garden", items: 1)])
+        vm.refresh()
+        await vm.settle()
+        #expect(vm.state.registry?.version == 1 && vm.state.tags.map(\.tag) == ["garden"])
+        // Without a conflict, an older read does not replace a newer registry.
+        sharing.registry = TagRegistry(version: 0, tags: [])
+        vm.refresh()
+        await vm.settle()
+        #expect(vm.state.registry?.version == 1)
+    }
+
+    /// A read that ends while a change is on its way leaves the change busy: it cannot be sent twice.
+    @Test func aReadEndingDuringACreateKeepsItBusy() async {
+        let vm = await loaded()
+        let create = TestHold()
+        sharing.holds["setTag:trips"] = create
+        vm.askCreate()
+        vm.setName("trips")
+        vm.save()
+        await waitFor { create.count == 1 }
+        #expect(vm.state.busy)
+        vm.refresh()
+        await waitFor { !vm.state.loading }
+        #expect(vm.state.busy, "the create is still on its way")
+        create.release(0)
+        await vm.settle()
+        #expect(!vm.state.busy && sharing.calls.count { $0 == "setTag:trips" } == 1)
+    }
+
+    /// Yields until [condition] holds (at most a few thousand turns of the main actor).
+    private func waitFor(_ condition: () -> Bool) async {
+        for _ in 0..<5000 where !condition() { await Task.yield() }
+        #expect(condition())
+    }
+
     @Test func aFailedListSaysWhyAndALimitIsNamed() async {
         sharing.fail["refreshTags"] = VaultFailure(.network)
         let vm = await loaded()
-        #expect(vm.state.error == .network && !vm.state.loading && vm.state.registry == nil)
+        // A read that failed is its own failure, with "Try again": not "No tags yet", not an action's failure.
+        #expect(vm.state.loadFailure == LoadFailure(.network) && vm.state.error == nil && !vm.state.loading && vm.state.registry == nil)
+        vm.refresh()
+        #expect(vm.state.loadFailure == nil && vm.state.loading)
+        await vm.settle()
+        #expect(vm.state.registry != nil && vm.state.loadFailure == nil)
+        // A refresh that fails with tags listed keeps them.
+        sharing.fail["refreshTags"] = VaultFailure(.noResponse)
         vm.refresh()
         await vm.settle()
-        #expect(vm.state.registry != nil)
+        #expect(vm.state.loadFailure?.kind == .noResponse && vm.state.registry != nil)
+        // A change that brings the tags back clears the failed read.
+        vm.askCreate()
+        vm.setName("trips")
+        vm.save()
+        await vm.settle()
+        #expect(vm.state.loadFailure == nil && vm.state.dialog == nil)
         sharing.fail["setTag:new"] = VaultFailure(.limit, code: "limit", limit: VaultLimit("tag_registry", max: 512))
         vm.askCreate()
         vm.setName("new")

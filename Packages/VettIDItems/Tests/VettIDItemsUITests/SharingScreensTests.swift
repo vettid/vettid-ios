@@ -36,6 +36,45 @@ import VettIDUI
 
     // MARK: - What a connection can see
 
+    /// After a read that failed, nothing says that nothing is shared, and no rule can be added while the rules are unknown;
+    /// the failure is shown with "Try again".
+    @Test func aFailedReadNeverSaysNothingIsShared() {
+        var failed = connection()
+        failed.loadFailure = LoadFailure(.network)
+        #expect(!ConnectionSharingScreen.saysNone(failed) && !ConnectionSharingScreen.canAddRule(failed))
+        #expect(ConnectionSharingScreen.saysNone(connection()) && ConnectionSharingScreen.canAddRule(connection()))
+        var reading = connection()
+        reading.loading = true
+        #expect(!ConnectionSharingScreen.saysNone(reading) && !ConnectionSharingScreen.canAddRule(reading), "the first read")
+        reading.rules = [address]
+        #expect(ConnectionSharingScreen.canAddRule(reading), "read again with the rules known")
+        // A vault on hold: no "Try again" only where the screen reads again by itself (the Vault list); the sharing screens,
+        // Tags and the item editor do not, and keep it.
+        let held = LoadFailure(.ownerCheckRequired)
+        #expect(!LoadFailedNotice.offersRetry(held, retriesByItself: true) && LoadFailedNotice.offersRetry(LoadFailure(.network), retriesByItself: true))
+        #expect(LoadFailedNotice.offersRetry(held, retriesByItself: false))
+        #expect(height(ConnectionSharingScreen(state: failed, actions: ConnectionSharingActions())) > 0)
+
+        var shared = SharedWithYouState(connectionID: "c1", connectionName: "Dana Lee")
+        shared.loading = false
+        #expect(SharedWithYouScreen.saysNone(shared))
+        shared.loadFailure = LoadFailure(.vaultCode("x"), code: "x")
+        #expect(!SharedWithYouScreen.saysNone(shared))
+        #expect(height(SharedWithYouScreen(state: shared, actions: SharedWithYouActions())) > 0)
+    }
+
+    /// "Try again" on the sharing screens reads again (the route's wiring).
+    @Test func tryAgainReadsAgain() async {
+        let sharing = FakeSharing(), items = FakeItems(), social = FakeConnections()
+        sharing.fail["rules"] = VaultFailure(.network)
+        let vm = ConnectionSharingViewModel(connectionID: "c1", sharing: sharing, items: items, connections: social)
+        await vm.settle()
+        #expect(vm.state.loadFailure != nil)
+        ConnectionSharingRoute.actions(vm, connectionID: "c1", host: ItemsHost()).onRetry()
+        await vm.settle()
+        #expect(vm.state.loadFailure == nil && sharing.calls.count { $0 == "rules" } == 2)
+    }
+
     @Test func everyStateOfTheConnectionsSharingRenders() {
         let passport = ItemSummary(itemID: "i1", version: 1, name: "Passport", category: "identity_document", sensitivity: .critical, tags: [], labels: [], updatedAt: nil)
         let grants = [

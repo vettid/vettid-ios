@@ -252,6 +252,29 @@ final class FakeApprovalOps: ApprovalOps, @unchecked Sendable {
         #expect(m.approvals.contains { $0.key == "grant:g2" }, "listed by the read before, when the grant list answered")
     }
 
+    /// A list that could not be read is a failure the screen shows, not "nothing to approve": what the other lists read is
+    /// listed, what was known of the failed one stays, and the failure is thrown. A list the vault does not have is none.
+    @Test func aListThatCouldNotBeReadIsThrownWithWhatTheOthersRead() async throws {
+        let m = manager()
+        ops.grants = #"{"pending":[{"request_id":"g1","connection_id":"c1","items":[],"uses":1,"expires_in":60,"exp":"\#(exp)"}]}"#
+        try await m.refreshApprovals()
+        #expect(m.approvals.map(\.key) == ["grant:g1"])
+
+        ops.errors["grantList"] = FakeApprovalOps.error("grants_down")
+        ops.critical = #"{"incoming":[{"request_id":"k1","connection_id":"c1","name":"Key","label":"Seed","operation":"sign","payload_sha256":"\#(Self.sha)","exp":"\#(exp)","kind":"password"}]}"#
+        let grants = await #expect(throws: VaultFailure.self) { try await m.refreshApprovals() }
+        #expect(grants?.code == "grants_down")
+        #expect(Set(m.approvals.map(\.key)) == ["grant:g1", "critical:k1"])
+
+        connOps.errors["requestList"] = FakeConnectionOps.error("connection.request.list", "requests_down")
+        let requests = await #expect(throws: VaultFailure.self) { try await m.refreshApprovals() }
+        #expect(requests?.code == "requests_down")
+
+        // Every list the vault does not have (an older release): nothing failed.
+        ops.listsFail = true
+        try await m.refreshApprovals()
+    }
+
     @Test func aCriticalUseIsApprovedOnlyForAPayloadThatMatches() async throws {
         let m = manager()
         var read: [String] = []

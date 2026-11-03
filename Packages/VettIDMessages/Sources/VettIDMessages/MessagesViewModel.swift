@@ -53,6 +53,8 @@ public final class MessagesViewModel {
     @ObservationIgnored private let follows = TaskBag()
     /// What the screen holds itself; the rows come from the repository (``state``).
     private var local = MessagesState()
+    /// Counts the reads started: only the latest one's answer is applied.
+    @ObservationIgnored private var reads = 0
 
     /// [ownerChecks]: a list refused because the daily check was due reads again by itself once a check passes, as
     /// vettid-android's.
@@ -84,17 +86,23 @@ public final class MessagesViewModel {
         return s
     }
 
+    /// Reads the conversations again. Reads may overlap: only the latest one's answer is shown.
     public func refresh() {
+        reads += 1
+        let read = reads
         local.error = nil
+        local.loading = true
         let messages = messages
         work.launch { [weak self] in
+            var failure: FailureKind?
             do {
                 try await messages.refreshConversations()
-                self?.local.loading = false
             } catch {
-                self?.local.loading = false
-                self?.local.error = failureKind(error)
+                failure = failureKind(error)
             }
+            guard let self, read == reads else { return }
+            local.loading = false
+            local.error = failure
         }
     }
 
@@ -134,18 +142,33 @@ public final class NewMessageViewModel {
     @ObservationIgnored private let connections: any ConnectionsRepository
     @ObservationIgnored private let work = Work()
     private var local = NewMessageState()
+    /// Counts the reads started: only the latest one's answer is applied.
+    @ObservationIgnored private var reads = 0
 
     public init(connections: any ConnectionsRepository) {
         self.connections = connections
+        reload()
+    }
+
+    /// Reads the connections (again, after a read that failed: the picker then says so, with "Try again", and not that
+    /// there is no one to write to).
+    /// Reads may overlap: only the latest one's answer is shown.
+    public func reload() {
+        reads += 1
+        let read = reads
+        local.loading = true
+        local.error = nil
         let repo = connections
         work.launch { [weak self] in
+            var failure: FailureKind?
             do {
                 try await repo.refresh()
-                self?.local.loading = false
             } catch {
-                self?.local.loading = false
-                self?.local.error = failureKind(error)
+                failure = failureKind(error)
             }
+            guard let self, read == reads else { return }
+            local.loading = false
+            local.error = failure
         }
     }
 

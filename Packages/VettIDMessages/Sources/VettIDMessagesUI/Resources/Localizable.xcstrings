@@ -245,6 +245,28 @@
         }
       }
     },
+    "messages_held_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your daily check is due. They'll show again once it's done."
+          }
+        }
+      }
+    },
+    "messages_held_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Messages are on hold"
+          }
+        }
+      }
+    },
     "messages_retry": {
       "extractionState": "manual",
       "localizations": {
@@ -472,6 +494,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "New message"
+          }
+        }
+      }
+    },
+    "messages_new_error_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Could not load connections"
           }
         }
       }

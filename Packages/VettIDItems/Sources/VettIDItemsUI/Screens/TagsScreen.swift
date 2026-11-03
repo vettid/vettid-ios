@@ -89,21 +89,49 @@ public struct TagsScreen: View {
             BottomFloatingControls {
                 EmptyView()
             } trailing: {
-                VettIDFab(.add, label: ItemsStrings.tagsNew) { actions.onCreate() }.accessibilityIdentifier("tags_new")
+                VettIDFab(.add, label: ItemsStrings.tagsNew) { actions.onCreate() }
+                    .disabled(!Self.canCreate(state))
+                    .accessibilityIdentifier("tags_new")
             }
         }
         .accessibilityIdentifier("tags")
         .modifier(TagDialogs(state: state, actions: actions))
     }
 
+    /// What the screen shows: tags that could not be read are never "No tags yet".
+    static func phase(_ state: TagsState) -> ListPhase {
+        ListPhase.of(loading: state.loading && state.registry == nil, empty: state.tags.isEmpty, failed: state.loadFailure != nil)
+    }
+
+    /// The tags are not read again by themselves after a refusal while the vault is on hold: "Try again" stays.
+    static let retriesByItself = false
+
+    /// "New tag" only once the tags are known: not during the first read, nor after it failed.
+    static func canCreate(_ state: TagsState) -> Bool { state.registry != nil }
+
     @ViewBuilder private var content: some View {
-        if state.loading && state.registry == nil {
+        switch Self.phase(state) {
+        case .loading:
             ProgressView().tint(colors.primary.color).frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else if state.tags.isEmpty {
+        case .failed:
+            ScrollView {
+                if let failure = state.loadFailure {
+                    LoadFailedNotice(
+                        failure: failure, identifier: "tags_load_error", retriesByItself: Self.retriesByItself, onRetry: actions.onRetry
+                    ).padding(Spacing.s)
+                }
+            }
+        case .empty:
             EmptyState(icon: .label, title: ItemsStrings.tagsEmptyTitle, message: ItemsStrings.tagsEmptyBody)
-        } else {
+        case .rows:
             ScrollView {
                 LazyVStack(spacing: 0) {
+                    if let failure = state.loadFailure {
+                        LoadFailedNotice(
+                            failure: failure, identifier: "tags_load_error", retriesByItself: Self.retriesByItself, onRetry: actions.onRetry
+                        )
+                            .padding(.horizontal, Spacing.s)
+                    }
                     ForEach(state.tags) { t in TagRow(tag: t, actions: actions) }
                     Spacer().frame(height: 96)
                 }

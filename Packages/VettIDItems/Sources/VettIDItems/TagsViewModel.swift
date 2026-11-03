@@ -21,6 +21,9 @@ public struct TagsState: Equatable, Sendable {
     public var loading = true
     public var busy = false
     public var dialog: TagDialog?
+    /// Why the last read of the tags failed: the screen says so with "Try again", and not "No tags yet".
+    public var loadFailure: LoadFailure?
+    /// Why the last change failed.
     public var error: FailureKind?
     /// The code an unmapped refusal names (shown with ``error``), or nil.
     public var errorCode: String?
@@ -46,6 +49,12 @@ public final class TagsViewModel {
 
     @ObservationIgnored private let sharing: any SharingRepository
     @ObservationIgnored let work = Work()
+    /// Counts the reads started: only the latest one's answer is applied, so that an older answer never replaces a newer
+    /// one.
+    @ObservationIgnored private var reads = 0
+    /// A change was refused as `conflict`: the vault's registry is not the one shown (another device, or a version that went
+    /// down, a restore), so the next read is applied whatever its version.
+    @ObservationIgnored private var anyVersion = false
 
     /// A tag's description is at most 256 bytes (§10.8); the field stops at 256 characters and the vault checks bytes.
     public static let maxDescription = 256
@@ -58,10 +67,26 @@ public final class TagsViewModel {
 
     deinit { work.cancelAll() }
 
+    /// Reads the tags. Only ``TagsState/loading`` marks it: ``TagsState/busy`` belongs to the changes, which a read ending
+    /// meanwhile must not let be sent again.
     public func refresh() {
-        run { [sharing] in
-            let r = try await sharing.refreshTags()
-            return { $0.registry = r }
+        reads += 1
+        let read = reads
+        state.loading = true
+        state.loadFailure = nil
+        work.launch { [weak self, sharing] in
+            do {
+                let r = try await sharing.refreshTags()
+                guard let self, read == reads else { return }
+                // A newer registry (a change applied meanwhile) is kept, unless a conflict said the shown one is not the vault's.
+                if anyVersion || (state.registry?.version ?? .min) <= r.version { state.registry = r }
+                anyVersion = false
+                state.loading = false
+            } catch {
+                guard let self, read == reads else { return }
+                state.loading = false
+                state.loadFailure = LoadFailure(error)
+            }
         }
     }
 
@@ -177,12 +202,16 @@ public final class TagsViewModel {
         let r = sharing.tags
         return { s in
             s.dialog = nil
-            if let r { s.registry = r }
+            // The tags are known again: a read that failed before is no longer the news.
+            if let r {
+                s.registry = r
+                s.loadFailure = nil
+            }
         }
     }
 
-    /// Runs [block] as one step of the screen: busy meanwhile, then its change of the state, or its failure shown (an
-    /// `in_use` closes the dialog it came from).
+    /// Runs [block] as one change of the screen (never the read, which is ``TagsState/loading``): busy meanwhile, then its
+    /// change of the state, or its failure shown (an `in_use` closes the dialog it came from).
     private func run(_ block: @escaping @MainActor () async throws -> (inout TagsState) -> Void) {
         state.busy = true
         state.error = nil
@@ -190,18 +219,23 @@ public final class TagsViewModel {
             do {
                 let apply = try await block()
                 guard let self else { return }
+                let before = state.registry
                 apply(&state)
                 state.busy = false
-                state.loading = false
+                // The change brought the registry after its write: a read already on its way is older, and is not applied.
+                if state.registry != before {
+                    reads += 1
+                    state.loading = false
+                }
             } catch {
                 guard let self else { return }
                 let f = error as? VaultFailure ?? VaultFailure(.other)
                 state.busy = false
-                state.loading = false
                 state.error = f.kind
                 state.errorCode = f.code
                 state.limit = f.limit
                 if f.kind == .inUse { state.dialog = nil }
+                if f.kind == .conflict { anyVersion = true }
             }
         }
     }

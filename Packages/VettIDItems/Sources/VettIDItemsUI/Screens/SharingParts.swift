@@ -23,6 +23,33 @@ struct SharingErrorNotice: View {
     }
 }
 
+/// A read that failed: why, with "Try again" that reads again; in place of a list's empty-state text, or above what it
+/// still shows. Spoken when it appears. Its title is the Vault list's ("Your vault could not be read").
+struct LoadFailedNotice: View {
+    let failure: LoadFailure
+    var identifier = "load_error"
+    /// The screen's view model reads again by itself once the daily check passes (it follows the owner check).
+    var retriesByItself = false
+    let onRetry: @MainActor () -> Void
+
+    /// Whether "Try again" is offered: always, except for a vault on hold (VAULT-MESSAGING §3.6.3) on a screen that reads
+    /// again by itself once the daily check passes.
+    static func offersRetry(_ failure: LoadFailure, retriesByItself: Bool) -> Bool {
+        !(retriesByItself && failure.kind == .ownerCheckRequired)
+    }
+
+    var body: some View {
+        let retry = Self.offersRetry(failure, retriesByItself: retriesByItself)
+        NoticeCard(
+            retry ? .warning : .info, title: failure.kind.title(or: ItemsStrings.errorList),
+            message: ItemsText.failure(failure.kind, shownCode: failure.code), announce: .polite
+        ) {
+            if retry { Button(ItemsStrings.retry) { onRetry() }.accessibilityIdentifier("\(identifier)_retry") }
+        }
+        .accessibilityIdentifier(identifier)
+    }
+}
+
 /// "This connection has the most share rules it can have (64)": the named limit (§10.12 `share_rules_subject`). Mirrors
 /// vettid-android `RuleLimitNotice`.
 struct RuleLimitNotice: View {

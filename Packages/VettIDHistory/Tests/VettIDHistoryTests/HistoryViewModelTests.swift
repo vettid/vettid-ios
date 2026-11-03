@@ -185,6 +185,33 @@ import VettIDVault
         #expect(m.state.error == nil && m.state.entries.map(\.seq) == [3])
     }
 
+    /// A refresh that fails with entries shown keeps them and says why; "Try again" refreshes again, not the next page.
+    @Test func aFailedRefreshKeepsTheEntriesAndTryAgainRefreshes() async {
+        let log = FakeAuditLog()
+        log.script([Self.page([3]), { throw VaultFailure(.noResponse) }, Self.page([4, 3])])
+        let m = await model(log)
+        #expect(m.state.entries.map(\.seq) == [3] && m.state.error == nil)
+        m.refresh()
+        await m.settle()
+        #expect(m.state.error == .noResponse && m.state.refreshFailed && m.state.entries.map(\.seq) == [3])
+        m.retry()
+        await m.settle()
+        #expect(m.state.error == nil && !m.state.refreshFailed && m.state.entries.map(\.seq) == [4, 3] && log.calls.count == 3 && log.calls.last?.beforeSeq == nil)
+    }
+
+    /// A next page that fails is the footer's "Try again" (not a failed refresh), which asks for that page again.
+    @Test func aFailedNextPageIsNotAFailedRefresh() async {
+        let log = FakeAuditLog()
+        log.script([Self.page(Array((950...999).reversed()), next: 950), { throw VaultFailure(.noResponse) }, Self.page([949])])
+        let m = await model(log)
+        m.loadMore()
+        await m.settle()
+        #expect(m.state.error == .noResponse && !m.state.refreshFailed && m.state.entries.count == 50)
+        m.retry()
+        await m.settle()
+        #expect(m.state.error == nil && m.state.entries.count == 51 && log.calls.count == 3 && log.calls.last?.beforeSeq == 950)
+    }
+
     @Test func theFiltersAreSentAndClearedAtOnce() async {
         let log = FakeAuditLog(FakeAuditLog.chain(30, kinds: ["vault.unlocked", "device.paired"], newest: Self.t0, connection: "c1"))
         var cal = Calendar(identifier: .gregorian)

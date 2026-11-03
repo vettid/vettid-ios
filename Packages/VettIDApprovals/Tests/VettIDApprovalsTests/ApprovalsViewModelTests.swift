@@ -60,9 +60,57 @@ import VettIDDataTesting
         let m = await model()
         #expect(m.state.error == .network && m.state.nothing && !m.state.loading)
         m.refresh()
-        #expect(m.state.error == nil)
+        // Read again: the failure goes while the read is under way, which is not "Nothing to approve".
+        #expect(m.state.error == nil && m.state.loading)
         await m.settle()
         #expect(m.state.error == nil && fake.calls.count == 2)
+    }
+
+    /// A refresh that fails while requests are listed keeps them and says why.
+    @Test func aFailedRefreshKeepsTheListAndSaysWhy() async {
+        fake.listed = [Samples.grant()]
+        let m = await model()
+        #expect(m.state.error == nil && m.state.approvals.count == 1)
+        fake.fail["refreshApprovals"] = VaultFailure(.network)
+        m.refresh()
+        await m.settle()
+        #expect(m.state.error == .network && m.state.approvals.count == 1 && !m.state.nothing && m.state.actionError == nil)
+    }
+
+    /// Reads that overlap: only the latest one's answer is shown.
+    @Test func onlyTheLatestReadIsShown() async {
+        let m = await model()
+        // A newer success is not undone by an older failure that answers after it.
+        let first = TestHold()
+        fake.refreshHold = first
+        fake.fail["refreshApprovals"] = VaultFailure(.network)
+        m.refresh()
+        m.refresh()
+        await waitFor { first.count == 2 }
+        first.release(1)
+        await waitFor { !m.state.loading }
+        first.release(0)
+        await m.settle()
+        #expect(m.state.error == nil && !m.state.loading)
+        // A newer failure is not cleared by an older success that answers after it.
+        let second = TestHold()
+        fake.refreshHold = second
+        m.refresh()
+        await waitFor { second.count == 1 }
+        fake.fail["refreshApprovals"] = VaultFailure(.noResponse)
+        m.refresh()
+        await waitFor { second.count == 2 }
+        second.release(1)
+        await waitFor { !m.state.loading }
+        second.release(0)
+        await m.settle()
+        #expect(m.state.error == .noResponse && !m.state.loading)
+    }
+
+    /// Yields until [condition] holds (at most a few thousand turns of the main actor).
+    private func waitFor(_ condition: () -> Bool) async {
+        for _ in 0..<5000 where !condition() { await Task.yield() }
+        #expect(condition())
     }
 
     /// §10.4.1: a connection's asks within 10 minutes of the first are one entry; later ones start a new batch; a single
@@ -119,7 +167,20 @@ import VettIDDataTesting
         let m = await model()
         m.resumeAsks("c1")
         await m.settle()
-        #expect(m.state.error == .network && !m.state.busy && m.state.paused.count == 1)
+        // An action's failure is its own, shown above the list with OK, not a failed read.
+        #expect(m.state.actionError == .network && m.state.error == nil && !m.state.busy && m.state.paused.count == 1)
+        m.dismissActionError()
+        #expect(m.state.actionError == nil)
+    }
+
+    @Test func aFailedRemoveSaysWhy() async {
+        connections.connections = [Samples.connection("c1", paused: true)]
+        connections.fail["remove"] = VaultFailure(.noResponse)
+        let m = await model()
+        m.askRemove(m.state.paused[0])
+        m.remove()
+        await m.settle()
+        #expect(m.state.actionError == .noResponse && m.state.error == nil && m.state.paused.count == 1)
     }
 
     @Test func aPeersDeclineShowsUntilDismissed() async {

@@ -51,6 +51,7 @@ public struct ApprovalsRoute: View {
         a.onResume = { m.resumeAsks($0) }
         a.onAskRemove = { m.askRemove($0) }
         a.onRemove = { m.remove() }
+        a.onDismissActionError = { m.dismissActionError() }
         return a
     }
 }

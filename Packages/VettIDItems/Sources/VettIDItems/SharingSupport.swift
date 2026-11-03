@@ -19,6 +19,24 @@ extension Failing {
     }
 }
 
+/// A read that failed (a list, an item to edit): why, and the code an unmapped refusal names. Kept apart from an action's
+/// failure: the screen shows it with "Try again" and never its empty-state text in its place.
+public struct LoadFailure: Equatable, Sendable {
+    public var kind: FailureKind
+    public var code: String?
+
+    public init(_ kind: FailureKind, code: String? = nil) {
+        self.kind = kind
+        self.code = code
+    }
+
+    /// [e] as a read's failure (anything but a vault failure reads as `other`).
+    public init(_ e: any Error) {
+        let f = e as? VaultFailure ?? VaultFailure(.other)
+        self.init(f.kind, code: f.code)
+    }
+}
+
 /// Active grants first, then by name (case-insensitive); equal ones keep their order. Mirrors vettid-android `GRANT_ORDER`.
 func grantOrder(_ grants: [GrantView]) -> [GrantView] {
     grants.enumerated().sorted { a, b in

@@ -12,6 +12,7 @@ public struct ApprovalsActions {
     public var onResume: @MainActor (String) -> Void = { _ in }
     public var onAskRemove: @MainActor (ConnectionInfo?) -> Void = { _ in }
     public var onRemove: @MainActor () -> Void = {}
+    public var onDismissActionError: @MainActor () -> Void = {}
 
     public init() {}
 }
@@ -48,25 +49,75 @@ public struct ApprovalsScreen: View {
             .accessibilityIdentifier("approvals_screen")
     }
 
+    /// What the screen shows: a list that could not be read is never "Nothing to approve".
+    static func phase(_ state: ApprovalsState) -> ListPhase {
+        ListPhase.of(loading: state.loading, empty: state.nothing, failed: state.error != nil)
+    }
+
     @ViewBuilder private var content: some View {
-        if state.loading && state.nothing {
+        switch Self.phase(state) {
+        case .loading:
             ProgressView().tint(colors.primary.color).frame(maxWidth: .infinity, maxHeight: .infinity)
                 .accessibilityIdentifier("approvals_loading")
-        } else if state.nothing, let error = state.error {
-            NoticeCard(.warning, title: ApprovalsStrings.errorTitle, message: error.message(timeScale: timeScale), announce: .polite) {
-                NoticeAction(label: ApprovalsStrings.retry, identifier: "approvals_retry", action: actions.onRetry)
+        case .failed:
+            ScrollView {
+                VStack(spacing: 0) {
+                    actionErrorNotice
+                    openAsksNotice
+                    readErrorNotice.padding(Spacing.xl)
+                }
             }
-            .padding(Spacing.xl)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .accessibilityIdentifier("approvals_error")
-        } else if state.nothing {
+        case .empty:
             VStack(spacing: 0) {
+                actionErrorNotice
                 openAsksNotice
                 EmptyState(icon: .approvals, title: ApprovalsStrings.emptyTitle, message: ApprovalsStrings.emptyBody)
                     .accessibilityIdentifier("approvals_empty")
             }
-        } else {
+        case .rows:
             list
+        }
+    }
+
+    /// Whether the lists' failure is said: not when it is the vault on hold that the open asks' notice already says
+    /// (VAULT-MESSAGING §3.6.3).
+    static func showsReadError(_ state: ApprovalsState) -> Bool {
+        guard let error = state.error else { return false }
+        return !(error == .ownerCheckRequired && state.openAsksError == .ownerCheckRequired)
+    }
+
+    /// Whether the lists' failure offers "Try again": not for a vault on hold, read again by itself once the daily check
+    /// passes.
+    static func offersRetry(_ error: FailureKind) -> Bool { error != .ownerCheckRequired }
+
+    /// The lists' failure's title: a vault on hold is said to be on hold (the open asks' title, also when that list is not
+    /// supported and says nothing itself), not failed.
+    static func readErrorTitle(_ error: FailureKind) -> String {
+        error == .ownerCheckRequired ? ApprovalsStrings.openAsksHeldTitle : ApprovalsStrings.errorTitle
+    }
+
+    /// The lists could not be read: why, with "Try again"; in place of the list, or above the rows still shown.
+    @ViewBuilder private var readErrorNotice: some View {
+        if let error = state.error, Self.showsReadError(state) {
+            let retry = Self.offersRetry(error)
+            NoticeCard(
+                retry ? .warning : .info, title: Self.readErrorTitle(error), message: error.message(timeScale: timeScale),
+                announce: .polite
+            ) {
+                if retry { NoticeAction(label: ApprovalsStrings.retry, identifier: "approvals_retry", action: actions.onRetry) }
+            }
+            .accessibilityIdentifier("approvals_error")
+        }
+    }
+
+    /// "Resume requests" or "Remove connection" failed: why, with "OK".
+    @ViewBuilder private var actionErrorNotice: some View {
+        if let error = state.actionError {
+            NoticeCard(.warning, title: error.message(timeScale: timeScale), announce: .assertive) {
+                NoticeAction(label: ApprovalsStrings.ok, identifier: "approvals_action_error_ok", action: actions.onDismissActionError)
+            }
+            .accessibilityIdentifier("approvals_action_error")
+            .padding(.horizontal, Spacing.gutter).padding(.vertical, Spacing.s)
         }
     }
 
@@ -90,6 +141,10 @@ public struct ApprovalsScreen: View {
     private var list: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 0) {
+                if Self.phase(state).failedAbove(failed: state.error != nil) {
+                    readErrorNotice.padding(.horizontal, Spacing.gutter).padding(.vertical, Spacing.s)
+                }
+                actionErrorNotice
                 openAsksNotice
                 // The other member declined a request (0.10.5): it has left the list; told once.
                 ForEach(state.peerDeclines, id: \.requestID) { d in

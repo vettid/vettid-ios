@@ -32,7 +32,7 @@ import VettIDUI
             .appendingPathComponent("Sources/VettIDMessagesUI/Resources/Localizable.xcstrings")
         let doc = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
         let keys = try #require((doc["strings"] as? [String: Any])?.keys)
-        #expect(keys.count == 96)
+        #expect(keys.count == 99)
         let missing = "\u{0}missing"
         for key in keys {
             let text = Bundle.module.localizedString(forKey: key, value: missing, table: nil)
@@ -97,9 +97,61 @@ import VettIDUI
         full.connections = [Self.connection("c1"), Self.connection("c2", first: nil)]
         var empty = NewMessageState()
         empty.loading = false
-        for s in [NewMessageState(), empty, full] {
+        var failed = empty
+        failed.error = .network
+        var stale = full
+        stale.error = .network
+        for s in [NewMessageState(), empty, full, failed, stale] {
             #expect(height(NewMessageScreen(state: s, onBack: {}, onPick: { _ in }, onInvite: {})) > 0, "\(s)")
         }
+    }
+
+    /// A list that could not be read is never its empty state ("No messages", "No connections yet" with "Invite", "Say
+    /// hello"): the failure with "Try again"; with rows, the failure is said and the rows stay.
+    @Test func aFailedReadIsNeverTheEmptyState() {
+        var list = MessagesState()
+        list.loading = false
+        list.error = .network
+        #expect(MessagesScreen.phase(list) == .failed)
+        list.error = nil
+        #expect(MessagesScreen.phase(list) == .empty)
+        list.error = .network
+        list.conversations = [ConversationSummary(connection: Self.connection("c1"), last: nil, unread: 0)]
+        #expect(MessagesScreen.phase(list).failedAbove(failed: true))
+
+        var picker = NewMessageState()
+        picker.loading = false
+        picker.error = .network
+        #expect(NewMessageScreen.phase(picker) == .failed)
+        picker.error = nil
+        #expect(NewMessageScreen.phase(picker) == .empty)
+
+        var conversation = ConversationState(connectionID: "c1")
+        conversation.loading = false
+        conversation.loadError = .network
+        #expect(ConversationBody.phase(conversation) == .failed)
+        #expect(!ConversationBody.retries(.notFound) && ConversationBody.retries(.network), "a connection that is gone: OK")
+        conversation.loadError = nil
+        conversation.error = .network
+        #expect(ConversationBody.phase(conversation) == .empty, "an action's failure is not a failed read")
+
+        #expect(MessagesStrings.newErrorTitle == "Could not load connections" && MessagesStrings.errorTitle == "Could not load messages")
+        #expect(MessagesStrings.retry == "Try again")
+    }
+
+    /// A vault on hold: the list, which reads again by itself once the daily check passes, says it is on hold, with no "Try
+    /// again"; the picker and a conversation, which do not, keep it.
+    @Test func aHeldListIsSaidAsHeld() {
+        #expect(MessagesStrings.heldTitle == "Messages are on hold")
+        #expect(MessagesStrings.heldBody == "Your daily check is due. They'll show again once it's done.")
+        #expect(MessagesError.held(.ownerCheckRequired, retriesByItself: MessagesScreen.retriesByItself))
+        #expect(!MessagesError.held(.network, retriesByItself: MessagesScreen.retriesByItself))
+        #expect(!MessagesError.held(.ownerCheckRequired, retriesByItself: false))
+        var held = MessagesState()
+        held.loading = false
+        held.error = .ownerCheckRequired
+        #expect(MessagesScreen.phase(held) == .failed)
+        #expect(height(MessagesScreen(state: held, chrome: chrome, actions: MessagesActions())) > 0)
     }
 
     /// VAULT-MESSAGING 0.76.0 §10.8 steps 4 and 6: the preview is the first line that shows something, isolated; a photo with
@@ -238,7 +290,9 @@ import VettIDUI
         var unread = loaded
         unread.unreadOnly = true
         unread.noConnections = false
-        return [MessagesState(), loaded, full, failed, noMatch, unread]
+        var stale = full
+        stale.error = .network
+        return [MessagesState(), loaded, full, failed, noMatch, unread, stale]
     }
 
     private func conversationStates() -> [ConversationState] {
@@ -263,7 +317,11 @@ import VettIDUI
         inactive.connection?.state = .blocked
         var deleting = full
         deleting.deleting = full.messages.first
-        return [base, empty, full, busy, tooLong, inactive, deleting]
+        var unread = empty
+        unread.loadError = .network
+        var stale = busy
+        stale.loadError = .noResponse
+        return [base, empty, full, busy, tooLong, inactive, deleting, unread, stale]
     }
 
     private func height(_ view: some View) -> CGFloat {

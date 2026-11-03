@@ -38,6 +38,35 @@ struct EditFixture {
 @Suite struct ItemEditViewModelTests {
     let f = EditFixture()
 
+    /// An item that could not be read opens no empty form: the failure, with "Try again" that reads it again; nothing can
+    /// be saved meanwhile.
+    @Test func anItemThatCouldNotBeReadIsNotAnEmptyFormAndIsReadAgain() async {
+        f.items.add(FakeItems.item("i1", "Passport", sensitivity: .data))
+        f.items.fail["get"] = VaultFailure(.network)
+        let vm = f.vm(itemID: "i1")
+        await vm.settle()
+        #expect(vm.state.loadFailure == LoadFailure(.network) && vm.state.error == nil && !vm.state.loading)
+        vm.save()
+        await vm.settle()
+        #expect(f.writes == ["get"] && vm.state.prompt == nil && vm.state.refusedSaves == 0)
+        vm.retryLoad()
+        #expect(vm.state.loading && vm.state.loadFailure == nil)
+        await vm.settle()
+        #expect(vm.state.loadFailure == nil && vm.state.draft.name == "Passport" && vm.state.version > 0 && f.writes == ["get", "get"])
+    }
+
+    /// Refused while the vault was on hold: "Try again" reads the item again.
+    @Test func aHeldReadIsReadAgainOnTryAgain() async {
+        f.items.add(FakeItems.item("i1", "Passport", sensitivity: .data))
+        f.items.fail["get"] = VaultFailure(.ownerCheckRequired)
+        let vm = f.vm(itemID: "i1")
+        await vm.settle()
+        #expect(vm.state.loadFailure?.kind == .ownerCheckRequired)
+        vm.retryLoad()
+        await vm.settle()
+        #expect(vm.state.loadFailure == nil && vm.state.draft.name == "Passport")
+    }
+
     @Test func aTemplatePrefillsTheDraft() {
         let s = f.vm(template: "passport").state
         // Owner request 2026-10-08: the template's name is the placeholder, never pre-typed.

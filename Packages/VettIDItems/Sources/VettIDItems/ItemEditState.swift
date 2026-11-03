@@ -34,6 +34,9 @@ public struct ItemEditState: Equatable, Sendable, CustomStringConvertible, Custo
     public var showErrors = false
     public var busy = false
     public var prompt: PasswordPrompt?
+    /// The item to edit could not be read: the screen says so with "Try again", in place of an empty form that could be
+    /// saved.
+    public var loadFailure: LoadFailure?
     public var error: FailureKind?
     public var errorCode: String?
     /// The limit a `limit` error named (VAULT-MESSAGING 0.21.0 §10.1); nil from an older vault.

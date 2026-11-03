@@ -32,6 +32,9 @@ public struct SharedWithYouState: Equatable, Sendable, Failing, CustomStringConv
     public var retryAt: [String: Date] = [:]
     public var fetching: String?
     public var loading = true
+    /// Why the last read of what the connection shares failed: the screen says so with "Try again", and not that the
+    /// connection shares nothing.
+    public var loadFailure: LoadFailure?
     public var error: FailureKind?
     /// The code an unmapped refusal names (shown with ``error``), or nil.
     public var errorCode: String?
@@ -66,6 +69,9 @@ public final class SharedWithYouViewModel {
     @ObservationIgnored private let follows = TaskBag()
     /// Counts the times the vault's items were cleared: an answer that started before one is not kept.
     @ObservationIgnored private var epoch = 0
+    /// Counts the reads started: only the latest one's answer is applied, so that an older answer never replaces a newer
+    /// one.
+    @ObservationIgnored private var reads = 0
     @ObservationIgnored private let now: @Sendable () -> Date
     @ObservationIgnored let work = Work()
 
@@ -103,24 +109,27 @@ public final class SharedWithYouViewModel {
     }
 
     public func load() {
+        reads += 1
+        let read = reads
         state.loading = true
-        state.error = nil
+        state.loadFailure = nil
         let id = state.connectionID
         let at = epoch
         work.launch { [weak self, sharing] in
             do {
                 let g = try await sharing.grants()
-                guard let self else { return }
+                guard let self, read == reads else { return }
                 state.loading = false
                 // An answer read before the vault was cleared is not shown.
                 guard epoch == at else { return }
+                state.loadFailure = nil
                 state.received = grantOrder(g.received.filter { $0.connectionID == id })
                 state.requested = g.requested.filter { $0.connectionID == id }
             } catch {
-                guard let self else { return }
+                guard let self, read == reads else { return }
                 state.loading = false
                 guard epoch == at else { return }
-                state.fail(error)
+                state.loadFailure = LoadFailure(error)
             }
         }
     }

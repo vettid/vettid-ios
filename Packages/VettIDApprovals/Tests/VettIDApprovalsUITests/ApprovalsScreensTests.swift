@@ -6,7 +6,7 @@ import UIKit
 import VettIDApprovals
 @testable import VettIDApprovalsUI
 @testable import VettIDData
-import VettIDUI
+@testable import VettIDUI
 
 // Fixtures stay on one line each.
 // swiftlint:disable line_length
@@ -15,7 +15,7 @@ import VettIDUI
 /// critical use's result, a backoff, the password field), the safety code and the data to sign kept out of captures, and
 /// a decided request's screen closing. Mirrors vettid-android's Approvals screen tests.
 @MainActor
-@Suite struct ApprovalsScreensTests {
+@Suite(.serialized) struct ApprovalsScreensTests {
     private var chrome: ShellChrome { ShellChrome(accountName: "Ada Lovelace", onMenu: {}, onAvatar: {}) }
 
     @Test func everyListStateRenders() {
@@ -39,6 +39,59 @@ import VettIDUI
         #expect(BatchRow.kinds(asks + [Samples.auth("a3")]) == "Authenticate to a connection · Request to see your items")
         #expect(BatchRow.kinds([Samples.auth("a4", purpose: .signin)] + asks, name: "Sam") == "Sign in to \(AccountNames.isolate("Sam"))? · Authenticate to a connection · Request to see your items")
         #expect(toggled == 0)
+    }
+
+    /// A list that could not be read is never "Nothing to approve"; with rows, the failure is said above them, and an
+    /// action's failure is said too.
+    @Test func aFailedReadIsNotTheEmptyState() {
+        var s = ApprovalsState()
+        s.loading = false
+        s.error = .network
+        #expect(ApprovalsScreen.phase(s) == .failed)
+        s.error = nil
+        #expect(ApprovalsScreen.phase(s) == .empty)
+        s.loading = true
+        #expect(ApprovalsScreen.phase(s) == .loading)
+        s.loading = false
+        s.error = .network
+        s.paused = [Samples.connection("c1", paused: true)]
+        #expect(ApprovalsScreen.phase(s) == .rows && ApprovalsScreen.phase(s).failedAbove(failed: true))
+        #expect(ApprovalsStrings.errorTitle == "Could not load approvals" && ApprovalsStrings.retry == "Try again" && ApprovalsStrings.ok == "OK")
+    }
+
+    /// A vault on hold: no "Try again" (the lists are read again once the daily check passes), and not said twice when
+    /// the open asks' notice already says it.
+    @Test func aVaultOnHoldOffersNoRetryAndIsSaidOnce() {
+        var s = ApprovalsState()
+        s.loading = false
+        s.error = .ownerCheckRequired
+        #expect(!ApprovalsScreen.offersRetry(.ownerCheckRequired) && ApprovalsScreen.offersRetry(.network))
+        #expect(ApprovalsScreen.showsReadError(s))
+        s.openAsksError = .ownerCheckRequired
+        #expect(!ApprovalsScreen.showsReadError(s) && ApprovalsScreen.phase(s) == .failed)
+        #expect(height(ApprovalsScreen(state: s, chrome: chrome, actions: ApprovalsActions())) > 0)
+        s.openAsksError = .network
+        #expect(ApprovalsScreen.showsReadError(s))
+        // The open asks' list not supported (nil): the lists' failure says the vault is on hold itself.
+        s.openAsksError = nil
+        #expect(ApprovalsScreen.showsReadError(s) && ApprovalsScreen.readErrorTitle(.ownerCheckRequired) == ApprovalsStrings.openAsksHeldTitle)
+        #expect(ApprovalsStrings.openAsksHeldTitle == "Open requests are on hold" && ApprovalsScreen.readErrorTitle(.network) == "Could not load approvals")
+    }
+
+    /// The failures are spoken by themselves: a read that failed with rows shown, and an action that failed.
+    @Test func failuresAreAnnounced() async {
+        var s = ApprovalsState()
+        s.loading = false
+        s.paused = [Samples.connection("c1", paused: true)]
+        s.error = .vaultCode("approvals_read_test")
+        s.actionError = .vaultCode("approvals_action_test")
+        let read = "\(ApprovalsStrings.errorTitle). \(FailureKind.vaultCode("approvals_read_test").message)"
+        let action = FailureKind.vaultCode("approvals_action_test").message
+        let expected: [Announcer.Event] = [.announcement(read, .polite), .announcement(action, .assertive)]
+        let spoken = await announcements(of: ApprovalsScreen(state: s, chrome: chrome, actions: ApprovalsActions()), until: expected) {
+            $0.contains("approvals_")
+        }
+        #expect(expected.allSatisfy(spoken.contains))
     }
 
     /// A request decided here closes its screen.
@@ -75,12 +128,14 @@ import VettIDUI
         var failed = ApprovalsState()
         failed.loading = false
         failed.error = .network
+        failed.actionError = .network
         var empty = ApprovalsState()
         empty.loading = false
         var full = ApprovalsState()
         full.loading = false
         full.busy = true
         full.error = .network
+        full.actionError = .noResponse
         let sam = Samples.connection("c1", paused: true)
         full.connections = ["c1": sam]
         full.paused = [sam, Samples.connection("c2", first: nil, paused: true)]
@@ -222,6 +277,25 @@ import VettIDUI
         UIHostingController(rootView: view.vettIDTheme(.light)).sizeThatFits(in: CGSize(width: 390, height: 844)).height
     }
 
+    /// What [view] says to VoiceOver by itself once on screen, of the texts [mine] picks, waiting (at most 5 s) until
+    /// [expected] were all said. The sink is this process's: no other suite of this bundle replaces it, and this suite is
+    /// serialized; the texts are filtered all the same, since other suites' screens speak through it meanwhile.
+    private func announcements(
+        of view: some View, until expected: [Announcer.Event], _ mine: @escaping (String) -> Bool
+    ) async -> [Announcer.Event] {
+        let saved = Announcer.sink
+        let log = EventLog()
+        Announcer.sink = { e in if case .announcement(let t, _) = e, mine(t) { log.events.append(e) } }
+        defer { Announcer.sink = saved }
+        let window = host(view)
+        defer { window.isHidden = true }
+        let end = ContinuousClock.now.advanced(by: .seconds(5))
+        while !expected.allSatisfy(log.events.contains), ContinuousClock.now < end {
+            try? await Task.sleep(for: .milliseconds(10))
+        }
+        return log.events
+    }
+
     private func host(_ view: some View) -> UIWindow {
         let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
         window.rootViewController = UIHostingController(rootView: view.vettIDTheme())
@@ -234,6 +308,11 @@ import VettIDUI
 
     /// The secure text field's layout canvas, which ``SecureContainer`` hosts its content on (VettIDUI `SecureLayer`).
     private func onSecureLayer(_ v: UIView) -> Bool { String(describing: type(of: v)).contains("Canvas") }
+}
+/// The events a test's sink records.
+@MainActor
+private final class EventLog {
+    var events: [Announcer.Event] = []
 }
 // swiftlint:enable line_length
 #endif

@@ -11,6 +11,9 @@ public final class FakeSharing: SharingRepository {
     public var calls: [String] = []
     /// A failure the next call of that name throws (once).
     public var fail: [String: VaultFailure] = [:]
+    /// Calls (by name, as recorded) that wait for their hold before they answer (reads and changes that overlap); a
+    /// failure set in ``fail`` is thrown after the wait. For `refreshTags`, `setTag:<tag>`, `rules` and `grants`.
+    public var holds: [String: TestHold] = [:]
     public var registry = TagRegistry(version: 1, tags: [])
     public var rulesStored: [ShareRule] = []
     /// What a rename or a delete answers.
@@ -51,16 +54,32 @@ public final class FakeSharing: SharingRepository {
 
     public init() {}
 
-    private func publish() {
-        tags = registry
+    private func publish(_ answer: TagRegistry? = nil) {
+        let r = answer ?? registry
+        tags = r
         var c: [String: String] = [:]
-        for t in registry.tags { if let color = t.color { c[t.tag] = color } }
+        for t in r.tags { if let color = t.color { c[t.tag] = color } }
         colors = c
+    }
+
+    private func held(_ n: String) async throws {
+        let failure = fail.removeValue(forKey: n)
+        calls.append(n)
+        if let hold = holds[n] { await hold.wait() }
+        if let failure { throw refused(n, failure) }
     }
 
     private func call(_ n: String) throws {
         calls.append(n)
-        if let f = fail.removeValue(forKey: n) { throw f }
+        if let f = fail.removeValue(forKey: n) { throw refused(n, f) }
+    }
+
+    /// As ``SharingManager``: a tag write (`setTag:`, `rename…`, `delete…`) refused as `conflict` drops the registry
+    /// published, so that the next read publishes whatever its version.
+    private func refused(_ n: String, _ f: VaultFailure) -> VaultFailure {
+        let tagWrite = n.hasPrefix("setTag:") || n.hasPrefix("rename") || n.hasPrefix("delete:") || n.hasPrefix("deleteDry:")
+        if f.kind == .conflict, tagWrite { tags = nil }
+        return f
     }
 
     private func replaced(_ tag: String, _ change: (inout TagView) -> Void) -> [TagView] {
@@ -73,9 +92,12 @@ public final class FakeSharing: SharingRepository {
 
     @discardableResult
     public func refreshTags() async throws -> TagRegistry {
-        try call("refreshTags")
-        publish()
-        return registry
+        // The registry as the vault had it when asked: a hold delays the answer, never changes it. Published only when not
+        // older than what is published, as ``SharingManager`` does.
+        let answer = registry
+        try await held("refreshTags")
+        if (tags?.version ?? .min) <= answer.version { publish(answer) }
+        return answer
     }
 
     /// Whether the vault is held or due: no quiet read then.
@@ -90,7 +112,7 @@ public final class FakeSharing: SharingRepository {
     }
 
     public func setTag(_ tag: String, description: String?, color: String?) async throws {
-        try call("setTag:\(tag)")
+        try await held("setTag:\(tag)")
         let icon = registry.tags.first { $0.tag == tag }?.icon
         let entry = TagView(tag: tag, color: color, description: description, icon: icon)
         registry = TagRegistry(version: registry.version + 1, tags: registry.tags.filter { $0.tag != tag } + [entry])
@@ -140,7 +162,7 @@ public final class FakeSharing: SharingRepository {
     }
 
     public func rules(connectionID: String?) async throws -> [ShareRule] {
-        try call("rules")
+        try await held("rules")
         return rulesStored.filter { connectionID == nil || $0.connectionID == connectionID }.sorted { $0.ruleID < $1.ruleID }
     }
 
@@ -173,7 +195,7 @@ public final class FakeSharing: SharingRepository {
     }
 
     public func grants() async throws -> GrantLists {
-        try call("grants")
+        try await held("grants")
         return GrantLists(given: given, received: received, requested: requested)
     }
 

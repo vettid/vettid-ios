@@ -30,6 +30,9 @@ public struct HistoryState: Equatable, Sendable, CustomStringConvertible, Custom
     /// The unfiltered log did not chain (§10.9): the red banner.
     public var chainBroken = false
     public var error: FailureKind?
+    /// ``error`` came from a refresh of the newest page, with entries shown: said above them, and "Try again" refreshes.
+    /// Otherwise a failed next page is the footer's "Try again" (vettid-android `HistoryScreen`'s footer).
+    public var refreshFailed = false
 
     public init(filter: AuditFilter = AuditFilter()) { self.filter = filter }
 
@@ -203,9 +206,15 @@ public final class HistoryViewModel {
         setFilter(AuditFilter())
     }
 
+    /// "Try again": with nothing shown, a full reload; with entries shown, what failed again (the refresh of the newest
+    /// page, or the next page).
     public func retry() {
         if local.entries.isEmpty {
             reload()
+        } else if local.refreshFailed {
+            local.refreshFailed = false
+            local.error = nil
+            refresh()
         } else {
             local.error = nil
             loadMore()
@@ -220,6 +229,7 @@ public final class HistoryViewModel {
 
     private func reload(debounced: Bool = false) {
         job?.cancel()
+        local.refreshFailed = false
         local.loading = true
         local.loadingMore = false
         local.error = nil
@@ -260,7 +270,9 @@ public final class HistoryViewModel {
         job = work.launch { [weak self] in
             await before?.value
             await self?.load(p) { try await p.refresh() }
-            if self?.refreshGeneration == g { self?.refreshing = false }
+            guard let self, refreshGeneration == g else { return }
+            refreshing = false
+            local.refreshFailed = local.error != nil
         }
     }
 
@@ -287,6 +299,7 @@ public final class HistoryViewModel {
             local.loading = false
             local.loadingMore = false
             local.error = nil
+            local.refreshFailed = false
         } catch {
             guard p === pager, !Task.isCancelled, !(error is CancellationError) else { return }
             local.loading = false
