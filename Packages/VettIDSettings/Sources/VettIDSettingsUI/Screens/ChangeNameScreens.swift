@@ -66,6 +66,10 @@ public struct ChangeNameContent: View {
     }
 
     public var body: some View {
+        form.holdsInput(state.holdsInput)
+    }
+
+    @ViewBuilder private var form: some View {
         switch state.step {
         case .names: ChangeNameNamesStep(state: state, actions: actions, now: now)
         case .confirm: ChangeNameConfirmStep(state: state, actions: actions)

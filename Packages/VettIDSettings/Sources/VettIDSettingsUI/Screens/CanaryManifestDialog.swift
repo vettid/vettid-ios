@@ -22,10 +22,12 @@ struct CanaryManifestDialog: ViewModifier {
     let prompt: CanaryManifestPrompt?
     let onConfirm: @MainActor () -> Void
     let onDismiss: @MainActor () -> Void
+    /// A cover (the daily owner check, "This phone can't use your vault") hides the alert; the prompt stays and comes back.
+    @Environment(\.vettIDCovered) private var covered
 
     func body(content: Content) -> some View {
         content.alert(
-            prompt.map(Self.title) ?? "", isPresented: Binding(get: { prompt != nil }, set: { _ in }), presenting: prompt
+            prompt.map(Self.title) ?? "", isPresented: Binding(get: { prompt != nil && !covered }, set: { _ in }), presenting: prompt
         ) { p in
             switch p {
             case .confirm:

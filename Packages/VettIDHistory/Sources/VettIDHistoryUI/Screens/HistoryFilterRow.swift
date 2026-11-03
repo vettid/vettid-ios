@@ -10,6 +10,7 @@ import VettIDUI
 struct HistoryFilterRow: View {
     let state: HistoryState
     let actions: HistoryActions
+    @Environment(\.vettIDCovered) private var covered
     @State private var pickRange = false
     @State private var pickConnection = false
 
@@ -41,14 +42,14 @@ struct HistoryFilterRow: View {
             }
         }
         .padding(.vertical, Spacing.xs)
-        .sheet(isPresented: $pickRange) {
+        .sheet(isPresented: uncovered($pickRange, covered: covered)) {
             HistoryRangeSheet(onCancel: { pickRange = false }) { since, until in
                 pickRange = false
                 actions.onDates(.custom, since, until)
             }
             .presentationDetents([.large])
         }
-        .sheet(isPresented: $pickConnection) {
+        .sheet(isPresented: uncovered($pickConnection, covered: covered)) {
             HistoryConnectionSheet(state: state, onCancel: { pickConnection = false }) { id in
                 pickConnection = false
                 actions.onConnection(id)

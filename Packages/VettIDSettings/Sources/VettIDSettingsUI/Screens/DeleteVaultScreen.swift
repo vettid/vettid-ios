@@ -52,6 +52,10 @@ public struct DeleteVaultContent: View {
     }
 
     public var body: some View {
+        form.holdsInput(state.holdsInput)
+    }
+
+    @ViewBuilder private var form: some View {
         FormScaffold(
             title: SecurityStrings.deleteTitle, message: SecurityStrings.deleteBody, primaryLabel: SecurityStrings.deleteSubmit,
             primaryEnabled: ready, busy: state.busy, destructive: true, onPrimary: submit, onBack: actions.back

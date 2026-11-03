@@ -37,6 +37,7 @@ public struct ConversationActions {
 /// Photos: the composer's photo button, the camera and the prepared photos over the conversation, the photo bubbles.
 /// Mirrors vettid-android `ConversationScreen`.
 public struct ConversationScreen: View {
+    @Environment(\.vettIDCovered) private var covered
     let state: ConversationState
     let actions: ConversationActions
 
@@ -52,6 +53,10 @@ public struct ConversationScreen: View {
     var isolated: String { name }
 
     public var body: some View {
+        form.holdsInput(!state.draft.isEmpty || state.photoDraft != nil)
+    }
+
+    private var form: some View {
         DetailScaffold(onBack: actions.onBack) {
             VStack(spacing: 0) {
                 CenteredTitle(name)
@@ -88,7 +93,7 @@ public struct ConversationScreen: View {
             confirmLabel: MessagesStrings.openLinkConfirm,
             onConfirm: actions.onConfirmLink
         )
-        .fullScreenCover(isPresented: Binding(get: { photoCover }, set: { if !$0 { closePhotoCover() } })) {
+        .fullScreenCover(isPresented: Binding(get: { photoCover && !covered }, set: { if !$0 && !covered { closePhotoCover() } })) {
             if state.capturing {
                 PhotoCaptureOverlay(actions: actions.photos)
             } else if let draft = state.photoDraft {

@@ -169,6 +169,10 @@ public struct ItemEditScreen: View {
     static let retriesByItself = false
 
     public var body: some View {
+        editor.holdsInput(state.dirty)
+    }
+
+    private var editor: some View {
         // A ZStack keeps its identity whichever step it shows, so that the gesture block below stays on one probe.
         ZStack {
             if let prompt = state.prompt {

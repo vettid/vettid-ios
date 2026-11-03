@@ -23,3 +23,16 @@ file_length:
   warning: 600
 type_body_length:
   warning: 450
+
+custom_rules:
+  # A screen that only shows something is covered at once by the daily owner check (VAULT-MESSAGING §3.6.5: "MUST NOT show
+  # cached vault content"); `holdsInput` makes the check wait, so only the screens that hold input or a started operation may
+  # apply it. Adding a screen to this list is a decision, not a convenience.
+  holds_input_only_on_input_screens:
+    name: "holdsInput only on input screens"
+    message: "holdsInput defers the daily owner check; apply it only on a screen that holds input or a started operation, and add the file to the list in .swiftlint.yml."
+    regex: '\.holdsInput\('
+    match_kinds:
+      - identifier
+    excluded: '/(HistoryExportScreen|ItemEditScreen|ApprovalDetailScreen|RuleEditScreen|ChangeNameScreens|DeleteVaultScreen|TransferOutScreen|VoteScreen|CredentialScreen|RotateScreen|AlarmScreen|NewPhoneSecretScreen|ConversationScreen|ChangePasswordScreen|NewCredentialScreen|ChangePinScreen|InputInProgress|OwnerCheckCoverTests)\.swift$'
+    severity: error

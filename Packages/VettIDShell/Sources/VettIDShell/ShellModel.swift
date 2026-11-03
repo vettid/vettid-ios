@@ -7,7 +7,7 @@ import VettIDVault
 
 /// What the shell shows and where the member is: the destination, the screens pushed over it, the drawer, the avatar
 /// sheet, and the owner check the member asked for. Owned above the owner check's gate (VAULT-MESSAGING §3.6.5), so that
-/// a check past the deadline, which takes the place of the whole shell, leaves the member where they were. Mirrors the
+/// a check past the deadline, which covers the whole shell, leaves the member where they were. Mirrors the
 /// state of vettid-android `AppShell` (its NavController, drawer state, `showAccount` and `asked`).
 @MainActor
 @Observable
@@ -18,6 +18,9 @@ public final class ShellModel {
     public var showAccount = false
     /// The voluntary check or the hold-off check, shown over the shell; nil: none.
     public private(set) var asked: OwnerCheckMode?
+    /// The daily check covers the shell (``shown()``'s case): the shell is not in front for a notification's tap, and the
+    /// root's own presentations close.
+    public var checkCovers = false
 
     @ObservationIgnored private let account: any AccountRepository
     @ObservationIgnored private let vault: any VaultRepository
@@ -103,9 +106,9 @@ public final class ShellModel {
     }
 
     /// Whether the shell is really in front for a notification's tap, the screen in front and the permission: not under
-    /// the app lock's cover ([appLocked]; the shell stays mounted under it) nor under an asked daily check (``asked``).
-    /// The vault's own lock and a check past the deadline take the shell away altogether.
-    public func inFront(appLocked: Bool) -> Bool { !appLocked && asked == nil }
+    /// the app lock's cover ([appLocked]; the shell stays mounted under it) nor under a daily check, asked (``asked``) or past the deadline (``checkCovers``).
+    /// The vault's own lock takes the shell away altogether.
+    public func inFront(appLocked: Bool) -> Bool { !appLocked && asked == nil && !checkCovers }
 
     /// The screen in front as the notifications see it: the Notifications list, a conversation, an approval, a
     /// connection or a vote; nil for any other screen. Mirrors vettid-android `visibleOf`.
@@ -202,6 +205,7 @@ public final class ShellModel {
     /// The vault was locked or left: the next open starts afresh, as vettid-android's new shell does.
     public func reset() {
         shown()
+        checkCovers = false
         path = []
         destination = .start
     }

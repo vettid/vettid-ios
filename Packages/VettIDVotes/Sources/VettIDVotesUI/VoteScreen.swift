@@ -48,6 +48,7 @@ public struct VoteActions {
 public struct VoteScreen: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.vettIDTimeScale) private var timeScale
+    @Environment(\.vettIDCovered) private var covered
     let state: VoteScreenState
     let proof: ProofFile?
     let actions: VoteActions
@@ -59,6 +60,10 @@ public struct VoteScreen: View {
     }
 
     public var body: some View {
+        screenBody.holdsInput(state.cast != .none)
+    }
+
+    @ViewBuilder private var screenBody: some View {
         // Always protected, whatever "Allow screenshots" says (IOS-PLAN §4.16 Screen privacy, ANDROID-PLAN decision A, 2026-10-31: the vote screen joins the SecureWindow list, as
         // Android's FLAG_SECURE does).
         SecureContainer(isSecure: true) {
@@ -69,10 +74,10 @@ public struct VoteScreen: View {
             CastSheet(state: state, actions: actions).vettIDGrowingSheet()
                 .interactiveDismissDisabled(state.cast == .sending)
         }
-        .sheet(isPresented: Binding(get: { state.restoreAsked }, set: { _ in })) {
+        .sheet(isPresented: Binding(get: { state.restoreAsked && !covered }, set: { _ in })) {
             RestoreSheet(state: state, actions: actions).vettIDGrowingSheet().interactiveDismissDisabled(true)
         }
-        .sheet(isPresented: Binding(get: { state.releaseDialog }, set: { if !$0 { actions.onDismissRelease() } })) {
+        .sheet(isPresented: Binding(get: { state.releaseDialog && !covered }, set: { if !$0 && !covered { actions.onDismissRelease() } })) {
             ReleaseSheet(state: state, actions: actions).vettIDGrowingSheet()
         }
         .confirmDialog(
@@ -86,6 +91,12 @@ public struct VoteScreen: View {
         // 2026-11-01; IOS-PLAN §4.16 (0.1.54)). It is Android's "Save to…" and History's export. The temporary file
         // it needs is made and removed here (``ProofTempFile``), not left in tmp/ as SwiftUI's `fileExporter` leaves it.
         .background(ProofExporter(file: proof, onAnswered: actions.onProofExporterAnswered, onFailed: actions.onProofExporterFailed))
+        // A cover (the daily owner check) closes the cast sheet, and with it the typed password (not while a cast is on its way),
+        // and drops an export still to be saved; the sheets that ask for something stay in the state and come back.
+        .closesWhenCovered {
+            if state.cast != .none { actions.onDismissCast() }
+            if proof != nil { actions.onProofExporterAnswered(false) }
+        }
         // The result of a save is announced, once.
         .onChange(of: state.proofSaved) { _, saved in if saved { Announcer.announce(VoteStrings.voteProofSaved, .polite) } }
         .onChange(of: state.proofSaveFailed) { _, failed in if failed { Announcer.announce(VoteStrings.voteProofFailed, .assertive) } }
@@ -102,7 +113,7 @@ public struct VoteScreen: View {
     /// While a cast is on its way the sheet it was started from stays, busy; the sheet shows the confirm step, then the
     /// password step in place.
     private var castSheet: Binding<Bool> {
-        Binding(get: { state.cast != .none }, set: { if !$0 { actions.onDismissCast() } })
+        Binding(get: { state.cast != .none && !covered }, set: { if !$0 && !covered { actions.onDismissCast() } })
     }
 
     @ViewBuilder private var content: some View {

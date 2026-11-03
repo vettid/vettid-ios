@@ -35,6 +35,10 @@ public struct AlarmContent: View {
     }
 
     public var body: some View {
+        screenBody.holdsInput(state.holdsInput)
+    }
+
+    @ViewBuilder private var screenBody: some View {
         switch state.step {
         case .ask, .confirmMine, .confirmNotMine: ask
         case .rotate: rotate

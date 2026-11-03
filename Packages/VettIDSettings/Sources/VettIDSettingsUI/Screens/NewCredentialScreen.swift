@@ -48,6 +48,10 @@ public struct NewCredentialContent: View {
     }
 
     public var body: some View {
+        screenBody.holdsInput(state.holdsInput)
+    }
+
+    @ViewBuilder private var screenBody: some View {
         if state.done {
             FormScaffold(
                 title: CredentialStrings.newDone, message: CredentialStrings.newDoneBody, primaryLabel: CredentialStrings.done,

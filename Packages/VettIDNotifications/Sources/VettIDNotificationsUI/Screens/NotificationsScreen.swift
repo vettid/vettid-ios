@@ -33,6 +33,7 @@ public struct NotificationsActions {
 /// vettid-android `NotificationsScreen`.
 public struct NotificationsScreen: View {
     @Environment(\.vettIDColors) private var colors
+    @Environment(\.vettIDCovered) private var covered
     let state: NotificationsState
     let actions: NotificationsActions
     /// The short message at the bottom (Android's snackbar): the archive's Undo, or a failure.
@@ -71,7 +72,7 @@ public struct NotificationsScreen: View {
             destructive: true,
             onConfirm: actions.onDelete
         )
-        .sheet(isPresented: Binding(get: { state.sheet != nil }, set: { if !$0 { actions.onCloseSheet() } })) {
+        .sheet(isPresented: Binding(get: { state.sheet != nil && !covered }, set: { if !$0 && !covered { actions.onCloseSheet() } })) {
             if let item = state.sheet {
                 FeedDetailSheet(item: item, names: state.names, gone: state.sheetGone)
                     .presentationDetents([.medium, .large])

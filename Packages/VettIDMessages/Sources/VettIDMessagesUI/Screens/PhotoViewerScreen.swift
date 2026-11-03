@@ -14,6 +14,7 @@ import VettIDUI
 public struct PhotoViewerScreen: View {
     @Environment(\.vettIDColors) private var colors
     @Environment(\.vettIDTimeScale) private var timeScale
+    @Environment(\.vettIDCovered) private var covered
     let state: PhotoViewerState
     let onBack: @MainActor () -> Void
     let onRetry: @MainActor () -> Void
@@ -59,6 +60,7 @@ public struct PhotoViewerScreen: View {
             onConfirm: leave
         )
         .sheet(item: $sharing) { item in ShareSheet(item: item).ignoresSafeArea() }
+        .closesWhenCovered { sharing = nil }
         .task(id: state.photo.map(ObjectIdentifier.init)) { await decode() }
         .accessibilityIdentifier("photo_viewer")
     }

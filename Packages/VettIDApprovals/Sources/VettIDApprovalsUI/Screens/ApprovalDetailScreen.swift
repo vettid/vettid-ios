@@ -53,6 +53,10 @@ public struct ApprovalDetailScreen: View {
     }
 
     public var body: some View {
+        screenBody.holdsInput(state.holdsInput)
+    }
+
+    @ViewBuilder private var screenBody: some View {
         Group {
             if let a = state.approval, !state.gone {
                 if state.withdrawn {

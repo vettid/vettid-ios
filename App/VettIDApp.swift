@@ -113,7 +113,7 @@ struct AppRoot: View {
     let inviteInbox: InviteLinkInbox
     /// The feed's notifications: the screen in front, a tap waiting for the shell, the permission.
     let notifications: AppNotifications?
-    /// Where the member is in the open app, kept while the check past the deadline takes the shell's place.
+    /// Where the member is in the open app, kept while the check past the deadline covers it.
     @State private var shell: ShellModel
     /// The last phase shown before "Finish the move" began (``RootHold``).
     @State private var held: AppPhase
@@ -156,6 +156,8 @@ struct AppRoot: View {
         }
             // The vault's time scale for every failure text below (STAGING-TIME-SCALE §5.2).
             .environment(\.vettIDTimeScale, vault.timeScale)
+            // The daily check covering the shell closes the root's own presentations too (the move's sheet, the canary alert).
+            .environment(\.vettIDCovered, shownPhase == .unlocked && shell.checkCovers)
             .task { try? await vault.refresh() }
             // A start before the first unlock (or while the iPhone was locked) read nothing: read again once the app is
             // active and protected data is available (IOS-PLAN §6.1, §6.3).
@@ -303,7 +305,9 @@ struct AppRoot: View {
         case .unlocked:
             // The check past the deadline closes whatever the shell had open (the drawer, the sheet, an asked check), so
             // that nothing of it comes back for a moment afterwards.
-            OwnerCheckGateView(vault: vault, onGated: { shell.shown() }) { gate, now in
+            OwnerCheckGateView(
+                vault: vault, path: shell.path, onGated: { shell.shown() }, onCovered: { shell.checkCovers = $0 }
+            ) { gate, now in
                 AppShell(
                     account: vault, vault: vault, ownerChecks: vault.ownerChecks, credential: vault, profiles: vault.profiles,
                     appLock: appLock, model: shell, gate: gate, now: now,
@@ -341,18 +345,32 @@ struct OptionalNotificationsHook: ViewModifier {
 
 /// The daily owner check before any other use of the open app (VAULT-MESSAGING §3.6.5): past the deadline (re-read as
 /// time passes, so that the deadline gates on its own) or after an unlock that cancelled a recovery whose check did not
-/// pass, the check screen takes the shell's place (so that nothing of the vault under it is visible or reachable, and the
-/// shell's sheets and dialogs close), never dismissible; otherwise [content], with the owner check at that moment for the
+/// pass, the check screen covers the shell (so that nothing of the vault under it is visible or reachable, and the
+/// shell's sheets and dialogs close; the shell and its screens' state are kept, ``CoveredByCheck``), never dismissible; otherwise [content], with the owner check at that moment for the
 /// shell's banners (the early warning, the hold-off indicator, the notices, the presence notice). Where the member was
 /// is kept above it (``ShellModel``). Mirrors vettid-android `OwnerCheckGate`.
 struct OwnerCheckGateView<Content: View>: View {
     let vault: VaultManager
-    /// The check took the shell's place.
+    /// The screens pushed over the destination (``ShellModel/path``): a change means the member left the screen they were
+    /// on, which opens a check that waited (``OwnerCheckDeferral``).
+    var path: [ShellRoute] = []
+    /// The check covers the shell.
     var onGated: @MainActor () -> Void = {}
+    /// Whether the check covers the shell now (for the root's own presentations, which sit beside the gate).
+    var onCovered: @MainActor (Bool) -> Void = { _ in }
     @ViewBuilder let content: (OwnerCheckGate, Date) -> Content
     /// The check screen was opened and is not done yet: it stays until the member goes on, so that a check that passed
     /// with the presence not recorded shows its notice (VAULT-MESSAGING §11.14.5), as vettid-android's route does until `onDone`.
     @State private var checking = false
+    @State private var deferral = OwnerCheckDeferral()
+    /// The check covered the shell: nothing under it (a screen registering input) takes it away until it is passed or no
+    /// longer due.
+    @State private var latch = OwnerCheckLatch()
+    /// Bumped to decide again outside the timeline's tick.
+    @State private var refresh = 0
+    /// The screens holding input, which a due check waits on (``OwnerCheckDeferral``).
+    @State private var input = InputInProgress()
+    @Environment(\.scenePhase) private var scenePhase
 
     /// How often the deadline is compared with the clock (vettid-android: 15 s).
     static var tick: TimeInterval { 15 }
@@ -360,23 +378,149 @@ struct OwnerCheckGateView<Content: View>: View {
     var body: some View {
         TimelineView(.periodic(from: .now, by: Self.tick)) { context in
             let checks = vault.ownerChecks
+            let _ = refresh // swiftlint:disable:this redundant_discardable_let
             let gate = OwnerCheckGate.of(
-                checks.ownerCheck, now: context.date, notices: checks.notices, presenceUnrecorded: checks.presenceUnrecorded,
+                checks.ownerCheck, now: Date(), notices: checks.notices, presenceUnrecorded: checks.presenceUnrecorded,
                 timeScale: vault.timeScale
             )
-            if checking || gate.gated || checks.checkAfterCancel {
-                OwnerCheckFlow(mode: .gated, repo: checks, vault: vault) {
-                    checking = false
-                    checks.consumeCheckAfterCancel()
-                }
-                .onAppear {
-                    checking = true
-                    onGated()
-                }
-            } else {
+            let raw = deferral.covers(
+                gated: gate.gated, input: input.active, deadline: gate.deadline, now: Date(),
+                opened: checking || checks.checkAfterCancel
+            )
+            let covered = latch.covered(raw)
+            // The shell stays in the tree under the check, so that its navigation and the view models of its screens (an
+            // item or rule being edited, a message being written) are kept; the cover hides it and takes its input.
+            ZStack {
                 content(gate, context.date)
+                    .environment(\.vettIDInput, input)
+                    .modifier(CoveredByCheck(covered: covered))
+                if covered {
+                    OwnerCheckFlow(mode: .gated, repo: checks, vault: vault) {
+                        checking = false
+                        latch.release()
+                        checks.consumeCheckAfterCancel()
+                    }
+                    .onAppear {
+                        checking = true
+                        onGated()
+                    }
+                    .zIndex(1)
+                }
             }
+            .onChange(of: raw, initial: true) { _, now in latch.observe(now) }
+            .onChange(of: gate.gated, initial: true) { _, now in
+                deferral.gateChanged(gated: now, now: context.date)
+                if !now { latch.release() }
+            }
+            .onChange(of: path) { _, _ in deferral.screenChanged(gated: gate.gated) }
+            .onChange(of: scenePhase) { _, now in
+                deferral.scene(now, gated: gate.gated)
+                // Decided again at once on a return, whatever the timeline's tick.
+                refresh += 1
+            }
+            .onChange(of: covered, initial: true) { _, now in onCovered(now) }
+            // The gate leaves with the open app (a lock, say): nothing is covered then.
+            .onDisappear { onCovered(false) }
         }
+    }
+}
+
+/// When a due daily check opens (VAULT-MESSAGING §3.6.5, "the check opens when you leave this screen"; §3.6.5 also
+/// forbids showing cached vault content): at once, except while a screen holds input the member has not saved or sent
+/// (an item or rule being edited, a message or photos being written, a form with typed fields: ``View/holdsInput(_:)``).
+/// Over such a screen it waits until the member leaves it (the input goes with it), leaves it for a deeper screen
+/// (any change of the pushed screens) or returns to the app from the background, or until ``limit`` has passed since
+/// the check came due, whichever is first; the input is kept under the cover. Agreed with vettid-android, which follows
+/// (its `AppShell` today defers by screen with `armed`, set by a change of the back stack entry or by ON_START while the
+/// check is due, and has no limit).
+/// Only screens that hold input in progress defer it; any other screen is covered at once, so no cached vault content stays
+/// on show while the vault is held (VAULT-MESSAGING §3.6.5). The screens declare their input (chosen; not in the spec).
+struct OwnerCheckDeferral: Equatable {
+    /// How long a due check waits over a screen with input in progress before it covers it anyway, the input kept
+    /// (chosen; not in the spec: 5 minutes, agreed with vettid-android, which follows).
+    static let limit: TimeInterval = 5 * 60
+
+    /// Everything that arms or times the check is state of the gate view, so that a change decides again.
+    private(set) var armed = false
+    /// The app went to the background and has not come back to the foreground yet: `.inactive` to `.active` (Control Center,
+    /// a permission prompt, the app lock's Face ID) is not a return.
+    private(set) var wasBackground = false
+    /// When the check was first seen due. The limit is measured from the vault's deadline, or from this when it is earlier
+    /// (the vault says the check is held while the phone's clock has not reached the deadline).
+    private(set) var dueSince: Date?
+
+    /// Whether the check covers the shell: [opened] (the check screen is up and not done, or one was sent after an
+    /// unlock that cancelled a recovery: at once), or due and not waiting on [input]. Waiting ends when the member leaves
+    /// the screen or returns from the background (``armed``), or at the limit after the check came due. Pure: the gate
+    /// latches the answer (a check that covered stays until it is passed).
+    func covers(gated: Bool, input: Bool, deadline: Date?, now: Date, opened: Bool) -> Bool {
+        if opened { return true }
+        guard gated else { return false }
+        if !input || armed { return true }
+        let since = [deadline, dueSince].compactMap { $0 }.min()
+        return since.map { now >= $0.addingTimeInterval(Self.limit) } ?? false
+    }
+
+    /// The member left the screen (the pushed screens changed).
+    mutating func screenChanged(gated: Bool) { if gated { armed = true } }
+
+    /// The scene's phase changed: a return to the foreground from the background arms a due check.
+    mutating func scene(_ phase: ScenePhase, gated: Bool) {
+        if phase == .background { wasBackground = true }
+        if phase == .active, wasBackground {
+            wasBackground = false
+            screenChanged(gated: gated)
+        }
+    }
+
+    /// The check became due or is no longer due.
+    mutating func gateChanged(gated: Bool, now: Date) {
+        if gated {
+            if dueSince == nil { dueSince = now }
+        } else {
+            armed = false
+            dueSince = nil
+        }
+    }
+}
+
+/// A check that covered the shell stays until it is passed or no longer due: nothing under it (a screen registering input
+/// in the same frame, a view appearing) takes it away. State of the gate view, so that a change decides again.
+struct OwnerCheckLatch: Equatable {
+    private(set) var latched = false
+
+    func covered(_ raw: Bool) -> Bool { raw || latched }
+
+    mutating func observe(_ raw: Bool) { if raw { latched = true } }
+
+    mutating func release() { latched = false }
+}
+
+/// What the daily owner check does to the shell under it (VAULT-MESSAGING §3.6.5; vettid-android `clearAndSetSemantics`):
+/// nothing of it is seen, read by VoiceOver, touched or typed into, and its sheets and dialogs close
+/// (``EnvironmentValues/vettIDCovered``), while the views and their state stay, so that what the member had entered is
+/// there after the check. Secret fields keep their value in memory only, as before; nothing is stored.
+struct CoveredByCheck: ViewModifier {
+    let covered: Bool
+    /// A cover above this one (``View/credentialRequiredCover``) stays: this only adds to it, never lifts it.
+    @Environment(\.vettIDCovered) private var outer
+    @Environment(\.scenePhase) private var scenePhase
+
+    func body(content: Content) -> some View {
+        content
+            .environment(\.vettIDCovered, covered || outer)
+            // To the screens the shell is as if in the background while the check covers it: the typed secrets and the
+            // revealed values go as they do there (IOS-PLAN §6.3), and nothing is announced or notified. Drafts of
+            // non-secret input stay.
+            .environment(\.scenePhase, covered ? .background : scenePhase)
+            .disabled(covered)
+            .allowsHitTesting(!covered)
+            .accessibilityHidden(covered)
+            .opacity(covered ? 0 : 1)
+            // No field of the shell keeps the keyboard.
+            .onChange(of: covered) { _, now in
+                if now { UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil) }
+            }
     }
 }
 

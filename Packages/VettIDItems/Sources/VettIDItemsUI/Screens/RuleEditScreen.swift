@@ -124,6 +124,10 @@ public struct RuleEditScreen: View {
     private var name: String { ItemsText.sharingName(state.connectionName) }
 
     public var body: some View {
+        form.holdsInput(state.dirty)
+    }
+
+    @ViewBuilder private var form: some View {
         let leave = { @MainActor in if state.dirty { actions.onAskDiscard() } else { actions.onBack() } }
         FormScaffold(
             title: state.isNew ? ItemsStrings.ruleNewTitle : ItemsStrings.ruleEditTitle,
