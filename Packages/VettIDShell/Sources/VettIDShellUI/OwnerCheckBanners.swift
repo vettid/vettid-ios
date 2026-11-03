@@ -41,6 +41,15 @@ public struct OwnerCheckBanners: View {
         self.onClearError = onClearError
     }
 
+    /// The banners over [model]: its actions, and its busy state and failure.
+    public init(gate: OwnerCheckGate, now: Date = Date(), model: ShellModel) {
+        self.init(
+            gate: gate, now: now, onCheckNow: { model.ownerCheck(holdOff: false) },
+            onHoldOn: { Task { await model.turnHoldOn() } }, onDismissNotices: { Task { await model.dismissNotices() } },
+            busy: model.bannerBusy, error: model.bannerError, onClearError: { model.clearBannerError() }
+        )
+    }
+
     public var body: some View {
         VStack(spacing: 0) {
             if let notice = gate.notices.first {
