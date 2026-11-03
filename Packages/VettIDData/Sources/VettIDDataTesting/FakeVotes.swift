@@ -32,6 +32,12 @@ public final class FakeVotes: VotesRepository {
     @ObservationIgnored public var acknowledged: [[String]] = []
     /// What ``checkResults(_:)`` answers.
     @ObservationIgnored public var resultsOutcome: ResultsOutcome = .submitted(.pending)
+    /// Runs when ``checkResults(_:)`` is asked, before it answers (the hints an attempt leaves).
+    @ObservationIgnored public var onCheckResults: @MainActor (FakeVotes) -> Void = { _ in }
+    /// Awaited once by the next ``recheckResults(_:)`` before it answers (a check under way); a cancellation throws.
+    @ObservationIgnored public var recheckHold: (@Sendable () async throws -> Void)?
+    /// What ``recheckResults(_:)`` answers; with ``RecheckOutcome/dontAddUp`` it also sets the hint, as the app does.
+    @ObservationIgnored public var recheckOutcome: RecheckOutcome = .consistent
     /// Runs when ``refresh()`` is asked, before it answers (the vault's list changing meanwhile).
     @ObservationIgnored public var onRefresh: @MainActor () -> Void = {}
 
@@ -99,8 +105,25 @@ public final class FakeVotes: VotesRepository {
 
     public func checkResults(_ key: VoteKey) async throws -> ResultsOutcome {
         try call("checkResults:\(Self.name(key))")
+        onCheckResults(self)
         return resultsOutcome
     }
 
     public func diagnoseGaveUp(_ key: VoteKey) async { calls.append("diagnoseGaveUp:\(Self.name(key))") }
+
+    public func recheckResults(_ key: VoteKey) async throws -> RecheckOutcome {
+        try call("recheckResults:\(Self.name(key))")
+        if let hold = recheckHold {
+            recheckHold = nil
+            try await hold()
+        }
+        if recheckOutcome != .notChecked {
+            var h = hints[key] ?? VoteHint()
+            h.resultsDontAddUp = recheckOutcome == .dontAddUp
+            h.observerVerdict = recheckOutcome == .consistent
+            h.verdictKept = true
+            hints[key] = h
+        }
+        return recheckOutcome
+    }
 }

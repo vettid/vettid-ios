@@ -331,7 +331,7 @@ struct VoteSiteTests: VotesTestCase {
         let proof = try body.obj("row_proof")
         #expect(try proof.uint("index", min: 0, max: 9) == 1 && proof.uint("tree_size", min: 0, max: 9) == 2)
         #expect(try proof.array("path").count == 1)
-        #expect(m.hints[key] == nil)
+        #expect(m.hints[key] == VoteHint(observerVerdict: true, verdictKept: true))
     }
 
     @Test func aCheckNotDueYetIsNotRun() async throws {
@@ -361,7 +361,7 @@ struct VoteSiteTests: VotesTestCase {
         site["p/\(pid)/results.json"] = .found([UInt8](repeating: 0x20, count: VoteSiteLimits.resultsMax + 1))
         #expect(try await m.checkResults(key) == .problem)
         #expect(m.hints[key]?.resultsTooLarge == true)
-        // Rows that do not hash to the results: a problem the app finds itself, nothing sent.
+        // Rows that are not as many as `counts.eligible` give no row with a proof: a problem, nothing sent.
         VoteResultsFixture.publish(site, pid)
         site.put("p/\(pid)/rows.json", #"{"rows":[]}"#)
         #expect(try await m.checkResults(key) == .problem)
@@ -374,12 +374,13 @@ struct VoteSiteTests: VotesTestCase {
         #expect(m.hints[key]?.resultsProblem == true && m.hints[key]?.gaveUp == nil)
         vault.submitAnswer = #"{"proposal_id":"\#(pid)","check":{"state":"verified"}}"#
         #expect(try await m.checkResults(key) == .submitted(.verified))
-        #expect(m.hints[key] == nil)
+        #expect(m.hints[key] == VoteHint(observerVerdict: true, verdictKept: true))
     }
 
-    /// Results whose rows hash and tree hold but whose tally the rows don't make (BALLOT-PROTOCOL §8.4): the app finds
-    /// it, sends nothing, and says there is a problem with the published results.
-    @Test func resultsAnObserverWouldRefuseAreNeverSubmitted() async throws {
+    /// Results whose tally the rows don't make, or whose `rows_hash` is not the rows' (BALLOT-PROTOCOL §8.4): the member's
+    /// row and its proof hold, so they are submitted and the vault judges the row (VAULT-MESSAGING 0.83.2 §10.19.6 step
+    /// 1), and the problem is kept for the screens whatever the vault answers, until a later attempt's check passes.
+    @Test func resultsWhoseTallyTheRowsDoNotMakeAreSubmittedAndSaidNotToAddUp() async throws {
         let ops = FakeVoteOps()
         ops.list = listing(closedPending())
         ops.detail = detail()
@@ -390,9 +391,77 @@ struct VoteSiteTests: VotesTestCase {
         let changed = doc.replacingOccurrences(of: #""tally":{"abstain":0,"no":0,"yes":1}"#, with: #""tally":{"abstain":0,"no":1,"yes":0}"#)
         #expect(changed != doc)
         site["p/\(pid)/results.json"] = .found(Array(changed.utf8))
+        vault.submitAnswer = #"{"proposal_id":"\#(pid)","check":{"state":"verified"}}"#
+        #expect(try await m.checkResults(key) == .submitted(.verified))
+        let body = try StrictJson.parseObject(try #require(vault.submits.last))
+        #expect(try body.base64("results") == Array(changed.utf8))
+        #expect(try body.obj("row_proof").uint("index", min: 0, max: 9) == 1)
+        #expect(m.hints[key] == VoteHint(resultsDontAddUp: true, observerVerdict: false, verdictKept: true))
+        // A refusal keeps it too.
+        m.hint(key) { $0.resultsDontAddUp = false }
+        vault.submitRefusal = "bad_request"
+        await #expect(throws: (any Error).self) { try await m.checkResults(key) }
+        #expect(m.hints[key]?.resultsDontAddUp == true)
+        // A pending answer keeps it too.
+        vault.submitAnswer = #"{"proposal_id":"\#(pid)","check":{"state":"pending","reason":"input"}}"#
+        #expect(try await m.checkResults(key) == .submitted(.pending))
+        #expect(m.hints[key]?.resultsDontAddUp == true && m.hints[key]?.resultsProblem == true)
+        // An attempt that submits nothing clears it: the screens say what that attempt came to.
+        site["p/\(pid)/results.json"] = .unreachable
+        #expect(try await m.checkResults(key) == .siteUnreachable)
+        #expect(m.hints[key]?.resultsDontAddUp == false && m.hints[key]?.gaveUp == .site)
+        // The verdict of the check stays: the numbers of a verified vote stay hidden.
+        #expect(m.hints[key]?.observerVerdict == false)
+        // Rows that are not what `rows_hash` names, but make the published tree: sent too.
+        VoteResultsFixture.publish(site, pid)
+        let hash = try StrictJson.parseObject(VoteResultsFixture.results).string("rows_hash")
+        let otherHash = doc.replacingOccurrences(of: hash, with: Base64s.encodeStd([UInt8](repeating: 3, count: 32)))
+        site["p/\(pid)/results.json"] = .found(Array(otherHash.utf8))
+        m.hint(key) { $0.resultsDontAddUp = false }
+        vault.submitAnswer = #"{"proposal_id":"\#(pid)","check":{"state":"verified"}}"#
+        #expect(try await m.checkResults(key) == .submitted(.verified))
+        #expect(m.hints[key] == VoteHint(resultsDontAddUp: true, observerVerdict: false, verdictKept: true))
+        // Consistent results clear it.
+        VoteResultsFixture.publish(site, pid)
+        vault.submitAnswer = #"{"proposal_id":"\#(pid)","check":{"state":"verified"}}"#
+        #expect(try await m.checkResults(key) == .submitted(.verified))
+        #expect(vault.submits.count == 5)
+        #expect(m.hints[key] == VoteHint(observerVerdict: true, verdictKept: true))
+    }
+
+    /// Results whose rows are not the tree of `rows_root`: there is no row with a proof to submit, and nothing goes
+    /// (VAULT-MESSAGING 0.83.2 §10.19.6 step 1: the vault would leave the check `pending` for its input).
+    @Test func resultsWhoseRowsAreNotThePublishedTreeAreNeverSubmitted() async throws {
+        let ops = FakeVoteOps()
+        ops.list = listing(closedPending())
+        ops.detail = detail()
+        let m = siteManager(ops)
+        try await m.refresh()
+        VoteResultsFixture.publish(site, pid)
+        let doc = try #require(String(bytes: VoteResultsFixture.results, encoding: .utf8))
+        let root = try StrictJson.parseObject(VoteResultsFixture.results).string("rows_root")
+        let changed = doc.replacingOccurrences(of: root, with: Base64s.encodeStd([UInt8](repeating: 1, count: 32)))
+        #expect(changed != doc)
+        site["p/\(pid)/results.json"] = .found(Array(changed.utf8))
         #expect(try await m.checkResults(key) == .problem)
-        #expect(m.hints[key]?.resultsProblem == true)
+        #expect(m.hints[key]?.resultsProblem == true && m.hints[key]?.resultsDontAddUp == false)
         #expect(vault.submits.isEmpty)
+    }
+
+    /// `rows.json` is read only up to what the rows of these results can take (their `counts.eligible`: 2 rows, 512 bytes a
+    /// row and 4,096), never to the global maximum: a larger one is refused before it is read in full, and nothing goes.
+    @Test func rowsOverThisVotesCapAreRefusedBeforeTheyAreRead() async throws {
+        let ops = FakeVoteOps()
+        ops.list = listing(closedPending())
+        ops.detail = detail()
+        let m = siteManager(ops)
+        try await m.refresh()
+        VoteResultsFixture.publish(site, pid)
+        let cap = 2 * VoteRows.rowBytes + VoteRows.rowsOverhead
+        site["p/\(pid)/rows.json"] = .found(VoteResultsFixture.rows + [UInt8](repeating: 0x20, count: cap))
+        #expect(try await m.checkResults(key) == .problem)
+        #expect(site.limit("p/\(pid)/rows.json") == cap && cap < VoteSiteLimits.rowsMax)
+        #expect(vault.submits.isEmpty && m.hints[key]?.resultsTooLarge == false && m.hints[key]?.observerVerdict == false)
     }
 
     @Test func aCheckDueEventRunsTheCheck() async throws {

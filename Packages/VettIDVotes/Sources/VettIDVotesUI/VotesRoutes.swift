@@ -113,7 +113,10 @@ public struct VoteRoute: View {
     public var body: some View {
         VoteScreen(state: model?.state ?? VoteScreenState(key: key), proof: model?.proofFile, actions: actions)
             .onAppear {
-                guard model == nil else { return }
+                guard model == nil else {
+                    model?.appeared()
+                    return
+                }
                 // Evidence left in tmp/ by an app that was killed with the picker up.
                 ProofTempFile.removeLeftovers()
                 model = VoteViewModel(key: key, repo: votes, connections: connections, ownerChecks: ownerChecks)
@@ -146,6 +149,7 @@ public struct VoteRoute: View {
         a.onCloseWindow = { m.closeWindowNow() }
         a.onDismissAlreadyVoted = { m.dismissAlreadyVoted() }
         a.onForgetSecrets = { m.forgetSecrets() }
+        a.onForeground = { m.appeared() }
         a.onLeave = { m.leave() }
         return a
     }

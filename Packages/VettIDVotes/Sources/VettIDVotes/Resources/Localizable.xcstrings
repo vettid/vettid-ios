@@ -1024,6 +1024,28 @@
         }
       }
     },
+    "vote_results_dont_add_up": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The rest of the published results don't add up. The service may have published them wrongly."
+          }
+        }
+      }
+    },
+    "vote_results_not_rechecked": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "VettID could not check the published results of this vote again just now, so their numbers are not shown. It will try again when you open this vote."
+          }
+        }
+      }
+    },
     "vote_results_row": {
       "extractionState": "manual",
       "localizations": {

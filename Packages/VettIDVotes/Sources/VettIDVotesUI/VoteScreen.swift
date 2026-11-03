@@ -33,6 +33,8 @@ public struct VoteActions {
     public var onDismissAlreadyVoted: @MainActor () -> Void = {}
     /// The app went to the background or the iPhone locked: the password goes.
     public var onForgetSecrets: @MainActor () -> Void = {}
+    /// The app returned to the foreground with the screen up.
+    public var onForeground: @MainActor () -> Void = {}
     /// The screen left: the password and unsaved evidence go.
     public var onLeave: @MainActor () -> Void = {}
 
@@ -88,7 +90,10 @@ public struct VoteScreen: View {
         .onChange(of: state.proofSaved) { _, saved in if saved { Announcer.announce(VoteStrings.voteProofSaved, .polite) } }
         .onChange(of: state.proofSaveFailed) { _, failed in if failed { Announcer.announce(VoteStrings.voteProofFailed, .assertive) } }
         .onDisappear { actions.onLeave() }
-        .onChange(of: scenePhase) { _, now in if now == .background { actions.onForgetSecrets() } }
+        .onChange(of: scenePhase) { _, now in
+            if now == .background { actions.onForgetSecrets() }
+            if now == .active { actions.onForeground() }
+        }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.protectedDataWillBecomeUnavailableNotification)) { _ in
             actions.onForgetSecrets()
         }

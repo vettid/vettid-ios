@@ -15,6 +15,7 @@ final class FakeVoteSite: VoteSite, @unchecked Sendable {
     private let lock = NSLock()
     private var docs: [String: SiteAnswer] = [:]
     private var log: [String] = []
+    private var limits: [String: Int] = [:]
     var configured = true
     /// Called with a path before it is answered (a test holds a read here); not under the lock.
     nonisolated(unsafe) var hold: (@Sendable (String) async -> Void)?
@@ -30,6 +31,9 @@ final class FakeVoteSite: VoteSite, @unchecked Sendable {
 
     func clearReads() { lock.withLock { log = [] } }
 
+    /// The most bytes the last read of [path] would take.
+    func limit(_ path: String) -> Int? { lock.withLock { limits[path] } }
+
     func get(_ path: String, maxBytes: Int) async -> SiteAnswer {
         // As the real site: a read of cancelled work is not made.
         if Task.isCancelled { return .unreachable }
@@ -37,6 +41,7 @@ final class FakeVoteSite: VoteSite, @unchecked Sendable {
         if Task.isCancelled { return .unreachable }
         return lock.withLock {
             log.append(path)
+            limits[path] = maxBytes
             guard let a = docs[path] else { return .absent }
             if case .found(let b) = a, b.count > maxBytes { return .tooLarge }
             return a
@@ -59,6 +64,8 @@ final class FakeVoteSiteOps: VoteSiteOps, @unchecked Sendable {
     /// Refuses the next uploads with the relay's storage-full answer; [syncRefusal] the next `vote.site.sync` once.
     var quotaRefusals = 0
     var syncRefusal: String?
+    /// Refuses the next `vote.results.submit` once with this code.
+    var submitRefusal: String?
     /// Runs before each inline `vote.site.sync`; a throw fails the call (a lost connection, say).
     nonisolated(unsafe) var syncHold: (@Sendable () async throws -> Void)?
 
@@ -100,6 +107,10 @@ final class FakeVoteSiteOps: VoteSiteOps, @unchecked Sendable {
     nonisolated func voteResultsSubmit(body: [UInt8]) async throws -> JsonObject {
         try await MainActor.run {
             submits.append(body)
+            if let code = submitRefusal {
+                submitRefusal = nil
+                throw VaultOpError(type: "vote.results.submit", code: code, detail: "", body: nil)
+            }
             return voteObj(submitAnswer)
         }
     }

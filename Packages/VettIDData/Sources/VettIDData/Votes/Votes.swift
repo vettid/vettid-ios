@@ -331,12 +331,30 @@ public enum VoteWire {
     }
 
     /// The label as sent, in the order sent; cleaned like any received text. A label that shows nothing is its id. The
-    /// reserved `abstain` (BALLOT-PROTOCOL §3.1) is always the app's own "Abstain", whatever label the service sent, so a
-    /// service can't make abstaining read as something else (owner decision 2026-11-02).
+    /// reserved `abstain` (BALLOT-PROTOCOL §3.1) is always the app's own "Abstain", whatever label the service sent, and
+    /// the label "Abstain" is reserved for it: another choice labelled so shows its id. A service can't make abstaining
+    /// read as something else, or something else read as abstaining (ANDROID-PLAN 0.1.116 §4 "Votes", IOS-PLAN 0.1.59
+    /// §4.16).
     private static func choice(_ c: JsonObject) -> VoteChoice? {
         guard let id = id(c, "id") else { return nil }
         if id == VoteChoice.abstain { return VoteChoice(id: id, label: DataStrings.voteChoiceAbstain) }
-        return VoteChoice(id: id, label: AccountNames.cleaned(s(c, "label")) ?? id)
+        guard let label = AccountNames.cleaned(s(c, "label")), !readsAsAbstain(label) else { return VoteChoice(id: id, label: id) }
+        return VoteChoice(id: id, label: label)
+    }
+
+    /// Whether [label] (already cleaned of control and bidirectional-override characters) is the reserved "Abstain":
+    /// with surrounding white space trimmed it equals "Abstain", ignoring case (ANDROID-PLAN 0.1.116 §4 "Votes"). What
+    /// shows nothing is dropped first, using the set VAULT-MESSAGING §10.8 step 4 sets aside when it decides whether a
+    /// text is blank (as ``AccountNames``): default-ignorable code points (joiners, variation selectors, U+034F and the
+    /// like) and U+2800, and white space is Unicode's. Lookalike letters are not folded. (chosen; not in the spec)
+    static func readsAsAbstain(_ label: String) -> Bool {
+        var shown = String.UnicodeScalarView()
+        shown.append(contentsOf: label.unicodeScalars.filter {
+            !$0.properties.isDefaultIgnorableCodePoint && $0 != AccountNames.brailleBlank
+        })
+        while let f = shown.first, f.properties.isWhitespace { shown.removeFirst() }
+        while let l = shown.last, l.properties.isWhitespace { shown.removeLast() }
+        return String(shown).lowercased() == "abstain"
     }
 
     /// The `ballot.state` of a `vote.cast` or `vote.confirm` answer.

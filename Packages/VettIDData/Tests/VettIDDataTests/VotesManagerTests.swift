@@ -173,6 +173,24 @@ struct VotesManagerTests: VotesTestCase {
         // The reserved abstain is always the app's own "Abstain", whatever the service labelled it.
         #expect(d.choices[1].label == "Abstain")
         #expect(d.choices[2].label == "Yes")
+        // The label "Abstain" is reserved: another choice labelled so, in any case, trimmed and with control and
+        // bidirectional-override characters removed, shows its id (ANDROID-PLAN 0.1.116 §4 "Votes").
+        for label in ["Abstain", "abstain", "ABSTAIN", " ABSTAIN ", " abstain ", "Abs\\u202Etain", "\\u2066Abstain\\u2069"] {
+            ops.detail = obj(#"{"proposal_id":"\#(pid)","connection_id":"\#(conn)","title":"T","state":"open","choices":[{"id":"no","label":"\#(label)"},{"id":"abstain","label":"Abstain"},{"id":"yes","label":"Yes"}]}"#)
+            let r = try await m.get(key)
+            #expect(r.choices.map(\.label) == ["no", "Abstain", "Yes"], "\(label)")
+        }
+        #expect(!VoteWire.readsAsAbstain("Abstain from it") && !VoteWire.readsAsAbstain("No"))
+        #expect(VoteWire.readsAsAbstain(" ABSTAIN ") && VoteWire.readsAsAbstain("abstain\n"))
+        // Code points that show nothing are dropped first: a joiner, a non-joiner, a variation selector, U+034F, a soft hyphen.
+        for hidden in ["Ab\u{200D}stain", "Abs\u{200C}tain", "Abstain\u{FE0F}", "A\u{034F}bstain", "Abst\u{00AD}ain", "\u{2060}Abstain"] {
+            #expect(VoteWire.readsAsAbstain(hidden), "\(hidden.unicodeScalars.map { String($0.value, radix: 16) })")
+        }
+        // As received text (VAULT-MESSAGING §10.8): U+2800 shows nothing, around the word or in it, and white space is
+        // Unicode's.
+        for blank in ["\u{2800}Abstain\u{2800}", "Abs\u{2800}tain", "\u{2800}\u{2800}abstain", "\u{3000}Abstain\u{2003}"] {
+            #expect(VoteWire.readsAsAbstain(blank), "\(blank.unicodeScalars.map { String($0.value, radix: 16) })")
+        }
         #expect(d.choiceID == "yes")
         #expect(d.text == "Line one\n\nLine two <b>x</b> http://example.test")
         #expect(d.minBallots == 2)

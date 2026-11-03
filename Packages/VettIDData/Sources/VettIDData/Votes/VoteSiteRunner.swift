@@ -44,9 +44,9 @@ final class VoteSiteRunner {
     /// spec, and not on Android, which does not leave the work in the background); otherwise the hourly wait goes on.
     static let returnAfter: TimeInterval = 600
 
-    private weak var votes: VotesManager?
+    private(set) weak var votes: VotesManager?
     let site: any VoteSite
-    private let reader: VoteSiteReader
+    let reader: VoteSiteReader
     /// The site calls, over the session already open when [quietly] (a run nobody asked for never opens one).
     private let ops: @MainActor (_ quietly: Bool) async throws -> any VoteSiteOps
     private let every: Duration
@@ -349,7 +349,10 @@ final class VoteSiteRunner {
 
     /// The results of a closed vote, fetched, checked as an observer does (BALLOT-PROTOCOL §8.4 items 2 to 4: the rows'
     /// hash, order and trees, every ballot's signature and choice, the tally and the member's row) and handed to the vault
-    /// (the member's **Check again**, and the run's retry). The vault alone judges. An attempt already on its way for the
+    /// (the member's **Check again**, and the run's retry) whenever what the vault itself checks can hold: the results
+    /// parse, their signature is one the vault reads, the bundle is an object, and the member's row has a proof to
+    /// `rows_root` with `tree_size` = `counts.eligible` (VAULT-MESSAGING 0.83.2 §10.19.6 step 1); any other failure of
+    /// the check is ``VoteHint/resultsDontAddUp`` and does not stop the submit. The vault alone judges. An attempt already on its way for the
     /// vote is joined, not repeated.
     func checkResults(_ key: VoteKey, quietly: Bool) async throws -> ResultsOutcome {
         guard site.configured else { return .siteUnreachable }
@@ -373,6 +376,9 @@ final class VoteSiteRunner {
         let files: VoteSiteReader.ResultsFiles
         switch try await reader.fetchResults(key.proposalID) {
         case .tooLarge: return fail(key, .problem, tooLarge: true)
+        // More rows than the results can have: no row with a proof, as when ``VoteRows/ownRow(results:rows:recordTag:)``
+        // refuses them.
+        case .rowsTooLarge: return noRow(key)
         case .siteDown: return unavailable(key, true)
         case .notPublished: return unavailable(key, false)
         case .files(let f): files = f
@@ -386,15 +392,56 @@ final class VoteSiteRunner {
         let doc = files.doc
         let rows = files.rows
         let sig = files.sig
-        let own: OwnRow
+        let checked: VoteRows.Checked
         do {
-            own = try await Task.detached { try VoteRows.ownRow(results: doc, rows: rows, recordTag: tag) }.value
+            checked = try await Task.detached { try VoteRows.ownRow(results: doc, rows: rows, recordTag: tag) }.value
         } catch {
-            return fail(key, .problem)
+            return noRow(key)
         }
-        guard let body = Self.submitBody(key, doc: doc, sig: sig, bundle: bundle, own: own) else { return fail(key, .problem) }
+        // A member's row whose ballot the vault would not read makes it refuse the whole call: nothing is sent
+        // (VAULT-MESSAGING 0.81.6 §10.19.8, "Choice ids in results").
+        guard let body = Self.submitBody(key, doc: doc, sig: sig, bundle: bundle, own: checked.own) else { return fail(key, .problem) }
         try Task.checkCancellation()
-        let answer = try await guarded { try await self.ops(quietly).voteResultsSubmit(body: body) }
+        // The site's numbers must also be the ones the vault holds (`vote.get`), as for a check again: a verdict about
+        // another copy says nothing of the numbers the screen shows (chosen; not in the spec).
+        let sameNumbers = await Task.detached { Self.sameNumbers(doc, detail) }.value
+        try Task.checkCancellation()
+        // A failure of the observer's check outside the four inputs does not hold the row back (VAULT-MESSAGING 0.83.2
+        // §10.19.6 step 1): the vault judges it, and the member is told the rest doesn't add up whatever it answers.
+        return try await submit(key, body, dontAddUp: checked.problem != nil || !sameNumbers, quietly: quietly)
+    }
+
+    /// No row with a proof: nothing to submit, and results that don't add up for the screens.
+    private func noRow(_ key: VoteKey) -> ResultsOutcome {
+        let outcome = fail(key, .problem)
+        if !Task.isCancelled {
+            votes?.hint(key) {
+                $0.observerVerdict = false
+                $0.verdictKept = false
+            }
+        }
+        return outcome
+    }
+
+    /// Hands [body] to the vault and keeps what it answered, and whether the rest of the results [dontAddUp], for
+    /// the screens.
+    private func submit(_ key: VoteKey, _ body: [UInt8], dontAddUp: Bool, quietly: Bool) async throws -> ResultsOutcome {
+        guard let votes else { throw CancellationError() }
+        let answer: JsonObject
+        do {
+            answer = try await guarded { try await self.ops(quietly).voteResultsSubmit(body: body) }
+        } catch {
+            // A refused or lost call is kept too: the find is the app's own, whatever the vault made of it (chosen; not in
+            // the spec).
+            if !Task.isCancelled, !(error is CancellationError) {
+                votes.hint(key) {
+                    $0.resultsDontAddUp = dontAddUp
+                    $0.observerVerdict = !dontAddUp
+                    $0.verdictKept = false
+                }
+            }
+            throw error
+        }
         try Task.checkCancellation()
         var state = CheckState.unknown
         var reason: String?
@@ -408,6 +455,10 @@ final class VoteSiteRunner {
             $0.gaveUp = nil
             $0.resultsProblem = input
             $0.resultsTooLarge = false
+            $0.resultsDontAddUp = dontAddUp
+            $0.observerVerdict = !dontAddUp
+            // Kept for the next opening only once the vault judged the results it was handed.
+            $0.verdictKept = state == .verified || state == .unconfirmed
         }
         votes.refreshQuietly()
         return .submitted(state)
@@ -450,6 +501,9 @@ final class VoteSiteRunner {
             $0.gaveUp = why ?? $0.gaveUp
             $0.resultsProblem = outcome == .problem
             $0.resultsTooLarge = tooLarge
+            // Nothing was submitted this time: what the screens say is this attempt's. The verdict of an earlier check
+            // (``VoteHint/observerVerdict``) stays: the documents are write-once.
+            $0.resultsDontAddUp = false
         }
         return outcome
     }
@@ -471,11 +525,14 @@ final class VoteSiteRunner {
 
     // MARK: Helpers
 
-    private enum Chain { case runs, attempts }
+    enum Chain { case runs, attempts }
 
     /// Runs [work] after the work before it on [chain], one at a time. It is cancelled by ``stop()`` and ``pause()``; work
     /// that was cancelled before it began does not begin.
-    private func serially<T: Sendable>(_ chain: Chain, _ work: @escaping @MainActor () async throws -> T) async throws -> T {
+    /// With [followCancel], cancelling the caller cancels the work too (a screen's own check, which nobody else waits on).
+    func serially<T: Sendable>(
+        _ chain: Chain, followCancel: Bool = false, _ work: @escaping @MainActor () async throws -> T
+    ) async throws -> T {
         let before = chain == .runs ? runs : attempts
         let id = nextWork
         nextWork += 1
@@ -494,7 +551,8 @@ final class VoteSiteRunner {
         cancellers[id] = { task.cancel() }
         let link = Task { _ = await task.value }
         if chain == .runs { runs = link } else { attempts = link }
-        return try await task.value.get()
+        guard followCancel else { return try await task.value.get() }
+        return try await withTaskCancellationHandler { try await task.value.get() } onCancel: { task.cancel() }
     }
 
     private func guarded<T: Sendable>(_ body: @MainActor () async throws -> T) async throws -> T {

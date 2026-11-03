@@ -25,13 +25,33 @@ public struct VoteHint: Equatable, Sendable {
     public var resultsProblem = false
     /// The site's results are larger than the vault could ever take: no retry will help.
     public var resultsTooLarge = false
+    /// The app submitted the member's row from results whose observer's check (BALLOT-PROTOCOL §8.4) failed outside the
+    /// four inputs the vault checks (VAULT-MESSAGING 0.83.2 §10.19.6 step 1): set whatever the vault answered, and kept
+    /// until a later attempt's observer check passes.
+    public var resultsDontAddUp = false
+    /// What the app's last observer check of the published results came to since the vault opened (true: it passed),
+    /// from an attempt that ran it or a check again when the screen opened; nil until one did. A lock forgets it, and
+    /// then the screen checks again (owner decision 2026-11-02). The numbers of a `verified` or `unconfirmed` check show
+    /// only when it is true.
+    public var observerVerdict: Bool?
+    /// Whether ``observerVerdict`` stands until the next lock, so that opening the screen checks nothing again: reached by
+    /// a check again (which compares the numbers with the vault's), or by a submission the vault answered `verified` or
+    /// `unconfirmed`. A verdict from a submission refused, lost or left pending still shows on the screen, but the next
+    /// opening checks again.
+    public var verdictKept = false
     /// When the app first saw the vote missing from the public site.
     public var notListedSince: Date?
 
-    public init(gaveUp: GaveUpWhy? = nil, resultsProblem: Bool = false, resultsTooLarge: Bool = false, notListedSince: Date? = nil) {
+    public init(
+        gaveUp: GaveUpWhy? = nil, resultsProblem: Bool = false, resultsTooLarge: Bool = false, resultsDontAddUp: Bool = false,
+        observerVerdict: Bool? = nil, verdictKept: Bool = false, notListedSince: Date? = nil
+    ) {
         self.gaveUp = gaveUp
         self.resultsProblem = resultsProblem
         self.resultsTooLarge = resultsTooLarge
+        self.resultsDontAddUp = resultsDontAddUp
+        self.observerVerdict = observerVerdict
+        self.verdictKept = verdictKept
         self.notListedSince = notListedSince
     }
 
@@ -88,6 +108,9 @@ public protocol VotesRepository: AnyObject, Observable, Sendable {
     func checkResults(_ key: VoteKey) async throws -> ResultsOutcome
     /// For a `gave_up` check the app has no reason for: looks at the site once and remembers which of two things.
     func diagnoseGaveUp(_ key: VoteKey) async
+    /// The published results of a vote whose check is `verified` or `unconfirmed`, checked again when its screen opens;
+    /// nothing is submitted. Throws only ``CancellationError``.
+    func recheckResults(_ key: VoteKey) async throws -> RecheckOutcome
 }
 
 /// The vault calls behind ``VotesManager``, so that it can be tested without a vault.
@@ -496,6 +519,11 @@ public final class VotesManager: VotesRepository {
     }
 
     public func diagnoseGaveUp(_ key: VoteKey) async { await siteRunner?.diagnoseGaveUp(key) }
+
+    public func recheckResults(_ key: VoteKey) async throws -> RecheckOutcome {
+        guard let siteRunner else { return .notChecked }
+        return try await siteRunner.recheckResults(key)
+    }
 
     private func guarded<T: Sendable>(_ body: @MainActor () async throws -> T) async throws -> T {
         do {

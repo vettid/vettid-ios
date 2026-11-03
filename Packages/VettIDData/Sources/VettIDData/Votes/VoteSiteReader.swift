@@ -1,4 +1,5 @@
 import Foundation
+import VettIDCrypto
 
 /// Reads the documents of the public votes site for ``VoteSiteRunner``: a proposal with its signature, bundle and
 /// extensions, the versions of the service list, a vote's results. Each read stops cancelled work. Everything is as the
@@ -134,14 +135,19 @@ struct VoteSiteReader: Sendable {
         case files(ResultsFiles)
         /// A document is over the limit the vault takes: a problem with the results, not a site that is down.
         case tooLarge
+        /// `rows.json` is larger than the rows of these results can be: refused before it is read in full.
+        case rowsTooLarge
         /// The site could not be reached for one of them.
         case siteDown
         /// The site answered, and the results are not (all) there.
         case notPublished
     }
 
-    /// The four documents of a vote's results from the site, or why there are not.
-    func fetchResults(_ proposalID: String) async throws -> ResultsFetch {
+    /// The four documents of a vote's results from the site, or why there are not. `rows.json` is read up to
+    /// [rowsCap] of the results read first (their `counts.eligible`), and never over ``VoteSiteLimits/rowsMax``.
+    func fetchResults(
+        _ proposalID: String, rowsCap: @Sendable ([UInt8]) -> Int = { VoteRows.rowsCap(results: $0) }
+    ) async throws -> ResultsFetch {
         var siteDown = false
         var tooLarge = false
         func fetch(_ name: String, _ max: Int) async throws -> [UInt8]? {
@@ -161,8 +167,9 @@ struct VoteSiteReader: Sendable {
         guard let doc else { return siteDown ? .siteDown : .notPublished }
         let sig = try await fetch("results.json.sig", VoteSiteLimits.sigMax)
         let bundle = try await fetch("results.json.sigstore.json", VoteSiteLimits.bundleMax)
-        let rows = try await fetch("rows.json", VoteSiteLimits.rowsMax)
         if tooLarge { return .tooLarge }
+        let rows = try await fetch("rows.json", min(VoteSiteLimits.rowsMax, rowsCap(doc)))
+        if tooLarge { return .rowsTooLarge }
         guard let sig, let bundle, let rows else { return siteDown ? .siteDown : .notPublished }
         return .files(ResultsFiles(doc: doc, sig: sig, bundle: bundle, rows: rows))
     }

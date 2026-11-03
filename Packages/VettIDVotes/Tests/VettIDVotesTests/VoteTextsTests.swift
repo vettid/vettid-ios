@@ -18,7 +18,7 @@ import Testing
     @Test func everyKeyOfTheCatalogResolvesToItsOwnText() throws {
         let doc = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: Self.catalog)) as? [String: Any])
         let keys = try #require((doc["strings"] as? [String: Any])?.keys)
-        #expect(keys.count == 129)
+        #expect(keys.count == 131)
         let missing = "\u{0}missing"
         for key in keys {
             let text = VoteStrings.bundle.localizedString(forKey: key, value: missing, table: nil)
@@ -31,6 +31,12 @@ import Testing
         #expect(VoteStrings.voteConflictAfterVerified("Example") == "**Your vote is in the published results.** Example also once showed a different vote under your code. Save the proof and show it to the organisation.")
         #expect(plainText(VoteStrings.voteConflictAfterVerified("Example")) == "Your vote is in the published results. Example also once showed a different vote under your code. Save the proof and show it to the organisation.")
         #expect(VoteTexts.text(.inResultsConflict, service: "Example", time: "") == VoteStrings.voteConflictAfterVerified("Example"))
+    }
+
+    @Test func resultsThatDoNotAddUpAreTheOwnersText() {
+        #expect(VoteStrings.voteResultsDontAddUp == "The rest of the published results don't add up. The service may have published them wrongly.")
+        #expect(VoteStrings.bundle.localizedString(forKey: "vote_results_dont_add_up", value: nil, table: nil) == VoteStrings.voteResultsDontAddUp)
+        #expect(VoteTexts.text(.resultsDontAddUp, service: "Example", time: "") == VoteStrings.voteResultsDontAddUp)
     }
 
     @Test func cancelIsCancel() {

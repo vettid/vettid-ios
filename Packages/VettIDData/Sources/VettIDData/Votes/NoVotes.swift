@@ -36,4 +36,5 @@ public final class NoVotes: VotesRepository {
     public func siteCheck(_ key: VoteKey) async throws {}
     public func checkResults(_ key: VoteKey) async throws -> ResultsOutcome { throw unsupported() }
     public func diagnoseGaveUp(_ key: VoteKey) async {}
+    public func recheckResults(_ key: VoteKey) async throws -> RecheckOutcome { .notChecked }
 }

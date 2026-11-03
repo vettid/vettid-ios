@@ -5,17 +5,6 @@ import VettIDData
 /// Where the screen is in a cast (ANDROID-PLAN 0.1.102 screens 2 and 3).
 public enum CastStep: Equatable, Sendable { case none, confirm, password, sending }
 
-/// The vault's evidence of a vote, in memory only, handed to the system's file exporter (IOS-PLAN §4.16 "Save the proof"):
-/// the bytes are the vault's evidence unchanged; the name is the proposal's id, never the title or the choice. Its
-/// description shows nothing of it.
-public struct ProofFile: Equatable, Sendable, CustomStringConvertible, CustomDebugStringConvertible {
-    public let bytes: Data
-    public let name: String
-
-    public var description: String { "ProofFile(\(bytes.count) bytes)" }
-    public var debugDescription: String { description }
-}
-
 /// One vote's state (screens 2 to 7). It holds the member's choice (``VoteDetail``), the credential password while the
 /// prompt is open and the vault's evidence while it waits for the exporter: its description and mirror show none of it.
 /// Mirrors vettid-android `VoteUiState`.
@@ -50,6 +39,8 @@ public struct VoteScreenState: Equatable, Sendable, CustomStringConvertible, Cus
     public var checkProblem: VoteProblem?
     /// What the last **Check again** came to when it was not handed to the vault: the site had nothing, or could not be reached.
     public var checkOutcome: ResultsOutcome?
+    /// The published results checked again since the screen opened (`verified` or `unconfirmed` checks only).
+    public var recheck = Recheck.none
     public var restoreBusy = false
     public var restoreProblem: VoteProblem?
     public var proofWarning = false
@@ -110,6 +101,13 @@ public final class VoteViewModel {
     @ObservationIgnored private let follows = TaskBag()
     @ObservationIgnored private let key: VoteKey
     @ObservationIgnored private var loadJob: Task<Void, Never>?
+    /// The check of the published results again: one an opening (cancelled when the screen leaves).
+    @ObservationIgnored private var recheckJob: Task<Void, Never>?
+    @ObservationIgnored private var rechecked = false
+    /// Counts the checks started: what an older one comes to (its cancellation included) changes nothing.
+    @ObservationIgnored private var recheckRun = 0
+    /// The vote left the list (a lock empties it) since it was last seen.
+    @ObservationIgnored private var summaryGone = false
     @ObservationIgnored private var lastSummary: VoteSummary?
     /// The evidence the vault gave, until the member saves it or leaves; only in memory.
     @ObservationIgnored private var proof: String?
@@ -130,6 +128,8 @@ public final class VoteViewModel {
         refresh()
         // A change of the vote (a ballot answered, a check made) reads it again: the choice and the tally appear then.
         follows.add(follow(self, read: { $0.current }, apply: { $0.onSummary($1) }))
+        // A lock forgets the verdict of the results: once the vote is back, they are checked again.
+        follows.add(follow(self, read: { $0.repo.hints[$0.key]?.observerVerdict }, apply: { $0.onVerdict($1) }))
         if ownerChecks != nil {
             follows.add(follow(self, read: { $0.ownerChecks?.ownerCheck }, apply: { $0.onOwnerCheck($1) }))
         }
@@ -152,13 +152,26 @@ public final class VoteViewModel {
         return s
     }
 
+    private func onVerdict(_ verdict: Bool?) {
+        if verdict == nil, local.recheck != .running { rechecked = false }
+    }
+
     private func onSummary(_ now: VoteSummary?) {
-        guard let now else { return }
-        if let last = lastSummary, now != last { loadDetail() }
+        guard let now else {
+            summaryGone = true
+            return
+        }
+        let returned = summaryGone
+        summaryGone = false
+        let changed = lastSummary.map { $0 != now } ?? false
+        if changed { loadDetail() }
         lastSummary = now
         // "Is this your vote?" is held back while the cast sheet is up: the vault now waits on the member's answer about an
         // earlier vote, so nothing is cast and the typed password goes.
         if now.confirmPending, local.cast == .confirm || local.cast == .password { dismissCast() }
+        // A check that became verified or unconfirmed while the screen is up, or a vote back after a lock (the opening
+        // itself is the read's).
+        if changed || returned { recheckIfNeeded() }
         if now.check?.state == .gaveUp {
             let repo = repo
             let key = key
@@ -190,10 +203,44 @@ public final class VoteViewModel {
             // The vault checks closed and closing before it checks for a repeat of the same choice: a retry may have been
             // refused while the vote was recorded. A vote that holds a ballot is not "not sent".
             if self?.current?.ballot != nil { self?.local.castProblem = nil }
+            self?.recheckIfNeeded()
             await self?.readDetail()
             // The vote's own documents are read from the public site when its screen opens, so that the vault can compare
             // it with the public copy. Best effort: a failure, and a lock or the app leaving (CancellationError), are silent.
             do { try await repo.siteCheck(key) } catch {}
+        }
+    }
+
+    /// A vote whose check is `verified` or `unconfirmed` has its published results checked again, once an opening, before
+    /// its numbers are shown (owner decision 2026-11-02: what the app found is kept in memory only, so a lock forgets it).
+    /// Nothing is submitted. Cut off (the screen left, a lock), it says nothing, and the next opening checks again.
+    /// The screen came back after it left, or the app returned to the foreground: a check of the results that was cut
+    /// off runs again.
+    public func appeared() { recheckIfNeeded() }
+
+    private func recheckIfNeeded() {
+        guard !rechecked, let state = current?.check?.state, state == .verified || state == .unconfirmed else { return }
+        rechecked = true
+        recheckRun += 1
+        let run = recheckRun
+        local.recheck = .running
+        let repo = repo
+        let key = key
+        recheckJob = work.launch { [weak self] in
+            do {
+                let outcome = try await repo.recheckResults(key)
+                guard let self, recheckRun == run else { return }
+                local.recheck = outcome == .notChecked ? .notChecked : .done
+            } catch where isSilent(error) {
+                // Cut off (the screen left, the app went to the background, a lock): the numbers stay hidden, and the
+                // check runs again when the screen comes back or the app returns to the foreground (``appeared()``).
+                // Not when a newer check already started: it is that one's guard.
+                guard let self, recheckRun == run else { return }
+                rechecked = false
+            } catch {
+                guard let self, recheckRun == run else { return }
+                local.recheck = .notChecked
+            }
         }
     }
 
@@ -341,6 +388,12 @@ public final class VoteViewModel {
     /// The screen left: the password goes, and so does evidence that was not saved (it is the member's own, and nobody's
     /// else to keep).
     public func leave() {
+        // A check of the results under way is cut off; it runs again when the screen comes back (``appeared()``).
+        if local.recheck == .running {
+            recheckJob?.cancel()
+            recheckJob = nil
+            rechecked = false
+        }
         local.password = ""
         proof = nil
         local.proofReady = false

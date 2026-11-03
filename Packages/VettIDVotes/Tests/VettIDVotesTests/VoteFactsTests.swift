@@ -162,7 +162,10 @@ import Testing
         d.tally = ["yes": 3, "no": 1]
         d.counts = VoteCounts(eligible: 9, ballots: 4, unhandled: 2)
         d.minBallots = 2
-        let f = Samples.facts(Samples.screen(s, detail: d))
+        // The numbers show once the app's own observer check passed (since the vault opened).
+        #expect(Samples.facts(Samples.screen(s, detail: d)).results == nil)
+        let checked = VoteHint(observerVerdict: true)
+        let f = Samples.facts(Samples.screen(s, detail: d) { $0.hint = checked })
         #expect(texts(f).contains("The published results include your vote."))
         #expect(f.results == [
             "Results", "\u{2068}Yes\u{2069}: 3", "\u{2068}No\u{2069}: 1", "4 of 9 eligible members voted.",
@@ -170,7 +173,7 @@ import Testing
             "2 messages sent to \(service) during the vote were not handled; any vote among them was not counted.",
         ])
         d.minBallots = 5
-        #expect(Samples.facts(Samples.screen(s, detail: d)).results?.contains("Not enough votes were cast: 4, and the service asked for at least 5.") == true)
+        #expect(Samples.facts(Samples.screen(s, detail: d) { $0.hint = checked }).results?.contains("Not enough votes were cast: 4, and the service asked for at least 5.") == true)
     }
 
     @Test func noNumberIsShownBeforeTheVerifiedResults() {
@@ -189,6 +192,50 @@ import Testing
         // Without the flag only the results line shows, and no proof.
         let plain = Samples.facts(Samples.screen(Samples.closed(VoteBallot(state: .recorded), check: VoteCheck(state: .verified))))
         #expect(plain.notes.map(\.note) == [.closed, .recorded, .inResults] && !plain.saveProof)
+    }
+
+    /// Results whose observer's check failed outside the four inputs, the member's row submitted (VAULT-MESSAGING 0.83.2
+    /// §10.19.6 step 1; ANDROID-PLAN 0.1.116 §4 "Votes"): with `verified` or `unconfirmed` the state, then the owner's
+    /// line once, no number and no error colour; `failed` only its own texts; before the vault judged, the problem with
+    /// the published results.
+    @Test func resultsThatDoNotAddUpShowTheStateTheLineAndNoNumber() {
+        let hint = VoteHint(resultsDontAddUp: true)
+        let line = "The rest of the published results don't add up. The service may have published them wrongly."
+        func facts(_ s: VoteSummary) -> VoteFacts {
+            var d = Samples.detail(s, choiceID: "yes")
+            d.tally = ["yes": 3, "no": 1]
+            d.counts = VoteCounts(eligible: 9, ballots: 4, unhandled: 2)
+            d.minBallots = 2
+            return Samples.facts(Samples.screen(s, detail: d) { $0.hint = hint })
+        }
+        let verified = facts(Samples.closed(VoteBallot(state: .recorded), check: VoteCheck(state: .verified)))
+        #expect(verified.notes.map(\.note) == [.closed, .recorded, .inResults, .resultsDontAddUp])
+        #expect(texts(verified).suffix(2) == ["The published results include your vote.", line])
+        #expect(verified.notes.last?.note.severity == .note && verified.results == nil)
+        #expect(texts(verified).filter { $0 == line }.count == 1)
+        let conflict = facts(Samples.closed(VoteBallot(state: .recorded), check: VoteCheck(state: .verified), conflict: true))
+        #expect(conflict.notes.map(\.note) == [.closed, .recorded, .inResults, .inResultsConflict, .resultsDontAddUp])
+        let unconfirmed = facts(Samples.closed(VoteBallot(state: .waiting), check: VoteCheck(state: .unconfirmed)))
+        #expect(unconfirmed.notes.map(\.note).suffix(2) == [.unconfirmed, .resultsDontAddUp] && unconfirmed.results == nil)
+        let failed = facts(Samples.closed(VoteBallot(state: .recorded), check: VoteCheck(state: .failed)))
+        #expect(!texts(failed).contains(line) && failed.notes.map(\.note).contains(.failed))
+        let pending = facts(Samples.closed(VoteBallot(state: .recorded), check: VoteCheck(state: .pending)))
+        #expect(texts(pending).last == "VettID could not check the published results of this vote yet. They may be incomplete or not valid. It will try again.")
+        #expect(!texts(pending).contains(line))
+        // A failed verdict of the check stays when a later attempt submitted nothing (the flag cleared): no number, and
+        // the line.
+        var d = Samples.detail(Samples.closed(VoteBallot(state: .waiting), check: VoteCheck(state: .unconfirmed)), choiceID: "yes")
+        d.tally = ["yes": 3, "no": 1]
+        let after = Samples.facts(Samples.screen(Samples.closed(VoteBallot(state: .waiting), check: VoteCheck(state: .unconfirmed)), detail: d) {
+            $0.hint = VoteHint(observerVerdict: false)
+        })
+        #expect(after.results == nil && after.notes.map(\.note).suffix(2) == [.unconfirmed, .resultsDontAddUp])
+        // Numbers only under a verified or unconfirmed check, whatever else the vault sends.
+        let failedVote = Samples.closed(VoteBallot(state: .recorded), check: VoteCheck(state: .failed))
+        var failedDetail = Samples.detail(failedVote, choiceID: "yes")
+        failedDetail.tally = ["yes": 3, "no": 1]
+        failedDetail.counts = VoteCounts(eligible: 9, ballots: 4)
+        #expect(Samples.facts(Samples.screen(failedVote, detail: failedDetail) { $0.hint = VoteHint(observerVerdict: true) }).results == nil)
     }
 
     /// Owner behaviour 5: the hints of Votes 2 show as Android shows them.

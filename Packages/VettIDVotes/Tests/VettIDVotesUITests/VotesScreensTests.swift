@@ -88,7 +88,9 @@ import VettIDUI
             Samples.screen(Samples.open(ballot: VoteBallot(state: .waiting), canCast: false)),
             Samples.screen(confirm, detail: Samples.detail(confirm, serviceBallot: "no")),
             Samples.screen(Samples.closed(VoteBallot(state: .recorded), check: VoteCheck(state: .verified), conflict: true)),
-            Samples.screen(Samples.closed(VoteBallot(state: .recorded), check: VoteCheck(state: .verified)), detail: resultsDetail()),
+            Samples.screen(Samples.closed(VoteBallot(state: .recorded), check: VoteCheck(state: .verified)), detail: resultsDetail()) {
+                $0.hint = VoteHint(observerVerdict: true)
+            },
             Samples.screen(Samples.closed(VoteBallot(state: .conflict), check: VoteCheck(state: .failed))) { $0.proofExported = true; $0.proofSaved = true },
             Samples.screen(Samples.open(canCast: false, state: .rejected, reason: "anchor")),
             Samples.screen(Samples.open()) { $0.castProblem = VoteProblem(kind: .noResponse); $0.alreadyVoted = true; $0.checkProblem = VoteProblem(kind: .network) },
