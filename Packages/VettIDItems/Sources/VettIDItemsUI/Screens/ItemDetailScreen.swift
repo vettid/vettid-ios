@@ -75,7 +75,7 @@ public struct ItemDetailRoute: View {
         a.onBack = host.onBack
         guard let model else { return a }
         a.onRetry = { model.load() }
-        a.onReveal = { model.askReveal { await presence($0) } }
+        a.onReveal = { model.askReveal(noPasscode: !presence.hasPasscode) { await presence($0) } }
         a.onOpen = { model.open() }
         a.onHide = { model.hide() }
         a.onToggleShown = { model.toggleShown($0) }

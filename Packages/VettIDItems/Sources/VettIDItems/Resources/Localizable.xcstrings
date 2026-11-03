@@ -1805,6 +1805,17 @@
         }
       }
     },
+    "items_reveal_no_passcode": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This iPhone has no passcode, so anyone holding it can see revealed items. Set a passcode in Settings to protect them."
+          }
+        }
+      }
+    },
     "items_critical_hidden_title": {
       "extractionState": "manual",
       "localizations": {
