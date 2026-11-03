@@ -210,6 +210,28 @@ func eventually(within: Duration = .seconds(20), _ condition: @MainActor () -> B
         #expect(sharing.tags?.tags.contains { $0.tag == "trips" } == true, "nor published over the newer registry")
     }
 
+    /// After a change refused as `conflict`, the next read is applied whatever its version (the vault's may have gone down,
+    /// a restore).
+    @Test func afterAConflictALowerVersionReadIsApplied() async {
+        let vm = await loaded()
+        #expect(vm.state.registry?.version == 3)
+        sharing.fail["setTag:trips"] = VaultFailure(.conflict, code: "conflict")
+        vm.askCreate()
+        vm.setName("trips")
+        vm.save()
+        await vm.settle()
+        #expect(vm.state.error == .conflict)
+        sharing.registry = TagRegistry(version: 1, tags: [TagView(tag: "garden", items: 1)])
+        vm.refresh()
+        await vm.settle()
+        #expect(vm.state.registry?.version == 1 && vm.state.tags.map(\.tag) == ["garden"])
+        // Without a conflict, an older read does not replace a newer registry.
+        sharing.registry = TagRegistry(version: 0, tags: [])
+        vm.refresh()
+        await vm.settle()
+        #expect(vm.state.registry?.version == 1)
+    }
+
     /// A read that ends while a change is on its way leaves the change busy: it cannot be sent twice.
     @Test func aReadEndingDuringACreateKeepsItBusy() async {
         let vm = await loaded()

@@ -272,6 +272,39 @@ final class FakeSharingOps: SharingOps, @unchecked Sendable {
         #expect(ops.calls.last { $0.hasPrefix("tagSet") }?.hasSuffix(":nil") == true, "a blank description is none")
     }
 
+    /// An older `tag.list` answer that lands after a write's own read published a higher version does not lower it; a read
+    /// at the same version still publishes (VAULT-MESSAGING §10.1, §10.8).
+    @Test func anOlderListDoesNotLowerThePublishedRegistry() async throws {
+        let gate = TestDeferred<Void>()
+        let held = FirstListHeldOps(inner: ops, gate: gate)
+        let m2 = SharingManager(ops: { held })
+        // The held read's answer (version 4); the write reads version 5, writes 6, and its own read publishes 6.
+        ops.tagPages = [page(4, TagEntry(tag: "travel")), page(5, TagEntry(tag: "travel")), page(6, TagEntry(tag: "travel"), TagEntry(tag: "garden"))]
+        let slow = Task { try await m2.refreshTags() }
+        while !held.waiting { await Task.yield() }
+        try await m2.setTag("garden", description: nil, color: nil)
+        #expect(m2.tags?.version == 6)
+        gate.complete()
+        let late = try await slow.value
+        #expect(late.version == 4 && m2.tags?.version == 6 && m2.tags?.tags.map(\.tag) == ["travel", "garden"])
+        ops.tagPages = [page(6, TagEntry(tag: "travel"), TagEntry(tag: "garden", items: 2))]
+        try await m2.refreshTags()
+        #expect(m2.tags?.tags.last?.items == 2, "the same version publishes")
+    }
+
+    /// A write refused as `conflict` drops the registry published, so that the next read publishes whatever its version
+    /// (a vault whose version went down, a restore).
+    @Test func aConflictDropsTheRegistrySoALowerVersionIsPublished() async throws {
+        ops.tagPages = [page(5, TagEntry(tag: "travel"))]
+        try await m.refreshTags()
+        ops.setErrors = ["conflict"]
+        #expect(await failure { try await m.setTag("garden", description: nil, color: nil) }?.kind == .conflict)
+        #expect(m.tags == nil)
+        ops.tagPages = [page(2, TagEntry(tag: "garden"))]
+        try await m.refreshTags()
+        #expect(m.tags?.version == 2 && m.tags?.tags.map(\.tag) == ["garden"])
+    }
+
     @Test func coloursOutliveATagChangedUntilReadAgainAndGoOnClear() async throws {
         ops.tagPages = [page(4, TagEntry(tag: "travel", color: "#000001"))]
         try await m.refreshTags()
@@ -361,6 +394,29 @@ private final class GatedSetOps: ForwardingSharingOps, @unchecked Sendable {
         waiting = true
         try await gate.value()
         return try await inner.tagSet(version: version, tag: tag, color: color, icon: icon, description: description)
+    }
+}
+
+/// ``FakeSharingOps`` whose first `tag.list` takes its answer when asked, then waits for [gate] before giving it.
+private final class FirstListHeldOps: ForwardingSharingOps, @unchecked Sendable {
+    let inner: FakeSharingOps
+    let gate: TestDeferred<Void>
+    @TestLocked var waiting = false
+    @TestLocked var lists = 0
+
+    init(inner: FakeSharingOps, gate: TestDeferred<Void>) {
+        self.inner = inner
+        self.gate = gate
+    }
+
+    func tagList(after: String?) async throws -> TagPage {
+        let answer = try await inner.tagList(after: after)
+        lists += 1
+        if lists == 1 {
+            waiting = true
+            try await gate.value()
+        }
+        return answer
     }
 }
 

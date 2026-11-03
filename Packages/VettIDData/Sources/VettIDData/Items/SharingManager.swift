@@ -125,8 +125,20 @@ public final class SharingManager: SharingRepository {
         let text = description.flatMap { $0.trimmingCharacters(in: .whitespaces).isEmpty ? nil : $0 }
         let mark = cleared
         let v = try await version()
-        _ = try await run { try await ops().tagSet(version: v, tag: n, color: color, icon: icon, description: text) }
+        _ = try await write { try await ops().tagSet(version: v, tag: n, color: color, icon: icon, description: text) }
         await afterWrite(mark)
+    }
+
+    /// Runs a write of the registry (as ``run(_:)``); a `conflict` drops the registry published, so that the next read
+    /// publishes whatever its version: the vault's may have gone down without a clear (a restore), which the version rule
+    /// of ``refreshTags(quietly:)`` would otherwise refuse until the next lock.
+    private func write<T>(_ body: () async throws -> T) async throws -> T {
+        do {
+            return try await run(body)
+        } catch let e as VaultFailure where e.kind == .conflict {
+            tags = nil
+            throw e
+        }
     }
 
     /// The registry read again after a write: quietly (never opening a session), and not at all when a clear came since
@@ -142,6 +154,7 @@ public final class SharingManager: SharingRepository {
         do {
             _ = try await putColor(try await current(), tag, color, quietly: false)
         } catch let e as VaultFailure where e.kind == .conflict {
+            tags = nil
             let r = try await refreshTags()
             guard mark == cleared else { return }
             _ = try await putColor(r, tag, color, quietly: false)
@@ -194,6 +207,7 @@ public final class SharingManager: SharingRepository {
             } catch let e as VaultFailure {
                 conflicts += 1
                 guard e.kind == .conflict, conflicts <= Self.maxConflicts, going() else { return count }
+                tags = nil
                 r = try await refreshTags(quietly: true)
             }
             step = pick(r)
@@ -209,7 +223,7 @@ public final class SharingManager: SharingRepository {
         guard let n = ItemChecks.normalizeTag(into, reserved: false), !from.hasPrefix("@") else { throw Self.badRequest() }
         let mark = cleared
         let v = try await version()
-        let o = try await run { try await ops().tagMerge(version: v, from: [from], into: n, dryRun: dryRun) }
+        let o = try await write { try await ops().tagMerge(version: v, from: [from], into: n, dryRun: dryRun) }
         if !dryRun { await afterTagChange(mark) }
         return TagChange.of(o)
     }
@@ -218,7 +232,7 @@ public final class SharingManager: SharingRepository {
         guard !tag.hasPrefix("@") else { throw Self.badRequest() }
         let mark = cleared
         let v = try await version()
-        let o = try await run { try await ops().tagDelete(version: v, tag: tag, dryRun: dryRun) }
+        let o = try await write { try await ops().tagDelete(version: v, tag: tag, dryRun: dryRun) }
         if !dryRun { await afterTagChange(mark) }
         return TagChange.of(o)
     }

@@ -52,6 +52,9 @@ public final class TagsViewModel {
     /// Counts the reads started: only the latest one's answer is applied, so that an older answer never replaces a newer
     /// one.
     @ObservationIgnored private var reads = 0
+    /// A change was refused as `conflict`: the vault's registry is not the one shown (another device, or a version that went
+    /// down, a restore), so the next read is applied whatever its version.
+    @ObservationIgnored private var anyVersion = false
 
     /// A tag's description is at most 256 bytes (§10.8); the field stops at 256 characters and the vault checks bytes.
     public static let maxDescription = 256
@@ -75,8 +78,9 @@ public final class TagsViewModel {
             do {
                 let r = try await sharing.refreshTags()
                 guard let self, read == reads else { return }
-                // A newer registry (a change applied meanwhile) is kept.
-                if (state.registry?.version ?? .min) <= r.version { state.registry = r }
+                // A newer registry (a change applied meanwhile) is kept, unless a conflict said the shown one is not the vault's.
+                if anyVersion || (state.registry?.version ?? .min) <= r.version { state.registry = r }
+                anyVersion = false
                 state.loading = false
             } catch {
                 guard let self, read == reads else { return }
@@ -231,6 +235,7 @@ public final class TagsViewModel {
                 state.errorCode = f.code
                 state.limit = f.limit
                 if f.kind == .inUse { state.dialog = nil }
+                if f.kind == .conflict { anyVersion = true }
             }
         }
     }
