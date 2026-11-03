@@ -41,6 +41,10 @@ public struct NewPhoneSecretContent: View {
     }
 
     public var body: some View {
+        screenBody.holdsInput(state.holdsInput)
+    }
+
+    @ViewBuilder private var screenBody: some View {
         if state.done {
             FormScaffold(
                 title: SecurityStrings.newSecret, message: SecurityStrings.newSecretDone, primaryLabel: SettingsStrings.done,

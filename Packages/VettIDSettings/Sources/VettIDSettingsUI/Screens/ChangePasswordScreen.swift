@@ -43,6 +43,10 @@ public struct ChangePasswordContent: View {
     }
 
     public var body: some View {
+        steps.holdsInput(state.holdsInput)
+    }
+
+    @ViewBuilder private var steps: some View {
         if state.done {
             FormScaffold(title: CredentialStrings.changeDone, primaryLabel: CredentialStrings.done, onPrimary: actions.onBack) {
                 EmptyView()

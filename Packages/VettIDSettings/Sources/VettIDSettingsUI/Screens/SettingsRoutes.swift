@@ -184,6 +184,7 @@ public struct AttestationRoute: View {
     private let onBack: @MainActor () -> Void
     @State private var model: AttestationViewModel?
     @State private var importing = false
+    @Environment(\.vettIDCovered) private var covered
 
     public init(
         vault: any VaultRepository,
@@ -203,7 +204,8 @@ public struct AttestationRoute: View {
             onLoadCanary: canaryInbox == nil ? nil : { importing = true }
         )
         .onAppear { if model == nil { model = AttestationViewModel(vault: vault, canary: canary) } }
-        .fileImporter(isPresented: $importing, allowedContentTypes: [.json]) { result in
+        .closesWhenCovered { importing = false }
+        .fileImporter(isPresented: uncovered($importing, covered: covered), allowedContentTypes: [.json]) { result in
             guard let inbox = canaryInbox else { return }
             let url = try? result.get()
             Task { @MainActor in

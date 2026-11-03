@@ -53,6 +53,10 @@ public struct CredentialContent: View {
     }
 
     public var body: some View {
+        screenBody.holdsInput(state.holdsInput)
+    }
+
+    @ViewBuilder private var screenBody: some View {
         DetailScaffold(background: colors.groupedBackground, onBack: actions.back) {
             content
         }

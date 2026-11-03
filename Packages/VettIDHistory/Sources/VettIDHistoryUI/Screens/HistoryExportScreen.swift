@@ -211,6 +211,10 @@ private struct ExportPinStep: View {
     @State private var pin = PinBuffer()
 
     var body: some View {
+        screenBody.holdsInput(pin.count > 0)
+    }
+
+    @ViewBuilder private var screenBody: some View {
         TimelineView(.periodic(from: .now, by: 1)) { context in
             FormScaffold(
                 title: HistoryStrings.exportPinTitle, message: HistoryStrings.exportPinBody, primaryLabel: HistoryStrings.exportExport,
@@ -260,6 +264,7 @@ private struct ExportSaveStep: View {
     let save: ExportSave
     let file: ExportFile?
     let actions: HistoryExportActions
+    @Environment(\.vettIDCovered) private var covered
     @State private var exporting = false
 
     var body: some View {
@@ -272,8 +277,11 @@ private struct ExportSaveStep: View {
             Text(save.fileName).vettIDFont(.bodyMedium).accessibilityIdentifier("history_export_file_name")
         }
         .onAppear { if !save.requested { open() } }
+        // A cover closes the exporter; "Save to Files" again opens it.
+        .closesWhenCovered { exporting = false }
         .fileExporter(
-            isPresented: $exporting, document: file.map(ExportDocument.init), contentTypes: [ExportDocument.contentType(save.format)],
+            isPresented: uncovered($exporting, covered: covered), document: file.map(ExportDocument.init),
+            contentTypes: [ExportDocument.contentType(save.format)],
             defaultFilename: save.fileName,
             onCompletion: { result in
                 switch result {

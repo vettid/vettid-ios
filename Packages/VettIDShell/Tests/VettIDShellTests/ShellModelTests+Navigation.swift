@@ -14,6 +14,16 @@ import VettIDVault
     let repo = FakeVaultRepository(.unlocked)
     var model: ShellModel { ShellModel(account: repo, vault: repo, ownerChecks: repo) }
 
+    /// The vault locks while the daily check covers the shell: nothing is covered after the reset.
+    @Test func aResetEndsTheCheckCovering() {
+        let m = model
+        m.checkCovers = true
+        #expect(!m.inFront(appLocked: false))
+        m.reset()
+        #expect(!m.checkCovers)
+        #expect(m.inFront(appLocked: false))
+    }
+
     /// A vote opens by the pair, once, over the Votes list; a service's votes over its page.
     @Test func aVoteOpensByThePairOnce() {
         let m = model

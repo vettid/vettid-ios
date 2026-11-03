@@ -50,6 +50,10 @@ public struct ChangePinContent: View {
     }
 
     public var body: some View {
+        steps.holdsInput(state.holdsInput)
+    }
+
+    @ViewBuilder private var steps: some View {
         if state.done {
             FormScaffold(
                 title: PinStrings.pinDone, message: state.withPassword ? PinStrings.pinDoneRecovery : nil,

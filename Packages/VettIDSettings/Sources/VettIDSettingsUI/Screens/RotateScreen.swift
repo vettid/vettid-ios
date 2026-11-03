@@ -28,6 +28,10 @@ public struct RotateContent: View {
     }
 
     public var body: some View {
+        screenBody.holdsInput(state.holdsInput)
+    }
+
+    @ViewBuilder private var screenBody: some View {
         if state.done {
             FormScaffold(title: CredentialStrings.rotateDone, primaryLabel: CredentialStrings.done, onPrimary: actions.onBack) {
                 EmptyView()

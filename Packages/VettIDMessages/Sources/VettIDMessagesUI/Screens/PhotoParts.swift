@@ -35,6 +35,7 @@ struct PhotoButton: View {
     @Environment(\.vettIDColors) private var colors
     let enabled: Bool
     let actions: PhotoActions
+    @Environment(\.vettIDCovered) private var covered
     @State private var picking = false
     @State private var picked: [PhotosPickerItem] = []
 
@@ -51,11 +52,13 @@ struct PhotoButton: View {
         .accessibilityLabel(MessagesStrings.photoAdd)
         .accessibilityIdentifier("photo")
         .photosPicker(
-            isPresented: $picking, selection: $picked, maxSelectionCount: PhotoDraft.maxPhotos, matching: .images,
+            isPresented: uncovered($picking, covered: covered), selection: $picked,
+            maxSelectionCount: PhotoDraft.maxPhotos, matching: .images,
             // The picture as the library holds it (HEIC included, which ImageIO reads): no transcoded copy is made for the
             // app (chosen; not in the spec).
             preferredItemEncoding: .current
         )
+        .closesWhenCovered { picking = false }
         .onChange(of: picked) { _, items in
             guard !items.isEmpty else { return }
             picked = []

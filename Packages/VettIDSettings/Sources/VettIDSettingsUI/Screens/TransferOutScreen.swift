@@ -56,6 +56,10 @@ public struct TransferOutContent: View {
     }
 
     public var body: some View {
+        screenBody.holdsInput(state.holdsInput)
+    }
+
+    @ViewBuilder private var screenBody: some View {
         // No identifier of its own: on `screen` it would land on the step's element and replace the step's identifier (UI
         // tests find each step by its own).
         screen

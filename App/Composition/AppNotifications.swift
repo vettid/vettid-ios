@@ -165,8 +165,8 @@ final class AppNotifications: NSObject, UNUserNotificationCenterDelegate {
 
 /// The open app's part (IOS-PLAN §4.12, the tap rule): the screen in front for the notifier, the tap's item opened once the
 /// shell is really in front, and the permission asked the first time. The shell exists only while the vault is open and
-/// no check past the deadline takes its place; it stays mounted under the app lock's cover and under an asked daily
-/// check, so nothing here acts then (``ShellModel/inFront(appLocked:)``): a tap waits for the unlock or the check. Waits up
+/// no check past the deadline covers it; it stays mounted under the app lock's cover, under an asked daily check and
+/// under one past the deadline, so nothing here acts then (``ShellModel/inFront(appLocked:)``): a tap waits for the unlock or the check. Waits up
 /// to 10 seconds for the tapped item after a start, as vettid-android does; the item is marked read.
 struct ShellNotificationsHook: ViewModifier {
     let notifications: AppNotifications
@@ -197,6 +197,17 @@ struct ShellNotificationsHook: ViewModifier {
                 update()
             }
             .onChange(of: model.asked) { _, _ in update() }
+            .onChange(of: model.checkCovers) { _, covers in
+                // The daily check covers the shell, which stays mounted: what ``onDisappear`` did when the check took its
+                // place is done here (no screen in front, the tap's item waited for again after the check), and undone
+                // when the check is passed.
+                if covers {
+                    show()
+                    notifications.taps.rearm()
+                } else {
+                    update()
+                }
+            }
             .onChange(of: scenePhase) { _, now in
                 show()
                 guard now == .active else { return }

@@ -13,6 +13,7 @@ import VettIDUI
 /// `MoveNotices`. Drawn by the root above every phase, so that the notice of a wipe (``movedAway``) is seen on the welcome screen.
 public struct MoveNotices: View {
     @Environment(\.vettIDColors) private var colors
+    @Environment(\.vettIDCovered) private var covered
     let vault: any VaultRepository
     let phase: AppPhase
     @State private var finishMoveOpen = false
@@ -62,7 +63,7 @@ public struct MoveNotices: View {
                 .accessibilityIdentifier("moved_away_banner")
             }
         }
-        .sheet(isPresented: Binding(get: { finishMoveOpen && showsSheet }, set: { finishMoveOpen = $0 })) {
+        .sheet(isPresented: Binding(get: { finishMoveOpen && showsSheet && !covered }, set: { if !covered { finishMoveOpen = $0 } })) {
             FinishMoveRoute(vault: vault) { if !vault.finishingMove { finishMoveOpen = false } }
                 .presentationDetents([.large])
                 .presentationDragIndicator(.visible)

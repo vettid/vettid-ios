@@ -289,6 +289,7 @@ import VettIDDataTesting
         m.cancel()
         #expect(m.state.pin.isEmpty && m.state.message == nil)
     }
+
 }
 
 /// Releases one tick per value of [stream].
