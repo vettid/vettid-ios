@@ -11,8 +11,25 @@ import VettIDDataTesting
 /// TEST ONLY. The vault calls of ``MessagesManager``: a conversation per connection, in arrival order, paged as
 /// vettid-vault pages it (by count only); every call recorded.
 final class FakeMessageOps: MessageOps, @unchecked Sendable {
-    var calls: [String] = []
-    var errors: [String: VaultOpError] = [:]
+    private let lock = NSLock()
+    private var recorded: [String] = []
+    private var failures: [String: VaultOpError] = [:]
+    private var listing = 0
+    private var listingPeak = 0
+    /// The calls, in the order they were made (a read may run alongside others).
+    var calls: [String] {
+        get { lock.withLock { recorded } }
+        set { lock.withLock { recorded = newValue } }
+    }
+    /// An error thrown by the next call of a kind (`send`, `list`, …).
+    var errors: [String: VaultOpError] {
+        get { lock.withLock { failures } }
+        set { lock.withLock { failures = newValue } }
+    }
+    /// The most `message.list` calls that were under way at once.
+    var peakListing: Int { lock.withLock { listingPeak } }
+    /// Set: each `message.list` waits this long (a read under way is seen by the others).
+    var listDelay: Duration?
     /// The conversations, oldest first.
     var stored: [String: [Message]] = [:]
     /// A page of more messages than this is `response_too_large`.
@@ -25,8 +42,10 @@ final class FakeMessageOps: MessageOps, @unchecked Sendable {
     private var sent = 0
 
     private func call(_ name: String) throws {
-        calls.append(name)
-        if let e = errors.removeValue(forKey: String(name.prefix { $0 != ":" })) { throw e }
+        try lock.withLock {
+            recorded.append(name)
+            if let e = failures.removeValue(forKey: String(name.prefix { $0 != ":" })) { throw e }
+        }
     }
 
     static func error(_ type: String, _ code: String) -> VaultOpError { VaultOpError(type: type, code: code, detail: "", body: nil) }
@@ -44,6 +63,12 @@ final class FakeMessageOps: MessageOps, @unchecked Sendable {
 
     func messagePage(_ connectionID: String, limit: Int?, before: String?) async throws -> MessagePage {
         try call("list:\(connectionID):\(limit ?? 0):\(before ?? "")")
+        lock.withLock {
+            listing += 1
+            listingPeak = max(listingPeak, listing)
+        }
+        defer { lock.withLock { listing -= 1 } }
+        if let d = listDelay { try await Task.sleep(for: d) }
         if let g = listGate { try await g.value() }
         let limit = limit ?? 100
         if limit > sealable { throw Self.error("message.list", "response_too_large") }
@@ -271,6 +296,24 @@ final class FakeMessageOps: MessageOps, @unchecked Sendable {
         #expect(ops.calls == ["list:c1:100:"])
         await m.refreshConversationsQuietly()
         #expect(ops.calls.count == 1 && quiet.calls == ["list:c1:100:"])
+    }
+
+    /// The newest pages of many conversations are read at most ``MessagesManager/readsAtOnce`` at a time, and all of them are
+    /// taken in; the first failure (in the list's order) is thrown and the reads not yet started are not made.
+    @Test func manyConversationsAreReadFourAtATime() async throws {
+        let ids = (1...10).map { "c\($0)" }
+        for id in ids { ops.stored[id] = [FakeMessageOps.message(id, "\(id)-m1")] }
+        ops.listDelay = .milliseconds(30)
+        let known = ids.map { ConnectionInfo(id: $0, name: "", state: .active) }
+        let ops = ops, quiet = quiet
+        let m = MessagesManager(ops: { ops }, quietOps: { quiet }, connections: { known }, refreshConnections: {})
+        try await m.refreshConversations()
+        #expect(ops.calls.count == 10 && ops.peakListing > 1 && ops.peakListing <= MessagesManager.readsAtOnce)
+        #expect(ids.allSatisfy { m.messages($0).map(\.messageID) == ["\($0)-m1"] })
+        ops.calls = []
+        ops.errors["list"] = FakeMessageOps.error("message.list", "bad_request")
+        await #expect(throws: (any Error).self) { try await m.refreshConversations() }
+        #expect(ops.calls.count < 10, "the reads after the failure were not started")
     }
 
     /// The vault call's failure is a ``VaultFailure``; a connection the vault does not know is `not_found`.

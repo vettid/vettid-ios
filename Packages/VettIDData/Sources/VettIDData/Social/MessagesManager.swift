@@ -106,8 +106,54 @@ public final class MessagesManager: MessagesRepository {
     /// The newest page of every active connection, read only over the session already open; failures are left for the
     /// screens to retry.
     func refreshConversationsQuietly() async {
-        for c in connections() where c.state == .active {
-            try? await load(c.id, quietly: true, fresh: false)
+        try? await loadNewest(of: connections().filter { $0.state == .active }.map(\.id), quietly: true)
+    }
+
+    /// How many conversations' newest pages are read at once (chosen; not in the spec: vettid-android reads them one
+    /// after the other).
+    static let readsAtOnce = 4
+
+    /// The newest page of each of [ids], at most ``readsAtOnce`` at a time. A failure stops the reads not yet started and
+    /// is thrown once the ones under way ended (the first of the list's order when several failed), unless [quietly]:
+    /// then failures are left for the screens to retry. A cancellation of the caller is thrown.
+    private func loadNewest(of ids: [String], quietly: Bool) async throws {
+        var failure: ReadFailure?
+        let read: @MainActor @Sendable (Int) async -> ReadFailure? = { [self] i in await readNewest(ids[i], i, quietly) }
+        await withTaskGroup(of: ReadFailure?.self) { group in
+            var next = 0
+            while next < min(Self.readsAtOnce, ids.count) {
+                let i = next
+                group.addTask { await read(i) }
+                next += 1
+            }
+            while let done = await group.next() {
+                if let done {
+                    // A read cancelled because another failed is no failure of its own.
+                    if !(done.error is CancellationError), failure.map({ done.index < $0.index }) ?? true { failure = done }
+                    if !quietly { group.cancelAll() }
+                } else if next < ids.count, quietly || failure == nil {
+                    let i = next
+                    group.addTask { await read(i) }
+                    next += 1
+                }
+            }
+        }
+        try Task.checkCancellation()
+        if !quietly, let failure { throw failure.error }
+    }
+
+    /// A read of the newest page of one conversation that ended in [error].
+    private struct ReadFailure: Sendable {
+        var index: Int
+        var error: any Error
+    }
+
+    private func readNewest(_ id: String, _ index: Int, _ quietly: Bool) async -> ReadFailure? {
+        do {
+            try await load(id, quietly: quietly, fresh: false)
+            return nil
+        } catch {
+            return ReadFailure(index: index, error: error)
         }
     }
 
@@ -124,9 +170,7 @@ public final class MessagesManager: MessagesRepository {
 
     public func refreshConversations() async throws {
         if connections().isEmpty { try await refreshConnections() }
-        for c in connections() where c.state == .active {
-            try await load(c.id, quietly: false, fresh: false)
-        }
+        try await loadNewest(of: connections().filter { $0.state == .active }.map(\.id), quietly: false)
     }
 
     public func load(_ connectionID: String) async throws { try await load(connectionID, quietly: false, fresh: false) }
