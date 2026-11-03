@@ -141,7 +141,7 @@ public struct ItemDetailScreen: View {
         } else if state.loading {
             ProgressView().tint(colors.primary.color).frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
-            let message = ItemsText.failure(state.error ?? .other, shownCode: state.errorCode)
+            let message = ItemsText.failure(state.error ?? .other, shownCode: state.errorCode, reading: true)
             NoticeCard(.warning, title: ItemsStrings.errorItem, message: message, announce: .polite) {
                 Button(ItemsStrings.retry) { actions.onRetry() }
             }
