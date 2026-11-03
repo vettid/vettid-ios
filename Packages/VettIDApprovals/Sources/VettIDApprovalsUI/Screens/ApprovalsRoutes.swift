@@ -96,8 +96,6 @@ public struct ApprovalDetailRoute: View {
         if case .share(let d)? = m.state.approval { shown = d.items.map(\.itemID) }
         a.onApprove = { m.approve(shown: shown) }
         a.onDeny = { m.deny(shown: shown) }
-        a.onAskBlock = { m.askBlock($0) }
-        a.onBlock = { m.block() }
         a.onAskMute = { m.askMute($0) }
         a.onMute = { m.mute() }
         a.onToggleShareItem = { m.toggleShareItem($0) }

@@ -210,14 +210,14 @@ final class FakeConnectionOps: ConnectionOps, @unchecked Sendable {
         }
         m.onEvent(event("connection.request.outgoing", #"{"connection_id":"c1","sas":"111111"}"#))
         try await m.declineConnection("p1")
-        try await m.blockConnectionRequest("p2")
+        try await m.declineConnection("p2")
         ops.errors["approve:p3"] = FakeConnectionOps.error("connection.approve", "not_found")
         let k6 = await kind { try await m.approveConnection("p3") }
         #expect(k6 == .notFound)
         try await m.approveOutgoing("c1")
         #expect(m.requests.map(\.id) == ["c1"] && m.requests.first?.state == .approved)
         try await m.declineOutgoing("c1")
-        #expect(ops.calls == ["decline:p1", "block:p2", "approve:p3", "approveOutgoing:c1", "declineOutgoing:c1"])
+        #expect(ops.calls == ["decline:p1", "decline:p2", "approve:p3", "approveOutgoing:c1", "declineOutgoing:c1"])
         #expect(m.requests.isEmpty)
         #expect(m.requestEnds == ["p1": .declined, "p2": .declined, "p3": .gone, "c1": .declined])
         // A list read sent before the vault said `not_found` does not bring the request back.
@@ -264,8 +264,7 @@ final class FakeConnectionOps: ConnectionOps, @unchecked Sendable {
         try await quiet.resumeAsks("c1")
         #expect(quiet.connections.first?.asks == AskState(muted: true))
         try await m.remove("c1")
-        try await m.block("c2")
-        #expect(m.connections.isEmpty && ops.calls.suffix(2) == ["remove:c1", "block:c2"])
+        #expect(m.connections.isEmpty && ops.calls.suffix(1) == ["remove:c1"])
     }
 
     /// Locked or held (IOS-PLAN §6.9: both ``ConnectionsManager/forgetOpenVault()``): what was read from the vault goes,

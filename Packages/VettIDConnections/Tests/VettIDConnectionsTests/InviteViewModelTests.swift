@@ -133,21 +133,6 @@ import VettIDDataTesting
         #expect(m.state.step == .choose && m.state.request == nil)
     }
 
-    @Test func blockIsConfirmedFirst() async {
-        let m = await showing()
-        fake.requests = [Samples.incoming()]
-        await m.settle()
-        m.askBlock(true)
-        #expect(m.state.confirmBlock)
-        m.askBlock(false)
-        #expect(!m.state.confirmBlock && !fake.calls.contains("blockConnectionRequest"))
-        m.askBlock(true)
-        m.block()
-        #expect(!m.state.confirmBlock)
-        await m.settle()
-        #expect(fake.calls.contains("blockConnectionRequest") && m.state.step == .choose)
-    }
-
     @Test func aFailedDecisionSaysWhy() async {
         let m = await showing()
         fake.requests = [Samples.incoming()]
@@ -156,10 +141,6 @@ import VettIDDataTesting
         m.decline()
         await m.settle()
         #expect(m.state.step == .request && m.state.error == .network)
-        fake.fail["blockConnectionRequest"] = VaultFailure(.limit)
-        m.block()
-        await m.settle()
-        #expect(m.state.step == .request && m.state.error == .limit)
     }
 
     @Test func cancellingTheInvitationGoesBackToTheStart() async {

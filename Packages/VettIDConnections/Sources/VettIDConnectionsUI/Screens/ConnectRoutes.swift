@@ -88,8 +88,6 @@ struct InviteRoute: View {
         a.onTick = { m.tick() }
         a.onApprove = { m.approve() }
         a.onDecline = { m.decline() }
-        a.onAskBlock = { m.askBlock($0) }
-        a.onBlock = { m.block() }
         a.onCancelInvite = { m.cancelInvite() }
         a.onAgain = { m.again() }
         return a

@@ -48,22 +48,12 @@ import VettIDDataTesting
         #expect(connections.calls.last == "declineConnection")
     }
 
-    @Test func anOutgoingRequestIsApprovedAndAnIncomingOneBlockedOnceConfirmed() async {
+    @Test func anOutgoingRequestIsApproved() async {
         connections.requests = [Samples.incoming("p1"), Samples.outgoing("o1")]
         let o = await model("outgoing:o1")
         o.approve()
         await o.settle()
         #expect(connections.calls.last == "approveOutgoing")
-        let p = await model("connection:p1")
-        p.askBlock(true)
-        #expect(p.state.confirmBlock)
-        p.askBlock(false)
-        #expect(!p.state.confirmBlock)
-        p.askBlock(true)
-        p.block()
-        #expect(!p.state.confirmBlock)
-        await p.settle()
-        #expect(connections.calls.last == "blockConnectionRequest" && p.state.done)
     }
 
     /// A request the vault no longer has (decided on another device, or expired): "Already decided", not a failure screen.

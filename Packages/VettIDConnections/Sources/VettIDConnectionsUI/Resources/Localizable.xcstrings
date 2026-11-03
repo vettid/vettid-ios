@@ -617,50 +617,6 @@
         }
       }
     },
-    "connections_block_request": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Block this request"
-          }
-        }
-      }
-    },
-    "connections_block_request_title": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Block this request?"
-          }
-        }
-      }
-    },
-    "connections_block_request_body": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "The request is declined and its vault cannot ask to connect again unless you unblock it."
-          }
-        }
-      }
-    },
-    "connections_block": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Block"
-          }
-        }
-      }
-    },
     "connections_connected_title": {
       "extractionState": "manual",
       "localizations": {

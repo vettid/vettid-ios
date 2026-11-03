@@ -328,26 +328,6 @@ enum ConnectStrings {
 
     static var requestDecline: String { String(localized: "connections_request_decline", defaultValue: "Decline", bundle: .module) }
 
-    static var blockRequest: String { String(localized: "connections_block_request", defaultValue: "Block this request", bundle: .module) }
-
-    static var blockRequestTitle: String {
-        String(
-            localized: "connections_block_request_title",
-            defaultValue: "Block this request?",
-            bundle: .module
-        )
-    }
-
-    static var blockRequestBody: String {
-        String(
-            localized: "connections_block_request_body",
-            defaultValue: "The request is declined and its vault cannot ask to connect again unless you unblock it.",
-            bundle: .module
-        )
-    }
-
-    static var block: String { String(localized: "connections_block", defaultValue: "Block", bundle: .module) }
-
     static var connectedTitle: String {
         String(
             localized: "connections_connected_title",

@@ -193,7 +193,6 @@ import VettIDApprovals
         failing.password = "pw"
         failing.error = .badPassword
         failing.busy = true
-        failing.confirmBlock = true
         var backoff = out[6]
         backoff.error = .backoff
         backoff.retryUntil = Date().addingTimeInterval(20)

@@ -9,7 +9,7 @@ public enum InviteStep: Equatable, Sendable {
     case choose
     /// The QR code and the link, until someone uses them.
     case showing
-    /// The request arrived: compare the safety code, then approve, decline or block.
+    /// The request arrived: compare the safety code, then approve or decline.
     case request
     /// This member approved; the other member's approval is awaited.
     case connecting
@@ -36,7 +36,6 @@ public struct InviteState: Equatable, Sendable, CustomStringConvertible, CustomD
     /// ``InviteStep/declined``: the name the request showed.
     public var declinedName: String?
     public var busy = false
-    public var confirmBlock = false
     /// The request arrived already approved by in-person auto-approval (§6.4), not by this member here.
     public var autoApproved = false
     public var error: FailureKind?
@@ -179,15 +178,6 @@ public final class InviteViewModel {
         guard let request = state.request else { return }
         let requests = requests
         decide { try await requests.declineConnection(request.pendingID) }
-    }
-
-    public func askBlock(_ show: Bool) { state.confirmBlock = show }
-
-    public func block() {
-        guard let request = state.request else { return }
-        state.confirmBlock = false
-        let requests = requests
-        decide { try await requests.blockConnectionRequest(request.pendingID) }
     }
 
     /// Cancels the invitation before anyone used it (the vault revokes its token and deletes the claim).

@@ -179,11 +179,6 @@ extension ConnectionsManager {
         endRequest(pendingID, .declined)
     }
 
-    public func blockConnectionRequest(_ pendingID: String) async throws {
-        try await decide(pendingID) { _ = try await $0.blockAdd(connectionID: nil, pendingID: pendingID, note: nil) }
-        endRequest(pendingID, .declined)
-    }
-
     public func approveOutgoing(_ connectionID: String) async throws {
         try await decide(connectionID) { try await $0.outgoingApprove(connectionID: connectionID) }
         patchRequest(connectionID) { $0.with(state: .approved) }

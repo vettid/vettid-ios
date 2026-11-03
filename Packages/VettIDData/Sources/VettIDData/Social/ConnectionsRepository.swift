@@ -30,9 +30,6 @@ public protocol ConnectionsRepository: AnyObject, Observable, Sendable {
 
     func remove(_ id: String) async throws
 
-    /// Removes the connection and blocks its identity (§10.4 block list).
-    func block(_ id: String) async throws
-
     /// Mutes or unmutes the connection's asks (`connection.asks.mute`, VAULT-MESSAGING 0.23.0 §10.4.1).
     func setAsksMuted(_ id: String, muted: Bool) async throws
 
@@ -65,9 +62,6 @@ public protocol ConnectionRequestsRepository: AnyObject, Observable, Sendable {
     func approveConnection(_ pendingID: String) async throws
 
     func declineConnection(_ pendingID: String) async throws
-
-    /// Declines the request and blocks the requester's identity (a block looks like a decline to the peer).
-    func blockConnectionRequest(_ pendingID: String) async throws
 
     /// Approves this vault's outgoing request (the accepter's side) after comparing the safety code.
     func approveOutgoing(_ connectionID: String) async throws

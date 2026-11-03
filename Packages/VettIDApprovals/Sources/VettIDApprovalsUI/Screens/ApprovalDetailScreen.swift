@@ -11,8 +11,6 @@ public struct DecisionActions {
     public var onPassword: @MainActor (String) -> Void = { _ in }
     public var onApprove: @MainActor () -> Void = {}
     public var onDeny: @MainActor () -> Void = {}
-    public var onAskBlock: @MainActor (Bool) -> Void = { _ in }
-    public var onBlock: @MainActor () -> Void = {}
     /// Ticks or unticks an item of a share decision.
     public var onToggleShareItem: @MainActor (String) -> Void = { _ in }
     /// A grant request (§10.12): tick an entry, answer a category entry with an item, set uses and lifetime.
@@ -200,14 +198,6 @@ public struct ApprovalDetailScreen: View {
         ) {
             DecisionContent(approval: a, state: state, actions: actions, now: now)
         }
-        .confirmDialog(
-            isPresented: Binding(get: { state.confirmBlock }, set: { if !$0 { actions.onAskBlock(false) } }),
-            title: ApprovalsStrings.blockTitle,
-            message: ApprovalsStrings.blockBody,
-            confirmLabel: ApprovalsStrings.block,
-            destructive: true,
-            onConfirm: actions.onBlock
-        )
         .endAccessConfirmation(state, actions)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("approval_detail")
@@ -254,11 +244,6 @@ struct DecisionContent: View {
                 )
                 .padding(.top, Spacing.l)
                 .accessibilityIdentifier("approval_password")
-            }
-            if case .connection(.incoming) = approval {
-                NoticeAction(label: ApprovalsStrings.block, identifier: "block_request", destructive: true) { actions.onAskBlock(true) }
-                    .disabled(state.busy)
-                    .padding(.top, Spacing.m)
             }
             RenewalNotices(state: state, actions: actions, now: now)
             if let error = state.error {

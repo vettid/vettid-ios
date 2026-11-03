@@ -364,18 +364,6 @@ enum ApprovalsStrings {
         )
     }
 
-    static var block: String { String(localized: "approvals_block", defaultValue: "Block this request", bundle: .module) }
-
-    static var blockTitle: String { String(localized: "approvals_block_title", defaultValue: "Block this request?", bundle: .module) }
-
-    static var blockBody: String {
-        String(
-            localized: "approvals_block_body",
-            defaultValue: "The request is declined and its vault cannot ask to connect again unless you unblock it.",
-            bundle: .module
-        )
-    }
-
     static func connectionBody(_ value: String) -> String {
         String(
             localized: "approvals_connection_body",

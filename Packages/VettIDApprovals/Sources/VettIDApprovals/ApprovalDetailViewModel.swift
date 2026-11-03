@@ -29,7 +29,6 @@ public struct ApprovalDetailState: Equatable, Sendable, CustomStringConvertible,
     public var approval: PendingApproval?
     public var password = ""
     public var busy = false
-    public var confirmBlock = false
     /// Decided here: the screen closes.
     public var done = false
     /// It left the list without a decision here (decided on another device, or expired).
@@ -333,8 +332,6 @@ public final class ApprovalDetailViewModel {
     /// The screen left or the app went to the background: the password goes.
     public func forgetSecrets() { local.password = "" }
 
-    public func askBlock(_ show: Bool) { local.confirmBlock = show }
-
     /// "Mute requests from …" on a withdrawn request (ANDROID-PLAN 0.1.101), only while it is offered
     /// (``ApprovalDetailState/offersMute(_:)``): a service connection's is confirmed first (superseded sign-ins are routine
     /// for a service), a person's is muted at once.
@@ -489,14 +486,6 @@ public final class ApprovalDetailViewModel {
                 local.endFailure = failureKind(error)
             }
         }
-    }
-
-    /// Declines an incoming connection request and blocks the requester (confirmed first).
-    public func block() {
-        guard case .connection(.incoming(let r))? = state.approval else { return }
-        local.confirmBlock = false
-        let repo = repo
-        decide { try await repo.blockConnectionRequest(r.pendingID) }
     }
 
     /// The member read the critical-use result.

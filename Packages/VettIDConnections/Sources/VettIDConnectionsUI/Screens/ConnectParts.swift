@@ -144,13 +144,12 @@ struct ConnectedScreen: View {
 struct RequestActions {
     var onApprove: @MainActor () -> Void = {}
     var onDecline: @MainActor () -> Void = {}
-    var onBlock: @MainActor () -> Void = {}
     var onBack: @MainActor () -> Void = {}
 }
 
 /// A connection request at the inviter (VAULT-MESSAGING §6.4, 0.10.3): the requester's "First Last" from its `hs.init`
 /// profile (the names on its VettID account, never called verified, 0.18.0 §6.2, §10.8) and its display name, if any
-/// (self-asserted, labelled so), the safety code to compare with them, and approve / decline / block. After this
+/// (self-asserted, labelled so), the safety code to compare with them, and approve / decline. After this
 /// member's approval ([approved]) the code stays on screen while the other member approves on their phone. Mirrors
 /// vettid-android `ConnectionRequestContent`.
 struct ConnectionRequestContent: View {
@@ -189,14 +188,6 @@ struct ConnectionRequestContent: View {
                     .padding(.top, Spacing.m)
             }
             if approved { WaitingRow(text: ConnectStrings.waitingPeer(who)).padding(.top, Spacing.l) }
-            Button(action: actions.onBlock) {
-                Text(ConnectStrings.blockRequest).vettIDFont(.labelLarge).foregroundStyle(colors.error)
-                    .frame(minHeight: Spacing.touchTarget)
-            }
-            .buttonStyle(.plain)
-            .disabled(busy)
-            .padding(.top, Spacing.l)
-            .accessibilityIdentifier("block_request")
             FailureLine(kind: error)
         }
         .accessibilityIdentifier("connection_request")

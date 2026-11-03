@@ -172,11 +172,6 @@ extension ApprovalsManager {
         decided("connection:\(pendingID)")
     }
 
-    public func blockConnectionRequest(_ pendingID: String) async throws {
-        try await connections.blockConnectionRequest(pendingID)
-        decided("connection:\(pendingID)")
-    }
-
     public func approveOutgoing(_ connectionID: String) async throws { try await connections.approveOutgoing(connectionID) }
 
     public func declineOutgoing(_ connectionID: String) async throws { try await connections.declineOutgoing(connectionID) }

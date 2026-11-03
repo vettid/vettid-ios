@@ -365,7 +365,7 @@ enum DataStrings {
         String(
             localized: "data_failure_blocked",
             defaultValue: """
-                You blocked the vault that sent this invitation. Unblock it first to connect.
+                You blocked this vault earlier, so this invitation can't be used to connect.
                 """,
             bundle: .module
         )

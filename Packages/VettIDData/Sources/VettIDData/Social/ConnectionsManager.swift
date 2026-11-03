@@ -255,11 +255,6 @@ public final class ConnectionsManager: ConnectionsRepository, ConnectionRequests
         forget(id)
     }
 
-    public func block(_ id: String) async throws {
-        _ = try await guarded { try await ops().blockAdd(connectionID: id, pendingID: nil, note: nil) }
-        forget(id)
-    }
-
     func forget(_ id: String) {
         connections.removeAll { $0.id == id }
         onForget(id)

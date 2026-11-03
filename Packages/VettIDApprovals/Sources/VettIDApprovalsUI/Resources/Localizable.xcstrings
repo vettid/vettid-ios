@@ -618,39 +618,6 @@
         }
       }
     },
-    "approvals_block": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Block this request"
-          }
-        }
-      }
-    },
-    "approvals_block_title": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Block this request?"
-          }
-        }
-      }
-    },
-    "approvals_block_body": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "The request is declined and its vault cannot ask to connect again unless you unblock it."
-          }
-        }
-      }
-    },
     "approvals_connection_body": {
       "extractionState": "manual",
       "localizations": {

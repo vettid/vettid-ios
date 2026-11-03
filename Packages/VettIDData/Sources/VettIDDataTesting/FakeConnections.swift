@@ -103,11 +103,6 @@ public final class FakeConnections: ConnectionsRepository, ConnectionRequestsRep
         connections.removeAll { $0.id == id }
     }
 
-    public func block(_ id: String) async throws {
-        try call("block")
-        connections.removeAll { $0.id == id }
-    }
-
     public func setAsksMuted(_ id: String, muted: Bool) async throws {
         try call("asksMute:\(id):\(muted)")
         edit(id) { $0.asks = ($0.asks ?? AskState()).muted(muted) }
@@ -152,11 +147,6 @@ public final class FakeConnections: ConnectionsRepository, ConnectionRequestsRep
 
     public func declineConnection(_ pendingID: String) async throws {
         try decide("declineConnection", pendingID)
-        end(pendingID, .declined)
-    }
-
-    public func blockConnectionRequest(_ pendingID: String) async throws {
-        try decide("blockConnectionRequest", pendingID)
         end(pendingID, .declined)
     }
 
