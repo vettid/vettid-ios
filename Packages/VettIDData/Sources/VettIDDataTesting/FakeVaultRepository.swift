@@ -244,6 +244,8 @@ public final class FakeVaultRepository: CustomStringConvertible {
     public var lastTransferApproved: String?
     /// When set, ``transferCreate()`` waits for it (a `device.transfer.create` still on its way).
     public var transferCreateGate: TestDeferred<Void>?
+    /// When set, ``transferApprove(transferID:pin:password:signer:)`` waits for it (an approval still on its way).
+    public var transferApproveGate: TestDeferred<Void>?
     public var lastTransferRejected: String?
     /// Whether the vault's `device.unlinked{transferred}` follows an approval (and wipes this phone).
     public var transferConfirmed = true

@@ -154,6 +154,35 @@ import VettIDUI
         #expect(model.state.step == .intro && model.state.offer == nil)
     }
 
+    /// A lock or a reset takes the screen away while the approval is on its way: nothing is rejected (it would race the approval).
+    @Test func anApprovalInFlightIsNotRejectedByTheScreenGoing() async throws {
+        let vault = FakeVaultRepository(.unlocked)
+        vault.transferApproveGate = TestDeferred<Void>()
+        vault.transferConfirmed = false
+        let clock = VirtualTime()
+        vault.offer = TransferOfferView(
+            transferID: pending.transferID, qrPayload: "{}", link: "link", expiresAt: clock.now().addingTimeInterval(600)
+        )
+        let model = TransferOutViewModel(move: vault, vault: vault, now: clock.now, sleep: clock.sleep)
+        model.create()
+        await clock.runCurrent()
+        vault.pendingTransfer.complete(pending)
+        await clock.runCurrent()
+        model.codesMatch()
+        model.setPin("975310")
+        model.setPassword("correct horse battery")
+        model.approve()
+        await clock.runCurrent()
+        #expect(model.state.step == .approve && model.state.busy)
+        var window: UIWindow? = host(TransferOutRoute(move: vault, vault: vault, onOpenRecovery: nil, onBack: {}, model: model))
+        window?.rootViewController = nil
+        window?.isHidden = true
+        window = nil
+        await clock.runCurrent()
+        try await Task.sleep(for: .milliseconds(200))
+        #expect(vault.lastTransferRejected == nil && !vault.calls.contains("transferReject"))
+    }
+
     /// An approval in flight is not rejected when the screen is replaced; every other step leaves the transfer.
     @Test func anApprovalInFlightIsNotRejectedWhenTheScreenGoes() {
         var s = TransferOutState()

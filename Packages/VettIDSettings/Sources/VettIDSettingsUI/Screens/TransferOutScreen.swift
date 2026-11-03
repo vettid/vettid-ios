@@ -63,8 +63,6 @@ public struct TransferOutContent: View {
             // The edge swipe goes around this screen's own Back, which cancels the transfer: off while one is open or a request
             // is in flight (the in-app Back is disabled then too).
             .blocksBackGesture(state.busy || state.step.isOpen)
-            // Whatever way the screen goes, an open transfer is cancelled at the vault (best effort; it expires anyway).
-            .onDisappear { actions.leave() }
             .confirmDialog(
                 isPresented: Binding(get: { state.confirmReject }, set: { if !$0 { actions.askReject(false) } }),
                 title: TransferStrings.transferRejectTitle,
