@@ -134,7 +134,7 @@ import VettIDDataTesting
         #expect(vm.state.step == .confirmAccount)
     }
 
-    @Test func aRefusedCodeSaysSoAndNotMyAccountStartsOver() async {
+    @Test func aRefusedCodeSaysSoAndNotMyAccountStartsOver() async throws {
         let vm = vm()
         await vm.settle()
         vm.start()
@@ -145,7 +145,8 @@ import VettIDDataTesting
         vault.fail["redeemSetupCode"] = FakeVaultRepository.failure(.rateLimited, retry: 120)
         vm.submitCode()
         await vm.settle()
-        #expect(vm.state.error == .rateLimited && abs(try #require(vm.state.errorRetryAt).timeIntervalSinceNow - 120) < 30)
+        let retryAt = try #require(vm.state.errorRetryAt)
+        #expect(vm.state.error == .rateLimited && abs(retryAt.timeIntervalSinceNow - 120) < 30)
         vault.fail["redeemSetupCode"] = FakeVaultRepository.failure(.setupCodeInvalid, code: "invalid_code")
         vm.submitCode()
         #expect(vm.state.busy, "busy at once: a second tap is ignored")
