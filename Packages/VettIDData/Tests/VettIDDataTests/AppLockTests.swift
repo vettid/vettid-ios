@@ -87,6 +87,41 @@ final class FaultyAppLockKeys: AppLockKeys, @unchecked Sendable {
     func delete() throws { try inner.delete() }
 }
 
+/// The software app-lock key whose open waits (the prompt on screen) until a test releases it.
+final class HeldAppLockKeys: AppLockKeys, @unchecked Sendable {
+    let inner = SoftwareAppLockKeys()
+    private let lock = NSLock()
+    private var holdValue = false
+    private var continuation: CheckedContinuation<Void, Never>?
+
+    var hold: Bool {
+        get { lock.withLock { holdValue } }
+        set { lock.withLock { holdValue = newValue } }
+    }
+
+    /// An open is waiting for ``release()``.
+    var waiting: Bool { lock.withLock { continuation != nil } }
+
+    func release() {
+        let c = lock.withLock { () -> CheckedContinuation<Void, Never>? in
+            defer { continuation = nil }
+            return continuation
+        }
+        c?.resume()
+    }
+
+    func create(_ method: AppLockMethod) throws { try inner.create(method) }
+    func exists() throws -> Bool { try inner.exists() }
+    func seal(_ plaintext: [UInt8]) throws -> [UInt8] { try inner.seal(plaintext) }
+
+    func open(_ sealed: [UInt8], reason: String) async throws -> [UInt8] {
+        if hold { await withCheckedContinuation { c in lock.withLock { continuation = c } } }
+        return try await inner.open(sealed, reason: reason)
+    }
+
+    func delete() throws { try inner.delete() }
+}
+
 @MainActor
 @Suite struct AppLockTests {
     final class Clock: @unchecked Sendable {
@@ -197,7 +232,7 @@ final class FaultyAppLockKeys: AppLockKeys, @unchecked Sendable {
         #expect(l.state == .locked)
     }
 
-    /// Setting the date back does not keep the app open (IOS-PLAN §6.4), and a date set forward does not lock early.
+    /// Setting the date back does not keep the app open (app lock timeout, 2026-11-03 lead decision), and a date set forward does not lock early.
     @Test func aWallClockSetBackLocks() async throws {
         let l = try await enabled()
         try l.setTimeout(.oneMinute)
@@ -283,6 +318,45 @@ final class FaultyAppLockKeys: AppLockKeys, @unchecked Sendable {
         l.authenticating = false
         l.onForeground()
         #expect(l.state == .locked)
+    }
+
+    /// The app goes to the background while the unlock prompt shows, and the prompt succeeds after the timeout: the return that
+    /// was skipped is applied when the prompt ends, so the app locks again.
+    @Test func aPromptSpanningTheBackgroundLocksWhenTheTimeoutIsDue() async throws {
+        let held = HeldAppLockKeys()
+        let l = lock(held)
+        l.start()
+        #expect(try await l.enable(.biometrics, reason: "Unlock VettID"))
+        try l.setTimeout(.oneMinute)
+        l.lockNow()
+        held.hold = true
+        let opening = Task { @MainActor in await l.unlock(reason: "Unlock VettID") }
+        while !held.waiting { await Task.yield() }
+        l.onBackground()
+        clock.up += 120
+        l.onForeground() // skipped: the prompt shows
+        #expect(l.state == .locked && l.foregroundCheckPending)
+        held.release()
+        _ = await opening.value
+        #expect(l.state == .locked && !l.foregroundCheckPending)
+    }
+
+    /// The same within the timeout: the app stays open and is no longer counted as covered.
+    @Test func aPromptSpanningTheBackgroundWithinTheTimeoutStaysUnlocked() async throws {
+        let held = HeldAppLockKeys()
+        let l = lock(held)
+        l.start()
+        #expect(try await l.enable(.biometrics, reason: "Unlock VettID"))
+        try l.setTimeout(.oneMinute)
+        l.lockNow()
+        held.hold = true
+        let opening = Task { @MainActor in await l.unlock(reason: "Unlock VettID") }
+        while !held.waiting { await Task.yield() }
+        l.onBackground()
+        clock.up += 30
+        held.release()
+        #expect(await opening.value)
+        #expect(l.state == .unlocked && !l.foregroundCheckPending)
     }
 
     @Test func invalidatedKeyTurnsTheLockOff() async throws {
