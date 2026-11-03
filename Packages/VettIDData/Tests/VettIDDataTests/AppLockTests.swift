@@ -271,6 +271,20 @@ final class FaultyAppLockKeys: AppLockKeys, @unchecked Sendable {
         #expect(l.state == .locked)
     }
 
+    /// A prompt that succeeds as the scene goes to the background: the return after it still applies the timeout.
+    @Test func aPromptThatEndsAsTheSceneLeavesStillGetsItsTimeout() async throws {
+        let l = try await enabled()
+        try l.setTimeout(.oneMinute)
+        l.authenticating = true
+        l.onBackground()
+        clock.up += 120
+        l.onForeground()
+        #expect(l.state == .unlocked && l.foregroundCheckPending, "skipped while the prompt shows, kept for later")
+        l.authenticating = false
+        l.onForeground()
+        #expect(l.state == .locked)
+    }
+
     @Test func invalidatedKeyTurnsTheLockOff() async throws {
         let l = try await enabled()
         l.lockNow()

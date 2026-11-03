@@ -368,10 +368,10 @@ public final class AppLock {
         state = .locked
     }
 
-    /// The app left the foreground (IOS-PLAN §6.6: the timeout counts from then, read on return). Not while a prompt
-    /// shows.
+    /// The app left the foreground (IOS-PLAN §6.6: the timeout counts from then, read on return). Recorded also while a
+    /// prompt shows: the passcode prompt can send the app to the background, and a prompt that succeeds as the scene leaves
+    /// must not leave the app with no start for its timeout. The return's check skips while the prompt shows and keeps it.
     public func onBackground() {
-        if authenticating { return }
         backgroundAt = (uptime(), wall())
         clockSteppedBack = false
     }
