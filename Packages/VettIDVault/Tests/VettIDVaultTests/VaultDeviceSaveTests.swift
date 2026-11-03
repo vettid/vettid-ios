@@ -70,6 +70,39 @@ extension VaultDeviceTests {
     }
 }
 
+extension VaultDeviceTests {
+    /// A store whose writes fail once armed.
+    final class FlakyStore: DeviceStateStore, @unchecked Sendable {
+        private let lock = NSLock()
+        private var b: [UInt8]?
+        private var armed = false
+
+        func arm() { lock.withLock { armed = true } }
+        func load() -> [UInt8]? { lock.withLock { b } }
+        func clear() { lock.withLock { b = nil } }
+        func save(_ state: [UInt8]) throws {
+            try lock.withLock {
+                if armed { throw CocoaError(.fileWriteOutOfSpace) }
+                b = state
+            }
+        }
+    }
+
+    /// The replies made while a message is handled go out only when the save that ends the handling succeeded: a failing
+    /// write deposits nothing (a token answer, and a rekey's `hs.resp` before its responder is on disk), and leaves nothing
+    /// in the outbox.
+    @Test func noReplyIsDepositedWhenTheSaveFailed() async throws {
+        let store = FlakyStore()
+        let (d, v) = try await pairedDevice(store: store)
+        store.arm()
+        await #expect(throws: (any Error).self) { try await d.handle(try v.seal("relay.token.refresh", "{}")) }
+        #expect(await relay.noDeposit(within: 0.3), "no token answer")
+        #expect(d.outboxIDs.isEmpty)
+        await #expect(throws: (any Error).self) { try await d.handle(v.msg(try v.rekey(d).envelope)) }
+        #expect(await relay.noDeposit(within: 0.3), "no hs.resp before the responder is stored")
+    }
+}
+
 private final class Recorder<T: Sendable>: @unchecked Sendable {
     private let lock = NSLock()
     private var items: [T] = []

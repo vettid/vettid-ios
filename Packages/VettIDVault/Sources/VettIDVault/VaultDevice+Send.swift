@@ -415,6 +415,9 @@ extension VaultDevice {
         mem.withLock { inbox.removeAll() }
     }
 
+    /// The ids of the outbox's entries (tests).
+    var outboxIDs: [String] { mem.withLock { st.outbox.map(\.id) } }
+
     /// How many events the inbox holds.
     public var inboxCount: Int { mem.withLock { inbox.count } }
 
@@ -464,4 +467,7 @@ final class AfterLockWork: @unchecked Sendable {
         }
         for w in all { await w() }
     }
+
+    /// Forgets the work queued by the handling without running it.
+    func drop() { lock.withLock { work.removeAll() } }
 }

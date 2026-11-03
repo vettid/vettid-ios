@@ -8,22 +8,26 @@ extension VaultDevice {
     /// rekey's new epoch that arrived before the rekey's `hs.fin` is neither recorded as seen nor acked
     /// (``LeaveUnacked``): the relay delivers it again, and it is opened once `hs.fin` has arrived (§6.3, §8.4).
     public func handle(_ m: RelayMessage) async throws {
-        var failure: (any Error)?
         let after = AfterLockWork()
         do {
             try await AfterLockWork.$current.withValue(after) { try await handleLocked(m) }
         } catch {
-            failure = error
+            // The replies queued while handling are stored by the save that ends it, and go out only after it succeeded: when
+            // the handling ended in an error (the save included), none is deposited (a rekey's `hs.resp` before its responder
+            // is on disk would leave the device unable to read the new epoch after a restart), and the entries it put in the
+            // outbox are taken out again.
+            after.drop()
+            throw error
         }
         // The replies to the vault go out after the lock: a relay that stalls holds up this message's ack, not the
         // answers to every other request. They are this call's own.
         await after.run()
-        if let failure { throw failure }
     }
 
     private func handleLocked(_ m: RelayMessage) async throws {
         try await lock.withLock {
             let t = now()
+            let outboxBefore: Set<String> = mem.withLock { Set(st.outbox.map(\.id)) }
             let fresh: Bool = mem.withLock {
                 guard st.seen[m.msgID] == nil else { return false }
                 st.seen[m.msgID] = Self.ms(t)
@@ -32,25 +36,30 @@ extension VaultDevice {
             }
             guard fresh else { return }
             do {
-                try await process(m, t)
-            } catch let e as CryptoError where e.kind == .early {
-                mem.withLock { _ = st.seen.removeValue(forKey: m.msgID) }
-                try save()
-                throw LeaveUnacked(e.description)
-            } catch is CryptoError, is TokenError {
-                // dropped (§13.6: a message that does not verify changes nothing)
-            } catch is RelayError, is URLError, is VaultStateError {
-                // A reply to the vault that the relay refused or could not take (a token refresh, a rekey's answer, a
-                // handshake's fin). The message itself was handled; it is acked and never handled again. Letting it out
-                // would end the collector, and without the ack the same message would fail again at every start.
+                try await handleFresh(m, t)
             } catch {
-                // The replies queued for after the lock (a rekey's answer, a token) are stored before they go out even
-                // when the handling ends in an error: their records are saved here, once, instead of at each queueing.
-                try? save()
+                // Nothing was stored for what the handling queued: the entries it made are taken out again.
+                mem.withLock { st.outbox.removeAll { !outboxBefore.contains($0.id) } }
                 throw error
             }
-            try save()
         }
+    }
+
+    private func handleFresh(_ m: RelayMessage, _ t: Date) async throws {
+        do {
+            try await process(m, t)
+        } catch let e as CryptoError where e.kind == .early {
+            mem.withLock { _ = st.seen.removeValue(forKey: m.msgID) }
+            try save()
+            throw LeaveUnacked(e.description)
+        } catch is CryptoError, is TokenError {
+            // dropped (§13.6: a message that does not verify changes nothing)
+        } catch is RelayError, is URLError, is VaultStateError {
+            // A reply to the vault that the relay refused or could not take (a token refresh, a rekey's answer, a
+            // handshake's fin). The message itself was handled; it is acked and never handled again. Letting it out
+            // would end the collector, and without the ack the same message would fail again at every start.
+        }
+        try save()
     }
 
     static func prune(_ m: inout [String: Int64], _ t: Date) {
