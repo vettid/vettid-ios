@@ -17,10 +17,13 @@ public struct MoveNotices: View {
     let vault: any VaultRepository
     let phase: AppPhase
     @State private var finishMoveOpen = false
+    /// A setup link was opened on a phone that already has a vault (chosen; not in the spec): said once, with "OK".
+    @Binding private var setupLinkIgnored: Bool
 
-    public init(vault: any VaultRepository, phase: AppPhase) {
+    public init(vault: any VaultRepository, phase: AppPhase, setupLinkIgnored: Binding<Bool> = .constant(false)) {
         self.vault = vault
         self.phase = phase
+        _setupLinkIgnored = setupLinkIgnored
     }
 
     /// The sheet is offered while the vault is open, and kept through the lock and unlock it sends.
@@ -61,6 +64,13 @@ public struct MoveNotices: View {
                     onAction: { vault.acknowledgeMovedAway() }
                 )
                 .accessibilityIdentifier("moved_away_banner")
+            }
+            if setupLinkIgnored {
+                InfoBanner(
+                    ShellMoveStrings.rootSetupLinkIgnored, actionLabel: ShellStrings.ownerCheckNoticeOk,
+                    onAction: { setupLinkIgnored = false }
+                )
+                .accessibilityIdentifier("setup_link_ignored_banner")
             }
         }
         .sheet(isPresented: Binding(get: { finishMoveOpen && showsSheet && !covered }, set: { if !covered { finishMoveOpen = $0 } })) {

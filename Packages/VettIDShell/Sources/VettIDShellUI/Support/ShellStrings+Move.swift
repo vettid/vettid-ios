@@ -2,6 +2,14 @@ import Foundation
 
 /// The open app's notices about a move (vettid-android `app` `strings.xml`, word for word).
 enum ShellMoveStrings {
+    static var rootSetupLinkIgnored: String {
+        String(
+            localized: "ios_root_setup_link_ignored",
+            defaultValue: "This phone already has a vault, so the setup link was not used.",
+            bundle: .module
+        )
+    }
+
     static var rootFinishMove: String {
         String(
             localized: "root_finish_move",

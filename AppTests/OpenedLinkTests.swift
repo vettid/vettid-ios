@@ -8,6 +8,12 @@ import Testing
 struct OpenedLinkTests {
     let link = String(repeating: "A", count: 120)
 
+    /// A setup link on a phone that already has a vault is said to be unused, not queued for a later setup.
+    @Test func aSetupLinkIsUnusedOnAPhoneWithAVault() {
+        for phase in [AppPhase.locked, .unlocked, .deleting] { #expect(AppRoot.hasVault(phase)) }
+        for phase in [AppPhase.starting, .signedOut, .setup(.newVault)] { #expect(!AppRoot.hasVault(phase)) }
+    }
+
     @Test func invitationsGoToTheInviteInbox() throws {
         for s in [
             "https://relay.vettid.org/connect#\(link)", "https://relay.vettid.org/connect/#\(link)", "vettid://connect#\(link)",

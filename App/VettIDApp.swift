@@ -120,6 +120,8 @@ struct AppRoot: View {
     @State private var held: AppPhase
     /// The banner areas (the move notices, the shell's banners) share a third of the screen.
     @State private var banners = BannerBudget()
+    /// A setup link was opened on a phone that already has a vault: said once.
+    @State private var setupLinkIgnored = false
     @Environment(\.openURL) private var openURL
     @Environment(\.scenePhase) private var scenePhase
     /// "Allow screenshots" (IOS-PLAN §4): it ends when the vault is no longer open, and after its hour.
@@ -150,7 +152,7 @@ struct AppRoot: View {
             // request, which stays. Nothing is erased.
             // The notices of a move are the root's, above every phase (vettid-android `VettIdApp`).
             VStack(spacing: 0) {
-                MoveNotices(vault: vault, phase: vault.phase)
+                MoveNotices(vault: vault, phase: vault.phase, setupLinkIgnored: $setupLinkIgnored)
                 content.credentialRequiredCover(
                     vault.credentialRequired, onRetry: { vault.credentialRequiredTryAgain() },
                     onLock: { Task { try? await vault.lock() } }
@@ -204,7 +206,9 @@ struct AppRoot: View {
                 // An invitation is kept until the vault is open (``OpenedLink``).
                 switch OpenedLink.route(url) {
                 case .invite(let link): inviteInbox.offer(link)
-                case .setup(let link): inbox.offer(link)
+                case .setup(let link):
+                    // A phone with a vault has no use for a setup link: said, not kept for a later setup.
+                    if Self.hasVault(vault.phase) { setupLinkIgnored = true } else { inbox.offer(link) }
                 case .other: openFile(url)
                 }
             }
@@ -225,6 +229,14 @@ struct AppRoot: View {
         AcceptedScans.reset()
         // The vault is no longer open (locked, signed out, unreachable): the allowance ends.
         screenshots.vaultClosed()
+    }
+
+    /// A vault is set up on this phone (the setup flow has nothing to do).
+    static func hasVault(_ phase: AppPhase) -> Bool {
+        switch phase {
+        case .locked, .unlocked, .deleting: true
+        default: false
+        }
     }
 
     private func openFile(_ url: URL) {
