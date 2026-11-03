@@ -8,7 +8,7 @@ public enum ExportRefusal: Equatable, Sendable {
     /// A clone alarm is open (`credential_frozen` / `rotation_required`, §3.5.9).
     case alarm
     /// The vault release predates `audit.export` (VAULT-MESSAGING 0.22.0): `unsupported_type`. A `bad_request` is not taken for it: that is the request's own fault and is shown as the vault's code
-    /// (chosen; not in the spec, where `bad_request` is among the ordinary answers, §10.9).
+    /// (VAULT-MESSAGING §10.9: an old vault answers `unsupported_type`, §5.3).
     case oldVault
 }
 
