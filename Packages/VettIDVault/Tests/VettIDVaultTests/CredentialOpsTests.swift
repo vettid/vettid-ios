@@ -66,6 +66,25 @@ import VettIDCrypto
         #expect(d.credentialVersion == 1 && d.utkCount == 2)
     }
 
+    /// A `credential.ack` that gets no answer does not undo the operation: the blob is stored, which is its outcome. The
+    /// confirmation stays pending and goes out before the next operation that carries the blob.
+    @Test func aLostAckLeavesTheOperationSuccessfulAndIsSentAgain() async throws {
+        let (d, v) = try await base.pairedDevice(cfg: base.config(InMemoryDeviceStateStore(), timeout: 0.3))
+        let api = VaultApi(device: d) { true }
+        let (utks, _) = try pool(3)
+        let create = Task { try await api.credentialCreate(password: "a long password", pin: "123456") }
+        try await answer(v, d, "credential.utk.get", utks)
+        try await answer(v, d, "credential.create", #"{"credential":"AQID","version":1,"key":"x"}"#)
+        _ = try await base.relay.nextDeposit() // the ack goes unanswered
+        try await create.value
+        #expect(d.credentialVersion == 1 && d.ackPendingVersion == 1)
+        let settling = Task { try await api.credential.settleAck() }
+        let ack = try await answer(v, d, "credential.ack")
+        #expect(VaultJSON.int(VaultJSON.object(ack.body), "version") == 1)
+        try await settling.value
+        #expect(d.ackPendingVersion == nil)
+    }
+
     /// Before release R the password goes as typed and without a PIN.
     @Test func beforeReleaseRThePasswordIsSentAsTyped() async throws {
         let (d, v) = try await base.pairedDevice()

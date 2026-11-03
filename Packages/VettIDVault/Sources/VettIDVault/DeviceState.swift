@@ -20,6 +20,9 @@ final class DeviceState: Codable, @unchecked Sendable {
     /// The alternate-channel state (``AltState`` JSON).
     var alt: String?
     var credential: CredentialCopy?
+    /// The version of the blob in [credential] whose `credential.ack` (§3.5.3) the vault has not been seen to take. Optional:
+    /// older states have none.
+    var ackPending: Int64?
     var utks: [UtkRecord] = []
     var recovery: RecoveryRecord?
     var outbox: [OutboxEntry] = []

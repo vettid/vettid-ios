@@ -117,11 +117,26 @@ extension VaultDevice {
             keyring.activate(res.epoch, now: t)
             return (res, try requireVault())
         }
+        // The fin is kept in the outbox until the relay accepts it: a pairing or transfer code is spent by its handshake, and
+        // an hs.fin that never arrives leaves the code burnt. It goes out after the lock (``afterLock(_:)``) and again at
+        // each flush.
+        let fin = mem.withLock {
+            let e = OutboxEntry(
+                id: Ulid.new(t), type: Self.typeHsFin, relayURL: v.relayURL, mailbox: v.mailbox, token: v.token,
+                envelope: Base64s.encodeStd(res.fin)
+            )
+            st.outbox.append(e)
+            return e
+        }
         try save()
-        try await depositToVault(v, res.fin)
-        if let s = res.sas {
-            mem.withLock { sas = s }
-            sasBroadcast.emit(s)
+        // The code is shown once the fin has gone out, or, when the relay would not take it, is kept for the next flush.
+        let shown = res.sas
+        afterLock { [self] in
+            try? await deliver(fin)
+            if let s = shown {
+                mem.withLock { sas = s }
+                sasBroadcast.emit(s)
+            }
         }
     }
 
@@ -229,10 +244,29 @@ extension VaultDevice {
         }
     }
 
-    func keepCredential(blob: String, version: Int64) async throws {
+    /// Stores the blob; with [awaitingAck] its `credential.ack` is pending until the vault takes it (``ackSettled(_:)``).
+    func keepCredential(blob: String, version: Int64, awaitingAck: Bool = false) async throws {
         try await lock.withLock {
-            mem.withLock { st.credential = CredentialCopy(blob: blob, version: version) }
+            mem.withLock {
+                st.credential = CredentialCopy(blob: blob, version: version)
+                if awaitingAck { st.ackPending = version }
+            }
             try save()
+        }
+    }
+
+    /// The version of the stored blob whose `credential.ack` is still to be sent, or nil.
+    var ackPendingVersion: Int64? { mem.withLock { st.ackPending } }
+
+    /// The blob of [version] is confirmed (or replaced): nothing is left to send for it.
+    func ackSettled(_ version: Int64) async throws {
+        try await lock.withLock {
+            let changed: Bool = mem.withLock {
+                guard st.ackPending == version else { return false }
+                st.ackPending = nil
+                return true
+            }
+            if changed { try save() }
         }
     }
 

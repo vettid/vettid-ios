@@ -65,6 +65,28 @@ extension VaultDeviceTests {
         #expect(try savedState(store).unsettled?.keys.sorted() == ["a"])
         #expect(!(await again.credentialSettled()))
     }
+
+    /// A handshake's `hs.fin` that the relay would not take is kept and goes out at the next flush: a pairing or transfer
+    /// code is spent by its handshake, and a fin that never arrives leaves the code burnt (RELAY-PROTOCOL §7.2).
+    @Test func aFinTheRelayRefusedIsKeptAndSentAgain() async throws {
+        let store = InMemoryDeviceStateStore()
+        let d = try await VaultDevice.create(config(store), secrets: try DeviceSecrets.generate())
+        let v = try FakeVault(relayURL: relay.baseURL)
+        try await d.handle(try v.enrolled(d))
+        try await d.awaitEnrolled(timeout: 1)
+        let waiting = Task { try await d.completeEnrollment(timeout: 10) }
+        let (_, initMsg) = try await relay.nextDeposit()
+        relay.refuseStatus = 503
+        relay.refuseDeposits = "unavailable"
+        relay.refuseOnly = 3
+        try await d.handle(try v.respond(initMsg, d))
+        #expect(try savedState(store).outbox.map(\.type) == ["hs.fin"], "kept for the next flush")
+        relay.refuseDeposits = nil
+        await d.flushOutbox()
+        try v.fin(try await relay.nextDeposit().payload, d)
+        #expect(try savedState(store).outbox.isEmpty, "gone once the relay took it")
+        waiting.cancel()
+    }
 }
 
 /// The outbox sizes the stored state had at each deposit.

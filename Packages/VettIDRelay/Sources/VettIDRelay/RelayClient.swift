@@ -131,6 +131,9 @@ public final class RelayClient: Sendable {
     static let maxWait = 25
     public static let maxCollect = 100
     static let pollTimeout: TimeInterval = 60
+    /// How long a request that is no long poll waits for the relay to answer (or to send more of its answer) before it
+    /// fails (chosen; not in the spec: the system's 60 s would hold a deposit for three minutes with the retries).
+    public static let requestTimeout: TimeInterval = 20
     static let backoffBase: TimeInterval = 0.25
     static let backoffMaxShift = 6
     static let jitter: TimeInterval = 0.25
@@ -220,7 +223,8 @@ public final class RelayClient: Sendable {
     func once(_ c: Call) async throws -> HTTPAnswer {
         let a: HTTPAnswer
         do {
-            a = try await transport.send(policy: c.policy, maxBody: c.maxBody, timeout: c.longPoll ? Self.pollTimeout : nil) {
+            let timeout = c.longPoll ? Self.pollTimeout : Self.requestTimeout
+            a = try await transport.send(policy: c.policy, maxBody: c.maxBody, timeout: timeout) {
                 try request(c)
             }
         } catch let e as BodyTooLarge {

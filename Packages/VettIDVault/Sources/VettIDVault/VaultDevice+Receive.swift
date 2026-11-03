@@ -8,6 +8,19 @@ extension VaultDevice {
     /// rekey's new epoch that arrived before the rekey's `hs.fin` is neither recorded as seen nor acked
     /// (``LeaveUnacked``): the relay delivers it again, and it is opened once `hs.fin` has arrived (§6.3, §8.4).
     public func handle(_ m: RelayMessage) async throws {
+        var failure: (any Error)?
+        do {
+            try await handleLocked(m)
+        } catch {
+            failure = error
+        }
+        // The replies to the vault go out after the lock: a relay that stalls holds up this message's ack, not the
+        // answers to every other request.
+        await runAfterLock()
+        if let failure { throw failure }
+    }
+
+    private func handleLocked(_ m: RelayMessage) async throws {
         try await lock.withLock {
             let t = now()
             let fresh: Bool = mem.withLock {
@@ -115,9 +128,10 @@ extension VaultDevice {
         case "relay.token.refresh":
             if inner.re == nil {
                 let tok = try mintForVault()
-                _ = try await sendLocked(
+                let entry = try enqueueLocked(
                     id: nil, type: inner.type, body: Self.standing(tok), re: inner.id, status: Inner.statusOK, exp: nil
                 )
+                afterLock { [self] in try? await deliver(entry) }
             } else {
                 storeVaultToken(body)
             }
@@ -146,6 +160,8 @@ extension VaultDevice {
             keyring = Keyring()
             st.vault?.token = ""
             st.vault?.tokenExpMs = 0
+            // The fin of the handshake that is dropped is of no use to anyone.
+            st.outbox.removeAll { $0.type == Self.typeHsFin }
         }
     }
 
@@ -167,18 +183,20 @@ extension VaultDevice {
         }
         guard let (a, env, v) = prepared else { return }
         try save()
-        do {
-            try await depositToVault(v, env)
-        } catch let e as RelayError {
-            // Refused: the vault never sees this hs.resp. Otherwise it may have arrived: the responder stays for its
-            // hs.fin, and expires if none comes.
-            if !e.retryable {
-                mem.withLock {
-                    awaiting.removeAll { $0.resp === a.resp }
-                    a.resp.abort()
+        afterLock { [self] in
+            do {
+                try await depositToVault(v, env)
+            } catch let e as RelayError {
+                // Refused: the vault never sees this hs.resp. Otherwise it may have arrived: the responder stays for its
+                // hs.fin, and expires if none comes.
+                if !e.retryable {
+                    mem.withLock {
+                        awaiting.removeAll { $0.resp === a.resp }
+                        a.resp.abort()
+                    }
+                    try? save()
                 }
-            }
-            throw e
+            } catch {}
         }
     }
 
@@ -233,11 +251,13 @@ extension VaultDevice {
         do {
             if issuedExp != 0, Double(issuedExp) / 1000 - t.timeIntervalSince1970 < Self.issueBefore {
                 let tok = try mintForVault()
-                _ = try await sendLocked(id: nil, type: "relay.token.issued", body: Self.standing(tok), re: nil, status: nil, exp: nil)
+                let e = try enqueueLocked(id: nil, type: "relay.token.issued", body: Self.standing(tok), re: nil, status: nil, exp: nil)
+                afterLock { [self] in try? await deliver(e) }
             }
             let exp = Double(v.tokenExpMs) / 1000
             if exp - t.timeIntervalSince1970 < Self.refreshBefore, t.timeIntervalSince1970 < exp {
-                _ = try await sendLocked(id: nil, type: "relay.token.refresh", body: VaultJSON.empty, re: nil, status: nil, exp: nil)
+                let e = try enqueueLocked(id: nil, type: "relay.token.refresh", body: VaultJSON.empty, re: nil, status: nil, exp: nil)
+                afterLock { [self] in try? await deliver(e) }
             }
         } catch {
             // retried at the next message

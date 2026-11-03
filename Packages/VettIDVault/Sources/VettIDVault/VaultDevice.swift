@@ -129,6 +129,12 @@ public final class VaultDevice: @unchecked Sendable {
     let secrets: DeviceSecrets
     let st: DeviceState
     let lock = AsyncLock()
+    /// Deposits to make once the lock of the message being handled is released (``afterLock(_:)``). Under ``mem``.
+    var afterWork: [@Sendable () async -> Void] = []
+    /// A flush of the outbox runs (``flushOutbox()``). Read and written under ``mem``.
+    var flushing = false
+    /// Orders the writes of the state to the store (``save()``).
+    let saveOrder = NSLock()
     /// Serializes the credential operations (§3.5.3): one UTK taken, sealed and answered at a time.
     let credentialLock = AsyncLock()
     /// The changes and renews this device sent (``CredentialOps``), counted under ``credentialLock`` as each goes out:
@@ -347,21 +353,26 @@ public final class VaultDevice: @unchecked Sendable {
 
     // MARK: - Persistence
 
-    /// Writes the state (with the keyring and the awaiting rekeys) to the store. Callers hold ``lock``.
+    /// Writes the state (with the keyring and the awaiting rekeys) to the store. Callers hold ``lock``, except a deposit that
+    /// ends outside it (``deliver(_:)``).
     func save() throws {
-        let data: Data? = try mem.withLock {
-            if forgotten { return nil }
-            if halted { throw Self.haltedError }
-            if st.vault != nil {
-                st.vault?.sessions = Base64s.encodeStd(try keyring.export())
-                st.vault?.awaiting = awaiting.compactMap { a in
-                    // A responder that is done (aborted) has nothing left to keep.
-                    (try? a.resp.export()).map { AwaitingRekey(createdMs: a.createdMs, state: Base64s.encodeStd($0)) }
+        // One write at a time, in the order of the snapshots: a deposit that ends outside ``lock`` saves too, and an older
+        // snapshot must not be stored after a newer one.
+        try saveOrder.withLock {
+            let data: Data? = try mem.withLock {
+                if forgotten { return nil }
+                if halted { throw Self.haltedError }
+                if st.vault != nil {
+                    st.vault?.sessions = Base64s.encodeStd(try keyring.export())
+                    st.vault?.awaiting = awaiting.compactMap { a in
+                        // A responder that is done (aborted) has nothing left to keep.
+                        (try? a.resp.export()).map { AwaitingRekey(createdMs: a.createdMs, state: Base64s.encodeStd($0)) }
+                    }
                 }
+                return try JSONEncoder().encode(st)
             }
-            return try JSONEncoder().encode(st)
+            if let data { try cfg.store.save(Array(data)) }
         }
-        if let data { try cfg.store.save(Array(data)) }
     }
 
     /// The persisted rekeys awaiting `hs.fin`; one that does not restore or is past ``handshakeTTL`` is dropped.

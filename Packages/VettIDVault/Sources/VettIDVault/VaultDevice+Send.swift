@@ -11,7 +11,10 @@ extension VaultDevice {
     @discardableResult
     public func send(_ type: String, body: [UInt8] = VaultJSON.empty, id: String? = nil) async throws -> String {
         guard Self.outboxTypes.contains(type) else { throw VaultStateError(message: "\(type): not kept in the outbox") }
-        return try await lock.withLock { try await sendLocked(id: id, type: type, body: body, re: nil, status: nil, exp: nil) }
+        let entry = try await lock.withLock { try enqueueLocked(id: id, type: type, body: body, re: nil, status: nil, exp: nil) }
+        // The deposit is made outside the device lock: a slow relay holds up this caller only.
+        try await deliver(entry)
+        return entry.id
     }
 
     /// Seals a message and hands it to the relay client **once**: never written to the outbox, so not sent again by a
@@ -19,10 +22,20 @@ extension VaultDevice {
     /// `vault.lock`, call signalling). Returns the inner id.
     @discardableResult
     public func sendOnce(_ type: String, body: [UInt8] = VaultJSON.empty, exp: Date? = nil) async throws -> String {
-        try await lock.withLock { try await sendOnceLocked(id: Ulid.new(now()), type: type, body: body, exp: exp) }
+        try await sendOnceUnlocked(id: Ulid.new(now()), type: type, body: body, exp: exp)
     }
 
-    func sendOnceLocked(id: String, type: String, body: [UInt8], exp: Date?) async throws -> String {
+    /// Seals and persists under the device lock, then deposits outside it: a deposit that stalls holds up its own caller
+    /// and not the answers to every other request (a relay call is bounded by its own timeout, ``RelayClient``).
+    func sendOnceUnlocked(id: String, type: String, body: [UInt8], exp: Date?) async throws -> String {
+        let (v, env) = try await lock.withLock { try sealOnceLocked(id: id, type: type, body: body, exp: exp) }
+        try await depositToVault(v, env)
+        return id
+    }
+
+    /// Seals [type] in the current epoch and saves the epoch's send counter; the caller deposits the envelope. Callers
+    /// hold ``lock``.
+    func sealOnceLocked(id: String, type: String, body: [UInt8], exp: Date?) throws -> (VaultRecord, [UInt8]) {
         let (v, env): (VaultRecord, [UInt8]) = try mem.withLock {
             if halted { throw Self.haltedError }
             if quieted { throw Self.quietedError }
@@ -32,8 +45,7 @@ extension VaultDevice {
             return (v, try ep.seal(Inner(id: id, type: type, ts: now(), exp: exp, body: body)))
         }
         try save() // the epoch's send counter
-        try await depositToVault(v, env)
-        return id
+        return (v, env)
     }
 
     /// A request deposited once (``sendOnce(_:body:exp:)``) and awaited for [timeout]: no second deposit, unlike
@@ -45,7 +57,7 @@ extension VaultDevice {
         let d = OneShot<Inner>()
         mem.withLock { pending[id] = d }
         defer { mem.withLock { _ = pending.removeValue(forKey: id) } }
-        _ = try await countingSend(type) { try await lock.withLock { try await sendOnceLocked(id: id, type: type, body: body, exp: exp) } }
+        _ = try await countingSend(type) { try await sendOnceUnlocked(id: id, type: type, body: body, exp: exp) }
         guard let inner = await d.wait(timeout: timeout ?? cfg.requestTimeout(for: type)) else {
             try Task.checkCancellation()
             countingNoAnswer(type)
@@ -64,6 +76,15 @@ extension VaultDevice {
     func sendLocked( // swiftlint:disable:this function_parameter_count
         id: String?, type: String, body: [UInt8], re: String?, status: String?, exp: Date?
     ) async throws -> String {
+        let entry = try enqueueLocked(id: id, type: type, body: body, re: re, status: status, exp: exp)
+        try await deliver(entry)
+        return entry.id
+    }
+
+    /// Seals a message into the outbox and saves; the caller delivers it (``deliver(_:)``). Callers hold ``lock``.
+    func enqueueLocked( // swiftlint:disable:this function_parameter_count
+        id: String?, type: String, body: [UInt8], re: String?, status: String?, exp: Date?
+    ) throws -> OutboxEntry {
         let entry: OutboxEntry = try mem.withLock {
             if halted { throw Self.haltedError }
             if quieted { throw Self.quietedError }
@@ -80,8 +101,7 @@ extension VaultDevice {
             return e
         }
         try save()
-        try await deliver(entry)
-        return entry.id
+        return entry
     }
 
     /// Deposits an outbox entry; removes it once the relay accepted it, or on a terminal relay error (rethrown). A
@@ -147,16 +167,29 @@ extension VaultDevice {
     }
 
     /// The only types the outbox keeps (``send(_:body:id:)``): the standing tokens given to the vault and the refresh
-    /// (§7.2), which mean the same when they arrive late. Anything else an earlier version left there is dropped at load.
-    static let outboxTypes: Set<String> = ["relay.token.issued", "relay.token.refresh"]
+    /// (§7.2), which mean the same when they arrive late, and the `hs.fin` of a handshake (§6.2), which is the same message
+    /// whenever it arrives and is lost with its code if it does not. Anything else an earlier version left there is dropped at load.
+    static let outboxTypes: Set<String> = ["relay.token.issued", "relay.token.refresh", VaultDevice.typeHsFin]
 
-    /// Re-deposits what the outbox still holds (after a restart or a transport failure).
+    /// Re-deposits what the outbox still holds (after a restart or a transport failure). The deposits are made outside the
+    /// device lock, one flush at a time: a slow relay holds up the flush and nothing else.
     public func flushOutbox() async {
-        let entries = mem.withLock { st.outbox }
+        let (entries, mine): ([OutboxEntry], Bool) = mem.withLock {
+            if flushing { return ([], false) }
+            flushing = true
+            return (st.outbox, true)
+        }
+        guard mine else { return }
+        defer { mem.withLock { flushing = false } }
         for e in entries {
-            try? await lock.withLock {
-                if mem.withLock({ st.outbox.contains(e) }) { try await deliver(e) }
+            guard mem.withLock({ st.outbox.contains(e) }) else { continue }
+            // A handshake's fin that was tried this often will not arrive: the handshake's code is lost either way.
+            if e.type == Self.typeHsFin, e.attempts >= Self.finAttempts {
+                mem.withLock { st.outbox.removeAll { $0.id == e.id } }
+                try? save()
+                continue
             }
+            try? await deliver(e)
         }
     }
 
@@ -181,9 +214,7 @@ extension VaultDevice {
         let d = OneShot<Inner>()
         mem.withLock { pending[id] = d }
         defer { mem.withLock { _ = pending.removeValue(forKey: id) } }
-        _ = try await countingSend(type) {
-            try await lock.withLock { try await sendOnceLocked(id: id, type: type, body: body, exp: exp) }
-        }
+        _ = try await countingSend(type) { try await sendOnceUnlocked(id: id, type: type, body: body, exp: exp) }
         for attempt in 0...retries {
             if let inner = await d.wait(timeout: timeout ?? cfg.requestTimeout(for: type)) {
                 return VaultMessage(inner: countingAnswer(type, inner))
@@ -195,9 +226,7 @@ extension VaultDevice {
             // No answer: the collection may have ended (the answer would then wait in the mailbox unread).
             ensureCollecting()
             if attempt < retries {
-                _ = try await countingSend(type) {
-                    try await lock.withLock { try await sendOnceLocked(id: id, type: type, body: body, exp: exp) }
-                }
+                _ = try await countingSend(type) { try await sendOnceUnlocked(id: id, type: type, body: body, exp: exp) }
             }
         }
         countingNoAnswer(type)
@@ -263,5 +292,28 @@ extension VaultDevice {
         }
         for w in waiters { w.complete(true) }
         eventBroadcast.emit(m)
+    }
+}
+
+// MARK: - Work after the device lock
+
+extension VaultDevice {
+    /// `hs.fin` (VAULT-MESSAGING §6.2).
+    static let typeHsFin = "hs.fin"
+    /// How many failed flushes an `hs.fin` survives.
+    static let finAttempts = 20
+
+    /// Runs [work] once the lock the caller holds is released: a deposit made while handling a message must not hold the
+    /// lock across the network (``handle(_:)`` runs it). Callers hold ``lock``.
+    func afterLock(_ work: @escaping @Sendable () async -> Void) {
+        mem.withLock { afterWork.append(work) }
+    }
+
+    func runAfterLock() async {
+        let work: [@Sendable () async -> Void] = mem.withLock {
+            defer { afterWork.removeAll() }
+            return afterWork
+        }
+        for w in work { await w() }
     }
 }
