@@ -18,6 +18,8 @@ public struct DeleteVaultState: Equatable, Sendable, CustomStringConvertible, Cu
     public var phraseWrong = false
     public var busy = false
     public var error: FailureKind?
+    /// The end of the wait the failure asked for (`retry_after`), or nil (``WaitText``).
+    public var errorRetryAt: Date?
     /// (iPhone; chosen, not in the spec) The deletion got no answer and the account service still lists the vault: it may
     /// or may not have been deleted. Said so, with a check that sends nothing to the vault.
     public var unconfirmed = false
@@ -99,6 +101,7 @@ public final class DeleteVaultViewModel {
         state.confirming = false
         state.busy = true
         state.error = nil
+        state.errorRetryAt = nil
         state.unconfirmed = false
         state.notDeleted = false
         let vault = vault
@@ -121,6 +124,7 @@ public final class DeleteVaultViewModel {
                 state.unconfirmed = true
             } else {
                 state.error = failed.kind
+                state.errorRetryAt = failureRetryAt(failed)
             }
         }
     }

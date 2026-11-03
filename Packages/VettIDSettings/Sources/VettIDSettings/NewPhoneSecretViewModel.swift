@@ -13,10 +13,13 @@ public struct NewPhoneSecretState: Equatable, Sendable, CustomStringConvertible,
     public var password = ""
     public var busy = false
     public var error: FailureKind?
+    /// The end of the wait the failure asked for (`retry_after`), or nil (``WaitText``).
+    public var errorRetryAt: Date?
     public var done = false
 
-    public init(error: FailureKind? = nil, done: Bool = false) {
+    public init(error: FailureKind? = nil, retryAt: Date? = nil, done: Bool = false) {
         self.error = error
+        errorRetryAt = retryAt
         self.done = done
     }
 
@@ -70,7 +73,7 @@ public final class NewPhoneSecretViewModel {
                 self?.state = NewPhoneSecretState(done: true)
             } catch {
                 // Neither entry is kept after an answer.
-                self?.state = NewPhoneSecretState(error: failureKind(error))
+                self?.state = NewPhoneSecretState(error: failureKind(error), retryAt: failureRetryAt(error))
             }
         }
     }

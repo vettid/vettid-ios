@@ -37,6 +37,21 @@ import VettIDDataTesting
         #expect(m.state.password.isEmpty)
     }
 
+    /// A rate-limited or backed-off refusal keeps the wait it asked for, for the text.
+    @Test func aRateLimitedRefusalKeepsTheWait() async {
+        repo.fail["rotate"] = FakeVaultRepository.failure(.rateLimited, retry: 120)
+        let m = RotateViewModel(repo: repo)
+        m.setPassword("pw")
+        m.submit()
+        await m.settle()
+        #expect(m.state.error == .rateLimited && abs((m.state.errorRetryAt ?? .distantPast).timeIntervalSinceNow - 120) < 30)
+        repo.fail["rotate"] = FakeVaultRepository.failure(.badPassword, code: "bad_password")
+        m.setPassword("pw")
+        m.submit()
+        await m.settle()
+        #expect(m.state.error == .badPassword && m.state.errorRetryAt == nil)
+    }
+
     // MARK: - The clone alarm
 
     func frozen() -> CredentialAlarm { CredentialAlarm(alarmID: "a1", state: CredentialAlarm.stateFrozen, at: "2026-10-04T12:00:00Z") }

@@ -25,6 +25,8 @@ public struct ChangePinState: Equatable, Sendable, CustomStringConvertible, Cust
     public var same = false
     public var busy = false
     public var error: FailureKind?
+    /// The end of the wait the failure asked for (`retry_after`), or nil (``WaitText``).
+    public var errorRetryAt: Date?
     public var done = false
     /// (Release R, VAULT-MESSAGING §11.14.9) `pin.change` is a credential operation: the password too, and the phone's next
     /// secret. Its answer gives the recovery 10 new attempts.
@@ -263,7 +265,7 @@ public final class ChangePinViewModel {
                 state.check = check.status
                 vault.acknowledgeChangeCheck()
             } else {
-                self.failed(failed.kind, kept: s)
+                self.failed(failed.kind, kept: s, retryAt: failureRetryAt(failed))
                 vault.acknowledgeChangeCheck()
             }
         }
@@ -282,7 +284,7 @@ public final class ChangePinViewModel {
     /// PIN, a wrong password the password (the confirmation is typed again on the keypad with it); the new PIN stays. Any
     /// other failure has every entry typed again, from the current PIN (on the iPhone's keypad steps; vettid-android
     /// clears the current PIN and the password): chosen; not in the spec.
-    private func failed(_ kind: FailureKind, kept s: ChangePinState) {
+    private func failed(_ kind: FailureKind, kept s: ChangePinState, retryAt: Date? = nil) {
         var next: ChangePinState
         switch kind {
         case .badPin:
@@ -295,6 +297,7 @@ public final class ChangePinViewModel {
             next = ChangePinState(withPassword: s.withPassword, fromAttempts: s.fromAttempts)
         }
         next.error = kind
+        next.errorRetryAt = retryAt
         state = next
     }
 

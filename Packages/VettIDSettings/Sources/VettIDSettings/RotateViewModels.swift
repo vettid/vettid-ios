@@ -7,10 +7,13 @@ public struct RotateState: Equatable, Sendable, CustomStringConvertible, CustomD
     public var password = ""
     public var busy = false
     public var error: FailureKind?
+    /// The end of the wait the failure asked for (`retry_after`), or nil (``WaitText``).
+    public var errorRetryAt: Date?
     public var done = false
 
-    public init(error: FailureKind? = nil, done: Bool = false) {
+    public init(error: FailureKind? = nil, retryAt: Date? = nil, done: Bool = false) {
         self.error = error
+        errorRetryAt = retryAt
         self.done = done
     }
 
@@ -51,7 +54,7 @@ public final class RotateViewModel {
                 try await repo.rotate(password: pw)
                 self?.state = RotateState(done: true)
             } catch {
-                self?.state = RotateState(error: failureKind(error))
+                self?.state = RotateState(error: failureKind(error), retryAt: failureRetryAt(error))
             }
         }
     }

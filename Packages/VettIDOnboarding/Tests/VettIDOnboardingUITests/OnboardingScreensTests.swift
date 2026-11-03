@@ -19,6 +19,18 @@ import VettIDUI
         #expect(height(StartingScreen(stuckAfter: .zero, onRetry: {})) > 0)
     }
 
+    /// Every screen that sends a PIN, a password or a code says a wait the same way (a `429` or a backoff).
+    @Test func aWaitIsSaidTheSameEverywhere() {
+        let soon = Date().addingTimeInterval(90)
+        for kind in [FailureKind.rateLimited, .backoff] {
+            #expect(WaitText.message(kind, retryAt: soon, timeScale: 1).hasPrefix("Too many attempts. Try again in "))
+            #expect(WaitText.spoken(kind, retryAt: soon)?.hasPrefix("Too many attempts. Try again in ") == true)
+        }
+        #expect(WaitText.message(.badPin, retryAt: soon, timeScale: 1) == FailureKind.badPin.message)
+        #expect(WaitText.spoken(.badPin, retryAt: soon) == nil && WaitText.spoken(.rateLimited, retryAt: nil) == nil)
+        #expect(WaitText.message(.backoff, retryAt: Date().addingTimeInterval(-1), timeScale: 1) == FailureKind.backoff.message)
+    }
+
     /// A rate-limited redeem says how long to wait (Android's text of the recovery); no wait left, the general text.
     @Test func aRateLimitedRedeemSaysTheWait() {
         let soon = Date().addingTimeInterval(90)

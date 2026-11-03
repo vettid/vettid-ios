@@ -24,6 +24,8 @@ public struct NewCredentialState: Equatable, Sendable, CustomStringConvertible, 
     public var confirming = false
     public var busy = false
     public var error: FailureKind?
+    /// The end of the wait the failure asked for (`retry_after`), or nil (``WaitText``).
+    public var errorRetryAt: Date?
     public var done = false
     /// (VAULT-MESSAGING 0.48.0 §11.14.9 "A lost answer to `credential.reset`") The reset got no answer and is being
     /// decided (``ChangeCheck/Status/checking``, ``ChangeCheck/Status/unreachable``), was decided as not applied
@@ -199,6 +201,7 @@ public final class NewCredentialViewModel {
             state.error = nil
         } else {
             state.error = kind
+            state.errorRetryAt = failureRetryAt(error)
         }
     }
 

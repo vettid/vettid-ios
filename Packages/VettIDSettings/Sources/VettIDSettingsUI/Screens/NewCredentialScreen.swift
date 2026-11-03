@@ -95,7 +95,10 @@ public struct NewCredentialContent: View {
                     NoticeCard(.info, title: CredentialStrings.newTitle, message: text).accessibilityIdentifier("change_check")
                 }
                 if let error = state.error {
-                    NoticeCard(.urgent, title: error.title(or: CredentialStrings.newTitle), message: error.message(timeScale: timeScale))
+                    NoticeCard(
+                        .urgent, title: error.title(or: CredentialStrings.newTitle), message: WaitText.message(error, retryAt: state.errorRetryAt, timeScale: timeScale),
+                        spokenMessage: WaitText.spoken(error, retryAt: state.errorRetryAt)
+                    )
                         .accessibilityIdentifier("error")
                 }
             }
