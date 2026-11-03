@@ -24,8 +24,9 @@ public struct ItemDetailActions {
     public var onPassword: @MainActor (String) -> Void = { _ in }
     public var onSubmitPassword: @MainActor () -> Void = {}
     public var onCancelPassword: @MainActor () -> Void = {}
-    /// Copies a value (a field's, or a one-time code) to the pasteboard, local to this iPhone and for a minute.
-    public var onCopy: @MainActor (String) -> Void = { SecurePasteboard.copy($0) }
+    /// Copies a value (a field's, or a one-time code) to the pasteboard, local to this iPhone and for a minute, and gone at the vault's lock
+    /// (IOS-PLAN §6.5, §6.9).
+    public var onCopy: @MainActor (String) -> Void = { SecurePasteboard.copy($0, clearAtLock: true) }
 
     public init() {}
 }

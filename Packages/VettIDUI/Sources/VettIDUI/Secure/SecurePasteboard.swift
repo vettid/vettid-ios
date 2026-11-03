@@ -6,12 +6,16 @@ import UIKit
 public enum SecurePasteboard {
     public static let defaultLifetime: TimeInterval = 60
 
-    public static func copy(_ text: String, lifetime: TimeInterval = defaultLifetime, pasteboard: UIPasteboard = .general) {
+    /// [clearAtLock]: a secret item's value, which ``clearIfOwn(pasteboard:)`` removes when the vault is no longer open (other copies,
+    /// such as a link or a reference, are not secrets of the vault and only expire).
+    public static func copy(
+        _ text: String, lifetime: TimeInterval = defaultLifetime, clearAtLock: Bool = false, pasteboard: UIPasteboard = .general
+    ) {
         pasteboard.setItems(
             [[UIPasteboard.typeAutomatic: text]],
             options: [.localOnly: true, .expirationDate: Date().addingTimeInterval(lifetime)]
         )
-        ownCopy = (pasteboard.name, pasteboard.changeCount)
+        ownCopy = clearAtLock ? (pasteboard.name, pasteboard.changeCount) : nil
     }
 
     /// The pasteboard and its `changeCount` right after the app's last copy; nil once cleared or taken over.
