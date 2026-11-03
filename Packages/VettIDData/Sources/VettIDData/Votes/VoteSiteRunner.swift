@@ -44,9 +44,9 @@ final class VoteSiteRunner {
     /// spec, and not on Android, which does not leave the work in the background); otherwise the hourly wait goes on.
     static let returnAfter: TimeInterval = 600
 
-    private weak var votes: VotesManager?
+    private(set) weak var votes: VotesManager?
     let site: any VoteSite
-    private let reader: VoteSiteReader
+    let reader: VoteSiteReader
     /// The site calls, over the session already open when [quietly] (a run nobody asked for never opens one).
     private let ops: @MainActor (_ quietly: Bool) async throws -> any VoteSiteOps
     private let every: Duration
@@ -393,8 +393,15 @@ final class VoteSiteRunner {
         do {
             checked = try await Task.detached { try VoteRows.ownRow(results: doc, rows: rows, recordTag: tag) }.value
         } catch {
-            // No row with a proof: nothing to submit.
-            return fail(key, .problem)
+            // No row with a proof: nothing to submit, and results that don't add up for the screens.
+            let outcome = fail(key, .problem)
+            if !Task.isCancelled {
+                votes.hint(key) {
+                    $0.observerVerdict = false
+                    $0.verdictKept = false
+                }
+            }
+            return outcome
         }
         // A member's row whose ballot the vault would not read makes it refuse the whole call: nothing is sent
         // (VAULT-MESSAGING 0.81.6 §10.19.8, "Choice ids in results").
@@ -415,7 +422,13 @@ final class VoteSiteRunner {
         } catch {
             // A refused or lost call is kept too: the find is the app's own, whatever the vault made of it (chosen; not in
             // the spec).
-            if !Task.isCancelled, !(error is CancellationError) { votes.hint(key) { $0.resultsDontAddUp = dontAddUp } }
+            if !Task.isCancelled, !(error is CancellationError) {
+                votes.hint(key) {
+                    $0.resultsDontAddUp = dontAddUp
+                    $0.observerVerdict = !dontAddUp
+                    $0.verdictKept = false
+                }
+            }
             throw error
         }
         try Task.checkCancellation()
@@ -432,6 +445,9 @@ final class VoteSiteRunner {
             $0.resultsProblem = input
             $0.resultsTooLarge = false
             $0.resultsDontAddUp = dontAddUp
+            $0.observerVerdict = !dontAddUp
+            // Kept for the next opening only once the vault judged the results it was handed.
+            $0.verdictKept = state == .verified || state == .unconfirmed
         }
         votes.refreshQuietly()
         return .submitted(state)
@@ -474,7 +490,8 @@ final class VoteSiteRunner {
             $0.gaveUp = why ?? $0.gaveUp
             $0.resultsProblem = outcome == .problem
             $0.resultsTooLarge = tooLarge
-            // Nothing was submitted this time: what the screens say is this attempt's.
+            // Nothing was submitted this time: what the screens say is this attempt's. The verdict of an earlier check
+            // (``VoteHint/observerVerdict``) stays: the documents are write-once.
             $0.resultsDontAddUp = false
         }
         return outcome
@@ -497,11 +514,14 @@ final class VoteSiteRunner {
 
     // MARK: Helpers
 
-    private enum Chain { case runs, attempts }
+    enum Chain { case runs, attempts }
 
     /// Runs [work] after the work before it on [chain], one at a time. It is cancelled by ``stop()`` and ``pause()``; work
     /// that was cancelled before it began does not begin.
-    private func serially<T: Sendable>(_ chain: Chain, _ work: @escaping @MainActor () async throws -> T) async throws -> T {
+    /// With [followCancel], cancelling the caller cancels the work too (a screen's own check, which nobody else waits on).
+    func serially<T: Sendable>(
+        _ chain: Chain, followCancel: Bool = false, _ work: @escaping @MainActor () async throws -> T
+    ) async throws -> T {
         let before = chain == .runs ? runs : attempts
         let id = nextWork
         nextWork += 1
@@ -520,7 +540,8 @@ final class VoteSiteRunner {
         cancellers[id] = { task.cancel() }
         let link = Task { _ = await task.value }
         if chain == .runs { runs = link } else { attempts = link }
-        return try await task.value.get()
+        guard followCancel else { return try await task.value.get() }
+        return try await withTaskCancellationHandler { try await task.value.get() } onCancel: { task.cancel() }
     }
 
     private func guarded<T: Sendable>(_ body: @MainActor () async throws -> T) async throws -> T {

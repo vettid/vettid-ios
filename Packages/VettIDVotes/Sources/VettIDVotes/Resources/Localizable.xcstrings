@@ -1035,6 +1035,17 @@
         }
       }
     },
+    "vote_results_not_rechecked": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "VettID could not check the published results of this vote again just now, so their numbers are not shown. It will try again when you open this vote."
+          }
+        }
+      }
+    },
     "vote_results_row": {
       "extractionState": "manual",
       "localizations": {

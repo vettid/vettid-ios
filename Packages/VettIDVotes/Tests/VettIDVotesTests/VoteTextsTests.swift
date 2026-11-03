@@ -18,7 +18,7 @@ import Testing
     @Test func everyKeyOfTheCatalogResolvesToItsOwnText() throws {
         let doc = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: Self.catalog)) as? [String: Any])
         let keys = try #require((doc["strings"] as? [String: Any])?.keys)
-        #expect(keys.count == 130)
+        #expect(keys.count == 131)
         let missing = "\u{0}missing"
         for key in keys {
             let text = VoteStrings.bundle.localizedString(forKey: key, value: missing, table: nil)

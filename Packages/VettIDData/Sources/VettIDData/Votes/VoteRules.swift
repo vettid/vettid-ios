@@ -19,6 +19,10 @@ public enum VoteNote: Sendable, CaseIterable {
     /// "Votes"). A warning, never the error colour (the warning: chosen; not in the spec, which says only "no error
     /// colour").
     case resultsDontAddUp
+    /// `vote_results_not_rechecked`, under the state of a `verified` or `unconfirmed` check: the published results could
+    /// not be checked again when the screen opened, so their numbers are hidden (the screen adds it; owner decision
+    /// 2026-11-02).
+    case resultsNotRechecked
     case unconfirmed, didntVote, checkPending
     /// A check the vault leaves `pending` with reason `input`, or the app's own check of the results failed: never "failed".
     case checkResultsProblem
@@ -37,8 +41,8 @@ public enum VoteNote: Sendable, CaseIterable {
     public var severity: Severity {
         switch self {
         case .inResultsConflict: .note
-        case .unconfirmed, .resultsDontAddUp, .checkResultsProblem, .checkResultsTooLarge, .checkGaveUpSite, .checkGaveUpUnpublished,
-             .checkGaveUp,
+        case .unconfirmed, .resultsDontAddUp, .resultsNotRechecked, .checkResultsProblem, .checkResultsTooLarge, .checkGaveUpSite,
+             .checkGaveUpUnpublished, .checkGaveUp,
              .refusedLate, .refusedNotActive, .refusedEnded, .notSignedIn, .closingSoon, .noConnection, .cannotCastOther,
              .notListedLate:
             .warning

@@ -55,6 +55,7 @@ import Testing
         Row("vote_state_recorded", VoteStrings.voteStateRecorded("Example"), "Example recorded your vote. It can't be changed."),
         Row("vote_state_in_results", VoteStrings.voteStateInResults, "The published results include your vote."),
         Row("vote_conflict_after_verified", VoteStrings.voteConflictAfterVerified("Example"), "**Your vote is in the published results.** Example also once showed a different vote under your code. Save the proof and show it to the organisation."),
+        Row("vote_results_not_rechecked", VoteStrings.voteResultsNotRechecked, "VettID could not check the published results of this vote again just now, so their numbers are not shown. It will try again when you open this vote."),
         Row("vote_results_dont_add_up", VoteStrings.voteResultsDontAddUp, "The rest of the published results don't add up. The service may have published them wrongly."),
         Row("vote_state_unconfirmed", VoteStrings.voteStateUnconfirmed("Example"), "Not confirmed. Example sent no receipt for your vote, and the published results don't settle whether it counted."),
         Row("vote_state_didnt_vote", VoteStrings.voteStateDidntVote, "You didn't vote in this one."),
@@ -154,7 +155,7 @@ import Testing
     ]
 
     @Test func everyTextIsWordForWord() {
-        #expect(Self.table.count == 128)
+        #expect(Self.table.count == 129)
         for row in Self.table { #expect(row.got == row.want, "\(row.key)") }
     }
 

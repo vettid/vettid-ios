@@ -331,7 +331,7 @@ struct VoteSiteTests: VotesTestCase {
         let proof = try body.obj("row_proof")
         #expect(try proof.uint("index", min: 0, max: 9) == 1 && proof.uint("tree_size", min: 0, max: 9) == 2)
         #expect(try proof.array("path").count == 1)
-        #expect(m.hints[key] == nil)
+        #expect(m.hints[key] == VoteHint(observerVerdict: true, verdictKept: true))
     }
 
     @Test func aCheckNotDueYetIsNotRun() async throws {
@@ -374,7 +374,7 @@ struct VoteSiteTests: VotesTestCase {
         #expect(m.hints[key]?.resultsProblem == true && m.hints[key]?.gaveUp == nil)
         vault.submitAnswer = #"{"proposal_id":"\#(pid)","check":{"state":"verified"}}"#
         #expect(try await m.checkResults(key) == .submitted(.verified))
-        #expect(m.hints[key] == nil)
+        #expect(m.hints[key] == VoteHint(observerVerdict: true, verdictKept: true))
     }
 
     /// Results whose tally the rows don't make, or whose `rows_hash` is not the rows' (BALLOT-PROTOCOL §8.4): the member's
@@ -396,7 +396,7 @@ struct VoteSiteTests: VotesTestCase {
         let body = try StrictJson.parseObject(try #require(vault.submits.last))
         #expect(try body.base64("results") == Array(changed.utf8))
         #expect(try body.obj("row_proof").uint("index", min: 0, max: 9) == 1)
-        #expect(m.hints[key] == VoteHint(resultsDontAddUp: true))
+        #expect(m.hints[key] == VoteHint(resultsDontAddUp: true, observerVerdict: false, verdictKept: true))
         // A refusal keeps it too.
         m.hint(key) { $0.resultsDontAddUp = false }
         vault.submitRefusal = "bad_request"
@@ -410,6 +410,8 @@ struct VoteSiteTests: VotesTestCase {
         site["p/\(pid)/results.json"] = .unreachable
         #expect(try await m.checkResults(key) == .siteUnreachable)
         #expect(m.hints[key]?.resultsDontAddUp == false && m.hints[key]?.gaveUp == .site)
+        // The verdict of the check stays: the numbers of a verified vote stay hidden.
+        #expect(m.hints[key]?.observerVerdict == false)
         // Rows that are not what `rows_hash` names, but make the published tree: sent too.
         VoteResultsFixture.publish(site, pid)
         let hash = try StrictJson.parseObject(VoteResultsFixture.results).string("rows_hash")
@@ -418,13 +420,13 @@ struct VoteSiteTests: VotesTestCase {
         m.hint(key) { $0.resultsDontAddUp = false }
         vault.submitAnswer = #"{"proposal_id":"\#(pid)","check":{"state":"verified"}}"#
         #expect(try await m.checkResults(key) == .submitted(.verified))
-        #expect(m.hints[key] == VoteHint(resultsDontAddUp: true))
+        #expect(m.hints[key] == VoteHint(resultsDontAddUp: true, observerVerdict: false, verdictKept: true))
         // Consistent results clear it.
         VoteResultsFixture.publish(site, pid)
         vault.submitAnswer = #"{"proposal_id":"\#(pid)","check":{"state":"verified"}}"#
         #expect(try await m.checkResults(key) == .submitted(.verified))
         #expect(vault.submits.count == 5)
-        #expect(m.hints[key] == nil)
+        #expect(m.hints[key] == VoteHint(observerVerdict: true, verdictKept: true))
     }
 
     /// Results whose rows are not the tree of `rows_root`: there is no row with a proof to submit, and nothing goes

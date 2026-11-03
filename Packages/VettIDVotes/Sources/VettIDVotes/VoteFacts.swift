@@ -87,13 +87,17 @@ public struct VoteFacts: Equatable, Sendable {
             // Results that don't add up show no number (VAULT-MESSAGING 0.83.2 §10.19.6 step 1; ANDROID-PLAN 0.1.116 §4
             // "Votes", screen 2 item 5): the line under the state says why. Left out whenever the flag is set, whatever
             // the check (chosen; not in the spec: before a verified or unconfirmed check there are no numbers anyway).
-            f.results = s.hint.resultsDontAddUp ? nil : results(d, service)
+            // Nor before the results were checked again when the screen opened, or when they could not be (owner decision
+            // 2026-11-02).
+            // The numbers show only on a passed observer check since the vault opened (``VoteHint/observerVerdict``):
+            // an attempt that ran it, or the check again when the screen opened.
+            f.results = s.hint.observerVerdict == true && !s.hint.resultsDontAddUp ? results(d, service) : nil
             f.choices = d.choices.map { AccountNames.isolateOrNull($0.label) ?? $0.id }
         }
         f.notes = VoteRules.notes(
             summary, gaveUp: s.hint.gaveUp, resultsProblem: s.hint.resultsProblem, notListedLate: s.hint.notListedLate(now),
-            resultsTooLarge: s.hint.resultsTooLarge, resultsDontAddUp: s.hint.resultsDontAddUp
-        ).map { n in
+            resultsTooLarge: s.hint.resultsTooLarge, resultsDontAddUp: s.hint.resultsDontAddUp || s.hint.observerVerdict == false
+        ).appendingNotRechecked(s).map { n in
             let why = n == .rejected ? VoteRules.rejectedWhy(summary.reason) : nil
             return VoteNoteLine(note: n, heading: VoteTexts.title(n), text: VoteTexts.text(n, service: service, time: time, rejected: why))
         }
@@ -220,5 +224,17 @@ public struct VoteRowFacts: Equatable, Sendable {
         case .upcoming: v.opensAt.map { VoteStrings.voteRowOpens(VoteFormat.full($0)) }
         default: v.closesAt.map { VoteStrings.voteRowCloses(VoteFormat.full($0)) }
         }
+    }
+}
+
+private extension [VoteNote] {
+    /// The line that the published results could not be checked again (their numbers are hidden), under the state line,
+    /// when the line that they don't add up does not already say why.
+    func appendingNotRechecked(_ s: VoteScreenState) -> [VoteNote] {
+        guard s.recheck == .notChecked, s.hint.observerVerdict == nil, !contains(.resultsDontAddUp) else { return self }
+        var out = self
+        let states: Set<VoteNote> = [.inResults, .inResultsConflict, .didntVote, .unconfirmed]
+        out.insert(.resultsNotRechecked, at: (lastIndex { states.contains($0) }).map { $0 + 1 } ?? count)
+        return out
     }
 }
