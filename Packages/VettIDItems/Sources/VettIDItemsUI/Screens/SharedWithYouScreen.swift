@@ -220,20 +220,20 @@ struct ReceivedCard: View {
 struct SharedFields: View {
     @Environment(\.vettIDColors) private var colors
     let content: SharedContent
-    /// The masked fields (a password, a one-time code's seed) the member showed, by position; none when the screen is
-    /// left. A value someone shares is hidden until shown on purpose, as in the member's own item.
-    @State private var shown: Set<Int> = []
+    /// The masked fields (a password, a one-time code's seed) the member showed; none when the screen is left or the
+    /// content changes. A value someone shares is hidden until shown on purpose, as in the member's own item.
+    @State private var masking = SharedMasking()
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            ForEach(Array(content.fields.enumerated()), id: \.offset) { index, f in
+            ForEach(Array(content.fields.enumerated()), id: \.offset) { _, f in
                 // An empty label is left out, not shown as a blank line (VAULT-MESSAGING 0.76.0 §10.8 step 4).
                 if let label = AccountNames.cleaned(f.label) {
                     Text(label).vettIDFont(.labelMedium).foregroundStyle(colors.onSurfaceVariant)
                 }
                 let text = Self.text(f)
                 let masked = FieldKinds.masked(f.kind) && !text.isEmpty
-                let visible = !masked || shown.contains(index)
+                let visible = !masked || masking.isShown(f)
                 HStack(spacing: Spacing.xs) {
                     Text(text.isEmpty ? ItemsStrings.emptyValue : (visible ? text : ItemsStrings.maskedValue))
                         .vettIDFont(.bodyLarge)
@@ -244,7 +244,7 @@ struct SharedFields: View {
                         let name = AccountNames.cleaned(f.label) ?? ""
                         let label = visible ? ItemsStrings.cdHideValue(name) : ItemsStrings.cdShowValue(name)
                         IconButton(visible ? .hide : .show, label: label) {
-                            if visible { shown.remove(index) } else { shown.insert(index) }
+                            masking.toggle(f)
                         }
                     }
                 }
@@ -255,6 +255,8 @@ struct SharedFields: View {
                 Text(notes).vettIDFont(.bodyLarge).frame(maxWidth: .infinity, alignment: .leading)
             }
         }
+        .onAppear { masking.update(content.fields) }
+        .onChange(of: SharedMasking.signature(content.fields)) { _, _ in masking.update(content.fields) }
     }
 
     /// A field's value as shown, cleaned (VAULT-MESSAGING 0.76.0 §10.8): one line, except a multi-line field and an address,
@@ -367,3 +369,31 @@ struct CappedField: View {
     }
 }
 #endif
+
+/// Which masked fields of a received item the member has shown. Keyed by the field (its id, or its label and kind), not by
+/// position; every one is hidden again when the content changes (a new fetch, another item).
+struct SharedMasking: Equatable {
+    private(set) var shown: Set<String> = []
+    private var current: [String] = []
+
+    static func key(_ f: ItemFieldView) -> String { f.fieldID ?? "\(f.label)|\(f.kind)" }
+
+    /// What identifies the content: each field's key and shown text.
+    static func signature(_ fields: [ItemFieldView]) -> [String] {
+        fields.map { key($0) + "\u{0}" + SharedFields.text($0) }.sorted()
+    }
+
+    func isShown(_ f: ItemFieldView) -> Bool { shown.contains(Self.key(f)) }
+
+    mutating func toggle(_ f: ItemFieldView) {
+        let k = Self.key(f)
+        if shown.contains(k) { shown.remove(k) } else { shown.insert(k) }
+    }
+
+    /// Hides everything when [fields] are not the content last seen.
+    mutating func update(_ fields: [ItemFieldView]) {
+        let now = Self.signature(fields)
+        if now != current { shown = [] }
+        current = now
+    }
+}
