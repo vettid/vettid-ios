@@ -162,6 +162,8 @@ public final class AppLock {
     /// The wall clock was seen stepping back while the app was away (``clockStepBackTolerance``): the lock engages at return even
     /// if the date was put right again meanwhile.
     @ObservationIgnored private var clockSteppedBack = false
+    /// The return to the foreground came while a prompt showed and was put off until the prompt ends.
+    @ObservationIgnored private var returnSkipped = false
     @ObservationIgnored private var clockObserver: (any NSObjectProtocol)?
 
     /// How far the wall clock may fall behind the clock that cannot be set before it counts as set back: network time
@@ -367,6 +369,7 @@ public final class AppLock {
         method = .biometrics
         timeout = .standard
         backgroundAt = nil
+        returnSkipped = false
         authenticating = false
     }
 
@@ -386,6 +389,7 @@ public final class AppLock {
     public func onBackground() {
         backgroundAt = (uptime(), wall())
         clockSteppedBack = false
+        returnSkipped = false
     }
 
     /// The app left the foreground and the check of its return has not run yet: what the app shows may still be covered
@@ -395,7 +399,10 @@ public final class AppLock {
     /// The return to the foreground: the timeout is applied from when the app left. Skipped while a prompt shows; the prompt's
     /// end applies it then (``applyReturn(afterPrompt:)``).
     public func onForeground() {
-        if authenticating { return }
+        if authenticating {
+            returnSkipped = true
+            return
+        }
         applyReturn(afterPrompt: false)
     }
 
@@ -409,6 +416,12 @@ public final class AppLock {
     /// back and put right again while the app is suspended is caught only if that notification is delivered; if it is not, the
     /// comparison at return sees equal elapsed times. The timeout itself never uses the wall clock.
     private func applyReturn(afterPrompt: Bool) {
+        // At the end of a prompt, only a return that was put off is applied: a prompt that ends while the app is still away
+        // leaves the record for the real return.
+        if afterPrompt {
+            guard returnSkipped else { return }
+            returnSkipped = false
+        }
         guard let at = backgroundAt else { return }
         backgroundAt = nil
         let elapsed = uptime() - at.uptime

@@ -321,6 +321,7 @@ final class FaultyAppLockKeys: AppLockKeys, @unchecked Sendable {
         while !held.waiting { await Task.yield() }
         let before = held.opens
         l.onBackground()
+        l.onForeground() // the return comes while the prompt shows
         held.release()
         _ = await opening.value
         #expect(l.state == .locked && !l.foregroundCheckPending)
@@ -346,9 +347,31 @@ final class FaultyAppLockKeys: AppLockKeys, @unchecked Sendable {
         while !held.waiting { await Task.yield() }
         l.onBackground()
         clock.up += 30
+        l.onForeground() // skipped: the prompt shows
         held.release()
         #expect(await opening.value)
         #expect(l.state == .unlocked && !l.foregroundCheckPending)
+    }
+
+    /// A prompt that succeeds while the app is still away (after it left, before any return) leaves the record for the real
+    /// return: coming back after the timeout locks.
+    @Test func aPromptEndingWhileStillAwayLeavesTheTimeoutToTheReturn() async throws {
+        let held = HeldAppLockKeys()
+        let l = lock(held)
+        l.start()
+        #expect(try await l.enable(.biometrics, reason: "Unlock VettID"))
+        try l.setTimeout(.fiveMinutes)
+        l.lockNow()
+        held.hold = true
+        let opening = Task { @MainActor in await l.unlock(reason: "Unlock VettID") }
+        while !held.waiting { await Task.yield() }
+        l.onBackground()
+        held.release()
+        #expect(await opening.value)
+        #expect(l.state == .unlocked && l.foregroundCheckPending, "the return has not happened yet")
+        clock.up += 3600
+        l.onForeground()
+        #expect(l.state == .locked && !l.foregroundCheckPending)
     }
 
     @Test func invalidatedKeyTurnsTheLockOff() async throws {
