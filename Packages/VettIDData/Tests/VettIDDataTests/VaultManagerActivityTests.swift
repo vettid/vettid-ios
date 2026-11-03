@@ -109,8 +109,12 @@ import VettIDVault
         let auth = try service.peerAsksAuthentication(id)
         let grant = try service.peerAsksForItems(id, [AskedItem(ref: "01JITEM000000000000000000A", label: "Passport")])
         #expect(await eventually { approvals.approvals.count == 2 && feed.items.count == 2 })
+        let kept = m.session?.device.inboxCount ?? 0
+        #expect(kept > 0, "the events are kept for the ones that wait for them")
         try await m.lock()
         #expect(feed.items.isEmpty && feed.badge == FeedBadge() && approvals.listed.isEmpty && approvals.approvals.isEmpty)
+        // (What the lock itself brings in, the vault's answers, arrives after it and is kept again.)
+        #expect((m.session?.device.inboxCount ?? 0) < kept, "the events read while open are not kept once the vault is locked")
         for name in VaultFiles.retired {
             #expect(!FileManager.default.fileExists(atPath: phone.directory.appendingPathComponent(name).path))
         }

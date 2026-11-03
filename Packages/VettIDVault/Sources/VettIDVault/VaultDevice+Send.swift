@@ -409,6 +409,15 @@ extension VaultDevice {
         }
     }
 
+    /// Drops the events kept for ``awaitEvent(_:timeout:match:)`` (the last ``inboxMax``): their bodies are vault content, which
+    /// is not kept in memory once the vault is no longer open (IOS-PLAN §6.9). A wait that is under way is not ended.
+    public func clearInbox() {
+        mem.withLock { inbox.removeAll() }
+    }
+
+    /// How many events the inbox holds.
+    public var inboxCount: Int { mem.withLock { inbox.count } }
+
     func publish(_ m: VaultMessage) {
         let waiters: [OneShot<Bool>] = mem.withLock {
             inbox.append(m)
