@@ -115,6 +115,69 @@ import VettIDDataTesting
         #expect(critical.state.prompt?.purpose == .open && !items.calls.contains("revealCritical"))
     }
 
+    /// A flag in a suite of its own, removed when [body] ends (never the real domain).
+    private func withNoteFlag(_ body: @MainActor (NoPasscodeNote) async throws -> Void) async throws {
+        let name = "test.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: name))
+        defer { defaults.removePersistentDomain(forName: name) }
+        try await body(NoPasscodeNote(defaults: defaults))
+    }
+
+    /// With no passcode on the iPhone the reveal still works, and the first one says so, once (the flag survives the
+    /// screen: a second view model on the same flag does not say it again).
+    @Test func revealingWithNoPasscodeSaysSoOnce() async throws { try await withNoteFlag { flag in
+        let vm = ItemDetailViewModel(itemID: "01L", items: items, noPasscodeNote: flag)
+        await vm.settle()
+        vm.askReveal(noPasscode: true) { _ in true }
+        await vm.settle()
+        #expect(vm.state.revealed && vm.state.dialog == .noPasscode)
+        vm.dismissDialog()
+        vm.hide()
+        vm.askReveal(noPasscode: true) { _ in true }
+        await vm.settle()
+        #expect(vm.state.revealed && vm.state.dialog == nil)
+        let again = ItemDetailViewModel(itemID: "01L", items: items, noPasscodeNote: flag)
+        await again.settle()
+        again.askReveal(noPasscode: true) { _ in true }
+        await again.settle()
+        #expect(again.state.revealed && again.state.dialog == nil)
+    } }
+
+    /// A reveal that fails does not use up the note: the first reveal that works says it.
+    @Test func aFailedRevealKeepsTheNoteForLater() async throws { try await withNoteFlag { flag in
+        let vm = ItemDetailViewModel(itemID: "01L", items: items, noPasscodeNote: flag)
+        await vm.settle()
+        items.fail["reveal"] = VaultFailure(.other)
+        vm.askReveal(noPasscode: true) { _ in true }
+        await vm.settle()
+        #expect(!vm.state.revealed && vm.state.dialog == nil)
+        vm.askReveal(noPasscode: true) { _ in true }
+        await vm.settle()
+        #expect(vm.state.revealed && vm.state.dialog == .noPasscode)
+    } }
+
+    /// With a passcode the note never shows, and the prompt runs; a refused prompt shows nothing and reveals nothing.
+    @Test func revealingWithAPasscodeNeverSaysIt() async throws { try await withNoteFlag { flag in
+        let vm = ItemDetailViewModel(itemID: "01L", items: items, noPasscodeNote: flag)
+        await vm.settle()
+        let asked = Box<Int>(0)
+        vm.askReveal(noPasscode: false) { _ in
+            asked.value += 1
+            return true
+        }
+        await vm.settle()
+        #expect(asked.value == 1 && vm.state.revealed && vm.state.dialog == nil)
+        let refused = ItemDetailViewModel(itemID: "01L", items: items, noPasscodeNote: flag)
+        await refused.settle()
+        refused.askReveal(noPasscode: true) { _ in false }
+        await refused.settle()
+        #expect(!refused.state.revealed && refused.state.dialog == nil)
+        // The note was not used up by the refusal: the first reveal that goes through still says it.
+        refused.askReveal(noPasscode: true) { _ in true }
+        await refused.settle()
+        #expect(refused.state.dialog == .noPasscode)
+    } }
+
     @Test func aCriticalItemOpensOnlyWithTheRightPassword() async throws {
         let vm = await detail("01C")
         vm.reveal() // a critical item is never revealed without the password

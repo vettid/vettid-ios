@@ -5,6 +5,8 @@ import VettIDData
 /// What the detail screen is confirming. Mirrors vettid-android `DetailDialog`.
 public enum DetailDialog: Sendable {
     case delete, protectionPick, leaveCritical
+    /// The one-time note on revealing with no passcode on the iPhone (VAULT-MESSAGING §10.7: revealed on purpose).
+    case noPasscode
 }
 
 /// An item's detail state; never printed or reflected with its values. Mirrors vettid-android `ItemDetailUiState`.
@@ -39,7 +41,7 @@ public struct ItemDetailState: Equatable, Sendable, CustomStringConvertible, Cus
 }
 
 /// An item (§10.7): `data` values at once; a `secret` item's values after the member confirms with the phone's lock
-/// (``reveal()``, audited by the vault, the screen asks first); a `critical` item's after the credential password
+/// (``reveal(noPasscode:)``, audited by the vault, the screen asks first); a `critical` item's after the credential password
 /// (``open()``). Values are dropped again when the screen leaves the foreground (``hide()``) and whenever the vault's
 /// items are cleared (a lock, the hold, a wipe). Delete and the sensitivity change follow §10.7: a critical item's need the
 /// password, and leaving `critical` warns first. Mirrors vettid-android `ItemDetailViewModel`.
@@ -52,9 +54,14 @@ public final class ItemDetailViewModel {
     @ObservationIgnored private let now: @Sendable () -> Date
     @ObservationIgnored let work = Work()
     @ObservationIgnored private let follows = TaskBag()
+    @ObservationIgnored private let noPasscodeNote: NoPasscodeNote
 
-    public init(itemID: String, items: any ItemsRepository, now: @escaping @Sendable () -> Date = { Date() }) {
+    public init(
+        itemID: String, items: any ItemsRepository, now: @escaping @Sendable () -> Date = { Date() },
+        noPasscodeNote: NoPasscodeNote = NoPasscodeNote()
+    ) {
         self.items = items
+        self.noPasscodeNote = noPasscodeNote
         self.now = now
         state = ItemDetailState(itemID: itemID)
         load()
@@ -95,25 +102,29 @@ public final class ItemDetailViewModel {
     }
 
     /// A secret item's values (`item.reveal`), after the screen confirmed the holder; a critical one asks the password.
-    public func reveal() {
+    /// [noPasscode]: the one-time note is used up only by a reveal that worked.
+    public func reveal(noPasscode: Bool = false) {
         guard let item = state.item else { return }
         if item.sensitivity == .critical { return open() }
-        let id = state.itemID, items = items
+        let id = state.itemID, items = items, note = noPasscodeNote
         run(nil) { m in
             let d = try await items.reveal(id)
             m.state.item = d
+            if noPasscode, note.takeFirst() { m.state.dialog = .noPasscode }
         }
     }
 
     /// "Reveal": the iPhone's owner is confirmed first ([confirm], with the prompt's reason: the title and the item's name,
     /// as vettid-android's prompt shows them); nothing is asked of the vault unless confirmed. A critical item asks the
-    /// password instead.
-    public func askReveal(_ confirm: @escaping @MainActor (String) async -> Bool) {
+    /// password instead. [noPasscode]: the iPhone has none, so [confirm] means nothing; the reveal goes on, and the first
+    /// time the note says so (``NoPasscodeNote``).
+    public func askReveal(noPasscode: Bool = false, _ confirm: @escaping @MainActor (String) async -> Bool) {
         guard let item = state.item else { return }
         if item.sensitivity == .critical { return open() }
         let reason = [ItemsStrings.revealPromptTitle, item.name].joined(separator: "\n")
         work.launch { [weak self] in
-            if await confirm(reason) { self?.reveal() }
+            guard await confirm(reason), let self else { return }
+            reveal(noPasscode: noPasscode)
         }
     }
 

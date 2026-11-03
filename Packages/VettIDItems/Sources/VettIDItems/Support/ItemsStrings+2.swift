@@ -169,6 +169,16 @@ public extension ItemsStrings {
         String(localized: "items_reveal_prompt_title", defaultValue: "Reveal a secret item", bundle: .module)
     }
 
+    static var revealNoPasscode: String {
+        String(
+            localized: "items_reveal_no_passcode",
+            defaultValue: """
+                This iPhone has no passcode, so anyone holding it can see revealed items. Set a passcode in Settings to protect them.
+                """,
+            bundle: .module
+        )
+    }
+
     static var criticalHiddenTitle: String {
         String(localized: "items_critical_hidden_title", defaultValue: "Inside your Protean Credential", bundle: .module)
     }

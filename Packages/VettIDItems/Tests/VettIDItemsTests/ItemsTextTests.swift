@@ -9,7 +9,7 @@ import VettIDData
 /// The Vault's texts: every key of vettid-android's `feature/items` `strings.xml` (278 strings) and `strings_sharing.xml`
 /// (158 strings, 24 plurals) resolves to its own text (0.55.0 adds `items_phone_extension_note` and the plural
 /// `items_share_preview_more`, 0.55.5 `items_rule_month`; the iPhone's two secret-item texts, the one-time code's time
-/// left as VoiceOver says it and a refused save's count are `ios_items_…`), and the tags screen's words.
+/// left as VoiceOver says it and a refused save's count are `ios_items_…`; the note on revealing with no passcode is `items_reveal_no_passcode`), and the tags screen's words.
 @Suite struct ItemsTextTests {
     @Test func everyStringResolves() throws {
         let url = URL(fileURLWithPath: #filePath)
@@ -17,7 +17,7 @@ import VettIDData
             .appendingPathComponent("Sources/VettIDItems/Resources/Localizable.xcstrings")
         let doc = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
         let strings = try #require(doc["strings"] as? [String: Any])
-        let expected = 278 + 158 + 24 + 4
+        let expected = 278 + 158 + 24 + 5
         #expect(strings.count == expected)
         let missing = "\u{0}missing"
         for key in strings.keys {
@@ -26,6 +26,11 @@ import VettIDData
             let named = key.hasPrefix("items_") || key.hasPrefix("ios_items_")
             #expect(named, "\(key)")
         }
+    }
+
+    /// The owner's decision of 2026-11-03: the note shown once, word for word.
+    @Test func theNoPasscodeNoteIsWordForWord() {
+        #expect(ItemsStrings.revealNoPasscode == "This iPhone has no passcode, so anyone holding it can see revealed items. Set a passcode in Settings to protect them.")
     }
 
     /// VAULT-MESSAGING 0.55.5 §10.7: a month-and-year field names its own form for any invalid value, a full date typed or

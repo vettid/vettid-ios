@@ -191,6 +191,12 @@ struct ItemDetailDialogs: ViewModifier {
                 isPresented: shown(.leaveCritical), title: ItemsStrings.leaveCriticalTitle, message: ItemsStrings.leaveCriticalBody,
                 confirmLabel: ItemsStrings.leaveCriticalConfirm, destructive: true, onConfirm: actions.onConfirmLeaveCritical
             )
+            // The one-time note on revealing with no passcode; an alert is read out by VoiceOver as it appears.
+            .alert(ItemsStrings.revealPromptTitle, isPresented: uncovered(shown(.noPasscode), covered: covered)) {
+                Button(ItemsStrings.ok) { actions.onDismissDialog() }.accessibilityIdentifier("item_no_passcode_ok")
+            } message: {
+                Text(ItemsStrings.revealNoPasscode)
+            }
             .sheet(isPresented: uncovered(shown(.protectionPick), covered: covered)) {
                 ProtectionPicker(current: state.item?.sensitivity ?? .data, actions: actions)
             }
