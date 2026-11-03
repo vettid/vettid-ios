@@ -220,19 +220,35 @@ struct ReceivedCard: View {
 struct SharedFields: View {
     @Environment(\.vettIDColors) private var colors
     let content: SharedContent
+    /// The masked fields (a password, a one-time code's seed) the member showed, by position; none when the screen is
+    /// left. A value someone shares is hidden until shown on purpose, as in the member's own item.
+    @State private var shown: Set<Int> = []
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            ForEach(Array(content.fields.enumerated()), id: \.offset) { _, f in
+            ForEach(Array(content.fields.enumerated()), id: \.offset) { index, f in
                 // An empty label is left out, not shown as a blank line (VAULT-MESSAGING 0.76.0 §10.8 step 4).
                 if let label = AccountNames.cleaned(f.label) {
                     Text(label).vettIDFont(.labelMedium).foregroundStyle(colors.onSurfaceVariant)
                 }
                 let text = Self.text(f)
-                Text(text.isEmpty ? ItemsStrings.emptyValue : text)
-                    .vettIDFont(.bodyLarge)
-                    .padding(.bottom, Spacing.s)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                let masked = FieldKinds.masked(f.kind) && !text.isEmpty
+                let visible = !masked || shown.contains(index)
+                HStack(spacing: Spacing.xs) {
+                    Text(text.isEmpty ? ItemsStrings.emptyValue : (visible ? text : ItemsStrings.maskedValue))
+                        .vettIDFont(.bodyLarge)
+                        .font(masked && visible ? .body.monospaced() : nil)
+                        .accessibilityLabel(visible ? Text(text.isEmpty ? ItemsStrings.emptyValue : text) : Text(ItemsStrings.hiddenValue))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    if masked {
+                        let name = AccountNames.cleaned(f.label) ?? ""
+                        let label = visible ? ItemsStrings.cdHideValue(name) : ItemsStrings.cdShowValue(name)
+                        IconButton(visible ? .hide : .show, label: label) {
+                            if visible { shown.remove(index) } else { shown.insert(index) }
+                        }
+                    }
+                }
+                .padding(.bottom, Spacing.s)
             }
             if let notes = AccountNames.cleanedLines(content.notes) {
                 Text(ItemsStrings.notes).vettIDFont(.labelMedium)
