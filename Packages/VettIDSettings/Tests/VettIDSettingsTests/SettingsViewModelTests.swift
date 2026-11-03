@@ -71,6 +71,25 @@ import VettIDKeys
         #expect(lock.calls.last == "disable" && !m.state.appLockOn)
     }
 
+    /// Changing the method of a lock that is on asks for the owner before the key is replaced: a refusal changes nothing,
+    /// so the method cannot be a way round the prompt that turning the lock off has.
+    @Test func changingTheMethodAsksForTheOwnerFirst() async {
+        lock.state = .unlocked
+        lock.method = .biometrics
+        var answer = false
+        let m = SettingsViewModel(
+            account: repo, vault: repo, appLock: lock, promptReason: "Unlock VettID",
+            confirmPresence: { _ in answer }, deviceAuthentication: { DeviceAuthentication(biometrics: true, passcode: true) }
+        )
+        m.setAppLockMethod(.passcode)
+        await m.settle()
+        #expect(m.state.appLockOn && m.state.appLockMethod == .biometrics && lock.calls.isEmpty)
+        answer = true
+        m.setAppLockMethod(.passcode)
+        await m.settle()
+        #expect(lock.calls == ["enable(passcode, Unlock VettID)"] && m.state.appLockMethod == .passcode)
+    }
+
     /// Off asks for the device owner first; a prompt that is cancelled or failed leaves the lock on.
     @Test func turningTheLockOffAsksForTheOwner() async {
         lock.state = .unlocked

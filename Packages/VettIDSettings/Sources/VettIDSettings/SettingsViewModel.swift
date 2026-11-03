@@ -170,7 +170,14 @@ public final class SettingsViewModel {
     public func setAppLockMethod(_ m: AppLockMethod) {
         guard m != appLock.method else { return }
         if appLock.state.isOn {
-            enable(m)
+            // A new key replaces the old one first, and a prompt that is cancelled then turns the lock off: the owner is
+            // confirmed before any of it, as for turning the lock off (chosen; not in the spec).
+            let reason = promptReason
+            let confirm = confirmPresence
+            prompts.launch { [weak self] in
+                guard await confirm(reason) else { return }
+                self?.enable(m)
+            }
         } else {
             act { try $0.appLock.chooseMethod(m) }
         }
