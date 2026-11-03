@@ -74,8 +74,10 @@ extension VaultDevice {
     }
 
     /// Seals a message into the outbox and saves; the caller delivers it (``deliver(_:)``). Callers hold ``lock``.
+    /// [save]: false while a message is being handled: the save that ends ``handleLocked(_:)`` stores the entry, and the
+    /// deposit is made after it (``afterLock(_:)``), so the entry is stored before it goes out all the same.
     func enqueueLocked( // swiftlint:disable:this function_parameter_count
-        id: String?, type: String, body: [UInt8], re: String?, status: String?, exp: Date?
+        id: String?, type: String, body: [UInt8], re: String?, status: String?, exp: Date?, save saves: Bool = true
     ) throws -> OutboxEntry {
         let entry: OutboxEntry = try mem.withLock {
             if halted { throw Self.haltedError }
@@ -94,7 +96,7 @@ extension VaultDevice {
             return e
         }
         do {
-            try save()
+            if saves { try save() }
         } catch {
             // Nothing will deliver it: neither kept in flight nor left in the outbox.
             mem.withLock {

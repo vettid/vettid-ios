@@ -43,6 +43,11 @@ extension VaultDevice {
                 // A reply to the vault that the relay refused or could not take (a token refresh, a rekey's answer, a
                 // handshake's fin). The message itself was handled; it is acked and never handled again. Letting it out
                 // would end the collector, and without the ack the same message would fail again at every start.
+            } catch {
+                // The replies queued for after the lock (a rekey's answer, a token) are stored before they go out even
+                // when the handling ends in an error: their records are saved here, once, instead of at each queueing.
+                try? save()
+                throw error
             }
             try save()
         }
@@ -146,7 +151,7 @@ extension VaultDevice {
             if inner.re == nil {
                 let tok = try mintForVault()
                 let entry = try enqueueLocked(
-                    id: nil, type: inner.type, body: Self.standing(tok), re: inner.id, status: Inner.statusOK, exp: nil
+                    id: nil, type: inner.type, body: Self.standing(tok), re: inner.id, status: Inner.statusOK, exp: nil, save: false
                 )
                 afterLock { [self] in try? await deliver(entry) }
             } else {
@@ -200,7 +205,7 @@ extension VaultDevice {
             return (a, env, v)
         }
         guard let (a, env, v) = prepared else { return }
-        try save()
+        // The responder is stored by the save that ends ``handleLocked(_:)``, before this deposit (``afterLock(_:)``).
         afterLock { [self] in
             do {
                 try await depositToVault(v, env)
@@ -268,12 +273,16 @@ extension VaultDevice {
         do {
             if issuedExp != 0, Double(issuedExp) / 1000 - t.timeIntervalSince1970 < Self.issueBefore {
                 let tok = try mintForVault()
-                let e = try enqueueLocked(id: nil, type: "relay.token.issued", body: Self.standing(tok), re: nil, status: nil, exp: nil)
+                let e = try enqueueLocked(
+                    id: nil, type: "relay.token.issued", body: Self.standing(tok), re: nil, status: nil, exp: nil, save: false
+                )
                 afterLock { [self] in try? await deliver(e) }
             }
             let exp = Double(v.tokenExpMs) / 1000
             if exp - t.timeIntervalSince1970 < Self.refreshBefore, t.timeIntervalSince1970 < exp {
-                let e = try enqueueLocked(id: nil, type: "relay.token.refresh", body: VaultJSON.empty, re: nil, status: nil, exp: nil)
+                let e = try enqueueLocked(
+                    id: nil, type: "relay.token.refresh", body: VaultJSON.empty, re: nil, status: nil, exp: nil, save: false
+                )
                 afterLock { [self] in try? await deliver(e) }
             }
         } catch {

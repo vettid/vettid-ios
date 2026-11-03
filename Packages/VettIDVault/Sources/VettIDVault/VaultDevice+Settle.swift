@@ -13,15 +13,16 @@ extension VaultDevice {
     static let settlePoll: TimeInterval = 0.1
 
     /// The credential request [id], valid until [exp], is about to be sent: unsettled until its answer arrives or the
-    /// vault's clock is past [exp] plus ``settleMargin``. Saved before the send.
-    func trackCredential(_ id: String, exp: Date) async throws {
-        try await lock.withLock {
+    /// vault's clock is past [exp] plus ``settleMargin``. Saved before the send: not by a write of its own but by the one
+    /// that stores the send's counter (``sealOnceLocked(id:type:body:exp:)``), which every deposit makes before it goes out
+    /// and which stores this record with it. A request that is never sealed leaves a record that settles by its `exp`.
+    func trackCredential(_ id: String, exp: Date) async {
+        await lock.withLock {
             mem.withLock {
                 var u = st.unsettled ?? [:]
                 u[id] = Self.ms(exp)
                 st.unsettled = u
             }
-            try save()
         }
     }
 
