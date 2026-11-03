@@ -174,13 +174,19 @@ import VettIDUI
         model.approve()
         await clock.runCurrent()
         #expect(model.state.step == .approve && model.state.busy)
-        var window: UIWindow? = host(TransferOutRoute(move: vault, vault: vault, onOpenRecovery: nil, onBack: {}, model: model))
+        final class Counter { var disappeared = 0 }
+        let counter = Counter()
+        var route = TransferOutRoute(move: vault, vault: vault, onOpenRecovery: nil, onBack: {}, model: model)
+        route.disappearProbe = { counter.disappeared += 1 }
+        var window: UIWindow? = host(route)
         window?.rootViewController = nil
         window?.isHidden = true
         window = nil
-        await clock.runCurrent()
-        // A reject would be sent from a task the screen going starts: give it every chance to run before checking.
-        for _ in 0..<200 { await Task.yield() }
+        // The screen really went (its onDisappear ran), and only then is it checked that nothing was rejected.
+        let went = await eventually { counter.disappeared > 0 }
+        #expect(went, "the route's onDisappear ran")
+        let sent = await eventually(within: .milliseconds(500)) { vault.lastTransferRejected != nil }
+        #expect(!sent)
         #expect(vault.lastTransferRejected == nil && !vault.calls.contains("transferReject"))
     }
 

@@ -370,6 +370,8 @@ public struct TransferOutRoute: View {
     private let onOpenRecovery: (@MainActor () -> Void)?
     private let onBack: @MainActor () -> Void
     @State private var model: TransferOutViewModel?
+    /// TEST ONLY: called when the route's `onDisappear` has run (a test proves that the screen went).
+    var disappearProbe: (@MainActor () -> Void)?
 
     public init(
         move: any MoveRepository, vault: any VaultRepository, onOpenRecovery: (@MainActor () -> Void)? = nil,
@@ -396,7 +398,10 @@ public struct TransferOutRoute: View {
             onBack: onBack
         )
         .onAppear { if model == nil { model = TransferOutViewModel(move: move, vault: vault) } }
-        .onDisappear { if let model, Self.leaves(model.state) { model.leave() } }
+        .onDisappear {
+            if let model, Self.leaves(model.state) { model.leave() }
+            disappearProbe?()
+        }
     }
 
     /// Whether the screen going away leaves the transfer (cancels the open code). Not while the approval is in flight: it is
