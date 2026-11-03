@@ -191,6 +191,25 @@ func eventually(within: Duration = .seconds(20), _ condition: @MainActor () -> B
         #expect(vm.state.loadFailure?.kind == .noResponse, "an older success does not clear a newer failure")
     }
 
+    /// A read already on its way when a change brings the new registry does not take the change back: the tag just made
+    /// stays shown.
+    @Test func aReadOnItsWayDoesNotDropATagJustMade() async {
+        let vm = await loaded()
+        let read = TestHold()
+        sharing.holds["refreshTags"] = read
+        vm.refresh()
+        await waitFor { read.count == 1 }
+        vm.askCreate()
+        vm.setName("trips")
+        vm.save()
+        await waitFor { !vm.state.busy && vm.state.dialog == nil }
+        #expect(vm.state.tags.contains { $0.tag == "trips" } && !vm.state.loading)
+        read.release(0)
+        await vm.settle()
+        #expect(vm.state.tags.contains { $0.tag == "trips" }, "the older read is not applied")
+        #expect(sharing.tags?.tags.contains { $0.tag == "trips" } == true, "nor published over the newer registry")
+    }
+
     /// A read that ends while a change is on its way leaves the change busy: it cannot be sent twice.
     @Test func aReadEndingDuringACreateKeepsItBusy() async {
         let vm = await loaded()

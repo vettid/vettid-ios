@@ -54,10 +54,11 @@ public final class FakeSharing: SharingRepository {
 
     public init() {}
 
-    private func publish() {
-        tags = registry
+    private func publish(_ answer: TagRegistry? = nil) {
+        let r = answer ?? registry
+        tags = r
         var c: [String: String] = [:]
-        for t in registry.tags { if let color = t.color { c[t.tag] = color } }
+        for t in r.tags { if let color = t.color { c[t.tag] = color } }
         colors = c
     }
 
@@ -83,9 +84,12 @@ public final class FakeSharing: SharingRepository {
 
     @discardableResult
     public func refreshTags() async throws -> TagRegistry {
+        // The registry as the vault had it when asked: a hold delays the answer, never changes it. Published only when not
+        // older than what is published, as ``SharingManager`` does.
+        let answer = registry
         try await held("refreshTags")
-        publish()
-        return registry
+        if (tags?.version ?? .min) <= answer.version { publish(answer) }
+        return answer
     }
 
     /// Whether the vault is held or due: no quiet read then.

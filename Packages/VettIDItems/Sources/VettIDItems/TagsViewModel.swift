@@ -75,7 +75,8 @@ public final class TagsViewModel {
             do {
                 let r = try await sharing.refreshTags()
                 guard let self, read == reads else { return }
-                state.registry = r
+                // A newer registry (a change applied meanwhile) is kept.
+                if (state.registry?.version ?? .min) <= r.version { state.registry = r }
                 state.loading = false
             } catch {
                 guard let self, read == reads else { return }
@@ -214,8 +215,14 @@ public final class TagsViewModel {
             do {
                 let apply = try await block()
                 guard let self else { return }
+                let before = state.registry
                 apply(&state)
                 state.busy = false
+                // The change brought the registry after its write: a read already on its way is older, and is not applied.
+                if state.registry != before {
+                    reads += 1
+                    state.loading = false
+                }
             } catch {
                 guard let self else { return }
                 let f = error as? VaultFailure ?? VaultFailure(.other)

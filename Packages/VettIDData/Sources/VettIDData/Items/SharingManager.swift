@@ -108,7 +108,9 @@ public final class SharingManager: SharingRepository {
             after = page.tags.isEmpty ? nil : page.next
         } while after != nil && out.count < Self.maxTagsListed
         let r = TagRegistry(version: version, tags: out)
-        if mark == cleared { publish(r) }
+        // A read that answers after a newer registry was published (a write's own read, or another device's change read
+        // since) does not put the older one back: the registry is versioned as one object (VAULT-MESSAGING §10.1, §10.8).
+        if mark == cleared, (tags?.version ?? .min) <= r.version { publish(r) }
         return r
     }
 
