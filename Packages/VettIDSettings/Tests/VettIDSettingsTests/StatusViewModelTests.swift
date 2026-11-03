@@ -33,6 +33,11 @@ import VettIDDataTesting
         let failed = AttestationViewModel(vault: repo)
         await failed.settle()
         #expect(failed.state == LoadState(loading: false, error: .other))
+        // "Try again" reads it once more.
+        failed.retry()
+        #expect(failed.state.loading)
+        await failed.settle()
+        #expect(failed.state.value?.environment == "staging")
     }
 
     /// ANDROID-PLAN §4 "Recovery and unlock from release R": the Recovery line, never "0 of 10" when the counter could not be read. Mirrors vettid-android

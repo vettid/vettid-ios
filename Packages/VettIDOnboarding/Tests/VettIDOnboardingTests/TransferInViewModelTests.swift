@@ -43,6 +43,24 @@ import VettIDDataTesting
         #expect(vault.phase == .unlocked)
     }
 
+    /// "Go" on the last screen says why it failed, and tries again on the next tap.
+    @Test func aFailedGoIsSaidAndTriedAgain() async throws {
+        let vm = model()
+        vm.scan()
+        vm.scanned(try qr())
+        await clock.runCurrent()
+        vault.transferApproval.complete()
+        await clock.advance(seconds: 2)
+        vault.fail["finishSetup"] = FakeVaultRepository.failure(.network)
+        vm.finish()
+        #expect(vm.state.busy)
+        await vm.settle()
+        #expect(vm.state.error == .network && !vm.state.busy && vault.phase == .setup(.finishing))
+        vm.finish()
+        await vm.settle()
+        #expect(vm.state.error == nil && vault.phase == .unlocked)
+    }
+
     /// The countdown to the end of the approval window runs on the clock.
     @Test func theApprovalCountdownRunsOnTheClock() async throws {
         let vm = model()

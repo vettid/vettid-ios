@@ -201,7 +201,7 @@ public struct AttestationRoute: View {
     public var body: some View {
         AttestationContent(
             state: model?.state ?? LoadState(), onBack: onBack, canary: model?.canary, onRemoveCanary: { model?.removeCanary() },
-            onLoadCanary: canaryInbox == nil ? nil : { importing = true }
+            onLoadCanary: canaryInbox == nil ? nil : { importing = true }, onRetry: { model?.retry() }
         )
         .onAppear { if model == nil { model = AttestationViewModel(vault: vault, canary: canary) } }
         .closesWhenCovered { importing = false }

@@ -266,7 +266,23 @@ public final class TransferInViewModel: TransferInActions {
     }
 
     public func finish() {
-        work.launch { [vault] in try? await vault.finishSetup() }
+        guard !state.busy else { return }
+        state.busy = true
+        state.error = nil
+        state.errorCode = nil
+        // The phase changes when it works; a failure is said on the screen and "Go" tries again.
+        work.launch { [weak self, vault] in
+            do {
+                try await vault.finishSetup()
+                self?.state.busy = false
+            } catch {
+                guard let self else { return }
+                let f = Self.failure(of: error)
+                state.busy = false
+                state.error = f.kind
+                state.errorCode = f.code
+            }
+        }
     }
 
     /// TEST ONLY: returns once what the model started has run as far as it can without a wait of the repository's or the

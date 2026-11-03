@@ -72,10 +72,21 @@ public final class AttestationViewModel {
     public init(vault: any VaultRepository, canary: (any CanaryManifestRepository)? = nil) {
         self.vault = vault
         canaryManifests = canary
+        load()
+    }
+
+    private func load() {
+        let vault = vault
         work.launch { [weak self] in
             let s = await LoadState.of { try await vault.attestationInfo() }
             self?.state = s
         }
+    }
+
+    /// "Try again" after a failed read.
+    public func retry() {
+        state = LoadState()
+        load()
     }
 
     /// The installed canary manifest, or nil (then nothing about it is shown).
