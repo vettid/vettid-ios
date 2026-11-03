@@ -87,6 +87,7 @@ public final class SettingsViewModel {
     @ObservationIgnored private let updates: (any ReleaseUpdateRepository)?
     @ObservationIgnored private let theme: ThemeSetting?
     @ObservationIgnored private let previews: NotificationPreviewsSetting?
+    @ObservationIgnored private let confirmPresence: @MainActor (String) async -> Bool
     @ObservationIgnored private let work = Work()
     /// Turning the app lock on: its prompt is the app lock's, never cancelled with the screen.
     @ObservationIgnored private let prompts = Work()
@@ -95,7 +96,8 @@ public final class SettingsViewModel {
     /// what the iPhone can ask for, read when the lock is turned on. [screenshots]: the app's "Allow screenshots" (nil: the
     /// row shows off and changes nothing). [updates]: the release update ("Update available" while one is offered). [theme]:
     /// the app's theme choice (nil: the row shows the system default and changes nothing). [previews]: what notifications
-    /// show (nil: the row is hidden).
+    /// show (nil: the row is hidden). [confirmPresence]: Face ID, Touch ID or the passcode, asked before the lock is turned
+    /// off (true: confirmed; the default confirms at once, for previews and tests).
     public init(
         account: any AccountRepository,
         vault: any VaultRepository,
@@ -105,6 +107,7 @@ public final class SettingsViewModel {
         updates: (any ReleaseUpdateRepository)? = nil,
         theme: ThemeSetting? = nil,
         previews: NotificationPreviewsSetting? = nil,
+        confirmPresence: @escaping @MainActor (String) async -> Bool = { _ in true },
         deviceAuthentication: @escaping @MainActor () -> DeviceAuthentication = { DeviceAuthentication.current() }
     ) {
         self.account = account
@@ -115,6 +118,7 @@ public final class SettingsViewModel {
         self.updates = updates
         self.theme = theme
         self.previews = previews
+        self.confirmPresence = confirmPresence
         self.deviceAuthentication = deviceAuthentication
     }
 
@@ -145,13 +149,20 @@ public final class SettingsViewModel {
         if on { screenshots?.allow() } else { screenshots?.disallow() }
     }
 
-    /// The switch: on asks for Face ID, Touch ID or the passcode at once (a new key); off needs no prompt (the app is
-    /// open).
+    /// The switch: on asks for Face ID, Touch ID or the passcode at once (a new key); off asks for the device owner too
+    /// (Face ID, Touch ID or the passcode, one prompt: whoever holds the open app cannot just switch the lock off).
+    /// (chosen; not in the spec: the prompt reuses the lock's own reason text.)
     public func setAppLock(_ on: Bool) {
         if on {
             enable(appLock.method)
         } else {
-            act { try $0.appLock.disable() }
+            let reason = promptReason
+            let confirm = confirmPresence
+            // Like turning it on, never cancelled with the screen: a prompt cut short leaves the lock as it was.
+            prompts.launch { [weak self] in
+                guard await confirm(reason) else { return }
+                self?.act { try $0.appLock.disable() }
+            }
         }
     }
 
