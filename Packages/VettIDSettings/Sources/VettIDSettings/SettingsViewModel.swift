@@ -161,7 +161,9 @@ public final class SettingsViewModel {
             // Like turning it on, never cancelled with the screen: a prompt cut short leaves the lock as it was.
             prompts.launch { [weak self] in
                 guard await confirm(reason) else { return }
-                self?.act { try $0.appLock.disable() }
+                // The lock may have closed (or been turned off) while the prompt was up: only an open app turns it off.
+                guard let self, self.appLock.state == .unlocked else { return }
+                self.act { try $0.appLock.disable() }
             }
         }
     }

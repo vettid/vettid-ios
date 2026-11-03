@@ -1,4 +1,5 @@
 #if os(iOS)
+import CryptoKit
 import SwiftUI
 import VettIDData
 import VettIDItems
@@ -374,13 +375,15 @@ struct CappedField: View {
 /// position; every one is hidden again when the content changes (a new fetch, another item).
 struct SharedMasking: Equatable {
     private(set) var shown: Set<String> = []
-    private var current: [String] = []
+    /// A digest of the content last seen, not the content (a password must not be kept in a second place).
+    private var current: Data?
 
     static func key(_ f: ItemFieldView) -> String { f.fieldID ?? "\(f.label)|\(f.kind)" }
 
     /// What identifies the content: each field's key and shown text.
-    static func signature(_ fields: [ItemFieldView]) -> [String] {
-        fields.map { key($0) + "\u{0}" + SharedFields.text($0) }.sorted()
+    static func signature(_ fields: [ItemFieldView]) -> Data {
+        let joined = fields.map { key($0) + "\u{0}" + SharedFields.text($0) }.sorted().joined(separator: "\u{1}")
+        return Data(SHA256.hash(data: Data(joined.utf8)))
     }
 
     func isShown(_ f: ItemFieldView) -> Bool { shown.contains(Self.key(f)) }

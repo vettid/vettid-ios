@@ -179,7 +179,8 @@ import VettIDUI
         window?.isHidden = true
         window = nil
         await clock.runCurrent()
-        try await Task.sleep(for: .milliseconds(200))
+        // A reject would be sent from a task the screen going starts: give it every chance to run before checking.
+        for _ in 0..<200 { await Task.yield() }
         #expect(vault.lastTransferRejected == nil && !vault.calls.contains("transferReject"))
     }
 
