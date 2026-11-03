@@ -13,6 +13,10 @@ import VettIDUI
 /// rule; here ``OnboardingState/canContinueBackup``, which the screen uses as is, is checked in the model's tests.)
 @MainActor
 @Suite struct OnboardingScreensTests {
+    private func height(_ view: some View) -> CGFloat {
+        UIHostingController(rootView: view.vettIDTheme()).sizeThatFits(in: CGSize(width: 390, height: 844)).height
+    }
+
     /// "Opening VettID" renders with and without the way out it offers after a long read.
     @Test func theStartingScreenRenders() {
         #expect(height(StartingScreen()) > 0)
