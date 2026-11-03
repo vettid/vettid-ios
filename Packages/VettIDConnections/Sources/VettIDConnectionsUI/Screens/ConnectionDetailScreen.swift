@@ -179,7 +179,8 @@ struct DetailContent: View {
 
     /// "Votes from <name>": the votes of this service connection.
     private func votesRow(_ open: @escaping @MainActor () -> Void) -> some View {
-        // The button is the whole card, so that its strong border bounds what can be tapped.
+        // The button is the whole card; its filled background makes exactly the card's shape tappable (the card's outer
+        // padding is outside it), so that the strong border bounds what can be tapped.
         Button(action: open) {
             DetailCard(interactive: true) {
                 HStack {
@@ -189,7 +190,6 @@ struct DetailContent: View {
                 }
                 .frame(minHeight: Spacing.touchTarget)
             }
-            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .accessibilityAddTraits(.isButton)
