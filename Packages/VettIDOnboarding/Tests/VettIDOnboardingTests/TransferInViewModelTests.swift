@@ -117,6 +117,25 @@ import VettIDDataTesting
         #expect(vm.state.inputProblem == nil)
     }
 
+    /// A refused code left in front of the camera is not sent again; the scan screen opened anew takes it.
+    @Test func aRefusedCodeLeftInFrontOfTheCameraIsNotSentAgain() async throws {
+        vault.fail["transferIn"] = FakeVaultRepository.failure(.other)
+        let vm = model()
+        vm.scan()
+        let code = try qr()
+        vm.scanned(code)
+        await clock.runCurrent()
+        #expect(vm.state.step == .scan && vm.state.error == .other)
+        vm.scanned(code)
+        await clock.runCurrent()
+        #expect(vm.state.step == .scan && vm.state.error == .other)
+        #expect(vault.calls.filter { $0 == "transferIn" }.count == 1)
+        vm.scan()
+        vm.scanned(code)
+        await clock.runCurrent()
+        #expect(vault.calls.filter { $0 == "transferIn" }.count == 2)
+    }
+
     @Test func aPastedCodeIsCheckedTheSameWay() async throws {
         let vm = model()
         vm.paste()

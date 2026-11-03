@@ -25,6 +25,9 @@ public final class TransferInViewModel: TransferInActions {
     @ObservationIgnored private let work = Work()
     @ObservationIgnored private var waiter: Task<Void, Never>?
     @ObservationIgnored private var ticker: Task<Void, Never>?
+    /// The scanned text last tried (chosen; not in the spec): the camera keeps reading a QR left in front of it, so a
+    /// refused or failed code is not sent again until the member opens the scan screen anew.
+    @ObservationIgnored private var lastScan: String?
 
     public init(
         move: any MoveRepository,
@@ -45,12 +48,14 @@ public final class TransferInViewModel: TransferInActions {
     }
 
     public func scan() {
+        lastScan = nil
         state.step = .scan
         state.inputProblem = nil
         state.error = nil
     }
 
     public func paste() {
+        lastScan = nil
         state.step = .paste
         state.inputProblem = nil
         state.error = nil
@@ -60,6 +65,7 @@ public final class TransferInViewModel: TransferInActions {
     public func back() -> Bool {
         switch state.step {
         case .scan, .paste:
+            lastScan = nil
             state.step = .intro
             state.inputProblem = nil
             return true
@@ -72,7 +78,8 @@ public final class TransferInViewModel: TransferInActions {
     }
 
     public func scanned(_ text: String) {
-        guard state.step == .scan, !state.busy else { return }
+        guard state.step == .scan, !state.busy, text != lastScan else { return }
+        lastScan = text
         start(text)
     }
 
@@ -238,6 +245,7 @@ public final class TransferInViewModel: TransferInActions {
 
     /// Leaves a transfer in progress: nothing was approved, so nothing changes; the handshake state is dropped.
     public func cancel() {
+        lastScan = nil
         waiter?.cancel()
         ticker?.cancel()
         state.step = .intro
@@ -253,6 +261,7 @@ public final class TransferInViewModel: TransferInActions {
     }
 
     public func again() {
+        lastScan = nil
         state = TransferInState(step: .scan)
     }
 
