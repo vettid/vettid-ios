@@ -136,7 +136,7 @@ struct UpdateGlyph: View {
     @Environment(\.vettIDColors) private var colors
 
     var body: some View {
-        VettIDSymbol.systemUpdate.image.scaledIcon(size: 36).foregroundStyle(colors.primary).padding(.top, Spacing.l)
+        VettIDSymbol.systemUpdate.image.font(.system(size: 36)).foregroundStyle(colors.primary).padding(.top, Spacing.l)
             .accessibilityHidden(true)
     }
 }

@@ -141,7 +141,7 @@ struct DirectionCard<Content: View>: View {
                     icon.image
                         .scaledIcon(size: 20)
                         .foregroundStyle(accent.color)
-                        .frame(width: 36, height: 36)
+                        .scaledIconSquare(36)
                         .background(accent.color.opacity(0.14), in: VettIDShape.pill)
                         .accessibilityHidden(true)
                     Text(title)

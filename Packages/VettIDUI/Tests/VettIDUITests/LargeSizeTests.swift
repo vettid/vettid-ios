@@ -26,25 +26,44 @@ struct LargeSizeTests {
         #expect(size(column, type: .accessibility5).width <= 24 * ScaledIconModifier.capFactor + 0.5)
     }
 
-    @Test func aBannerAreaIsBoundedAndScrollsBeyondItsLimit() {
-        func areaHeight(banners: Int, limit: CGFloat) -> CGFloat {
+    @Test func theBannersShareAThirdOfTheScreen() {
+        #expect(BannerBudget.limit(third: 300, sharers: 1) == 300)
+        #expect(BannerBudget.limit(third: 300, sharers: 2) == 150)
+        let budget = BannerBudget()
+        let a = UUID(), b = UUID()
+        #expect(budget.sharers(including: a) == 1)
+        budget.report(b, 40)
+        #expect(budget.sharers(including: a) == 2)
+        budget.report(a, 90)
+        #expect(budget.sharers(including: a) == 2)
+        budget.report(b, 0)
+        #expect(budget.sharers(including: a) == 1)
+    }
+
+    /// A stack while the banners fit; a scroll view of the limit's height, without the status bar's scroll-to-top, when they
+    /// do not.
+    @Test func aBannerAreaScrollsOnlyBeyondItsLimit() async {
+        func scrollViews(banners: Int, limit: CGFloat) async -> [UIScrollView] {
             let area = BannerArea(limit: limit) {
                 ForEach(0..<banners, id: \.self) { _ in Color.gray.frame(height: 80) }
             }
-            let renderer = ImageRenderer(content: area.vettIDTheme(.light))
-            renderer.proposedSize = ProposedViewSize(width: 390, height: 844)
-            return renderer.uiImage?.size.height ?? -1
+            let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
+            window.rootViewController = UIHostingController(rootView: area.vettIDTheme(.light))
+            window.isHidden = false
+            for _ in 0..<8 {
+                window.layoutIfNeeded()
+                try? await Task.sleep(for: .milliseconds(50))
+            }
+            let found = Self.views(in: window).compactMap { $0 as? UIScrollView }
+            window.isHidden = true
+            return found
         }
-
-        #expect(areaHeight(banners: 0, limit: 200) <= 0)
-        #expect(areaHeight(banners: 2, limit: 200) == 160)
-        #expect(areaHeight(banners: 8, limit: 200) == 200)
+        #expect(await scrollViews(banners: 2, limit: 200).isEmpty)
+        let overflowing = await scrollViews(banners: 8, limit: 200)
+        #expect(!overflowing.isEmpty)
+        #expect(overflowing.allSatisfy { !$0.scrollsToTop && $0.contentInsetAdjustmentBehavior == .never })
+        #expect(BannerArea<EmptyView>.scrolls(content: 640, limit: 281) && !BannerArea<EmptyView>.scrolls(content: 90, limit: 281))
     }
 
-    @Test func theBoundedHeightTakesTheLeastOfTheChildTheLimitAndTheOffer() {
-        #expect(BoundedHeight.height(ideal: 640, limit: 281, offered: 844) == 281)
-        #expect(BoundedHeight.height(ideal: 90, limit: 281, offered: 844) == 90)
-        #expect(BoundedHeight.height(ideal: 640, limit: 281, offered: 100) == 100)
-        #expect(BoundedHeight.height(ideal: 90, limit: .infinity, offered: nil) == 90)
-    }
+    private static func views(in view: UIView) -> [UIView] { [view] + view.subviews.flatMap { views(in: $0) } }
 }

@@ -98,7 +98,7 @@ struct HeaderGlyph: View {
 
     var body: some View {
         symbol.image
-            .scaledIcon(size: 34)
+            .font(.system(size: 34))
             .foregroundStyle(colors.primary)
             .padding(.top, Spacing.l)
             .accessibilityHidden(true)

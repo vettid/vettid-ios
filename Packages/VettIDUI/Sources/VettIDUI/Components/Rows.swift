@@ -271,7 +271,7 @@ public struct EmptyState: View {
                 }
             }
             icon.image
-                .scaledIcon(size: 44)
+                .font(.system(size: 44))
                 .foregroundStyle(colors.primary)
                 .frame(width: 104, height: 104)
                 .background(colors.surfaceContainerHigh, in: VettIDShape.tile(104))

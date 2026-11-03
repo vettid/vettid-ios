@@ -119,7 +119,7 @@ struct ConnectedScreen: View {
             onPrimary: message ?? onDone,
             onSecondary: onDone,
             header: {
-                VettIDSymbol.checkCircle.image.scaledIcon(size: 56).foregroundStyle(colors.success)
+                VettIDSymbol.checkCircle.image.font(.system(size: 56)).foregroundStyle(colors.success)
                     .accessibilityHidden(true)
             },
             content: { EmptyView() }

@@ -110,7 +110,7 @@ private struct ExportGlyph: View {
     let symbol: String
 
     var body: some View {
-        Image(systemName: symbol).scaledIcon(size: 36).foregroundStyle(colors.primary).padding(.top, Spacing.l)
+        Image(systemName: symbol).font(.system(size: 36)).foregroundStyle(colors.primary).padding(.top, Spacing.l)
             .accessibilityHidden(true)
     }
 }

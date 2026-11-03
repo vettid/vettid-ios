@@ -86,6 +86,24 @@ struct ScaledIconColumn: ViewModifier {
 }
 
 public extension View {
+    /// A square [side] points wide at the default text size around an icon (a badge), scaling with it.
+    func scaledIconSquare(_ side: CGFloat) -> some View { modifier(ScaledIconSquare(side: side)) }
+
     /// A column [width] points wide at the default text size beside an icon, scaling with it.
     func scaledIconColumn(_ width: CGFloat) -> some View { modifier(ScaledIconColumn(width: width)) }
+}
+
+struct ScaledIconSquare: ViewModifier {
+    @ScaledMetric private var side: CGFloat
+    private let base: CGFloat
+
+    init(side: CGFloat) {
+        _side = ScaledMetric(wrappedValue: side, relativeTo: .body)
+        base = side
+    }
+
+    func body(content: Content) -> some View {
+        let scaled = ScaledIconModifier.capped(side, base: base)
+        content.frame(width: scaled, height: scaled)
+    }
 }

@@ -113,7 +113,7 @@ private struct CategoryChip: View {
                 HistoryVisuals.symbol(category).image
                     .scaledIcon(size: 11, weight: .semibold)
                     .foregroundStyle(hue.onContainer)
-                    .frame(width: 22, height: 22)
+                    .scaledIconSquare(22)
                     .background(hue.container, in: Circle())
                     .accessibilityHidden(true)
                 Text(AuditKinds.categoryLabel(category)).vettIDFont(.labelLarge).lineLimit(1)
