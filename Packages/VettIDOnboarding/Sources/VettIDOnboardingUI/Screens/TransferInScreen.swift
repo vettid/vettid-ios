@@ -243,7 +243,8 @@ public struct MovedScreen: View {
 
     public var body: some View {
         FormScaffold(
-            title: MoveStrings.onboardingMovedTitle, message: message, primaryLabel: MoveStrings.onboardingMovedGo, busy: busy, onPrimary: onGo,
+            title: MoveStrings.onboardingMovedTitle, message: message, primaryLabel: MoveStrings.onboardingMovedGo, busy: busy,
+            onPrimary: onGo,
             header: {
                 VStack(spacing: Spacing.l) {
                     Spacer().frame(height: Spacing.xl)
@@ -252,7 +253,9 @@ public struct MovedScreen: View {
             }
         ) {
             if let error {
-                NoticeCard(.urgent, title: OnboardingStrings.progressFailed, message: error.message(timeScale: timeScale), announce: .assertive)
+                NoticeCard(
+                    .urgent, title: OnboardingStrings.progressFailed, message: error.message(timeScale: timeScale), announce: .assertive
+                )
                     .accessibilityIdentifier("error")
             }
         }

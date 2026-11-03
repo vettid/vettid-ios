@@ -17,7 +17,8 @@ struct ErrorNotice: View {
         if let kind = state.error {
             let text = override != nil && kind == override
                 ? overrideText ?? kind.message(timeScale: timeScale) : Self.message(kind, state.errorRetryAt, timeScale: timeScale)
-            let spoken = kind == .rateLimited ? Self.wait(until: state.errorRetryAt).map { RecoveryStrings.recoverRateLimitedWait(spokenDuration($0)) } : nil
+            let spoken = kind == .rateLimited
+                ? Self.wait(until: state.errorRetryAt).map { RecoveryStrings.recoverRateLimitedWait(spokenDuration($0)) } : nil
             NoticeCard(.urgent, title: OnboardingStrings.progressFailed, message: text, announce: .assertive, spokenMessage: spoken)
                 .padding(.top, Spacing.l)
                 .accessibilityIdentifier("error")
