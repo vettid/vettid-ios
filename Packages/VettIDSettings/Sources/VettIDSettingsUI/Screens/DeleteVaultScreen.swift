@@ -78,7 +78,8 @@ public struct DeleteVaultContent: View {
                 }
                 if let error = state.error {
                     NoticeCard(
-                        .urgent, title: error.title(or: SecurityStrings.deleteTitle), message: WaitText.message(error, retryAt: state.errorRetryAt, timeScale: timeScale),
+                        .urgent, title: error.title(or: SecurityStrings.deleteTitle),
+                        message: WaitText.message(error, retryAt: state.errorRetryAt, timeScale: timeScale),
                         spokenMessage: WaitText.spoken(error, retryAt: state.errorRetryAt)
                     )
                         .accessibilityIdentifier("error")

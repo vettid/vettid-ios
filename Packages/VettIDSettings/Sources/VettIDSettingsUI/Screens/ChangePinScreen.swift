@@ -111,7 +111,8 @@ public struct ChangePinContent: View {
                 }
                 if let error = state.error {
                     NoticeCard(
-                        .urgent, title: Self.failureTitle(error), message: WaitText.message(error, retryAt: state.errorRetryAt, timeScale: timeScale),
+                        .urgent, title: Self.failureTitle(error),
+                        message: WaitText.message(error, retryAt: state.errorRetryAt, timeScale: timeScale),
                         spokenMessage: WaitText.spoken(error, retryAt: state.errorRetryAt)
                     )
                         .accessibilityIdentifier("error")
