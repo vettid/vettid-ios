@@ -316,6 +316,20 @@ final class FakeMessageOps: MessageOps, @unchecked Sendable {
         #expect(ops.calls.count < 10, "the reads after the failure were not started")
     }
 
+    /// A quiet refresh tries every conversation, the ones after a failed read included, and throws nothing.
+    @Test func aQuietRefreshTriesEveryConversationWhateverFailed() async throws {
+        let ids = (1...10).map { "c\($0)" }
+        for id in ids { ops.stored[id] = [FakeMessageOps.message(id, "\(id)-m1")] }
+        let known = ids.map { ConnectionInfo(id: $0, name: "", state: .active) }
+        let ops = ops, quiet = quiet
+        quiet.stored = ops.stored
+        quiet.errors["list"] = FakeMessageOps.error("message.list", "bad_request")
+        let m = MessagesManager(ops: { ops }, quietOps: { quiet }, connections: { known }, refreshConnections: {})
+        await m.refreshConversationsQuietly()
+        #expect(quiet.calls.count == 10, "the failure of one read did not stop the others")
+        #expect(ids.filter { !m.messages($0).isEmpty }.count == 9)
+    }
+
     /// The vault call's failure is a ``VaultFailure``; a connection the vault does not know is `not_found`.
     @Test func failuresAreVaultFailures() async throws {
         let m = manager()

@@ -131,7 +131,10 @@ public final class MessagesManager: MessagesRepository {
                     // A read cancelled because another failed is no failure of its own.
                     if !(done.error is CancellationError), failure.map({ done.index < $0.index }) ?? true { failure = done }
                     if !quietly { group.cancelAll() }
-                } else if next < ids.count, quietly || failure == nil {
+                }
+                // A quiet refresh tries every conversation, whatever failed; a read stops the ones not yet started at its
+                // first failure.
+                if next < ids.count, quietly || failure == nil {
                     let i = next
                     group.addTask { await read(i) }
                     next += 1
@@ -153,7 +156,8 @@ public final class MessagesManager: MessagesRepository {
             try await load(id, quietly: quietly, fresh: false)
             return nil
         } catch {
-            return ReadFailure(index: index, error: error)
+            // A read cancelled with its group (the transport reports it as `URLError(.cancelled)`) is a cancellation.
+            return ReadFailure(index: index, error: Task.isCancelled ? CancellationError() : error)
         }
     }
 
