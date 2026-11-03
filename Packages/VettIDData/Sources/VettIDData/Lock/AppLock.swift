@@ -150,13 +150,21 @@ public final class AppLock {
 
     @ObservationIgnored private let store: any AppLockStore
     @ObservationIgnored private let keys: any AppLockKeys
-    @ObservationIgnored private let now: @Sendable () -> Date
-    @ObservationIgnored private var backgroundAt: Date?
+    /// Seconds on a clock that counts while the iPhone sleeps and cannot be set (IOS-PLAN §6.4); the timeout runs on it.
+    @ObservationIgnored private let uptime: @Sendable () -> TimeInterval
+    /// The wall clock: only compared, to notice that it was set back.
+    @ObservationIgnored private let wall: @Sendable () -> Date
+    @ObservationIgnored private var backgroundAt: (uptime: TimeInterval, wall: Date)?
 
-    public init(store: any AppLockStore, keys: any AppLockKeys, now: @escaping @Sendable () -> Date = { Date() }) {
+    public init(
+        store: any AppLockStore, keys: any AppLockKeys,
+        uptime: @escaping @Sendable () -> TimeInterval = { ScreenshotAllowance.continuousSeconds() },
+        wall: @escaping @Sendable () -> Date = { Date() }
+    ) {
         self.store = store
         self.keys = keys
-        self.now = now
+        self.uptime = uptime
+        self.wall = wall
     }
 
     /// Reads the preferences: an enabled lock whose key exists starts locked. Leaves ``AppLockState/pending`` unless the
@@ -339,7 +347,7 @@ public final class AppLock {
     /// shows.
     public func onBackground() {
         if authenticating { return }
-        backgroundAt = now()
+        backgroundAt = (uptime(), wall())
     }
 
     /// The app left the foreground and the check of its return has not run yet: what the app shows may still be covered
@@ -350,6 +358,9 @@ public final class AppLock {
         if authenticating { return }
         guard let at = backgroundAt else { return }
         backgroundAt = nil
-        if state == .unlocked && now().timeIntervalSince(at) >= Double(timeout.rawValue) { lockNow() }
+        // The timeout is measured on the clock that cannot be set; a wall clock found earlier than when the app left
+        // means the date was moved back, which also locks (IOS-PLAN §6.4).
+        let elapsed = uptime() - at.uptime
+        if state == .unlocked && (elapsed >= Double(timeout.rawValue) || wall() < at.wall) { lockNow() }
     }
 }

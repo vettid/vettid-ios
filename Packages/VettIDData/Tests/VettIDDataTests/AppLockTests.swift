@@ -90,7 +90,11 @@ final class FaultyAppLockKeys: AppLockKeys, @unchecked Sendable {
 @MainActor
 @Suite struct AppLockTests {
     final class Clock: @unchecked Sendable {
-        var t = Date(timeIntervalSince1970: 1_791_000_000)
+        /// Seconds on the clock that cannot be set.
+        var up: TimeInterval = 5_000
+        /// What the wall clock was moved by, besides the time that passed.
+        var skew: TimeInterval = 0
+        var wall: Date { Date(timeIntervalSince1970: 1_791_000_000 + up + skew) }
     }
 
     let store = MemoryAppLockStore()
@@ -99,7 +103,7 @@ final class FaultyAppLockKeys: AppLockKeys, @unchecked Sendable {
 
     func lock(_ keys: (any AppLockKeys)? = nil) -> AppLock {
         let clock = clock
-        return AppLock(store: store, keys: keys ?? self.keys) { clock.t }
+        return AppLock(store: store, keys: keys ?? self.keys, uptime: { clock.up }, wall: { clock.wall })
     }
 
     func enabled(_ m: AppLockMethod = .biometrics) async throws -> AppLock {
@@ -183,13 +187,34 @@ final class FaultyAppLockKeys: AppLockKeys, @unchecked Sendable {
         let l = try await enabled()
         try l.setTimeout(.oneMinute)
         l.onBackground()
-        clock.t += 59
+        clock.up += 59
         l.onForeground()
         #expect(l.state == .unlocked)
         l.onBackground()
-        clock.t += 60
+        clock.up += 60
         l.onForeground()
         #expect(l.state == .locked)
+    }
+
+    /// Setting the date back does not keep the app open (IOS-PLAN §6.4), and a date set forward does not lock early.
+    @Test func aWallClockSetBackLocks() async throws {
+        let l = try await enabled()
+        try l.setTimeout(.oneMinute)
+        l.onBackground()
+        clock.up += 5
+        clock.skew = -86_400
+        l.onForeground()
+        #expect(l.state == .locked)
+    }
+
+    @Test func aWallClockSetForwardDoesNotLockEarly() async throws {
+        let l = try await enabled()
+        try l.setTimeout(.oneMinute)
+        l.onBackground()
+        clock.up += 5
+        clock.skew = 86_400
+        l.onForeground()
+        #expect(l.state == .unlocked)
     }
 
     /// From leaving the foreground until the return's check runs, the check is pending (what the app shows may be covered).
@@ -199,7 +224,7 @@ final class FaultyAppLockKeys: AppLockKeys, @unchecked Sendable {
         #expect(!l.foregroundCheckPending)
         l.onBackground()
         #expect(l.foregroundCheckPending && l.state == .unlocked)
-        clock.t += 5
+        clock.up += 5
         l.onForeground()
         #expect(!l.foregroundCheckPending && l.state == .unlocked)
     }
@@ -210,7 +235,7 @@ final class FaultyAppLockKeys: AppLockKeys, @unchecked Sendable {
         try l.setTimeout(.immediately)
         l.authenticating = true
         l.onBackground()
-        clock.t += 5
+        clock.up += 5
         l.onForeground()
         l.authenticating = false
         #expect(l.state == .unlocked)
