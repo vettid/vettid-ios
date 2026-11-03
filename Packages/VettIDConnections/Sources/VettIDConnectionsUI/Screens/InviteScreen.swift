@@ -176,7 +176,6 @@ struct ShowInvite: View {
                 Text(verbatim: invite.url)
                     .font(.system(.footnote, design: .monospaced))
                     .lineLimit(4)
-                    .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(Spacing.m)
                     .background(colors.surfaceContainer, in: VettIDShape.card)

@@ -223,7 +223,13 @@ public final class VaultDevice: @unchecked Sendable {
     /// Restores a device from its store; nil if the store is empty.
     public static func load(_ cfg: DeviceConfig, secrets: DeviceSecrets) throws -> VaultDevice? {
         guard let b = try cfg.store.load() else { return nil }
-        let st = try JSONDecoder().decode(DeviceState.self, from: Data(b))
+        let st: DeviceState
+        do {
+            st = try JSONDecoder().decode(DeviceState.self, from: Data(b))
+        } catch let e as DecodingError {
+            // Not a failure of the network: the file this phone keeps. Only the kind of error is kept, never the data.
+            throw StoredStateUnreadable(underlying: String(describing: type(of: e)))
+        }
         // Requests an earlier version kept in the outbox are dropped unsent: the member was told they failed. A credential
         // request among them stays unsettled until its `exp` (§11.14.9 step 1), as it was recorded before its send.
         let before = st.outbox.count

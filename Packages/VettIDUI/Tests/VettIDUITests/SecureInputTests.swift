@@ -20,6 +20,7 @@ import UIKit
             #expect(f.inlinePredictionType == .no && f.autocapitalizationType == .none)
             #expect(f.keyboardType == .asciiCapable)
             #expect(f.isSecureTextEntry == !visible)
+            if #available(iOS 18.0, *) { #expect(f.writingToolsBehavior == .none) }
         }
     }
 
@@ -107,6 +108,35 @@ import UIKit
         SecurePasteboard.copy("gone", lifetime: -1, pasteboard: board)
         #expect(board.string == nil) // already expired
         UIPasteboard.remove(withName: board.name)
+    }
+
+    /// At the vault lock the app's own copy goes; anything copied since stays (IOS-PLAN §6.5, §6.9).
+    @Test func theLockClearsOnlyTheAppsOwnCopy() throws {
+        let board = try #require(UIPasteboard(name: UIPasteboard.Name("vettid.test.\(UUID().uuidString)"), create: true))
+        SecurePasteboard.copy("ABCD-EFGH", clearAtLock: true, pasteboard: board)
+        SecurePasteboard.clearIfOwn(pasteboard: board)
+        #expect(board.string == nil)
+        // Any other copy (a link, a reference) is not cleared at the lock.
+        SecurePasteboard.copy("https://example.invalid/i", pasteboard: board)
+        SecurePasteboard.clearIfOwn(pasteboard: board)
+        #expect(board.string == "https://example.invalid/i")
+        SecurePasteboard.copy("ABCD-EFGH", clearAtLock: true, pasteboard: board)
+        board.string = "the member's own"
+        SecurePasteboard.clearIfOwn(pasteboard: board)
+        #expect(board.string == "the member's own")
+        UIPasteboard.remove(withName: board.name)
+    }
+
+    /// A secret field's menu never copies or cuts (the app's copy goes through ``SecurePasteboard``).
+    @Test func aSecretFieldNeverCopies() {
+        let f = PasteOnlyTextField()
+        f.text = "hunter2"
+        for action in [#selector(UIResponderStandardEditActions.copy(_:)), #selector(UIResponderStandardEditActions.cut(_:))] {
+            #expect(!f.canPerformAction(action, withSender: nil), "\(action)")
+        }
+        f.copy(nil)
+        f.cut(nil)
+        #expect(f.text == "hunter2")
     }
 
     @Test func theCoverAndTheCaptureTextRender() {

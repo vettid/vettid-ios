@@ -51,6 +51,8 @@ public struct SettingsRoute: View {
     @Environment(ThemeSetting.self) private var theme: ThemeSetting?
     /// What notifications show (Settings → App → "Show in notifications"), from the environment; absent in a preview.
     @Environment(NotificationPreviewsSetting.self) private var previews: NotificationPreviewsSetting?
+    /// How the owner is confirmed before the app lock is turned off.
+    @Environment(\.vettIDUserPresence) private var presence
     @State private var model: SettingsViewModel?
     @State private var ownerCheck: OwnerCheckSettingsViewModel?
 
@@ -100,7 +102,8 @@ public struct SettingsRoute: View {
             if model == nil {
                 model = SettingsViewModel(
                     account: account, vault: vault, appLock: appLock, promptReason: promptReason, screenshots: screenshots,
-                    updates: updates, theme: theme, previews: previews
+                    updates: updates, theme: theme, previews: previews,
+                    confirmPresence: { [presence] reason in await presence(reason) }
                 )
                 ownerCheck = OwnerCheckSettingsViewModel(repo: ownerChecks)
             }

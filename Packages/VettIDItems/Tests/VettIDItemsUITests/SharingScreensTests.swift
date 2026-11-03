@@ -295,6 +295,27 @@ import VettIDUI
         #expect(height(SharedFields(content: content)) > 0)
     }
 
+    /// A received password is masked until shown on purpose, and masked again when the content changes.
+    @Test func aReceivedPasswordIsMaskedUntilShown() {
+        let pw = ItemFieldView(fieldID: "f1", label: "Password", kind: FieldKinds.password, value: .text("hunter2"))
+        let plain = ItemFieldView(fieldID: "f2", label: "Policy", kind: FieldKinds.text, value: .text("P-42"))
+        var masking = SharedMasking()
+        masking.update([plain, pw])
+        #expect(FieldKinds.masked(pw.kind) && !FieldKinds.masked(plain.kind))
+        #expect(!masking.isShown(pw))
+        masking.toggle(pw)
+        #expect(masking.isShown(pw))
+        // The same content again keeps it; another order of the fields too (keyed by field, not by position).
+        masking.update([pw, plain])
+        #expect(masking.isShown(pw))
+        // Another value (a new fetch) hides it again.
+        masking.update([ItemFieldView(fieldID: "f1", label: "Password", kind: FieldKinds.password, value: .text("changed")), plain])
+        #expect(!masking.isShown(pw))
+        masking.toggle(pw)
+        masking.toggle(pw)
+        #expect(!masking.isShown(pw))
+    }
+
     @Test func theFetchedValuesAreOnTheSecureLayer() throws {
         try #require(SecureLayer.isAvailable, "no secure layer on this iOS: the cover and capture hiding protect the values")
         let g = GrantView(grantID: "g5", connectionID: "c1", direction: .received, itemRef: "x1", name: "Card", category: "insurance")

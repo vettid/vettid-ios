@@ -314,6 +314,7 @@ extension FakeVaultRepository: MoveRepository {
 
     public func transferApprove(transferID: String, pin: String, password: String, signer: String?) async throws -> Bool {
         try call("transferApprove")
+        if let transferApproveGate { try await transferApproveGate.value() }
         transferSigners.append(signer)
         let missing = transferSignerRequired != nil && signer == nil
         let wrong = signer != nil && signer != (transferSignerRequired ?? transferSignerClass)

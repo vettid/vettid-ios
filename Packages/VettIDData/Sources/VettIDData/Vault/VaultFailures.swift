@@ -33,6 +33,8 @@ enum VaultFailures {
         case let r as AltResultFailure: VaultFailure(.other, code: "unreadable_result", cause: r)
         case let c as AltChannelFailure: VaultFailure(.noResponse, cause: c)
         case let s as VaultStateError: VaultFailure(noResponse(s) ? .noResponse : .other, cause: s)
+        // The state this phone stored for the vault does not decode: the root screen says so, with the way out.
+        case let u as StoredStateUnreadable: VaultFailure(.other, code: codeKeystore, cause: u)
         case let u as CredentialUnsettled: VaultFailure(.credentialUnsettled, code: codeCredentialUnsettled, cause: u)
         case let u as RequestUnanswered: VaultFailure(.noResponse, cause: u)
         case let n as NotATransferCode:

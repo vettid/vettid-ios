@@ -22,6 +22,11 @@ public enum TransferOutStep: Equatable, Sendable {
     case moved
 }
 
+extension TransferOutStep {
+    /// A transfer is open at the vault: the code is shown or awaits the approval (leaving cancels it).
+    public var isOpen: Bool { self == .showing || self == .compare || self == .signer || self == .approve }
+}
+
 /// The state of the transfer on the old phone. The PIN and the password live here only until the approval's answer; the
 /// description names no secret. Mirrors vettid-android `TransferOutUiState`.
 public struct TransferOutState: Equatable, Sendable, CustomStringConvertible, CustomDebugStringConvertible, CustomReflectable {
@@ -130,7 +135,6 @@ public final class TransferOutViewModel: TransferOutActions {
     @ObservationIgnored private var backoff: Task<Void, Never>?
 
     /// The steps in which the transfer is open at the vault: leaving cancels it, the deadline expires it.
-    private static let openSteps: Set<TransferOutStep> = [.showing, .compare, .signer, .approve]
     private static let codeSignerUnconfirmed = "signer_unconfirmed"
 
     public init(
@@ -243,7 +247,7 @@ public final class TransferOutViewModel: TransferOutActions {
         let left = max(Int64(deadline.timeIntervalSince(now()).rounded(.down)), 0)
         state.secondsLeft = left
         if left == 0 {
-            if Self.openSteps.contains(state.step) { expire() }
+            if state.step.isOpen { expire() }
             return false
         }
         return true
@@ -390,7 +394,7 @@ public final class TransferOutViewModel: TransferOutActions {
     /// Leaving before the approval cancels the transfer, so the code cannot be used later.
     public func leave() {
         let id = state.offer?.transferID
-        let open = Self.openSteps.contains(state.step)
+        let open = state.step.isOpen
         waiter?.cancel()
         ticker?.cancel()
         backoff?.cancel()

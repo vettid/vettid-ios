@@ -154,6 +154,42 @@ import VettIDUI
         #expect(model.state.step == .intro && model.state.offer == nil)
     }
 
+    /// A lock or a reset takes the screen away while the approval is on its way: nothing is rejected (it would race the approval).
+    @Test func anApprovalInFlightIsNotRejectedByTheScreenGoing() async throws {
+        let vault = FakeVaultRepository(.unlocked)
+        vault.transferApproveGate = TestDeferred<Void>()
+        vault.transferConfirmed = false
+        let clock = VirtualTime()
+        vault.offer = TransferOfferView(
+            transferID: pending.transferID, qrPayload: "{}", link: "link", expiresAt: clock.now().addingTimeInterval(600)
+        )
+        let model = TransferOutViewModel(move: vault, vault: vault, now: clock.now, sleep: clock.sleep)
+        model.create()
+        await clock.runCurrent()
+        vault.pendingTransfer.complete(pending)
+        await clock.runCurrent()
+        model.codesMatch()
+        model.setPin("975310")
+        model.setPassword("correct horse battery")
+        model.approve()
+        await clock.runCurrent()
+        #expect(model.state.step == .approve && model.state.busy)
+        final class Counter { var disappeared = 0 }
+        let counter = Counter()
+        var route = TransferOutRoute(move: vault, vault: vault, onOpenRecovery: nil, onBack: {}, model: model)
+        route.disappearProbe = { counter.disappeared += 1 }
+        var window: UIWindow? = host(route)
+        window?.rootViewController = nil
+        window?.isHidden = true
+        window = nil
+        // The screen really went (its onDisappear ran), and only then is it checked that nothing was rejected.
+        let went = await eventually { counter.disappeared > 0 }
+        #expect(went, "the route's onDisappear ran")
+        let sent = await eventually(within: .milliseconds(500)) { vault.lastTransferRejected != nil }
+        #expect(!sent)
+        #expect(vault.lastTransferRejected == nil && !vault.calls.contains("transferReject"))
+    }
+
     /// An approval in flight is not rejected when the screen is replaced; every other step leaves the transfer.
     @Test func anApprovalInFlightIsNotRejectedWhenTheScreenGoes() {
         var s = TransferOutState()

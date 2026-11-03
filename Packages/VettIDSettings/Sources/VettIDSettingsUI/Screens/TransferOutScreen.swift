@@ -60,6 +60,9 @@ public struct TransferOutContent: View {
         // tests find each step by its own).
         screen
             .announcesStepChanges(of: state.step)
+            // The edge swipe goes around this screen's own Back, which cancels the transfer: off while one is open or a request
+            // is in flight (the in-app Back is disabled then too).
+            .blocksBackGesture(state.busy || state.step.isOpen)
             .confirmDialog(
                 isPresented: Binding(get: { state.confirmReject }, set: { if !$0 { actions.askReject(false) } }),
                 title: TransferStrings.transferRejectTitle,
@@ -367,6 +370,8 @@ public struct TransferOutRoute: View {
     private let onOpenRecovery: (@MainActor () -> Void)?
     private let onBack: @MainActor () -> Void
     @State private var model: TransferOutViewModel?
+    /// TEST ONLY: called when the route's `onDisappear` has run (a test proves that the screen went).
+    var disappearProbe: (@MainActor () -> Void)?
 
     public init(
         move: any MoveRepository, vault: any VaultRepository, onOpenRecovery: (@MainActor () -> Void)? = nil,
@@ -393,7 +398,10 @@ public struct TransferOutRoute: View {
             onBack: onBack
         )
         .onAppear { if model == nil { model = TransferOutViewModel(move: move, vault: vault) } }
-        .onDisappear { if let model, Self.leaves(model.state) { model.leave() } }
+        .onDisappear {
+            if let model, Self.leaves(model.state) { model.leave() }
+            disappearProbe?()
+        }
     }
 
     /// Whether the screen going away leaves the transfer (cancels the open code). Not while the approval is in flight: it is

@@ -114,6 +114,9 @@ public final class UnlockPromptGate {
 
     /// A new lock (start, timeout): its first prompt is automatic again.
     public func newLock() { endedWithoutSuccess = false }
+
+    /// The next automatic prompt is not made: the lock screen waits for the member's "Unlock".
+    public func suppressAutomatic() { endedWithoutSuccess = true }
 }
 
 /// The app lock (ANDROID-PLAN D6; IOS-PLAN ID17): a UI gate in front of the app's screens that protects no data at rest
@@ -150,13 +153,49 @@ public final class AppLock {
 
     @ObservationIgnored private let store: any AppLockStore
     @ObservationIgnored private let keys: any AppLockKeys
-    @ObservationIgnored private let now: @Sendable () -> Date
-    @ObservationIgnored private var backgroundAt: Date?
+    /// Seconds on a clock that counts while the iPhone sleeps and cannot be set; the timeout runs on it (IOS-PLAN §6.4;
+    /// chosen, not in the spec yet: the monotonic timeout and the 5 s set-back rule).
+    @ObservationIgnored private let uptime: @Sendable () -> TimeInterval
+    /// The wall clock: only compared, to notice that it was set back.
+    @ObservationIgnored private let wall: @Sendable () -> Date
+    @ObservationIgnored private var backgroundAt: (uptime: TimeInterval, wall: Date)?
+    /// The wall clock was seen stepping back while the app was away (``clockStepBackTolerance``): the lock engages at return even
+    /// if the date was put right again meanwhile.
+    @ObservationIgnored private var clockSteppedBack = false
+    /// The return to the foreground came while a prompt showed and was put off until the prompt ends.
+    @ObservationIgnored private var returnSkipped = false
+    @ObservationIgnored private var clockObserver: (any NSObjectProtocol)?
 
-    public init(store: any AppLockStore, keys: any AppLockKeys, now: @escaping @Sendable () -> Date = { Date() }) {
+    /// How far the wall clock may fall behind the clock that cannot be set before it counts as set back: network time
+    /// corrections stay below it (chosen; not in the spec).
+    public static let clockStepBackTolerance: TimeInterval = 5
+
+    public init(
+        store: any AppLockStore, keys: any AppLockKeys,
+        uptime: @escaping @Sendable () -> TimeInterval = { ScreenshotAllowance.continuousSeconds() },
+        wall: @escaping @Sendable () -> Date = { Date() },
+        notifications: NotificationCenter = .default
+    ) {
         self.store = store
         self.keys = keys
-        self.now = now
+        self.uptime = uptime
+        self.wall = wall
+        // A change of the system clock while the app is away (delivered if the app runs in the background; the comparison at
+        // return covers the rest).
+        clockObserver = notifications.addObserver(forName: .NSSystemClockDidChange, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.noteClockChange() }
+        }
+    }
+
+    /// True when the wall clock has advanced less than the clock that cannot be set, by more than the tolerance, since [at].
+    private func wallFellBehind(since at: (uptime: TimeInterval, wall: Date)) -> Bool {
+        let real = uptime() - at.uptime
+        return wall().timeIntervalSince(at.wall) < real - Self.clockStepBackTolerance
+    }
+
+    private func noteClockChange() {
+        guard let at = backgroundAt, wallFellBehind(since: at) else { return }
+        clockSteppedBack = true
     }
 
     /// Reads the preferences: an enabled lock whose key exists starts locked. Leaves ``AppLockState/pending`` unless the
@@ -227,7 +266,10 @@ public final class AppLock {
     public func enable(_ m: AppLockMethod, reason: String) async throws -> Bool {
         guard prompts.tryStart(auto: false) else { return false }
         authenticating = true
-        defer { authenticating = false }
+        defer {
+            authenticating = false
+            applyReturn(afterPrompt: true)
+        }
         let challenge = Randomness.bytes(Self.challengeSize)
         let sealed: [UInt8]
         do {
@@ -261,7 +303,11 @@ public final class AppLock {
         guard state == .locked, prompts.tryStart(auto: auto) else { return false }
         lockedOut = false
         authenticating = true
-        defer { authenticating = false }
+        defer {
+            // A background during the prompt skipped its return: it is applied now (and cleared, also after a failure).
+            authenticating = false
+            applyReturn(afterPrompt: true)
+        }
         // The "new face or finger" notice is the biometric method's only.
         let notice = method == .biometrics
         let challenge = Randomness.bytes(Self.challengeSize)
@@ -323,6 +369,7 @@ public final class AppLock {
         method = .biometrics
         timeout = .standard
         backgroundAt = nil
+        returnSkipped = false
         authenticating = false
     }
 
@@ -335,21 +382,59 @@ public final class AppLock {
         state = .locked
     }
 
-    /// The app left the foreground (IOS-PLAN §6.6: the timeout counts from then, read on return). Not while a prompt
-    /// shows.
+    /// The app left the foreground (IOS-PLAN §6.6: the timeout counts from then, read on return). Recorded also while a
+    /// prompt shows. It is not known whether a system prompt can send the scene to the background (the passcode prompt
+    /// might); if it can, the return after it is applied when the prompt ends (``applyReturn(afterPrompt:)``), and a lock
+    /// made then does not re-arm the automatic prompt, so it stays safe either way.
     public func onBackground() {
-        if authenticating { return }
-        backgroundAt = now()
+        backgroundAt = (uptime(), wall())
+        clockSteppedBack = false
+        returnSkipped = false
     }
 
     /// The app left the foreground and the check of its return has not run yet: what the app shows may still be covered
     /// by the lock once it does, so nothing acts on the member's behalf meanwhile.
     public var foregroundCheckPending: Bool { backgroundAt != nil }
 
+    /// The return to the foreground: the timeout is applied from when the app left. Skipped while a prompt shows; the prompt's
+    /// end applies it then (``applyReturn(afterPrompt:)``).
     public func onForeground() {
-        if authenticating { return }
+        if authenticating {
+            returnSkipped = true
+            return
+        }
+        applyReturn(afterPrompt: false)
+    }
+
+    /// Applies the return of a background recorded by ``onBackground()``, once: locks when the timeout is due or the date was
+    /// set back, and clears the record (so the app is no longer counted as covered). Called at the return, and at the end of a
+    /// prompt that spanned the background.
+    ///
+    /// The timeout runs on the clock that cannot be set; the wall clock is only compared (IOS-PLAN §6.4; chosen, not in the spec yet: the
+    /// monotonic timeout and the 5 s set-back rule). A wall clock that fell behind it by more than ``clockStepBackTolerance``, seen at return or by a
+    /// `NSSystemClockDidChange` notification while away, means the date was moved back, which also locks. Limit: a date set
+    /// back and put right again while the app is suspended is caught only if that notification is delivered; if it is not, the
+    /// comparison at return sees equal elapsed times. The timeout itself never uses the wall clock.
+    private func applyReturn(afterPrompt: Bool) {
+        // At the end of a prompt, only a return that was put off is applied: a prompt that ends while the app is still away
+        // leaves the record for the real return.
+        if afterPrompt {
+            guard returnSkipped else { return }
+            returnSkipped = false
+        }
         guard let at = backgroundAt else { return }
         backgroundAt = nil
-        if state == .unlocked && now().timeIntervalSince(at) >= Double(timeout.rawValue) { lockNow() }
+        let elapsed = uptime() - at.uptime
+        let steppedBack = clockSteppedBack || wallFellBehind(since: at)
+        clockSteppedBack = false
+        guard state == .unlocked, elapsed >= Double(timeout.rawValue) || steppedBack else { return }
+        if afterPrompt {
+            // The prompt that just succeeded ended the lock the app was under: locking again without re-arming the automatic
+            // prompt means at worst one tap on "Unlock", never a loop of prompts (chosen; not in the spec).
+            prompts.suppressAutomatic()
+            state = .locked
+        } else {
+            lockNow()
+        }
     }
 }

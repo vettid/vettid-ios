@@ -90,16 +90,21 @@ final class FaultyAppLockKeys: AppLockKeys, @unchecked Sendable {
 @MainActor
 @Suite struct AppLockTests {
     final class Clock: @unchecked Sendable {
-        var t = Date(timeIntervalSince1970: 1_791_000_000)
+        /// Seconds on the clock that cannot be set.
+        var up: TimeInterval = 5_000
+        /// What the wall clock was moved by, besides the time that passed.
+        var skew: TimeInterval = 0
+        var wall: Date { Date(timeIntervalSince1970: 1_791_000_000 + up + skew) }
     }
 
     let store = MemoryAppLockStore()
     let keys = SoftwareAppLockKeys()
     let clock = Clock()
+    let center = NotificationCenter()
 
     func lock(_ keys: (any AppLockKeys)? = nil) -> AppLock {
         let clock = clock
-        return AppLock(store: store, keys: keys ?? self.keys) { clock.t }
+        return AppLock(store: store, keys: keys ?? self.keys, uptime: { clock.up }, wall: { clock.wall }, notifications: center)
     }
 
     func enabled(_ m: AppLockMethod = .biometrics) async throws -> AppLock {
@@ -183,13 +188,60 @@ final class FaultyAppLockKeys: AppLockKeys, @unchecked Sendable {
         let l = try await enabled()
         try l.setTimeout(.oneMinute)
         l.onBackground()
-        clock.t += 59
+        clock.up += 59
         l.onForeground()
         #expect(l.state == .unlocked)
         l.onBackground()
-        clock.t += 60
+        clock.up += 60
         l.onForeground()
         #expect(l.state == .locked)
+    }
+
+    /// Setting the date back does not keep the app open, and a date set forward does not lock early (IOS-PLAN §6.4;
+    /// chosen, not in the spec yet: the monotonic timeout and the 5 s set-back rule).
+    @Test func aWallClockSetBackLocks() async throws {
+        let l = try await enabled()
+        try l.setTimeout(.oneMinute)
+        l.onBackground()
+        clock.up += 5
+        clock.skew = -86_400
+        l.onForeground()
+        #expect(l.state == .locked)
+    }
+
+    /// A correction of a few seconds (network time) is no step back.
+    @Test func aSmallCorrectionDoesNotLock() async throws {
+        let l = try await enabled()
+        try l.setTimeout(.oneMinute)
+        l.onBackground()
+        clock.up += 10
+        clock.skew = -3
+        l.onForeground()
+        #expect(l.state == .unlocked)
+    }
+
+    /// The date set back 10 s and put right again before the return is noticed by the clock-change notification.
+    @Test func aDateSetBackAndRestoredLocks() async throws {
+        let l = try await enabled()
+        try l.setTimeout(.oneMinute)
+        l.onBackground()
+        clock.up += 5
+        clock.skew = -10
+        center.post(name: .NSSystemClockDidChange, object: nil)
+        try await Task.sleep(for: .milliseconds(100))
+        clock.skew = 0
+        l.onForeground()
+        #expect(l.state == .locked)
+    }
+
+    @Test func aWallClockSetForwardDoesNotLockEarly() async throws {
+        let l = try await enabled()
+        try l.setTimeout(.oneMinute)
+        l.onBackground()
+        clock.up += 5
+        clock.skew = 86_400
+        l.onForeground()
+        #expect(l.state == .unlocked)
     }
 
     /// From leaving the foreground until the return's check runs, the check is pending (what the app shows may be covered).
@@ -199,7 +251,7 @@ final class FaultyAppLockKeys: AppLockKeys, @unchecked Sendable {
         #expect(!l.foregroundCheckPending)
         l.onBackground()
         #expect(l.foregroundCheckPending && l.state == .unlocked)
-        clock.t += 5
+        clock.up += 5
         l.onForeground()
         #expect(!l.foregroundCheckPending && l.state == .unlocked)
     }
@@ -210,7 +262,7 @@ final class FaultyAppLockKeys: AppLockKeys, @unchecked Sendable {
         try l.setTimeout(.immediately)
         l.authenticating = true
         l.onBackground()
-        clock.t += 5
+        clock.up += 5
         l.onForeground()
         l.authenticating = false
         #expect(l.state == .unlocked)
@@ -218,6 +270,108 @@ final class FaultyAppLockKeys: AppLockKeys, @unchecked Sendable {
         l.onBackground()
         l.onForeground()
         #expect(l.state == .locked)
+    }
+
+    /// A prompt that succeeds as the scene goes to the background: the return after it still applies the timeout.
+    @Test func aPromptThatEndsAsTheSceneLeavesStillGetsItsTimeout() async throws {
+        let l = try await enabled()
+        try l.setTimeout(.oneMinute)
+        l.authenticating = true
+        l.onBackground()
+        clock.up += 120
+        l.onForeground()
+        #expect(l.state == .unlocked && l.foregroundCheckPending, "skipped while the prompt shows, kept for later")
+        l.authenticating = false
+        l.onForeground()
+        #expect(l.state == .locked)
+    }
+
+    /// The app goes to the background while the unlock prompt shows, and the prompt succeeds after the timeout: the return that
+    /// was skipped is applied when the prompt ends, so the app locks again.
+    @Test func aPromptSpanningTheBackgroundLocksWhenTheTimeoutIsDue() async throws {
+        let held = HeldAppLockKeys()
+        let l = lock(held)
+        l.start()
+        #expect(try await l.enable(.biometrics, reason: "Unlock VettID"))
+        try l.setTimeout(.oneMinute)
+        l.lockNow()
+        held.hold = true
+        let opening = Task { @MainActor in await l.unlock(reason: "Unlock VettID") }
+        while !held.waiting { await Task.yield() }
+        l.onBackground()
+        clock.up += 120
+        l.onForeground() // skipped: the prompt shows
+        #expect(l.state == .locked && l.foregroundCheckPending)
+        held.release()
+        _ = await opening.value
+        #expect(l.state == .locked && !l.foregroundCheckPending)
+    }
+
+    /// With "Immediately", a prompt that spans a background and succeeds locks the app again without re-arming the automatic
+    /// prompt: the member taps "Unlock"; no second prompt starts by itself (never a loop).
+    @Test func aLockMadeRightAfterAPromptDoesNotPromptAgainByItself() async throws {
+        let held = HeldAppLockKeys()
+        let l = lock(held)
+        l.start()
+        #expect(try await l.enable(.biometrics, reason: "Unlock VettID"))
+        try l.setTimeout(.immediately)
+        l.lockNow()
+        held.hold = true
+        let opening = Task { @MainActor in await l.unlock(reason: "Unlock VettID", auto: true) }
+        while !held.waiting { await Task.yield() }
+        let before = held.opens
+        l.onBackground()
+        l.onForeground() // the return comes while the prompt shows
+        held.release()
+        _ = await opening.value
+        #expect(l.state == .locked && !l.foregroundCheckPending)
+        // The gate's automatic attempt is refused; no second prompt was opened.
+        held.hold = false
+        #expect(await l.unlock(reason: "Unlock VettID", auto: true) == false)
+        #expect(held.opens == before)
+        // The member's tap still opens it.
+        #expect(await l.unlock(reason: "Unlock VettID"))
+        #expect(l.state == .unlocked)
+    }
+
+    /// The same within the timeout: the app stays open and is no longer counted as covered.
+    @Test func aPromptSpanningTheBackgroundWithinTheTimeoutStaysUnlocked() async throws {
+        let held = HeldAppLockKeys()
+        let l = lock(held)
+        l.start()
+        #expect(try await l.enable(.biometrics, reason: "Unlock VettID"))
+        try l.setTimeout(.oneMinute)
+        l.lockNow()
+        held.hold = true
+        let opening = Task { @MainActor in await l.unlock(reason: "Unlock VettID") }
+        while !held.waiting { await Task.yield() }
+        l.onBackground()
+        clock.up += 30
+        l.onForeground() // skipped: the prompt shows
+        held.release()
+        #expect(await opening.value)
+        #expect(l.state == .unlocked && !l.foregroundCheckPending)
+    }
+
+    /// A prompt that succeeds while the app is still away (after it left, before any return) leaves the record for the real
+    /// return: coming back after the timeout locks.
+    @Test func aPromptEndingWhileStillAwayLeavesTheTimeoutToTheReturn() async throws {
+        let held = HeldAppLockKeys()
+        let l = lock(held)
+        l.start()
+        #expect(try await l.enable(.biometrics, reason: "Unlock VettID"))
+        try l.setTimeout(.fiveMinutes)
+        l.lockNow()
+        held.hold = true
+        let opening = Task { @MainActor in await l.unlock(reason: "Unlock VettID") }
+        while !held.waiting { await Task.yield() }
+        l.onBackground()
+        held.release()
+        #expect(await opening.value)
+        #expect(l.state == .unlocked && l.foregroundCheckPending, "the return has not happened yet")
+        clock.up += 3600
+        l.onForeground()
+        #expect(l.state == .locked && !l.foregroundCheckPending)
     }
 
     @Test func invalidatedKeyTurnsTheLockOff() async throws {

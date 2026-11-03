@@ -208,6 +208,8 @@ struct AppRoot: View {
     /// A lock (or anything that leaves the open app) starts the next open afresh and ends the screenshot allowance, unless
     /// the root is held.
     private func closeIfNotOpen() {
+        // A secret item value copied while open does not outlive the vault's lock (IOS-PLAN §6.5, §6.9).
+        if vault.phase != .unlocked { SecurePasteboard.clearIfOwn() }
         guard vault.phase != .unlocked, !RootHold.holds(phase: vault.phase, finishingMove: vault.finishingMove) else { return }
         shell.reset()
         // The vault is no longer open (locked, signed out, unreachable): the allowance ends.

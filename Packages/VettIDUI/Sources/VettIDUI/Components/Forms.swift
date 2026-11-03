@@ -476,5 +476,8 @@ public struct FormScaffold<Header: View, Content: View, TopActions: View>: View 
         // buttons, the notices, the fields) keeps its own (UI tests find them).
         .accessibilityElement(children: .contain)
         .background(colors.background)
+        // The in-app Back is disabled while a request is in flight; the edge swipe would go around it and free the screen that
+        // asked, so it is off too (held per owner, ``View/blocksBackGesture(_:)``).
+        .blocksBackGesture(busy)
     }
 }

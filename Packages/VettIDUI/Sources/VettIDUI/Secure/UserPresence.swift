@@ -17,6 +17,8 @@ public struct UserPresence: Sendable {
     /// This iPhone's Face ID, Touch ID or passcode.
     public static let device = UserPresence { reason in
         let context = LAContext()
+        // No passcode set (the policy cannot be evaluated): there is nothing to confirm with, and the app lock cannot exist
+        // either (its key needs a passcode or biometrics), so nothing is lost by letting the member through.
         guard context.canEvaluatePolicy(.deviceOwnerAuthentication, error: nil) else { return true }
         return (try? await context.evaluatePolicy(.deviceOwnerAuthentication, localizedReason: reason)) ?? false
     }
