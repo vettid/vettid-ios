@@ -214,7 +214,7 @@ extension OnboardingStrings {
     static func releaseUpdateRefusedOther(_ code: String) -> String {
         String(
             localized: "release_update_refused_other",
-            defaultValue: "Your vault did not move (\(VaultFailures.shownCode(code))).",
+            defaultValue: "Your vault did not move (\(FailureKind.shownCode(code))).",
             bundle: .module
         )
     }
