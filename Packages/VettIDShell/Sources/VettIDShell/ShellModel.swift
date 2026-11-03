@@ -206,6 +206,9 @@ public final class ShellModel {
     public func reset() {
         shown()
         checkCovers = false
+        // A banner action's failure is not kept across a lock and unlock.
+        bannerError = nil
+        bannerBusy = false
         path = []
         destination = .start
     }

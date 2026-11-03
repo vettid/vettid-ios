@@ -18,9 +18,13 @@ import VettIDUI
     }
 
     /// "Opening VettID" renders with and without the way out it offers after a long read.
-    @Test func theStartingScreenRenders() {
+    @Test func theStartingScreenRenders() async {
+        // The stuck state, reached through the model with a bound of zero (the clock is the model's).
+        let stuck = StartingViewModel(stuckAfter: .zero, sleep: { _ in }, reread: {})
+        await stuck.watch()
+        #expect(stuck.stuck && height(StartingScreen(model: stuck)) > 0)
         #expect(height(StartingScreen()) > 0)
-        #expect(height(StartingScreen(stuckAfter: .zero, onRetry: {})) > 0)
+        #expect(height(StartingScreen(reread: {}, stuckAfter: .zero)) > 0)
     }
 
     /// Every screen that sends a PIN, a password or a code says a wait the same way (a `429` or a backoff).

@@ -122,6 +122,8 @@ struct AppRoot: View {
     @State private var banners = BannerBudget()
     /// A setup link was opened on a phone that already has a vault: said once.
     @State private var setupLinkIgnored = false
+    /// A read of the phase is running (``refreshAgain()``).
+    @State private var refreshInFlight = false
     @Environment(\.openURL) private var openURL
     @Environment(\.scenePhase) private var scenePhase
     /// "Allow screenshots" (IOS-PLAN §4): it ends when the vault is no longer open, and after its hour.
@@ -273,8 +275,16 @@ struct AppRoot: View {
     }
 
     private func retryRefresh() {
-        guard Self.readsAgain(vault.phase) else { return }
-        Task { try? await vault.refresh() }
+        Task { await refreshAgain() }
+    }
+
+    /// Reads the phase again while it is a start that could not read it yet; one read at a time, whoever asks ("Try again" on
+    /// the start screen, the foreground, protected data).
+    private func refreshAgain() async {
+        guard Self.readsAgain(vault.phase), !refreshInFlight else { return }
+        refreshInFlight = true
+        try? await vault.refresh()
+        refreshInFlight = false
     }
 
     /// IOS-PLAN §6.6: what is in flight (a lock's first attempt, the outbox, a vote window's lock) is finished in a
@@ -330,7 +340,7 @@ struct AppRoot: View {
         case .signedOut, .setup:
             OnboardingFlow(account: vault, vault: vault, inbox: inbox, routes: onboardingRoutes) { openPortal() }
         case .starting:
-            StartingScreen(onRetry: { Task { try? await vault.refresh() } })
+            StartingScreen(reread: { await refreshAgain() })
         case .unreachable:
             UnreachableFlow(account: vault, timeScale: vault.timeScale) { openPortal() }
         case .locked:

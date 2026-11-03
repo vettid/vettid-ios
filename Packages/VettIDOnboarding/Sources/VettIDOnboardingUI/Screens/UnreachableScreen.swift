@@ -163,37 +163,42 @@ public struct UnreachableFlow: View {
     }
 }
 
-/// The start, while the phase is read ("Opening VettID").
-///
-/// A read that takes longer than [stuckAfter] (a network that answers nothing) shows why it may be taking long, with "Try again"
-/// ([onRetry]) as the unreachable screen has; the read goes on and the screen leaves by itself when it ends (chosen; not in
-/// the spec, where vettid-android has the spinner only).
+/// The start, while the phase is read ("Opening VettID"). A read that takes longer than the model's bound (a network that
+/// answers nothing) shows why it may be taking long, with "Try again" as the unreachable screen has; the read goes on and the
+/// screen leaves by itself when it ends. The wait counts only while the app is in the foreground.
 public struct StartingScreen: View {
-    private let onRetry: (@MainActor () -> Void)?
-    private let stuckAfter: Duration
-    @State private var stuck = false
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var model: StartingViewModel?
+    private let make: (@MainActor () -> StartingViewModel)?
 
-    public init(stuckAfter: Duration = .seconds(20), onRetry: (@MainActor () -> Void)? = nil) {
-        self.stuckAfter = stuckAfter
-        self.onRetry = onRetry
+    /// Without [reread] ("Try again") the screen is the spinner alone.
+    public init(reread: (@MainActor () async -> Void)? = nil, stuckAfter: Duration = .seconds(20)) {
+        make = reread.map { reread in { StartingViewModel(stuckAfter: stuckAfter, reread: reread) } }
+    }
+
+    /// For tests and previews: a model made by the caller (a short bound, a clock of its own).
+    init(model: StartingViewModel) {
+        make = nil
+        _model = State(initialValue: model)
     }
 
     public var body: some View {
         Group {
-            if stuck, let onRetry {
+            if let model, model.stuck {
                 FormScaffold(
                     title: OnboardingStrings.rootUnreachableTitle, message: FailureKind.network.message,
-                    primaryLabel: OnboardingStrings.rootRetry, onPrimary: onRetry
+                    primaryLabel: OnboardingStrings.rootRetry, busy: model.retrying, onPrimary: { model.retry() }
                 ) { EmptyView() }
                     .accessibilityIdentifier("starting_stuck")
             } else {
                 FullScreenProgress(OnboardingStrings.rootStarting)
             }
         }
-        .task {
-            guard onRetry != nil else { return }
-            try? await Task.sleep(for: stuckAfter)
-            if !Task.isCancelled { stuck = true }
+        .onAppear { if model == nil { model = make?() } }
+        // Restarted each time the app comes back to the foreground; cancelled when it leaves.
+        .task(id: scenePhase) {
+            guard scenePhase == .active else { return }
+            await model?.watch()
         }
     }
 }

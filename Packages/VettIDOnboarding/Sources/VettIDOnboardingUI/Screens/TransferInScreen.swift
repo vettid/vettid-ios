@@ -108,9 +108,13 @@ public struct TransferInContent: View {
     }
 
     private var scan: some View {
-        FormScaffold(
-            title: MoveStrings.transferInScanTitle, message: MoveStrings.transferInScanBody, primaryLabel: nil,
-            secondaryLabel: MoveStrings.transferInPaste, onPrimary: {}, onSecondary: actions.paste, onBack: back
+        // After a refusal or a failure the camera reads the same QR again and it is not sent again: "Try again" scans anew
+        // (the model forgets the refused text), as the recovery's scan does.
+        let retry = state.inputProblem != nil || state.error != nil
+        return FormScaffold(
+            title: MoveStrings.transferInScanTitle, message: MoveStrings.transferInScanBody,
+            primaryLabel: retry ? RecoveryScreenStrings.onboardingOpenTryAgain : nil,
+            secondaryLabel: MoveStrings.transferInPaste, onPrimary: actions.scan, onSecondary: actions.paste, onBack: back
         ) {
             VStack(alignment: .leading, spacing: Spacing.l) {
                 ScannerBox(onText: actions.scanned, onTypeInstead: actions.paste, camera: camera, typeLabel: MoveStrings.transferInPaste)

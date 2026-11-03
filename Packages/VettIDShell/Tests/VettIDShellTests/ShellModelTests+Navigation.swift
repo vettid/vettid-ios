@@ -192,6 +192,13 @@ import VettIDVault
         #expect(m.bannerError == nil)
         await m.turnHoldOn()
         #expect(m.bannerError == nil && repo.ownerCheck?.hold == true)
+        // A stale failure does not come back after a lock and unlock.
+        repo.fail["turnHoldOn"] = VaultFailure(.network)
+        repo.ownerCheck = OwnerCheckView(state: .ok, deadline: nil, hold: false)
+        await m.turnHoldOn()
+        #expect(m.bannerError == .network)
+        m.reset()
+        #expect(m.bannerError == nil && !m.bannerBusy)
     }
 
     /// The bell opens Notifications once; a feed item's target opens its screen as vettid-android's `openFeedTarget`.
