@@ -155,16 +155,41 @@ public final class AppLock {
     /// The wall clock: only compared, to notice that it was set back.
     @ObservationIgnored private let wall: @Sendable () -> Date
     @ObservationIgnored private var backgroundAt: (uptime: TimeInterval, wall: Date)?
+    /// The wall clock was seen stepping back while the app was away (``clockStepBackTolerance``): the lock engages at return even
+    /// if the date was put right again meanwhile.
+    @ObservationIgnored private var clockSteppedBack = false
+    @ObservationIgnored private var clockObserver: (any NSObjectProtocol)?
+
+    /// How far the wall clock may fall behind the clock that cannot be set before it counts as set back: network time
+    /// corrections stay below it (chosen; not in the spec).
+    public static let clockStepBackTolerance: TimeInterval = 5
 
     public init(
         store: any AppLockStore, keys: any AppLockKeys,
         uptime: @escaping @Sendable () -> TimeInterval = { ScreenshotAllowance.continuousSeconds() },
-        wall: @escaping @Sendable () -> Date = { Date() }
+        wall: @escaping @Sendable () -> Date = { Date() },
+        notifications: NotificationCenter = .default
     ) {
         self.store = store
         self.keys = keys
         self.uptime = uptime
         self.wall = wall
+        // A change of the system clock while the app is away (delivered if the app runs in the background; the comparison at
+        // return covers the rest).
+        clockObserver = notifications.addObserver(forName: .NSSystemClockDidChange, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.noteClockChange() }
+        }
+    }
+
+    /// True when the wall clock has advanced less than the clock that cannot be set, by more than the tolerance, since [at].
+    private func wallFellBehind(since at: (uptime: TimeInterval, wall: Date)) -> Bool {
+        let real = uptime() - at.uptime
+        return wall().timeIntervalSince(at.wall) < real - Self.clockStepBackTolerance
+    }
+
+    private func noteClockChange() {
+        guard let at = backgroundAt, wallFellBehind(since: at) else { return }
+        clockSteppedBack = true
     }
 
     /// Reads the preferences: an enabled lock whose key exists starts locked. Leaves ``AppLockState/pending`` unless the
@@ -348,6 +373,7 @@ public final class AppLock {
     public func onBackground() {
         if authenticating { return }
         backgroundAt = (uptime(), wall())
+        clockSteppedBack = false
     }
 
     /// The app left the foreground and the check of its return has not run yet: what the app shows may still be covered
@@ -358,9 +384,12 @@ public final class AppLock {
         if authenticating { return }
         guard let at = backgroundAt else { return }
         backgroundAt = nil
-        // The timeout is measured on the clock that cannot be set; a wall clock found earlier than when the app left
-        // means the date was moved back, which also locks (IOS-PLAN §6.4).
+        // The timeout is measured on the clock that cannot be set; a wall clock that fell behind it by more than
+        // the tolerance, seen at return or by a clock-change notification while away, means the date was moved back, which
+        // also locks (IOS-PLAN §6.4).
         let elapsed = uptime() - at.uptime
-        if state == .unlocked && (elapsed >= Double(timeout.rawValue) || wall() < at.wall) { lockNow() }
+        let steppedBack = clockSteppedBack || wallFellBehind(since: at)
+        clockSteppedBack = false
+        if state == .unlocked && (elapsed >= Double(timeout.rawValue) || steppedBack) { lockNow() }
     }
 }

@@ -100,10 +100,11 @@ final class FaultyAppLockKeys: AppLockKeys, @unchecked Sendable {
     let store = MemoryAppLockStore()
     let keys = SoftwareAppLockKeys()
     let clock = Clock()
+    let center = NotificationCenter()
 
     func lock(_ keys: (any AppLockKeys)? = nil) -> AppLock {
         let clock = clock
-        return AppLock(store: store, keys: keys ?? self.keys, uptime: { clock.up }, wall: { clock.wall })
+        return AppLock(store: store, keys: keys ?? self.keys, uptime: { clock.up }, wall: { clock.wall }, notifications: center)
     }
 
     func enabled(_ m: AppLockMethod = .biometrics) async throws -> AppLock {
@@ -203,6 +204,31 @@ final class FaultyAppLockKeys: AppLockKeys, @unchecked Sendable {
         l.onBackground()
         clock.up += 5
         clock.skew = -86_400
+        l.onForeground()
+        #expect(l.state == .locked)
+    }
+
+    /// A correction of a few seconds (network time) is no step back.
+    @Test func aSmallCorrectionDoesNotLock() async throws {
+        let l = try await enabled()
+        try l.setTimeout(.oneMinute)
+        l.onBackground()
+        clock.up += 10
+        clock.skew = -3
+        l.onForeground()
+        #expect(l.state == .unlocked)
+    }
+
+    /// The date set back 10 s and put right again before the return is noticed by the clock-change notification.
+    @Test func aDateSetBackAndRestoredLocks() async throws {
+        let l = try await enabled()
+        try l.setTimeout(.oneMinute)
+        l.onBackground()
+        clock.up += 5
+        clock.skew = -10
+        center.post(name: .NSSystemClockDidChange, object: nil)
+        try await Task.sleep(for: .milliseconds(100))
+        clock.skew = 0
         l.onForeground()
         #expect(l.state == .locked)
     }
