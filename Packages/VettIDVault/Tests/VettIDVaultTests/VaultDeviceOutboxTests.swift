@@ -87,6 +87,32 @@ extension VaultDeviceTests {
         #expect(try savedState(store).outbox.isEmpty, "gone once the relay took it")
         waiting.cancel()
     }
+
+    /// A deposit that stalls holds up its own caller only: the device lock is free while the relay has not answered
+    /// (the standing token's renewal is sealed and saved under the lock and deposited after it).
+    @Test func aStalledRenewalDoesNotHoldTheDeviceLock() async throws {
+        let (d, _) = try await pairedDevice()
+        let gate = DispatchSemaphore(value: 0)
+        let entered = StoredCounts()
+        relay.onDeposit = {
+            entered.add(1)
+            gate.wait()
+        }
+        let renewing = Task { try await d.renewStandingToken() }
+        for _ in 0..<500 where entered.all.isEmpty { try await Task.sleep(for: .milliseconds(10)) }
+        #expect(!entered.all.isEmpty, "the renewal reached the relay")
+        let free = Task { try await d.dropFromOutbox("none") }
+        let finished = StoredCounts()
+        Task {
+            _ = try? await free.value
+            finished.add(1)
+        }
+        for _ in 0..<200 where finished.all.isEmpty { try await Task.sleep(for: .milliseconds(10)) }
+        #expect(!finished.all.isEmpty, "something that needs the lock ran while the deposit was stalled")
+        // (The hook runs under the fake relay's own lock: it is let go before the relay is touched again.)
+        gate.signal()
+        try await renewing.value
+    }
 }
 
 /// The outbox sizes the stored state had at each deposit.

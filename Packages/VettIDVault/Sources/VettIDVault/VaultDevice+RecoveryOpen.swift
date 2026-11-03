@@ -213,7 +213,7 @@ extension VaultDevice {
 
     /// One `hs.init` of the recovered phone with [ctx], saved with it, and the wait for `device.paired`.
     private func pairRecovered(ctx: String, timeout: TimeInterval) async throws {
-        try await lock.withLock {
+        let (prepared, earlier): (PreparedInit, String?) = try await lock.withLock {
             let (v, named): (VaultRecord, Bool) = try mem.withLock {
                 let v = try requireVault()
                 guard st.recovery != nil else { throw VaultStateError(message: "no recovery registered") }
@@ -225,9 +225,22 @@ extension VaultDevice {
             // (IOS-PLAN 0.1.40 §4.9) The `hs.init` with the named invitation is marked sent before it is deposited: a kill or a lost
             // relay answer after the deposit then costs one more unlock (no attempt), never the same `hs.init` again.
             if named { try save() }
-            try await startInit(purpose: .app, ctx: ctx, depositToken: v.token)
-            mem.withLock { st.recovery?.pairing = ctx }
+            let p = try prepareInit(purpose: .app, ctx: ctx, depositToken: v.token)
+            // Noted before the deposit, for an `hs.resp` that comes back at once (``handleResp``); put back if it is refused.
+            let earlier = mem.withLock {
+                let e = st.recovery?.pairing
+                st.recovery?.pairing = ctx
+                return e
+            }
             try save()
+            return (p, earlier)
+        }
+        do {
+            try await sendInit(prepared)
+        } catch {
+            mem.withLock { st.recovery?.pairing = earlier }
+            try? save()
+            throw error
         }
         _ = try await awaitPaired(timeout: timeout)
     }

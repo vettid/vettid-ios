@@ -148,16 +148,18 @@ extension VaultDevice {
     /// Runs the first app's handshake (purpose app, ctx = vault id; it carries the SAS commitment, but the vault answers
     /// it without approval, so no code is shown) and waits for device.paired.
     public func completeEnrollment(timeout: TimeInterval = awaitDefault) async throws {
-        try await lock.withLock {
+        let prepared: PreparedInit = try await lock.withLock {
             let (v, ctx): (VaultRecord, String) = try mem.withLock {
                 let v = try requireVault()
                 guard let ctx = st.recovery?.recoveryID ?? st.vaultID else { throw VaultStateError(message: "no vault id") }
                 guard !v.token.isEmpty else { throw VaultStateError(message: "no token for the vault") }
                 return (v, ctx)
             }
-            try await startInit(purpose: .app, ctx: ctx, depositToken: v.token)
+            let p = try prepareInit(purpose: .app, ctx: ctx, depositToken: v.token)
             try save()
+            return p
         }
+        try await sendInit(prepared)
         _ = try await awaitPaired(timeout: timeout)
     }
 
@@ -202,10 +204,20 @@ extension VaultDevice {
         return guid
     }
 
-    func startInit(
+    /// An `hs.init` built and kept as the handshake in flight, not yet deposited (``sendInit(_:)``).
+    struct PreparedInit {
+        let initiator: Initiator
+        let vault: VaultRecord
+        let depositToken: String
+    }
+
+    /// Builds the `hs.init` and makes it the handshake in flight, so that an `hs.resp` that arrives before the deposit call
+    /// returns finds it. Callers hold ``lock``, save, leave it, and then deposit with ``sendInit(_:)``: a slow relay must not
+    /// hold the lock.
+    func prepareInit(
         purpose: Purpose, ctx: String, depositToken: String, profile: [UInt8]? = nil, at: Date? = nil,
         deviceAttest: DeviceAttest? = nil, id: String? = nil, apiKey: [UInt8]? = nil, unlockSecret: [UInt8]? = nil
-    ) async throws {
+    ) throws -> PreparedInit {
         let v = try mem.withLock { try requireVault() }
         let tok = try mintForVault()
         let i = try Initiator.create(InitiatorConfig(
@@ -216,10 +228,28 @@ extension VaultDevice {
             policy: .vaultToDevice, id: id, now: at ?? now()
         ))
         try refuseSending()
-        _ = try await relayFor(v.relayURL).deposit(mailboxID: v.mailbox, token: depositToken, payload: i.envelope)
         mem.withLock {
             ini?.abort()
             ini = i
+        }
+        return PreparedInit(initiator: i, vault: v, depositToken: depositToken)
+    }
+
+    /// Deposits a prepared `hs.init`, outside the lock. When the relay does not take it the handshake is dropped (unless a
+    /// newer one replaced it) and the error is thrown.
+    func sendInit(_ p: PreparedInit) async throws {
+        do {
+            try refuseSending()
+            let relay = relayFor(p.vault.relayURL)
+            _ = try await relay.deposit(mailboxID: p.vault.mailbox, token: p.depositToken, payload: p.initiator.envelope)
+        } catch {
+            mem.withLock {
+                if ini === p.initiator {
+                    p.initiator.abort()
+                    ini = nil
+                }
+            }
+            throw error
         }
     }
 
