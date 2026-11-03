@@ -526,14 +526,33 @@ enum SourceStep { case messages([RelayMessage]), error(Error) }
         #expect(c.socketPause(RelayError(status: 503, code: "http_503"), 20) == 300)
     }
 
-    /// A session that the relay closes normally at once backs off instead of reconnecting in a loop.
-    @Test func aSessionClosedAtOnceBacksOff() async throws {
-        let src = FakeSource([.messages([Self.msg("01C")])], stream: FakeStream([], end: nil))
-        let waits = Recorder<TimeInterval>()
+    /// A session that the relay closes normally at once is collected by long-poll for the pause, not reconnected in a loop.
+    @Test func aSessionClosedAtOnceFallsBackToLongPoll() async throws {
+        let src = FakeSource([.messages([Self.msg("01C")]), .messages([Self.msg("01D")])], stream: FakeStream([], end: nil))
+        let got = Recorder<String>()
         await #expect(throws: RelayError.self) {
-            try await MailboxCollector(source: src, mode: .webSocket, sleep: { waits.add($0) }).run { _ in }
+            try await MailboxCollector(source: src, mode: .webSocket, sleep: { _ in }).run { got.add($0.msgID) }
         }
-        #expect(waits.all.count == 2 && waits.all[0] > 0, "the closed session backed off, then the second open failed and backed off")
+        #expect(src.streamOpens == 1 && got.all == ["01C", "01D"])
+    }
+
+    /// An upgrade refused with a 4xx that is no retry (404, 403) does not end the collection: the long-poll goes on.
+    @Test func aRefusedUpgradeOfAnyStatusKeepsCollectingByLongPoll() async throws {
+        for status in [404, 403, 401] {
+            let src = FakeSource([.messages([Self.msg("01R")])], stream: FakeStream([], end: RelayError(status: status, code: "http_\(status)")))
+            let got = Recorder<String>()
+            await #expect(throws: RelayError.self) {
+                try await MailboxCollector(source: src, mode: .webSocket, sleep: { _ in }).run { got.add($0.msgID) }
+            }
+            #expect(got.all == ["01R"], "status \(status)")
+        }
+        // The close code 4404 is the mailbox's end, and ends the collection.
+        let gone = FakeSource([.messages([Self.msg("01G")])], stream: FakeStream([], end: RelayError(status: 404, code: RelayError.mailboxUnknown)))
+        let got = Recorder<String>()
+        await #expect(throws: RelayError(status: 404, code: RelayError.mailboxUnknown)) {
+            try await MailboxCollector(source: gone, mode: .webSocket, sleep: { _ in }).run { got.add($0.msgID) }
+        }
+        #expect(got.all.isEmpty)
     }
 
     @Test func theCloseCodes() {
@@ -542,6 +561,9 @@ enum SourceStep { case messages([RelayMessage]), error(Error) }
         #expect(RelayStream.closeError(code: 1011, error: URLError(.unknown)) is URLError)
         // A refused upgrade keeps its HTTP status.
         #expect(RelayStream.closeError(code: 0, upgradeStatus: 429, error: URLError(.badServerResponse)) as? RelayError == RelayError(status: 429, code: "http_429"))
+        // Its Retry-After is read (§7.2).
+        let refused = RelayStream.closeError(code: 0, upgradeStatus: 429, upgradeHeaders: ["retry-after": "9"], error: URLError(.badServerResponse)) as? RelayError
+        #expect(refused?.retryAfterSeconds == 9)
     }
 
     /// A handler's own error (storage, decoding) ends the run; it is not retried as a transport failure.
