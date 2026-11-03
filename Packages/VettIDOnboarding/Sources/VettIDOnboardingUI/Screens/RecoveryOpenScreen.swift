@@ -110,6 +110,8 @@ public struct RecoveryOpenContent: View {
                 confirmLabel: OnboardingStrings.unlockEraseConfirm, destructive: true, onConfirm: { actions.erase() }
             )
             .onChange(of: state.opened, initial: true) { _, opened in if opened { onOpened() } }
+            // "Continue" again after a failed end of setup.
+            .onChange(of: state.finishRequests) { _, _ in if state.opened { onOpened() } }
             .onChange(of: state.step) { _, now in
                 // The keypad holds nothing once the PIN was handed over or the fields are left.
                 if now == .sending || now == .done { pin.clear() }
@@ -148,7 +150,7 @@ public struct RecoveryOpenContent: View {
                     state: state, actions: actions, side: side, onNewCode: finishNewCodeAction(state, onNewCode), timeScale: timeScale,
                     pin: pin
                 )
-            case .done: OpenDone(state: state, actions: actions, timeScale: timeScale)
+            case .done: OpenDone(state: state, actions: actions, side: side, timeScale: timeScale)
             }
         }
     }
@@ -491,6 +493,8 @@ private struct OpenFinish: View {
 private struct OpenDone: View {
     let state: RecoveryOpenState
     let actions: RecoveryOpenActions
+    /// The flow's notice: why the end of setup failed (``RecoverState/error``), with "Continue" to try again.
+    let side: OpenSide
     let timeScale: UInt64
 
     var body: some View {
@@ -505,6 +509,7 @@ private struct OpenDone: View {
                     message: RecoveryTexts.openAnswer(openAnswerText(o, rightButIncomplete: false), retryAt: "")
                 )
                 .accessibilityIdentifier("open_answer_ok")
+                OpenSideNoticeView(side: side, finishLink: false)
                 if let failure = state.failure {
                     // A lock asked for meanwhile is pending: said as the unlock screen says it (the phone stays locked).
                     Text(

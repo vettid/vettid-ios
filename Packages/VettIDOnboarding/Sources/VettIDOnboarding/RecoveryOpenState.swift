@@ -57,6 +57,9 @@ public struct RecoveryOpenState: Equatable, Sendable, CustomStringConvertible, C
     /// The member continued after `ok` and the vault opened on this phone (``RecoveryOpenViewModel/openApp()``): the
     /// recovery's own screen hands over to the end of setup.
     public var opened = false
+    /// "Continue" was pressed again after the app was opened: the screen finishes setup again (the first attempt may have
+    /// failed, and ``opened`` does not change a second time).
+    public var finishRequests = 0
     /// (IOS-PLAN 0.1.38 §4.9, "A phone that could not tell") ``CouldNotTellStage/finishWithPin`` puts this screen at the PIN of
     /// ``OpenStep/finish`` (the unlock with this phone's secret, the new identity first if it registered, then the earlier one);
     /// ``CouldNotTellStage/contact`` adds the second text, "Your vault took this phone, but it cannot be unlocked right now.

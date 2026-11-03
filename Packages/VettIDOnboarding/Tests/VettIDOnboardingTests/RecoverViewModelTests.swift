@@ -63,6 +63,11 @@ import VettIDDataTesting
         vm.finish()
         await vm.settle()
         #expect(vm.state.error == .network && vault.phase == .setup(.finishing))
+        // Tried again, the failure goes and setup ends.
+        vm.finish()
+        #expect(vm.state.error == nil)
+        await vm.settle()
+        #expect(vm.state.error == nil && vault.phase == .unlocked)
     }
 
     @Test func aRegisteredPhoneResumesAtTheOpen() async throws {

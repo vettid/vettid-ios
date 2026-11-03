@@ -151,7 +151,8 @@ extension OnboardingStrings {
             bundle: .module
         )
     }
-    /// [why]: the refusal in words (``refusalText(_:_:)``).
+    /// [why]: the refusal in words (``refusalText(_:_:)``). Android's `unlock_update_refused` shows the raw code in this place;
+    /// the iPhone shows the sentence for it (chosen; not in the spec).
     static func unlockUpdateRefused(_ why: String) -> String {
         String(
             localized: "unlock_update_refused",

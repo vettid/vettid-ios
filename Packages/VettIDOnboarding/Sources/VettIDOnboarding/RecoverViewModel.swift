@@ -37,6 +37,8 @@ public final class RecoverViewModel: RecoverActions {
     @ObservationIgnored private let vault: any VaultRepository
     @ObservationIgnored private let account: any AccountRepository
     /// One second of the rate limit's countdown (a virtual clock in the tests).
+    /// ``finish()`` is running: a second press does not start another.
+    @ObservationIgnored private var finishing = false
     @ObservationIgnored private let tick: @Sendable () async throws -> Void
     @ObservationIgnored private let work = Work()
     @ObservationIgnored private var retryTicker: Task<Void, Never>?
@@ -431,12 +433,19 @@ public final class RecoverViewModel: RecoverActions {
     }
 
     public func finish() {
-        // A failure is said where the member looks next: the open step's notice (``RecoverState/error``).
+        // A failure is said where the member looks next: the open step's notice (``RecoverState/error``), and "Continue" tries
+        // again. One attempt at a time.
+        guard !finishing else { return }
+        finishing = true
+        state.error = nil
+        state.errorCode = nil
         work.launch { [weak self, vault] in
             do {
                 try await vault.finishSetup()
+                self?.finishing = false
             } catch {
                 guard let self else { return }
+                finishing = false
                 let e = Self.failure(of: error)
                 state.error = e.kind
                 state.errorCode = e.code

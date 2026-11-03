@@ -210,6 +210,10 @@ public final class RecoveryOpenViewModel {
     /// phone locked and is said as the unlock screen says it.
     public func openApp() {
         guard state.step == .done, !openingApp else { return }
+        if state.opened {
+            state.finishRequests += 1
+            return
+        }
         openingApp = true
         work.launch { [weak self, move] in
             defer { self?.openingApp = false }
