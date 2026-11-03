@@ -239,7 +239,7 @@ import VettIDDataTesting
         f.items.effect = ShareEffect(shares: [])
         vm.setTagInput("travel")
         vm.addTag()
-        #expect(await eventually { !vm.state.shareImpactUnavailable && f.items.effectAsked.count == 2 })
+        #expect(await eventually { !vm.state.shareImpactUnavailable && f.items.calls.count { $0 == "shareEffect" } == 2 })
     }
 
     // MARK: - Dialogs

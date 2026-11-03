@@ -141,7 +141,6 @@ import VettIDDataTesting
         vm.typeCode()
         vm.setEmail("sam@example.org")
         vm.setCode("K7QM-4XRP")
-        vault.fail["redeemSetupCode"] = FakeVaultRepository.failure(.setupCodeInvalid, code: "invalid_code")
         vault.fail["redeemSetupCode"] = FakeVaultRepository.failure(.rateLimited, retry: 120)
         vm.submitCode()
         await vm.settle()

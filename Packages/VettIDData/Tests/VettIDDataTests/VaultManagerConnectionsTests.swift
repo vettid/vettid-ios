@@ -106,7 +106,7 @@ import VettIDVault
         #expect(got.displayName == "Morgan Lee" && got.state == .active)
     }
 
-    /// §6.4 "Already connected", a spent link, and a spent link.
+    /// §6.4 "Already connected", a spent link, and an inviter on the block list (a block made before the app stopped offering one).
     @Test func anInviterAlreadyConnectedSpentLinksAndBlocks() async throws {
         defer { phone.close() }
         try await setUp()
@@ -115,6 +115,9 @@ import VettIDVault
         #expect(try await c.acceptInvite(again) == AcceptedConnection(connectionID: id, exists: true))
         #expect(c.requests.isEmpty)
         #expect(await kind { try await c.acceptInvite(again) } == .inviteUnavailable, "the claim was fetched once")
+        let later = try service.peerInvite(sameAs: id)
+        try service.blockPeer(of: id)
+        #expect(await kind { try await c.acceptInvite(later) } == .blocked)
     }
 
     /// Either member's decline (0.10.5): the vault sends `connection.declined` once it can; the member whose request

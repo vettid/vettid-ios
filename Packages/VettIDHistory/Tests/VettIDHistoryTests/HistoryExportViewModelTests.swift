@@ -166,6 +166,17 @@ import VettIDVault
         }
     }
 
+    /// A `bad_request` is the request's own fault (VAULT-MESSAGING §10.9): the vault's code is shown, not "an older vault".
+    @Test func aBadRequestShowsTheVaultsCode() async {
+        log.preview = { throw VaultFailure(.vaultCode("bad_request"), code: "bad_request") }
+        let m = model()
+        m.start(ctx)
+        await m.settle()
+        #expect(m.step != .refused(.oldVault))
+        guard case .failed(let kind) = m.step else { Issue.record("not a failure: \(m.step)"); return }
+        #expect(kind.message.contains("bad_request"))
+    }
+
     @Test func aWrongPinThenTheBackoff() async {
         log.answerExports([{ throw VaultFailure(.badPin, code: "bad_pin") }, { throw VaultFailure(.backoff, code: "backoff", retryAfterSeconds: 60) }])
         let m = await toPin(.json)

@@ -6,6 +6,7 @@ import VettIDData
 /// A URL the app was opened with goes where it belongs (IOS-PLAN §6.8): an invitation by the Universal Link of
 /// `relay.vettid.org` or by `vettid://connect` to the invitation inbox, the portal's setup link to onboarding, anything
 /// else to the files; nothing over 4,096 bytes is taken.
+@MainActor
 struct OpenedLinkTests {
     let link = String(repeating: "A", count: 120)
 
