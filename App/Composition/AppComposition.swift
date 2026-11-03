@@ -26,6 +26,8 @@ final class AppComposition {
     /// A canary manifest opened with VettID or picked in Settings → Attestation, waiting for the root's dialog.
     let canaryInbox = CanaryManifestInbox()
     let firstRun: FirstRunGate
+    /// The app lock's start is under way (``startAppLock()``).
+    private var startingAppLock = false
     let vault: VaultManager
     /// The app lock (ANDROID-PLAN D6, IOS-PLAN ID17): its key in the Secure Enclave; off where there is none
     /// (``NoAppLockKeys``).
@@ -148,17 +150,28 @@ final class AppComposition {
     /// app becomes active while it is still pending. The lock stays pending only while the iPhone has not been unlocked
     /// since it started: any other failure of the cleanup gives way to the root's screen that says so.
     func startAppLock() {
-        guard appLock.state == .pending else { return }
-        do {
-            try firstRun.ensure()
-        } catch KeysError.unavailable {
-            return
-        } catch {
-            appLock.startFailed()
-            return
+        guard appLock.state == .pending, !startingAppLock else { return }
+        startingAppLock = true
+        let gate = firstRun
+        let lock = appLock
+        let vault = vault
+        // The cleanup and the reads run off the main actor (the keychain and the files); the lock stays pending until they
+        // are done, and the screen shows no lock screen before (chosen; not in the spec).
+        Task { [weak self] in
+            defer { self?.startingAppLock = false }
+            let cleaned = await Task.detached { Result { try gate.ensure() } }.value
+            switch cleaned {
+            case .success:
+                break
+            case .failure(KeysError.unavailable):
+                return
+            case .failure:
+                lock.startFailed()
+                return
+            }
+            vault.resumePendingWipe()
+            await lock.startOffMain()
         }
-        vault.resumePendingWipe()
-        appLock.start()
     }
 
     /// `Application Support/VettID` (IOS-PLAN §6.1), excluded from backups when the files are written.

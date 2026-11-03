@@ -78,11 +78,11 @@ public final class CanaryManifestManager: CanaryManifestRepository {
 
     /// Reads what is installed (once the first-run cleanup ran, IOS-PLAN §6.1): a document that no longer verifies, or
     /// a file that no longer decrypts, is dropped. Tried again while the file cannot be read yet.
-    func loadIfNeeded() {
+    func loadIfNeeded(read: FileRead? = nil) {
         guard !loaded else { return }
         let served: [UInt8]?
         do {
-            served = try store.load()
+            served = try (read ?? FileRead { try store.load() }).bytes.get()
         } catch KeysError.unavailable {
             return
         } catch {
@@ -92,6 +92,9 @@ public final class CanaryManifestManager: CanaryManifestRepository {
         loaded = true
         canaryManifest = served.flatMap(verified)
     }
+
+    /// Whether the file has not been read yet.
+    var needsLoad: Bool { !loaded }
 
     /// The view of what the file holds now (after the alternate channel retired it).
     func reload() {

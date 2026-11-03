@@ -292,14 +292,14 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
     // MARK: - Local state
 
     /// The first-run cleanup, then the account record (IOS-PLAN §6.1: nothing is read before the cleanup ran).
-    func prepared() throws {
+    func prepared(reads: LocalFileReads = LocalFileReads()) throws {
         try config.prepare()
         resumePendingWipe()
         removeRetiredFiles()
         try record.refuseWhileClosed()
-        try record.load()
+        try record.load(read: reads.record)
         ownerChecks.loadIfNeeded()
-        canary.loadIfNeeded()
+        canary.loadIfNeeded(read: reads.canary)
         memberVault.set(recorded: record.value.vaultID)
         if account == nil { publishAccount() }
         if !moveFlags.book.lockResumed {
@@ -536,7 +536,7 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
             await holder?.wipeNow()
             return phase
         }
-        try prepared()
+        try await preparedOffMain()
         // IOS-PLAN §4.2: a vault being deleted, before anything else is read or opened.
         if let d = record.value.deleting { return resumeDeleting(d) }
         usesPhoneSecret = phoneSecrets.inUse

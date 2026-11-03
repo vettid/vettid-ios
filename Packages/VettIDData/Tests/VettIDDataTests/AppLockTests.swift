@@ -12,6 +12,10 @@ final class MemoryAppLockStore: AppLockStore, @unchecked Sendable {
     private var retiredValue: [UInt8]?
     private var unavailableValue = false
     private var corruptValue = false
+    private var mainReads = 0
+
+    /// How many times the preferences were read on the main thread.
+    var readsOnMain: Int { lock.withLock { mainReads } }
 
     var current: AppLockPreferences {
         get { lock.withLock { prefs } }
@@ -40,6 +44,7 @@ final class MemoryAppLockStore: AppLockStore, @unchecked Sendable {
     }
 
     func preferences() throws -> AppLockPreferences {
+        if Thread.isMainThread { lock.withLock { mainReads += 1 } }
         try check()
         return current
     }
