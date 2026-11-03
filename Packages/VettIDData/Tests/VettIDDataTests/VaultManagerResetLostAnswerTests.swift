@@ -195,14 +195,21 @@ import VettIDVault
         try await expectApplied()
     }
 
-    /// The reset's own `ok`, then its `credential.ack` refused (a follow-up, not the reset's refusal): the reset is
-    /// decided, not taken as not made; the resend's cached answer shows it applied.
+    /// The reset's own `ok`, then its `credential.ack` refused (a follow-up, not the reset's refusal): the stored blob is
+    /// the outcome, so the reset succeeds at once and nothing is left undecided; the ack that was refused is pending, and
+    /// goes out again before the next operation that carries the blob.
     @Test func anAckRefusedAfterTheResetsOkIsNotItsRefusal() async throws {
         defer { phone.close() }
         try await setUp()
         service.refuse("credential.ack", with: "stale_credential", times: 1)
         try await m.newCredential(pin: pin, password: password, newPassword: newPassword)
-        try await expectApplied()
+        #expect(m.changeCheck == nil && m.heldChange == nil)
+        #expect(try m.phoneSecrets.unresolvedChange() == nil)
+        #expect(m.session?.device.credentialVersion == service.vaultCredentialVersion)
+        #expect(service.resets.count == 1 && service.currentPassword == newPassword)
+        #expect(try await m.ownerChecks.check(pin: pin, password: newPassword, holdOff: nil) == .passed)
+        #expect(count("credential.ack") >= 1)
+        #expect(service.alarmState == nil && m.alarm == nil && service.ownerCheckFailures == 0)
     }
 
     /// The same key with a higher version: something else moved the credential, so the check ends without a decision;

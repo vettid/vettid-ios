@@ -49,7 +49,7 @@ public struct UnreachableScreen: View {
 
     static func title(_ kind: FailureKind?) -> String {
         switch kind {
-        case .clock: OnboardingStrings.rootClockTitle
+        case .clock, .clockOff: OnboardingStrings.rootClockTitle
         case .noVault: OnboardingStrings.rootNoVaultTitle
         case .localState: OnboardingStrings.rootLocalStateTitle
         case .eraseFailed: OnboardingStrings.rootEraseFailedTitle

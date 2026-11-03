@@ -491,6 +491,61 @@
         }
       }
     },
+    "data_failure_offline": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "There is no connection to the internet. Connect, then try again."
+          }
+        }
+      }
+    },
+    "data_failure_relay_quota": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "VettID's message relay is full for now. Nothing was sent. Try again later."
+          }
+        }
+      }
+    },
+    "data_failure_payload_too_large": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This is too large to send. Make it smaller and try again."
+          }
+        }
+      }
+    },
+    "data_failure_relay_refused": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "VettID's message relay refused this. Try again; if it keeps happening, contact VettID."
+          }
+        }
+      }
+    },
+    "data_failure_clock_off": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This phone's date and time look wrong, so VettID's relay or your vault will not accept its messages. Turn on automatic date and time in the phone's settings, then try again."
+          }
+        }
+      }
+    },
     "data_failure_no_response": {
       "extractionState": "manual",
       "localizations": {

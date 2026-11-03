@@ -55,6 +55,9 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
     public internal(set) var credentialRequired = false
     /// What "Try again" sends again (``credentialRequiredTryAgain()``): the ``Resend`` of the request that raised it.
     @ObservationIgnored var credentialRequiredResend: Resend?
+    /// When the device last dropped an authenticated message for its time (expired, or from the future): a wrong clock on
+    /// this phone is the likely cause of a request that then gets no answer (``noted(_:since:resend:)``).
+    @ObservationIgnored var timeDropAt: Date?
     public let apiOrigin: String
     /// DevStack hints come with the dev stack's helpers (I1.3).
     public var devHint: String? { nil }

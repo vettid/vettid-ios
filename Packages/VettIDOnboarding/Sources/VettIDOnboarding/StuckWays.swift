@@ -37,7 +37,7 @@ public enum WayOut: Equatable, Sendable {
         case .localState: .erase
         case .eraseFailed: .clearData
         case .unauthorized: .eraseOrRecover
-        case .some(let k) where longUnreachable && k != .clock: .eraseOrRecover
+        case .some(let k) where longUnreachable && k != .clock && k != .clockOff && k != .offline: .eraseOrRecover
         default: nil
         }
     }

@@ -67,8 +67,15 @@ extension VaultManager {
     /// (``VaultFailures/memberRequest(_:)``; never one the app sends by itself, such as the reads on every open) shows the
     /// root screen (``credentialRequired``), unless a lock was asked for since the request was sent ([since], the lock
     /// generation then). [resend] is kept for "Try again".
+    /// How long a dropped message is held against a request that gets no answer (chosen; not in the spec).
+    static let timeDropMemory: TimeInterval = 600
+
     func noted(_ e: any Error, since: Int, resend: Resend? = nil) -> any Error {
         guard let f = e as? VaultFailure else { return e }
+        // A vault whose answers this phone drops for their time, and then a request without an answer: the phone's clock.
+        if f.kind == .noResponse, let at = timeDropAt, Date().timeIntervalSince(at) < Self.timeDropMemory {
+            return VaultFailure(.clockOff, code: VaultFailures.codeClockSkew, cause: f.cause)
+        }
         if f.kind == .servicePaused { servicePaused = true }
         if f.kind == .credentialRequired, since == lockGeneration, VaultFailures.memberRequest(f) {
             credentialRequired = true

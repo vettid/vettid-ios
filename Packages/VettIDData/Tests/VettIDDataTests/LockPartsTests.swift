@@ -405,7 +405,7 @@ import VettIDKeysTesting
     }
 
     @Test func failuresWithTheirOwnWayOrNoneAreNotChanged() {
-        let own: Set<FailureKind> = [.clock, .noVault, .localState, .eraseFailed, .unauthorized]
+        let own: Set<FailureKind> = [.clock, .clockOff, .offline, .noVault, .localState, .eraseFailed, .unauthorized]
         for k in FailureKind.allCases {
             #expect(StuckScreens.longUnreachable(k, lastContactMs: now - 30 * day, nowMs: now) == !own.contains(k), "\(k)")
         }

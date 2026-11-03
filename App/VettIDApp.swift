@@ -87,6 +87,11 @@ struct RootView: View {
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.protectedDataDidBecomeAvailableNotification)) { _ in
             composition.startAppLock()
         }
+        // A network that comes back reads a phase that could not be read for want of one (IOS-PLAN §6.6).
+        .onChange(of: composition.network?.restoreCount) {
+            guard AppRoot.readsAgain(composition.vault.phase) else { return }
+            Task { try? await composition.vault.refresh() }
+        }
     }
 
     private var appRoot: some View {
@@ -237,7 +242,7 @@ struct AppRoot: View {
     /// Whether [phase] is a start that could not read this phone's state yet.
     static func readsAgain(_ phase: AppPhase) -> Bool {
         switch phase {
-        case .starting, .unreachable(.phoneLocked, _): true
+        case .starting, .unreachable(.phoneLocked, _), .unreachable(.network, _), .unreachable(.offline, _): true
         default: false
         }
     }

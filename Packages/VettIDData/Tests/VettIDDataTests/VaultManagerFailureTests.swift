@@ -40,7 +40,7 @@ import VettIDKeysTesting
     @Test func theRedeemIsRetriedAfterANetworkFailure() async throws {
         defer { phone.close() }
         service.redeemAnswer = .offline
-        #expect(await vaultFailure { try await redeemed() }?.kind == .network)
+        #expect(await vaultFailure { try await redeemed() }?.kind == .offline)
         service.redeemAnswer = .ok
         try await redeemed()
         #expect(service.redeems == 1 && m.phase == .setup(.newVault))
@@ -68,7 +68,7 @@ import VettIDKeysTesting
         defer { phone.close() }
         try await redeemed()
         service.enclaveOffline = true
-        #expect(await vaultFailure { try await m.enroll(pin: "402817") { _ in } }?.kind == .network)
+        #expect(await vaultFailure { try await m.enroll(pin: "402817") { _ in } }?.kind == .offline)
         #expect(phone.phoneKeys.count == 0 && service.enrolls.isEmpty)
         try await m.forgetSetupCode()
         #expect(m.phase == .signedOut)

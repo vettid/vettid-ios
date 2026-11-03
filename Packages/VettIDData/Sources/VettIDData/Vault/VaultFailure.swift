@@ -4,6 +4,17 @@ import VettIDVault
 /// Why an action failed, for the UI (``FailureText``). Mirrors vettid-android `FailureKind`.
 public enum FailureKind: Hashable, Sendable, CaseIterable {
     case network
+    /// (chosen; not in the spec) The phone has no connection at all (`notConnectedToInternet`, or the network monitor says
+    /// so): "no connection" rather than the generic network text.
+    case offline
+    /// (chosen; not in the spec) The relay's own refusals, by their codes (RELAY-PROTOCOL §7.1): `quota_exceeded`,
+    /// `payload_too_large`, and any other client error the relay meant.
+    case relayQuota
+    case payloadTooLarge
+    case relayRefused
+    /// (chosen; not in the spec) The phone's date and time are off by what the relay or the vault shows (a relay
+    /// `timestamp_stale`, VAULT-MESSAGING §8.4 answers dropped for their time), as ``clock`` is for the member API.
+    case clockOff
     case unauthorized
     /// A setup code the member API refused (`404 invalid_code`: wrong, expired, used, or another email's).
     case setupCodeInvalid
@@ -150,7 +161,8 @@ public enum FailureKind: Hashable, Sendable, CaseIterable {
     /// Every kind, ``vaultCode(_:)`` once (with ``VaultFailures/unknownCode``).
     public static var allCases: [FailureKind] {
         [
-            .network, .unauthorized, .setupCodeInvalid, .termsRequired, .rateLimited, .vaultUnavailable, .servicePaused,
+            .network, .offline, .relayQuota, .payloadTooLarge, .relayRefused, .clockOff, .unauthorized, .setupCodeInvalid,
+            .termsRequired, .rateLimited, .vaultUnavailable, .servicePaused,
             .releaseEnded, .badPin, .badPassword, .backoff, .credentialFrozen, .rotationRequired, .notSupported, .noResponse,
             .vaultExists, .attestation, .rollback, .capabilityRollback, .releaseTooOld, .enrollmentStarted, .manifest,
             .manifestUnavailable, .releaseUnknown, .enclave, .notFound, .connectionUnavailable, .inviteInvalid, .inviteExpired,
