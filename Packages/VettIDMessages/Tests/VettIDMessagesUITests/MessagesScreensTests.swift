@@ -32,7 +32,7 @@ import VettIDUI
             .appendingPathComponent("Sources/VettIDMessagesUI/Resources/Localizable.xcstrings")
         let doc = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
         let keys = try #require((doc["strings"] as? [String: Any])?.keys)
-        #expect(keys.count == 98)
+        #expect(keys.count == 99)
         let missing = "\u{0}missing"
         for key in keys {
             let text = Bundle.module.localizedString(forKey: key, value: missing, table: nil)
@@ -143,6 +143,7 @@ import VettIDUI
     /// again"; the picker and a conversation, which do not, keep it.
     @Test func aHeldListIsSaidAsHeld() {
         #expect(MessagesStrings.heldTitle == "Messages are on hold")
+        #expect(MessagesStrings.heldBody == "Your daily check is due. They'll show again once it's done.")
         #expect(MessagesError.held(.ownerCheckRequired, retriesByItself: MessagesScreen.retriesByItself))
         #expect(!MessagesError.held(.network, retriesByItself: MessagesScreen.retriesByItself))
         #expect(!MessagesError.held(.ownerCheckRequired, retriesByItself: false))

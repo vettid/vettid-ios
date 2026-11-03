@@ -106,6 +106,7 @@ import VettIDVault
     /// not in the footer either), since the list reads again by itself once the daily check passes.
     @Test func aHeldReadIsSaidAsHeld() {
         #expect(HistoryStrings.heldTitle == "History is on hold")
+        #expect(HistoryStrings.heldBody == "Your daily check is due. They'll show again once it's done.")
         #expect(HistoryFailureNotice.held(.ownerCheckRequired) && !HistoryFailureNotice.held(.network))
         var s = HistoryState()
         s.loading = false

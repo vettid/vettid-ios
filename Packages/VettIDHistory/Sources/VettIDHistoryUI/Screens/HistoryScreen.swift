@@ -244,8 +244,8 @@ struct HistoryFailureNotice: View {
     /// Whether [error] is the vault on hold, said without "Try again".
     static func held(_ error: FailureKind) -> Bool { error == .ownerCheckRequired }
 
-    /// The held notice's body: the failure's own message for now (the owner may choose a text of its own).
-    static func heldBody(_ error: FailureKind, timeScale: UInt64) -> String { error.message(timeScale: timeScale) }
+    /// The held notice's body, the owner's approved line (IOS-PLAN §6.6).
+    static func heldBody(_ error: FailureKind, timeScale: UInt64) -> String { HistoryStrings.heldBody }
 
     var body: some View {
         if Self.held(error) {

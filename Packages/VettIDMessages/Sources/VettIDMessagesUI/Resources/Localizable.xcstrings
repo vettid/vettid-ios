@@ -245,6 +245,17 @@
         }
       }
     },
+    "messages_held_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your daily check is due. They'll show again once it's done."
+          }
+        }
+      }
+    },
     "messages_held_title": {
       "extractionState": "manual",
       "localizations": {

@@ -181,8 +181,8 @@ struct MessagesError: View {
     /// cannot help.
     static func held(_ kind: FailureKind, retriesByItself: Bool) -> Bool { retriesByItself && kind == .ownerCheckRequired }
 
-    /// The held notice's body: the failure's own message for now (the owner may choose a text of its own).
-    static func heldBody(_ kind: FailureKind, timeScale: UInt64) -> String { kind.message(timeScale: timeScale) }
+    /// The held notice's body, the owner's approved line (IOS-PLAN §6.6).
+    static func heldBody(_ kind: FailureKind, timeScale: UInt64) -> String { MessagesStrings.heldBody }
 
     var body: some View {
         if Self.held(kind, retriesByItself: retriesByItself) {
