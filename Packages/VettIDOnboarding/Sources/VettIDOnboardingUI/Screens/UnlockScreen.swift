@@ -198,9 +198,10 @@ public struct UnlockScreen: View {
     /// An ended release or a rollback wins: no erase there, whatever else the last answers said.
     @ViewBuilder private var wayForward: some View {
         if state.recoverOnly {
+            let checkAgain: (@MainActor () -> Void)? = state.recheckOffered ? { [actions] in actions.retryPreflight() } : nil
             RecoverOnlyNotice(
                 onRecover: onOpenAccountSite, contactSupport: contactSupport,
-                onCheckAgain: state.recheckOffered ? { actions.retryPreflight() } : nil, checkAgainEnabled: state.retryAllowed
+                onCheckAgain: checkAgain, checkAgainEnabled: state.retryAllowed
             )
         } else if state.notRecognised {
             NotRecognisedNotice(erasing: state.erasing, onErase: { actions.askErase() })
