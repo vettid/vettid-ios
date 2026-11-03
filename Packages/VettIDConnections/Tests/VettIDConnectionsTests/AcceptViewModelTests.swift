@@ -213,3 +213,16 @@ import VettIDDataTesting
         #expect(after.state.problem == .inviteExpired)
     }
 }
+
+@MainActor
+@Suite struct AcceptedScansTests {
+    /// A route made again for a link already sent does not send it a second time; a lock forgets it.
+    @Test func aLinkIsSentOncePerRun() {
+        AcceptedScans.reset()
+        #expect(AcceptedScans.firstTime("vettid://invite/abc"))
+        #expect(!AcceptedScans.firstTime("vettid://invite/abc"))
+        #expect(AcceptedScans.firstTime("vettid://invite/other"))
+        AcceptedScans.reset()
+        #expect(AcceptedScans.firstTime("vettid://invite/abc"))
+    }
+}

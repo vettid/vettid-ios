@@ -219,6 +219,7 @@ struct AppRoot: View {
         if vault.phase != .unlocked { SecurePasteboard.clearIfOwn() }
         guard vault.phase != .unlocked, !RootHold.holds(phase: vault.phase, finishingMove: vault.finishingMove) else { return }
         shell.reset()
+        AcceptedScans.reset()
         // The vault is no longer open (locked, signed out, unreachable): the allowance ends.
         screenshots.vaultClosed()
     }

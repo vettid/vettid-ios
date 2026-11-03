@@ -23,3 +23,17 @@ public enum ConnectDestination: Hashable, Sendable {
     case scan
     case accept(AcceptInput)
 }
+
+/// The scanned or pasted links an accept screen already sent in this run of the app (chosen; not in the spec): a screen made
+/// again for the same route (the shell rebuilt, a screen restored) does not send the same link a second time, but waits for
+/// the member as for an opened link. Only a hash of each link is held, in memory.
+@MainActor
+public enum AcceptedScans {
+    private static var sent: Set<Int> = []
+
+    /// True the first time for [link], false for a link sent before.
+    public static func firstTime(_ link: String) -> Bool { sent.insert(link.hashValue).inserted }
+
+    /// Forgets every link (a lock ends the run of screens).
+    public static func reset() { sent.removeAll() }
+}

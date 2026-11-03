@@ -125,7 +125,9 @@ struct AcceptRoute: View {
         AcceptScreen(state: model?.state ?? AcceptState(input: input.link ?? "", fromLink: input.opened), actions: actions)
             .onAppear {
                 guard model == nil else { return }
-                model = AcceptViewModel(connections: connections, requests: requests, input: input.link, opened: input.opened)
+                // A link sent already (the route made again) waits for the member, as an opened one does.
+                let sentBefore = !input.opened && (input.link.map { !AcceptedScans.firstTime($0) } ?? false)
+                model = AcceptViewModel(connections: connections, requests: requests, input: input.link, opened: input.opened || sentBefore)
             }
     }
 
