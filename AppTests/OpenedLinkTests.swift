@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 @testable import VettID
+import VettIDData
 
 /// A URL the app was opened with goes where it belongs (IOS-PLAN §6.8): an invitation by the Universal Link of
 /// `relay.vettid.org` or by `vettid://connect` to the invitation inbox, the portal's setup link to onboarding, anything
