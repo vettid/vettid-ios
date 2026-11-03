@@ -145,7 +145,7 @@ struct AppRoot: View {
 
     var body: some View {
         // A canary manifest handed to the app is asked about over whatever is shown (VAULT-RELEASES §10.1 step 9).
-        CanaryManifestHost(inbox: canaryInbox, repo: vault.canary) {
+        CanaryManifestHost(inbox: canaryInbox, repo: vault.canary, ready: shownPhase == .unlocked) {
             // IOS-PLAN §4.4 (1): the vault does not count this phone as its credential's holder; over whatever sent the
             // request, which stays. Nothing is erased.
             // The notices of a move are the root's, above every phase (vettid-android `VettIdApp`).
@@ -163,7 +163,9 @@ struct AppRoot: View {
             // The vault's time scale for every failure text below (STAGING-TIME-SCALE §5.2).
             .environment(\.vettIDTimeScale, vault.timeScale)
             // The daily check covering the shell closes the root's own presentations too (the move's sheet, the canary alert).
-            .environment(\.vettIDCovered, shownPhase == .unlocked && shell.checkCovers)
+            // The same for the credential-required cover: the root's presentations (the move's sheet, the canary alert) are
+            // outside the subtree it covers, so they close for it here.
+            .environment(\.vettIDCovered, (shownPhase == .unlocked && shell.checkCovers) || vault.credentialRequired)
             .task { try? await vault.refresh() }
             // A start before the first unlock (or while the iPhone was locked) read nothing: read again once the app is
             // active and protected data is available (IOS-PLAN §6.1, §6.3).

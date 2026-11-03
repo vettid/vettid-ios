@@ -36,6 +36,16 @@ public struct CredentialRequiredScreen: View {
     }
 }
 
+/// Sets the cover for what is under it, never lifting a cover above (the daily check's, at the root).
+private struct CredentialRequiredCover: ViewModifier {
+    let shown: Bool
+    @Environment(\.vettIDCovered) private var outer
+
+    func body(content: Content) -> some View {
+        content.environment(\.vettIDCovered, shown || outer)
+    }
+}
+
 public extension View {
     /// ``CredentialRequiredScreen`` over this view while [shown]: what is under it stays (a screen's own state, such as a
     /// daily check the member opened, comes back after "Try again"), hidden from VoiceOver and out of reach.
@@ -44,7 +54,7 @@ public extension View {
     ) -> some View {
         // Every sheet and alert under it closes first (``EnvironmentValues/vettIDCovered``): a presentation would stay
         // above the cover.
-        environment(\.vettIDCovered, shown)
+        modifier(CredentialRequiredCover(shown: shown))
             .accessibilityHidden(shown)
             .allowsHitTesting(!shown)
             .overlay {

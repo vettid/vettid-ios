@@ -65,11 +65,18 @@ public struct CanaryManifestHost<Content: View>: View {
     private let inbox: CanaryManifestInbox
     private let repo: any CanaryManifestRepository
     private let content: Content
+    private let ready: Bool
     @State private var model: CanaryManifestViewModel?
 
-    public init(inbox: CanaryManifestInbox, repo: any CanaryManifestRepository, @ViewBuilder content: () -> Content) {
+    /// [ready]: the vault is open. A document handed to the app before that waits in the inbox (and a dialog open at a lock
+    /// closes, nothing installed), as an invitation waits: the dialog is never over onboarding or the unlock (chosen; not in
+    /// the spec).
+    public init(
+        inbox: CanaryManifestInbox, repo: any CanaryManifestRepository, ready: Bool = true, @ViewBuilder content: () -> Content
+    ) {
         self.inbox = inbox
         self.repo = repo
+        self.ready = ready
         self.content = content()
     }
 
@@ -78,12 +85,18 @@ public struct CanaryManifestHost<Content: View>: View {
             .canaryManifestDialog(model?.prompt, onConfirm: { model?.confirm() }, onDismiss: { model?.dismiss() })
             .onAppear {
                 if model == nil { model = CanaryManifestViewModel(inbox: inbox, repo: repo) }
-                model?.inboxChanged()
+                follow()
             }
-            .onChange(of: inbox.document) { _, doc in if doc != nil { model?.inboxChanged() } }
+            .onChange(of: ready) { _, _ in follow() }
+            .onChange(of: inbox.document) { _, doc in if doc != nil { follow() } }
             // A wipe of this phone: the dialog closes, and nothing it was asking about is installed.
-            .onChange(of: inbox.resets) { _, _ in model?.inboxChanged() }
-            .onChange(of: inbox.unreadable) { _, _ in model?.inboxChanged() }
+            .onChange(of: inbox.resets) { _, _ in follow() }
+            .onChange(of: inbox.unreadable) { _, _ in follow() }
+    }
+
+    /// The inbox is read while the vault is open; when it is not, a dialog closes.
+    private func follow() {
+        if ready { model?.inboxChanged() } else { model?.dismiss() }
     }
 }
 #endif
