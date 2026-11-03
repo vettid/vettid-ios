@@ -155,7 +155,7 @@ struct AppRoot: View {
                     onLock: { Task { try? await vault.lock() } }
                 )
             }
-            .environment(\.bannerBudget, banners)
+            .bannerBudgetRoot(banners)
         }
             // The vault's time scale for every failure text below (STAGING-TIME-SCALE §5.2).
             .environment(\.vettIDTimeScale, vault.timeScale)
