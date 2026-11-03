@@ -29,6 +29,7 @@ final class AppComposition {
     let firstRun: FirstRunGate
     /// The app lock's start is under way (``startAppLock()``).
     private var startingAppLock = false
+    private var startAppLockAgain = false
     let vault: VaultManager
     /// The app lock (ANDROID-PLAN D6, IOS-PLAN ID17): its key in the Secure Enclave; off where there is none
     /// (``NoAppLockKeys``).
@@ -154,7 +155,12 @@ final class AppComposition {
     /// app becomes active while it is still pending. The lock stays pending only while the iPhone has not been unlocked
     /// since it started: any other failure of the cleanup gives way to the root's screen that says so.
     func startAppLock() {
-        guard appLock.state == .pending, !startingAppLock else { return }
+        guard appLock.state == .pending else { return }
+        // A request that comes while a start is under way (the iPhone was unlocked meanwhile) is run again once it ended.
+        if startingAppLock {
+            startAppLockAgain = true
+            return
+        }
         startingAppLock = true
         let gate = firstRun
         let lock = appLock
@@ -162,7 +168,13 @@ final class AppComposition {
         // The cleanup and the reads run off the main actor (the keychain and the files); the lock stays pending until they
         // are done, and the screen shows no lock screen before (chosen; not in the spec).
         Task { [weak self] in
-            defer { self?.startingAppLock = false }
+            defer {
+                self?.startingAppLock = false
+                if self?.startAppLockAgain == true {
+                    self?.startAppLockAgain = false
+                    self?.startAppLock()
+                }
+            }
             let cleaned = await Task.detached { Result { try gate.ensure() } }.value
             switch cleaned {
             case .success:

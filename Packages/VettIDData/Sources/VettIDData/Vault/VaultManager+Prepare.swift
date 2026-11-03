@@ -21,12 +21,16 @@ extension VaultManager {
         guard !record.closed else { return try prepared() }
         let recordFile = record.needsLoad ? record.file : nil
         let canaryStore = canary.needsLoad ? canary.store : nil
-        let reads = await Task.detached {
+        let recordGeneration = record.generation, canaryWipes = canary.wipes
+        var reads = await Task.detached {
             LocalFileReads(
                 record: recordFile.map { f in FileRead { try f.load() } },
                 canary: canaryStore.map { s in FileRead { try s.load() } }
             )
         }.value
+        // A reset of the record or a wipe meanwhile (the files were replaced or erased): what was read is stale and dropped.
+        if record.generation != recordGeneration { reads.record = nil }
+        if canary.wipes != canaryWipes || record.generation != recordGeneration { reads.canary = nil }
         try prepared(reads: reads)
     }
 }

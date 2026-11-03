@@ -96,6 +96,9 @@ public final class CanaryManifestManager: CanaryManifestRepository {
     /// Whether the file has not been read yet.
     var needsLoad: Bool { !loaded }
 
+    /// Bumped by every wipe (``forget()``): a read of the file made before one is not taken in.
+    var wipes: Int { generation }
+
     /// The view of what the file holds now (after the alternate channel retired it).
     func reload() {
         guard loaded else { return }
