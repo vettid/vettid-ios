@@ -146,11 +146,12 @@ extension OnboardingStrings {
             bundle: .module
         )
     }
-    static func unlockUpdateRefused(_ code: String) -> String {
+    /// [why]: the refusal in words (``refusalText(_:_:)``).
+    static func unlockUpdateRefused(_ why: String) -> String {
         String(
             localized: "unlock_update_refused",
             defaultValue: """
-                The update was refused (\(code)). Your vault stayed on its current release.
+                The update was refused. \(why) Your vault stayed on its current release.
                 """,
             bundle: .module
         )

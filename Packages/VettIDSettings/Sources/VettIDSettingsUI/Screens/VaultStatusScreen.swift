@@ -115,13 +115,16 @@ public struct VaultStatusContent: View {
 
     static func releaseText(_ r: ReleaseInfoView?) -> String {
         guard let r, let n = r.number else { return SettingsStrings.unknown }
+        // Only the vault's known words for a release are shown; another word is not.
+        guard ["active", "deprecated", "retired"].contains(r.status) else { return SettingsStrings.statusReleaseLastValue(Int(n)) }
         return SettingsStrings.statusReleaseValue(Int(n), r.status)
     }
 
     static func recoveryText(_ v: VaultOverview) -> String {
         if !v.recoveryOffered { return SettingsStrings.recoveryNotOffered }
         if let r = v.recovery { return recoveryLine(RecoveryLine.of(r)) }
-        return v.recoveryState ?? SettingsStrings.statusRecoveryNone
+        // A recovery state this app does not know is not shown as the vault wrote it.
+        return v.recoveryState == nil ? SettingsStrings.statusRecoveryNone : SettingsStrings.unknown
     }
 
     static func recoveryLine(_ l: RecoveryLine) -> String {

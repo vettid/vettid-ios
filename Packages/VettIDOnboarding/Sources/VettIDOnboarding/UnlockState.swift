@@ -112,6 +112,10 @@ public struct UnlockState: Equatable, Sendable, CustomStringConvertible, CustomD
     /// the release or of the vault's state. "Recover your vault" and support only.
     public var recoverOnly: Bool { preflightError == .releaseEnded || preflight?.rollback == true || stateRollback }
 
+    /// "Try again" is offered on a ``recoverOnly`` screen: the release check can be run again (an ended release, or a rollback
+    /// the check found), not for a rollback of the vault's state, which a new check of the release does not clear.
+    public var recheckOffered: Bool { recoverOnly && !stateRollback }
+
     /// "Erase VettID from this phone" is offered: never on a ``recoverOnly`` screen, which wins.
     public var eraseOffered: Bool { !recoverOnly && (notRecognised || keysGone) }
 

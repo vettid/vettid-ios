@@ -177,7 +177,7 @@ public final class OnboardingViewModel: OnboardingActions {
                 state.busy = false
                 state.error = e.kind
                 state.errorCode = e.code
-                state.errorRetryAt = e.kind == .enrollmentStarted && e.retryAfterSeconds > 0
+                state.errorRetryAt = (e.kind == .enrollmentStarted || e.kind == .rateLimited) && e.retryAfterSeconds > 0
                     ? Date().addingTimeInterval(Double(e.retryAfterSeconds)) : nil
                 onFailure()
             } catch {

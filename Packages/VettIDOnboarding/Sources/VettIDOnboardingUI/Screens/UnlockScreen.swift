@@ -198,7 +198,10 @@ public struct UnlockScreen: View {
     /// An ended release or a rollback wins: no erase there, whatever else the last answers said.
     @ViewBuilder private var wayForward: some View {
         if state.recoverOnly {
-            RecoverOnlyNotice(onRecover: onOpenAccountSite, contactSupport: contactSupport)
+            RecoverOnlyNotice(
+                onRecover: onOpenAccountSite, contactSupport: contactSupport,
+                onCheckAgain: state.recheckOffered ? { actions.retryPreflight() } : nil, checkAgainEnabled: state.retryAllowed
+            )
         } else if state.notRecognised {
             NotRecognisedNotice(erasing: state.erasing, onErase: { actions.askErase() })
         } else if state.keysGone {
@@ -404,7 +407,9 @@ struct UnlockMessageNotice: View {
                 .accessibilityIdentifier("move_back_failed")
         case .updateRefused(let code):
             NoticeCard(
-                .warning, title: OnboardingStrings.unlockTitle, message: OnboardingStrings.unlockUpdateRefused(code),
+                .warning, title: OnboardingStrings.unlockTitle, message: OnboardingStrings.unlockUpdateRefused(
+                    state.preflight?.offer.map { refusalText(code, Int($0.number)) } ?? OnboardingStrings.releaseUpdateRefusedOther(code)
+                ),
                 announce: .assertive
             )
         // An unreadable result is the "not recognised" notice, with its erase action.

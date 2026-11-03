@@ -167,6 +167,9 @@ struct StuckNotice: View {
 struct RecoverOnlyNotice: View {
     let onRecover: @MainActor () -> Void
     let contactSupport: @MainActor (_ done: @escaping @MainActor (Bool) -> Void) -> Void
+    /// Runs the release check again (nil: not offered).
+    var onCheckAgain: (@MainActor () -> Void)?
+    var checkAgainEnabled = true
     @State private var noMailApp = false
 
     var body: some View {
@@ -178,6 +181,9 @@ struct RecoverOnlyNotice: View {
                 TextLink(OnboardingStrings.unlockRecover, identifier: "recover_vault", action: onRecover)
                 TextLink(OnboardingStrings.unlockContactSupport, identifier: "contact_support") {
                     contactSupport { accepted in noMailApp = !accepted }
+                }
+                if let onCheckAgain {
+                    TextLink(OnboardingStrings.unlockRetry, identifier: "unlock_recheck", action: onCheckAgain).disabled(!checkAgainEnabled)
                 }
             }
         }

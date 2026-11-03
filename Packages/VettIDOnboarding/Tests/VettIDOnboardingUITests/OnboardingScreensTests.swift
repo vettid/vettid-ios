@@ -13,6 +13,14 @@ import VettIDUI
 /// rule; here ``OnboardingState/canContinueBackup``, which the screen uses as is, is checked in the model's tests.)
 @MainActor
 @Suite struct OnboardingScreensTests {
+    /// A rate-limited redeem says how long to wait (Android's text of the recovery); no wait left, the general text.
+    @Test func aRateLimitedRedeemSaysTheWait() {
+        let soon = Date().addingTimeInterval(90)
+        #expect(ErrorNotice.message(.rateLimited, soon, timeScale: 1).hasPrefix("Too many attempts. Try again in "))
+        #expect(ErrorNotice.message(.rateLimited, nil, timeScale: 1) == FailureKind.rateLimited.message)
+        #expect(ErrorNotice.message(.rateLimited, Date().addingTimeInterval(-5), timeScale: 1) == FailureKind.rateLimited.message)
+    }
+
     /// iPhone only: a refused start-over says from when it is possible; without a time, the general text.
     @Test func aRefusedStartOverSaysWhen() {
         let at = Date(timeIntervalSince1970: 1_800_000_000)

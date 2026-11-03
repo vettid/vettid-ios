@@ -45,6 +45,10 @@ import VettIDUI
         #expect(Set(codes.map { refusalText($0, 5) }).count == codes.count)
         #expect(refusalText("approval", 5) == "Your vault could not verify this phone's approval.")
         #expect(refusalText("not_moved", 5) == "Your vault did not move (not_moved).")
+        // A word that is not a code is not shown as it came.
+        #expect(refusalText("Not Moved!", 5) == "Your vault did not move (unknown).")
+        #expect(OnboardingStrings.unlockUpdateRefused(refusalText("downgrade", 5))
+            == "The update was refused. Release 5 is not newer than your vault's release. Your vault stayed on its current release.")
         var p = UpdateProgress(step: .failed, from: rel(4), to: rel(5), failure: .vaultUnavailable)
         p.failureCode = ReleaseUpdateManager.codeReleaseStarting
         #expect(updateFailureText(p, timeScale: 1) == "The new release did not start. Try again later.")

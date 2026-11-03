@@ -61,10 +61,12 @@ import VettIDUI
         for (name, s) in recoverOnly {
             #expect(s.recoverOnly, "\(name)")
             #expect(!s.eraseOffered, "\(name): no erase")
+            // The release check can be run again, except for a rollback of the vault's state.
+            #expect(s.recheckOffered == (name != "state rollback"), "\(name)")
         }
         #expect(keysGone.eraseOffered && !keysGone.recoverOnly)
         for (name, s) in ordinary {
-            #expect(!s.recoverOnly && !s.eraseOffered, "\(name)")
+            #expect(!s.recoverOnly && !s.eraseOffered && !s.recheckOffered, "\(name)")
         }
     }
 

@@ -2087,7 +2087,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The update was refused (%@). Your vault stayed on its current release."
+            "value": "The update was refused. %@ Your vault stayed on its current release."
           }
         }
       }

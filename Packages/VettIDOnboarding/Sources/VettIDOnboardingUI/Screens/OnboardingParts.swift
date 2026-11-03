@@ -17,7 +17,8 @@ struct ErrorNotice: View {
         if let kind = state.error {
             let text = override != nil && kind == override
                 ? overrideText ?? kind.message(timeScale: timeScale) : Self.message(kind, state.errorRetryAt, timeScale: timeScale)
-            NoticeCard(.urgent, title: OnboardingStrings.progressFailed, message: text, announce: .assertive)
+            let spoken = kind == .rateLimited ? Self.wait(until: state.errorRetryAt).map { RecoveryStrings.recoverRateLimitedWait(spokenDuration($0)) } : nil
+            NoticeCard(.urgent, title: OnboardingStrings.progressFailed, message: text, announce: .assertive, spokenMessage: spoken)
                 .padding(.top, Spacing.l)
                 .accessibilityIdentifier("error")
         }
@@ -25,9 +26,18 @@ struct ErrorNotice: View {
 }
 
 extension ErrorNotice {
+    /// The seconds still to wait until [retryAt], or nil when none are left.
+    static func wait(until retryAt: Date?, now: Date = Date()) -> Int64? {
+        guard let retryAt else { return nil }
+        let s = Int64(retryAt.timeIntervalSince(now).rounded(.up))
+        return s > 0 ? s : nil
+    }
+
     /// The failure's text at the vault's [timeScale]; a refused start-over (iPhone only) says from when it is possible.
     static func message(_ kind: FailureKind, _ retryAt: Date?, timeScale: UInt64) -> String {
         if kind == .enrollmentStarted, let retryAt { return FailureKind.enrollmentStartedText(after: retryAt) }
+        // A `429`'s wait (`Retry-After`), in Android's words for the recovery's (RecoveryStrings.recoverRateLimitedWait).
+        if kind == .rateLimited, let wait = wait(until: retryAt) { return RecoveryStrings.recoverRateLimitedWait(formatWait(wait)) }
         return kind.message(timeScale: timeScale)
     }
 }
