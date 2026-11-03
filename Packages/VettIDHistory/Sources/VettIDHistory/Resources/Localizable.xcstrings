@@ -386,6 +386,17 @@
         }
       }
     },
+    "history_authn_withdrawn_muted": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Requests muted"
+          }
+        }
+      }
+    },
     "history_authn_withdrawn_mute_cancel_button": {
       "extractionState": "manual",
       "localizations": {

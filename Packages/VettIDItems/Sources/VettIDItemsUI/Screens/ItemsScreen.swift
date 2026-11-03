@@ -220,6 +220,7 @@ struct ChoiceChip: View {
         .frame(minHeight: 32)
         .background(selected ? colors.secondaryContainer : ThemeColor(0, alpha: 0), in: RoundedRectangle(cornerRadius: 8))
         .overlay(RoundedRectangle(cornerRadius: 8).stroke(selected ? ThemeColor(0, alpha: 0) : colors.outline, lineWidth: 1))
+        .frame(minHeight: Spacing.minTarget)
         .contentShape(Rectangle())
         .accessibilityAddTraits(selected ? [.isSelected] : [])
     }

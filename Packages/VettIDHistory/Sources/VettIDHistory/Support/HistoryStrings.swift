@@ -181,6 +181,11 @@ public enum HistoryStrings {
         String(localized: "history_authn_withdrawn_mute_confirm_button", defaultValue: "Mute", bundle: .module)
     }
 
+    /// Said once the mute went through (draft; the words are Android's `connections_asks_muted_title`).
+    public static var withdrawnMuted: String {
+        String(localized: "history_authn_withdrawn_muted", defaultValue: "Requests muted", bundle: .module)
+    }
+
     public static var withdrawnMuteCancel: String {
         String(localized: "history_authn_withdrawn_mute_cancel_button", defaultValue: "Cancel", bundle: .module)
     }

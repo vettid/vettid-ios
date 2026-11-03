@@ -55,6 +55,8 @@ public struct HistoryEntryScreen: View {
                     .accessibilityIdentifier("history_entry_missing")
             }
         }
+        // The button pressed goes with the mute: it is said, once, and only for a mute made here.
+        .onChange(of: state.mutedHere) { _, muted in if muted { Announcer.announce(HistoryStrings.withdrawnMuted, .polite) } }
         .accessibilityIdentifier("history_entry")
     }
 

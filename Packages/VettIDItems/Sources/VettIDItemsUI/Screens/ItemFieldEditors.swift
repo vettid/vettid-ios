@@ -340,7 +340,8 @@ struct MonthPicker: View {
                 Text(String(year)).vettIDFont(.titleMedium).frame(maxWidth: .infinity).accessibilityIdentifier("item_month_year")
                 IconButton(.chevronForward, label: ItemsStrings.cdNextYear) { year = min(9_999, year + 1) }
             }
-            LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 4), spacing: Spacing.s) {
+            // The chips are 44 pt targets around 32 pt pills: no spacing, so the gaps seen stay near what they were.
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 4), spacing: 0) {
                 ForEach(1...12, id: \.self) { m in
                     VettIDFilterChip(Calendar.current.shortMonthSymbols[m - 1], selected: m == month) { month = m }
                         .accessibilityIdentifier("item_month_\(m)")

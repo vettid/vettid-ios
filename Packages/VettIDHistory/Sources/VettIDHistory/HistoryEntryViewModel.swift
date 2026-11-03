@@ -15,6 +15,8 @@ public struct HistoryEntryState: Equatable, Sendable, CustomStringConvertible, C
     public var asksMuted = false
     /// The mute's confirmation is showing (a service connection's).
     public var confirmMute = false
+    /// The mute went through from this screen (not a muted flag that arrived with the connections): it is said once.
+    public var mutedHere = false
     public var muting = false
     /// Why the mute failed, nil otherwise.
     public var muteError: FailureKind?
@@ -191,6 +193,7 @@ public final class HistoryEntryViewModel {
             do {
                 try await connections.setAsksMuted(id, muted: true)
                 self?.local.asksMuted = true
+                self?.local.mutedHere = true
             } catch {
                 self?.local.muteError = failureKind(error)
             }

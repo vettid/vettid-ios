@@ -147,6 +147,12 @@ enum ApprovalsStrings {
         String(localized: "approvals_authn_withdrawn_mute_cancel_button", defaultValue: "Cancel", bundle: .module)
     }
 
+    /// Said once the mute went through (draft; the words are Android's `connections_asks_muted_title`): the button that
+    /// was pressed is gone, so VoiceOver would otherwise say nothing.
+    static var withdrawnMuted: String {
+        String(localized: "approvals_authn_withdrawn_muted", defaultValue: "Requests muted", bundle: .module)
+    }
+
     static var withdrawnClose: String { String(localized: "approvals_authn_withdrawn_close", defaultValue: "Close", bundle: .module) }
 
     static var anAgent: String { String(localized: "approvals_an_agent", defaultValue: "An agent", bundle: .module) }

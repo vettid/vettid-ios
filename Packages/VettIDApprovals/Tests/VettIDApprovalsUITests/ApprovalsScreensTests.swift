@@ -94,6 +94,34 @@ import VettIDApprovals
         #expect(expected.allSatisfy(spoken.contains))
     }
 
+    /// The mute of a withdrawn request is said once it went through from this screen (the button pressed is gone), and not
+    /// when the connection's muted flag turns true by itself (a late snapshot, a mute from another device).
+    @Test func aMuteMadeHereIsAnnouncedAndAnotherIsNot() async {
+        struct Probe: View {
+            let base: ApprovalDetailState
+            let hereLater: Bool
+            let flagLater: Bool
+            @State private var later = false
+            var body: some View {
+                let shown = { () -> ApprovalDetailState in
+                    var s = base
+                    if later { s.mutedHere = hereLater; s.asksMuted = hereLater || flagLater }
+                    return s
+                }()
+                ApprovalDetailScreen(state: shown, actions: DecisionActions())
+                    .onAppear { DispatchQueue.main.async { later = true } }
+            }
+        }
+        var base = ApprovalDetailState(key: "auth:a1")
+        base.approval = Samples.auth()
+        base.withdrawn = true
+        let said = Announcer.Event.announcement(ApprovalsStrings.withdrawnMuted, .polite)
+        let here = await announcements(of: Probe(base: base, hereLater: true, flagLater: false), until: [said]) { $0 == ApprovalsStrings.withdrawnMuted }
+        #expect(here.contains(said))
+        let elsewhere = await announcements(of: Probe(base: base, hereLater: false, flagLater: true), until: [said]) { $0 == ApprovalsStrings.withdrawnMuted }
+        #expect(elsewhere.isEmpty)
+    }
+
     /// A request decided here closes its screen.
     @Test func aDecidedRequestCloses() {
         var closed = 0

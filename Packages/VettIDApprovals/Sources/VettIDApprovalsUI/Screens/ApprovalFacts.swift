@@ -363,9 +363,10 @@ struct ShareFacts: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
+            .frame(minHeight: Spacing.touchTarget)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .frame(minHeight: Spacing.touchTarget)
         .accessibilityAddTraits(on ? .isSelected : [])
         .accessibilityIdentifier("share_item_\(i.itemID)")
     }

@@ -77,7 +77,11 @@ public struct VoteScreen: View {
         .sheet(isPresented: Binding(get: { state.restoreAsked && !covered }, set: { _ in })) {
             RestoreSheet(state: state, actions: actions).vettIDGrowingSheet().interactiveDismissDisabled(true)
         }
-        .sheet(isPresented: Binding(get: { state.releaseDialog && !covered }, set: { if !$0 && !covered { actions.onDismissRelease() } })) {
+        .sheet(
+            isPresented: Binding(get: { state.releaseDialog && !covered }, set: { if !$0 && !covered { actions.onDismissRelease() } }),
+            // Said when the sheet is gone, so that it is not cut off by the sheet closing: a release that went through.
+            onDismiss: { Self.releaseSheetGone(state) }
+        ) {
             ReleaseSheet(state: state, actions: actions).vettIDGrowingSheet()
         }
         .confirmDialog(
@@ -108,6 +112,12 @@ public struct VoteScreen: View {
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.protectedDataWillBecomeUnavailableNotification)) { _ in
             actions.onForgetSecrets()
         }
+    }
+
+    /// The release sheet is gone: a release that went through is said now, not while the sheet closes (a cancelled sheet says
+    /// nothing).
+    static func releaseSheetGone(_ state: VoteScreenState) {
+        if state.released { Announcer.announce(VoteStrings.voteReleased, .polite) }
     }
 
     /// While a cast is on its way the sheet it was started from stays, busy; the sheet shows the confirm step, then the

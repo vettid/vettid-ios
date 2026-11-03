@@ -45,9 +45,9 @@ public struct WhatsNew: View {
                 if ReleaseLog.openable(notesURL), let url = URL(string: notesURL) {
                     Button { openURL(url) } label: {
                         Text(OnboardingStrings.releaseNotesFull).vettIDFont(.labelLarge).foregroundStyle(colors.primary)
+                            .textButtonTarget()
                     }
                     .buttonStyle(.plain)
-                    .frame(minHeight: Spacing.touchTarget)
                     .accessibilityIdentifier("whats_new_full")
                 }
             }

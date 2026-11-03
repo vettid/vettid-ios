@@ -234,6 +234,7 @@ public struct InfoBanner: View {
                             .fixedSize()
                             .padding(.horizontal, Spacing.m)
                             .frame(minHeight: Spacing.touchTarget)
+                            .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                 }
@@ -479,5 +480,13 @@ public struct FormScaffold<Header: View, Content: View, TopActions: View>: View 
         // The in-app Back is disabled while a request is in flight; the edge swipe would go around it and free the screen that
         // asked, so it is off too (held per owner, ``View/blocksBackGesture(_:)``).
         .blocksBackGesture(busy)
+    }
+}
+
+public extension View {
+    /// The label of a plain text button, as tall as a target and hit over its whole frame: put it inside the button's
+    /// label, since a frame outside a `.plain` button leaves the hit area at the text (IOS-PLAN ID5).
+    func textButtonTarget() -> some View {
+        frame(minHeight: Spacing.touchTarget).contentShape(Rectangle())
     }
 }

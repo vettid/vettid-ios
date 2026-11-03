@@ -22,6 +22,7 @@ public struct RowAction {
 /// names a service connection, read with it (IOS-PLAN §4.13). Mirrors vettid-android `VettIdListRow`.
 public struct VettIDListRow<Below: View>: View {
     @Environment(\.vettIDColors) private var colors
+    @Environment(\.dynamicTypeSize) private var typeSize
     let title: String
     let supporting: String?
     let meta: String?
@@ -72,6 +73,8 @@ public struct VettIDListRow<Below: View>: View {
     public var body: some View {
         let lineColor = emphasized ? colors.onSurface : colors.onSurfaceVariant
         let weight: Font.Weight = emphasized ? .semibold : .regular
+        // One line each, but two at the accessibility sizes, where one would cut most of a name or a summary.
+        let lines = typeSize.isAccessibilitySize ? 2 : 1
         HStack(alignment: .center, spacing: 0) {
             InitialTile(tileName, size: 40, style: tileStyle, photo: tilePhoto, icon: tileIcon, colors: tileColors)
             Spacer().frame(width: Spacing.l)
@@ -81,7 +84,7 @@ public struct VettIDListRow<Below: View>: View {
                         Text(title)
                             .vettIDFont(.bodyLarge, weight: weight)
                             .foregroundStyle(lineColor)
-                            .lineLimit(1)
+                            .lineLimit(lines)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     if let meta {
@@ -98,7 +101,7 @@ public struct VettIDListRow<Below: View>: View {
                             Text(supporting)
                                 .vettIDFont(.bodyMedium)
                                 .foregroundStyle(lineColor)
-                                .lineLimit(1)
+                                .lineLimit(lines)
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
                     } else {
@@ -209,7 +212,7 @@ public struct DetailCard<Content: View>: View {
             .padding(Spacing.l)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(colors.background, in: VettIDShape.card)
-            .overlay(VettIDShape.card.stroke(colors.outline, lineWidth: 1))
+            .overlay(VettIDShape.card.stroke(colors.outlineVariant, lineWidth: 1))
             .padding(.horizontal, Spacing.s)
     }
 }

@@ -374,9 +374,9 @@ struct RecoveryPendingNotice: View {
         NoticeCard(.urgent, title: OnboardingStrings.unlockRecoveryTitle, message: OnboardingStrings.unlockRecoveryBody) {
             Button { actions.cancelRecoveryAndUnlock() } label: {
                 Text(OnboardingStrings.unlockRecoveryCancel).vettIDFont(.labelLarge).foregroundStyle(colors.error)
+                    .textButtonTarget()
             }
             .buttonStyle(.plain)
-            .frame(minHeight: Spacing.touchTarget)
             .disabled(!state.cancelAllowed)
             .accessibilityIdentifier("recovery_cancel")
         }

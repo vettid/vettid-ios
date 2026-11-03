@@ -150,9 +150,9 @@ struct OlderRow: View {
             } else {
                 Button(action: onLoad) {
                     Text(MessagesStrings.loadOlder).vettIDFont(.labelLarge, weight: .semibold).foregroundStyle(colors.primary)
+                        .textButtonTarget()
                 }
                 .buttonStyle(.plain)
-                .frame(minHeight: Spacing.touchTarget)
             }
         }
         .frame(maxWidth: .infinity)

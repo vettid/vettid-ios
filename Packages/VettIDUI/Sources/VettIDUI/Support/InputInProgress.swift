@@ -12,8 +12,9 @@ public final class InputInProgress {
 
     public init() {}
 
-    /// Whether any screen holds input now. (Calls, when iOS has them, will need a rule of their own: never cover while a
-    /// call holds, neither at a return from the background nor at a push over the call screen. To be decided with them.)
+    /// Whether any screen holds input now. (VAULT-MESSAGING §3.6.5 says the check does
+    /// not interrupt a call, and iOS has no calls yet. When calls land, the call's own UI stays up while the shell is
+    /// covered by the check as usual (chosen; not in the spec yet), so a call does not count here.)
     public var active: Bool { !holders.isEmpty }
 
     func set(_ id: UUID, _ on: Bool) {

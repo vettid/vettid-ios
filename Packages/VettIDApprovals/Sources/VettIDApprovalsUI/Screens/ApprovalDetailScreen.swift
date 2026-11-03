@@ -144,6 +144,7 @@ public struct ApprovalDetailScreen: View {
             dismissLabel: ApprovalsStrings.withdrawnMuteCancel,
             onConfirm: actions.onMute
         )
+        .onChange(of: state.mutedHere) { _, muted in if muted { Announcer.announce(ApprovalsStrings.withdrawnMuted, .polite) } }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("approval_detail")
     }

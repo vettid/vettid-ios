@@ -47,6 +47,10 @@ struct ContrastTests {
         expectContrast("favoriteTile/background", c.favoriteTile, c.background, 3)
         expectContrast("onAvatar/avatar", c.onAvatar, c.avatar, 4.5)
         expectContrast("error/background", c.error, c.background, 4.5)
+        // The outline is the only boundary of a text field, a chip and a secondary button (3:1, WCAG 1.4.11).
+        for (name, bg) in surfaces + [("card", c.card), ("groupedBackground", c.groupedBackground)] {
+            expectContrast("outline/\(name)", c.outline, bg, 3)
+        }
     }
 }
 
@@ -87,7 +91,30 @@ struct SymbolTests {
 private func UIImageExists(systemName: String) -> Bool { UIImage(systemName: systemName) != nil }
 
 /// The bundled fonts register and each weight the type scale uses resolves to its face.
+@MainActor
 struct FontTests {
+    /// Bold Text steps every weight of the scale up one named instance (a custom font does not follow the setting by
+    /// itself); the heaviest stays; every stepped face exists.
+    @Test func boldTextStepsEachWeightUpOneInstance() {
+        VettIDFonts.register()
+        #expect(VettIDFonts.bolder(.regular) == .medium)
+        #expect(VettIDFonts.bolder(.medium) == .semibold)
+        #expect(VettIDFonts.bolder(.semibold) == .bold)
+        #expect(VettIDFonts.bolder(.bold) == .heavy)
+        #expect(VettIDFonts.bolder(.heavy) == .heavy)
+        for style in VettIDTextStyle.allCases {
+            let s = style.spec
+            #expect(UIFont(name: VettIDFonts.postScriptName(s.family, VettIDFonts.bolder(s.weight)), size: 12) != nil, "\(style)")
+        }
+        // The UIKit fonts follow the trait collection's Bold Text.
+        let bold = UITraitCollection(legibilityWeight: .bold)
+        let usual = UITraitCollection(legibilityWeight: .regular)
+        let regular = VettIDTextStyle.bodyLarge.uiFont(compatibleWith: usual)
+        let stepped = VettIDTextStyle.bodyLarge.uiFont(compatibleWith: bold)
+        #expect(regular.fontName != stepped.fontName)
+        #expect(stepped.fontName == VettIDFonts.postScriptName(.body, .medium))
+    }
+
     @Test func everyWeightOfTheScaleResolves() {
         VettIDFonts.register()
         for style in VettIDTextStyle.allCases {

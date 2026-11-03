@@ -45,6 +45,8 @@ public struct ApprovalDetailState: Equatable, Sendable, CustomStringConvertible,
     public var asksMuted = false
     /// The mute's confirmation is showing (a service connection's).
     public var confirmMute = false
+    /// The mute went through from this screen (not a muted flag that arrived with the connections): it is said once.
+    public var mutedHere = false
     /// The mute is on its way: the notice stays, its action waits.
     public var muting = false
     /// Why the mute failed; the only failure a withdrawn request's screen shows.
@@ -355,6 +357,7 @@ public final class ApprovalDetailViewModel {
             do {
                 try await connections.setAsksMuted(id, muted: true)
                 self?.local.asksMuted = true
+                self?.local.mutedHere = true
             } catch {
                 self?.local.muteError = failureKind(error)
             }

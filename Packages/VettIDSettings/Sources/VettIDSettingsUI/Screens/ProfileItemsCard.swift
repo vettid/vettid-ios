@@ -25,9 +25,9 @@ struct ProfileItemsCard: View {
                     Button { actions.onOpenItem?(i.itemID) } label: {
                         Text(i.name).vettIDFont(.bodyLarge).foregroundStyle(colors.onSurface)
                             .frame(maxWidth: .infinity, alignment: .leading)
+                            .textButtonTarget()
                     }
                     .buttonStyle(.plain)
-                    .frame(minHeight: Spacing.touchTarget)
                     ProfileTextButton(ProfileStrings.itemsRemove, enabled: !state.itemsBusy) { actions.onRemoveItem(i) }
                 }
                 .accessibilityElement(children: .contain)

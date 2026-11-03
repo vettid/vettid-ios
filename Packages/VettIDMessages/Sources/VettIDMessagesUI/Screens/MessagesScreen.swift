@@ -197,9 +197,9 @@ struct MessagesError: View {
         NoticeCard(.warning, title: title, message: kind.message(timeScale: timeScale), announce: announce) {
             Button(action: action) {
                 Text(actionLabel).vettIDFont(.labelLarge, weight: .semibold).foregroundStyle(colors.primary)
+                    .textButtonTarget()
             }
             .buttonStyle(.plain)
-            .frame(minHeight: Spacing.touchTarget)
             .accessibilityIdentifier("messages_error_action")
         }
         .accessibilityIdentifier("messages_error")

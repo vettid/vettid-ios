@@ -59,9 +59,9 @@ struct TextLink: View {
     var body: some View {
         Button(action: action) {
             Text(label).vettIDFont(.labelLarge).foregroundStyle(colors.primary).multilineTextAlignment(.leading)
+                .textButtonTarget()
         }
         .buttonStyle(.plain)
-        .frame(minHeight: Spacing.touchTarget)
         .accessibilityIdentifier(identifier ?? "")
     }
 }

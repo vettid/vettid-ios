@@ -116,6 +116,8 @@ public struct RemovableTagChip: View {
             .padding(.trailing, Spacing.s)
             .frame(minHeight: 32)
             .background(c.container, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .frame(minHeight: Spacing.minTarget)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .accessibilityLabel(removeLabel)
@@ -149,6 +151,7 @@ public struct VettIDFilterChip: View {
             .frame(minHeight: 32)
             .background(selected ? colors.secondaryContainer : ThemeColor(0, alpha: 0), in: RoundedRectangle(cornerRadius: 8))
             .overlay(RoundedRectangle(cornerRadius: 8).stroke(selected ? ThemeColor(0, alpha: 0) : colors.outline, lineWidth: 1))
+            .frame(minHeight: Spacing.minTarget)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -175,6 +178,7 @@ public struct ClearFiltersChip: View {
             .padding(.horizontal, Spacing.m)
             .frame(minHeight: 32)
             .overlay(RoundedRectangle(cornerRadius: 8).stroke(colors.outline, lineWidth: 1))
+            .frame(minHeight: Spacing.minTarget)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

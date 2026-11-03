@@ -4,8 +4,9 @@ import Testing
 import UIKit
 @testable import VettIDUI
 
-/// The "Service" label (IOS-PLAN §4.13): at the trailing end of a list row's line, which stays one line high whatever the
-/// name's length; beside or under a page's name, never cutting either.
+/// The "Service" label (IOS-PLAN §4.13): at the trailing end of a list row's line, which stays as high as it is without the
+/// label whatever the name's length (the label goes under the line from the accessibility sizes); beside or under a page's
+/// name, never cutting either.
 @MainActor
 struct ServiceLabelTests {
     private func size(_ view: some View, width: CGFloat = 390, type: DynamicTypeSize = .large) -> CGSize {
@@ -37,6 +38,23 @@ struct ServiceLabelTests {
         #expect(size(labelled).height == size(plain).height)
         let second = VettIDListRow(title: "A new vote", supporting: long, supportingService: true)
         #expect(size(second).height == size(plain).height)
+    }
+
+    /// From the accessibility sizes the label goes under the line, so the name keeps the whole width.
+    @Test func aRowLineStacksTheLabelAtTheAccessibilitySizes() {
+        let plain = size(line("Example Bank", false), type: .accessibility3).height
+        #expect(size(line("Example Bank", true), type: .accessibility3).height > plain + 10)
+        // At the usual size the label is beside the name.
+        #expect(size(line("Example Bank", true)).height < size(line("Example Bank", false)).height + 10)
+    }
+
+    /// A row's title and second line take two lines at the accessibility sizes, one at the others.
+    @Test func aRowShowsTwoLinesAtTheAccessibilitySizes() {
+        let long = String(repeating: "Adopt the budget for next year ", count: 8)
+        let row = VettIDListRow(title: long, supporting: long)
+        let short = VettIDListRow(title: "Short", supporting: "Short")
+        #expect(size(row, type: .accessibility3).height > size(short, type: .accessibility3).height + 40)
+        #expect(size(row).height == size(short).height)
     }
 
     @Test func aPageNameStacksTheLabelWhenTooLong() {

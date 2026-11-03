@@ -16,6 +16,8 @@ public enum Spacing {
 
     /// Minimum touch target (Android's 48 dp; above Apple's 44 pt minimum).
     public static let touchTarget: CGFloat = 48
+    /// The least a target may measure (Apple's HIG: 44 pt), for a control drawn smaller than it is hit.
+    public static let minTarget: CGFloat = 44
 }
 
 /// Shapes of VettID components. Mirrors vettid-android `core/ui/…/theme/Shape.kt`.

@@ -20,6 +20,10 @@ public enum VettIDPalette {
     public static let navy800 = ThemeColor(0x26264A)
     public static let navy700 = ThemeColor(0x30305A)
     public static let navy600 = ThemeColor(0x3E3E6C)
+    /// The boundary of a text field, chip or button (``VettIDColors/outline``): 3:1 (WCAG 1.4.11) against the dark background,
+    /// low, container and grouped surfaces and the card, not against the high ones (chosen; not in the spec; Android's
+    /// `outline` is a different value).
+    public static let navyOutline = ThemeColor(0x70709C)
     public static let indigo = ThemeColor(0x2E2D88) // --surface-indigo
 
     /// Favourite connections' tiles: a teal that sits with navy and gold.
@@ -31,6 +35,10 @@ public enum VettIDPalette {
     public static let mist100 = ThemeColor(0xF4F4F6) // --band-light
     public static let mist200 = ThemeColor(0xE6E6EE)
     public static let mist300 = ThemeColor(0xD9D9DF) // --border-light
+    /// The boundary of a text field, chip or button (``VettIDColors/outline``): 3:1 (WCAG 1.4.11) against the light background,
+    /// low, container and grouped surfaces and the card, not against the high ones (chosen; not in the spec; Android's
+    /// `outline` is a different value).
+    public static let mistOutline = ThemeColor(0x85858F)
 
     public static let inkHigh = ThemeColor(0xF7F7FA) // --ink-hi
     public static let inkBody = ThemeColor(0xA9A9C2)

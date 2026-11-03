@@ -59,6 +59,17 @@ import VettIDVault
         m.askMute(true)
         await m.settle()
         #expect(connections.calls.contains("asksMute:c1:true") && m.state.asksMuted && !m.state.offersMute)
+        #expect(m.state.mutedHere)
+    }
+
+    /// A muted flag that arrives with the connections is not a mute made here, so nothing is said for it.
+    @Test func aFlagFromTheConnectionsIsNotAMuteMadeHere() async {
+        var muted = connection("c1")
+        muted.asks = AskState(muted: true)
+        connections.connections = [muted]
+        let m = await model()
+        #expect(m.state.asksMuted && !m.state.mutedHere)
+        #expect(HistoryStrings.withdrawnMuted == "Requests muted")
     }
 
     @Test func aServicesMuteIsConfirmedFirst() async {
