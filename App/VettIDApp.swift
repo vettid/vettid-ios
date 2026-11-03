@@ -2,6 +2,7 @@ import Combine
 import SwiftUI
 import UIKit
 import VettIDAltChan
+import VettIDConnections
 import VettIDData
 import VettIDOnboarding
 import VettIDOnboardingUI
