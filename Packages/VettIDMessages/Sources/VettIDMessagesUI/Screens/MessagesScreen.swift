@@ -64,6 +64,10 @@ public struct MessagesScreen: View {
         .accessibilityIdentifier("messages_screen")
     }
 
+    /// The list reads again by itself once the daily check passes (``MessagesViewModel`` follows the owner check): a vault on
+    /// hold is said as held, with no "Try again".
+    static let retriesByItself = true
+
     /// What the screen shows: conversations that could not be read are never the empty state.
     static func phase(_ state: MessagesState) -> ListPhase {
         ListPhase.of(loading: state.loading, empty: state.conversations.isEmpty, failed: state.error != nil)
@@ -76,7 +80,10 @@ public struct MessagesScreen: View {
                 .accessibilityIdentifier("messages_loading")
         } else if phase == .failed, let error = state.error {
             ScrollView {
-                MessagesError(kind: error, actionLabel: MessagesStrings.retry, action: actions.onRetry).padding(Spacing.xl)
+                MessagesError(
+                    kind: error, actionLabel: MessagesStrings.retry, retriesByItself: Self.retriesByItself, action: actions.onRetry
+                )
+                .padding(Spacing.xl)
             }
         } else if state.conversations.isEmpty && state.searching {
             EmptyState(icon: .search, title: MessagesStrings.noMatchTitle, message: MessagesStrings.noMatchBody)
@@ -89,8 +96,10 @@ public struct MessagesScreen: View {
                 LazyVStack(spacing: 0) {
                     // A refresh that failed keeps the conversations shown and says why.
                     if phase.failedAbove(failed: state.error != nil), let error = state.error {
-                        MessagesError(kind: error, actionLabel: MessagesStrings.retry, action: actions.onRetry)
-                            .padding(.horizontal, Spacing.gutter).padding(.vertical, Spacing.s)
+                        MessagesError(
+                            kind: error, actionLabel: MessagesStrings.retry, retriesByItself: Self.retriesByItself, action: actions.onRetry
+                        )
+                        .padding(.horizontal, Spacing.gutter).padding(.vertical, Spacing.s)
                     }
                     ForEach(state.conversations) { c in
                         ConversationItem(summary: c) { actions.onOpen(c.connection.id) }
@@ -164,9 +173,27 @@ struct MessagesError: View {
     var title = MessagesStrings.errorTitle
     /// Spoken when it appears: a failed read waits its turn, an action's failure interrupts.
     var announce = Announce.polite
+    /// The screen's view model reads again by itself once the daily check passes (it follows the owner check).
+    var retriesByItself = false
     let action: @MainActor () -> Void
 
+    /// A vault on hold (VAULT-MESSAGING §3.6.3) on a screen that reads again by itself: said as held, with no action that
+    /// cannot help.
+    static func held(_ kind: FailureKind, retriesByItself: Bool) -> Bool { retriesByItself && kind == .ownerCheckRequired }
+
+    /// The held notice's body: the failure's own message for now (the owner may choose a text of its own).
+    static func heldBody(_ kind: FailureKind, timeScale: UInt64) -> String { kind.message(timeScale: timeScale) }
+
     var body: some View {
+        if Self.held(kind, retriesByItself: retriesByItself) {
+            NoticeCard(.info, title: MessagesStrings.heldTitle, message: Self.heldBody(kind, timeScale: timeScale), announce: announce)
+                .accessibilityIdentifier("messages_held")
+        } else {
+            failed
+        }
+    }
+
+    private var failed: some View {
         NoticeCard(.warning, title: title, message: kind.message(timeScale: timeScale), announce: announce) {
             Button(action: action) {
                 Text(actionLabel).vettIDFont(.labelLarge, weight: .semibold).foregroundStyle(colors.primary)

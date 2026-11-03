@@ -149,6 +149,10 @@ enum MessagesStrings {
 
     static var newTitle: String { String(localized: "messages_new_title", defaultValue: "New message", bundle: .module) }
 
+    /// The conversations could not be read because the vault is on hold (VAULT-MESSAGING §3.6.3). Draft text for the
+    /// owner (chosen; not in the spec).
+    static var heldTitle: String { String(localized: "messages_held_title", defaultValue: "Messages are on hold", bundle: .module) }
+
     /// The new-message picker's connections could not be read: vettid-android's `connections_error_title`.
     static var newErrorTitle: String {
         String(localized: "messages_new_error_title", defaultValue: "Could not load connections", bundle: .module)

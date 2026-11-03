@@ -11,6 +11,9 @@ public final class FakeSharing: SharingRepository {
     public var calls: [String] = []
     /// A failure the next call of that name throws (once).
     public var fail: [String: VaultFailure] = [:]
+    /// Calls (by name, as recorded) that wait for their hold before they answer (reads and changes that overlap); a
+    /// failure set in ``fail`` is thrown after the wait. For `refreshTags`, `setTag:<tag>`, `rules` and `grants`.
+    public var holds: [String: TestHold] = [:]
     public var registry = TagRegistry(version: 1, tags: [])
     public var rulesStored: [ShareRule] = []
     /// What a rename or a delete answers.
@@ -58,6 +61,13 @@ public final class FakeSharing: SharingRepository {
         colors = c
     }
 
+    private func held(_ n: String) async throws {
+        let failure = fail.removeValue(forKey: n)
+        calls.append(n)
+        if let hold = holds[n] { await hold.wait() }
+        if let failure { throw failure }
+    }
+
     private func call(_ n: String) throws {
         calls.append(n)
         if let f = fail.removeValue(forKey: n) { throw f }
@@ -73,7 +83,7 @@ public final class FakeSharing: SharingRepository {
 
     @discardableResult
     public func refreshTags() async throws -> TagRegistry {
-        try call("refreshTags")
+        try await held("refreshTags")
         publish()
         return registry
     }
@@ -90,7 +100,7 @@ public final class FakeSharing: SharingRepository {
     }
 
     public func setTag(_ tag: String, description: String?, color: String?) async throws {
-        try call("setTag:\(tag)")
+        try await held("setTag:\(tag)")
         let icon = registry.tags.first { $0.tag == tag }?.icon
         let entry = TagView(tag: tag, color: color, description: description, icon: icon)
         registry = TagRegistry(version: registry.version + 1, tags: registry.tags.filter { $0.tag != tag } + [entry])
@@ -140,7 +150,7 @@ public final class FakeSharing: SharingRepository {
     }
 
     public func rules(connectionID: String?) async throws -> [ShareRule] {
-        try call("rules")
+        try await held("rules")
         return rulesStored.filter { connectionID == nil || $0.connectionID == connectionID }.sorted { $0.ruleID < $1.ruleID }
     }
 
@@ -173,7 +183,7 @@ public final class FakeSharing: SharingRepository {
     }
 
     public func grants() async throws -> GrantLists {
-        try call("grants")
+        try await held("grants")
         return GrantLists(given: given, received: received, requested: requested)
     }
 

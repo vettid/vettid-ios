@@ -63,6 +63,12 @@ public enum HistoryStrings {
         )
     }
 
+    /// History could not be read because the vault is on hold (VAULT-MESSAGING §3.6.3). Draft text for the owner (chosen;
+    /// not in the spec).
+    public static var heldTitle: String {
+        String(localized: "history_held_title", defaultValue: "History is on hold", bundle: .module)
+    }
+
     public static var errorTitle: String {
         String(
             localized: "history_error_title",

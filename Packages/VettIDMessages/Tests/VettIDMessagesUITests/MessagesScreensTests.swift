@@ -32,7 +32,7 @@ import VettIDUI
             .appendingPathComponent("Sources/VettIDMessagesUI/Resources/Localizable.xcstrings")
         let doc = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
         let keys = try #require((doc["strings"] as? [String: Any])?.keys)
-        #expect(keys.count == 97)
+        #expect(keys.count == 98)
         let missing = "\u{0}missing"
         for key in keys {
             let text = Bundle.module.localizedString(forKey: key, value: missing, table: nil)
@@ -137,6 +137,20 @@ import VettIDUI
 
         #expect(MessagesStrings.newErrorTitle == "Could not load connections" && MessagesStrings.errorTitle == "Could not load messages")
         #expect(MessagesStrings.retry == "Try again")
+    }
+
+    /// A vault on hold: the list, which reads again by itself once the daily check passes, says it is on hold, with no "Try
+    /// again"; the picker and a conversation, which do not, keep it.
+    @Test func aHeldListIsSaidAsHeld() {
+        #expect(MessagesStrings.heldTitle == "Messages are on hold")
+        #expect(MessagesError.held(.ownerCheckRequired, retriesByItself: MessagesScreen.retriesByItself))
+        #expect(!MessagesError.held(.network, retriesByItself: MessagesScreen.retriesByItself))
+        #expect(!MessagesError.held(.ownerCheckRequired, retriesByItself: false))
+        var held = MessagesState()
+        held.loading = false
+        held.error = .ownerCheckRequired
+        #expect(MessagesScreen.phase(held) == .failed)
+        #expect(height(MessagesScreen(state: held, chrome: chrome, actions: MessagesActions())) > 0)
     }
 
     /// VAULT-MESSAGING 0.76.0 §10.8 steps 4 and 6: the preview is the first line that shows something, isolated; a photo with

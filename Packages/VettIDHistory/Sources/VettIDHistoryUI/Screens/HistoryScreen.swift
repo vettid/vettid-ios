@@ -27,7 +27,6 @@ public struct HistoryActions {
 /// History with a back arrow ([onBack]). Mirrors vettid-android `HistoryScreen`.
 public struct HistoryScreen: View {
     @Environment(\.vettIDColors) private var colors
-    @Environment(\.vettIDTimeScale) private var timeScale
     let state: HistoryState
     let chrome: ShellChrome?
     let onBack: (@MainActor () -> Void)?
@@ -87,14 +86,7 @@ public struct HistoryScreen: View {
         if state.loading && state.entries.isEmpty {
             ProgressView().tint(colors.primary.color).accessibilityIdentifier("history_loading")
         } else if let error = state.error, state.entries.isEmpty {
-            NoticeCard(
-                .warning, title: error.title(or: HistoryStrings.errorTitle), message: error.message(timeScale: timeScale),
-                announce: .polite
-            ) {
-                Button(HistoryStrings.retry, action: actions.onRetry).accessibilityIdentifier("history_retry")
-            }
-            .padding(Spacing.xl)
-            .accessibilityIdentifier("history_error")
+            ScrollView { HistoryFailureNotice(error: error, onRetry: actions.onRetry).padding(Spacing.xl) }
         } else if state.emptyHistory {
             EmptyState(icon: .history, title: HistoryStrings.emptyTitle, message: HistoryStrings.emptyBody)
                 .accessibilityIdentifier("history_empty")
@@ -160,7 +152,6 @@ struct HistorySearchField: View {
 struct HistoryEntryList: View {
     @Environment(\.vettIDColors) private var colors
     @Environment(\.colorScheme) private var scheme
-    @Environment(\.vettIDTimeScale) private var timeScale
     let state: HistoryState
     let actions: HistoryActions
     /// The next page is asked for this many rows before the end.
@@ -170,16 +161,10 @@ struct HistoryEntryList: View {
         let shown = state.shown
         ScrollView {
             LazyVStack(spacing: 0) {
-                // A refresh that failed with entries shown keeps them and says why, with "Try again".
-                if let error = state.error, state.refreshFailed {
-                    NoticeCard(
-                        .warning, title: error.title(or: HistoryStrings.errorTitle), message: error.message(timeScale: timeScale),
-                        announce: .polite
-                    ) {
-                        Button(HistoryStrings.retry, action: actions.onRetry).accessibilityIdentifier("history_retry")
-                    }
-                    .padding(.horizontal, Spacing.gutter).padding(.vertical, Spacing.s)
-                    .accessibilityIdentifier("history_error")
+                // A refresh that failed (or a vault on hold) with entries shown keeps them and says why.
+                if let error = state.error, Self.saysAbove(state) {
+                    HistoryFailureNotice(error: error, onRetry: actions.onRetry)
+                        .padding(.horizontal, Spacing.gutter).padding(.vertical, Spacing.s)
                 }
                 ForEach(Array(shown.enumerated()), id: \.element.seq) { i, e in
                     let row = state.row(e)
@@ -215,8 +200,15 @@ struct HistoryEntryList: View {
 
     static func footer(_ state: HistoryState) -> Footer {
         if state.loadingMore || (state.loading && !state.entries.isEmpty) { return .loading }
-        if state.error != nil { return state.refreshFailed ? .none : .retry }
+        if state.error != nil { return saysAbove(state) ? .none : .retry }
         return state.end ? .end : .more
+    }
+
+    /// A failure is said above the entries: a refresh that failed, or a vault on hold (whatever read it refused), which
+    /// the list reads again by itself once the daily check passes.
+    static func saysAbove(_ state: HistoryState) -> Bool {
+        guard let error = state.error else { return false }
+        return state.refreshFailed || HistoryFailureNotice.held(error)
     }
 
     @ViewBuilder private var footer: some View {
@@ -238,6 +230,35 @@ struct HistoryEntryList: View {
             Text(HistoryStrings.end).vettIDFont(.bodySmall).foregroundStyle(colors.onSurfaceVariant)
         case .more:
             Color.clear.frame(height: 1).onAppear(perform: actions.onLoadMore)
+        }
+    }
+}
+
+/// History's read failure: why, with "Try again". A vault on hold (VAULT-MESSAGING §3.6.3) is said as held, with no "Try
+/// again": the list reads again by itself once the daily check passes (``HistoryViewModel`` follows the owner check).
+struct HistoryFailureNotice: View {
+    @Environment(\.vettIDTimeScale) private var timeScale
+    let error: FailureKind
+    let onRetry: @MainActor () -> Void
+
+    /// Whether [error] is the vault on hold, said without "Try again".
+    static func held(_ error: FailureKind) -> Bool { error == .ownerCheckRequired }
+
+    /// The held notice's body: the failure's own message for now (the owner may choose a text of its own).
+    static func heldBody(_ error: FailureKind, timeScale: UInt64) -> String { error.message(timeScale: timeScale) }
+
+    var body: some View {
+        if Self.held(error) {
+            NoticeCard(.info, title: HistoryStrings.heldTitle, message: Self.heldBody(error, timeScale: timeScale), announce: .polite)
+                .accessibilityIdentifier("history_held")
+        } else {
+            NoticeCard(
+                .warning, title: error.title(or: HistoryStrings.errorTitle), message: error.message(timeScale: timeScale),
+                announce: .polite
+            ) {
+                Button(HistoryStrings.retry, action: onRetry).accessibilityIdentifier("history_retry")
+            }
+            .accessibilityIdentifier("history_error")
         }
     }
 }

@@ -72,6 +72,10 @@ import VettIDApprovals
         #expect(height(ApprovalsScreen(state: s, chrome: chrome, actions: ApprovalsActions())) > 0)
         s.openAsksError = .network
         #expect(ApprovalsScreen.showsReadError(s))
+        // The open asks' list not supported (nil): the lists' failure says the vault is on hold itself.
+        s.openAsksError = nil
+        #expect(ApprovalsScreen.showsReadError(s) && ApprovalsScreen.readErrorTitle(.ownerCheckRequired) == ApprovalsStrings.openAsksHeldTitle)
+        #expect(ApprovalsStrings.openAsksHeldTitle == "Open requests are on hold" && ApprovalsScreen.readErrorTitle(.network) == "Could not load approvals")
     }
 
     /// The failures are spoken by themselves: a read that failed with rows shown, and an action that failed.

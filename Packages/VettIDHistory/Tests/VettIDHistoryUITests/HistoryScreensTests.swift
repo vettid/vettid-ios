@@ -102,6 +102,27 @@ import VettIDVault
         #expect(HistoryEntryList.footer(s) == .loading)
     }
 
+    /// A vault on hold, whatever read it refused: said as held above the entries ("History is on hold", no "Try again",
+    /// not in the footer either), since the list reads again by itself once the daily check passes.
+    @Test func aHeldReadIsSaidAsHeld() {
+        #expect(HistoryStrings.heldTitle == "History is on hold")
+        #expect(HistoryFailureNotice.held(.ownerCheckRequired) && !HistoryFailureNotice.held(.network))
+        var s = HistoryState()
+        s.loading = false
+        s.entries = [Self.rec(5, "message.sent")]
+        s.error = .ownerCheckRequired
+        #expect(HistoryEntryList.footer(s) == .none && HistoryEntryList.saysAbove(s))
+        s.error = .network
+        #expect(HistoryEntryList.footer(s) == .retry && !HistoryEntryList.saysAbove(s))
+        var empty = HistoryState()
+        empty.loading = false
+        empty.error = .ownerCheckRequired
+        s.error = .ownerCheckRequired
+        for state in [s, empty] {
+            #expect(height(HistoryScreen(state: state, chrome: chrome, actions: HistoryActions())) > 0)
+        }
+    }
+
     @Test func everyStateOfAnEntryRenders() {
         var s = HistoryEntryState()
         #expect(height(HistoryEntryScreen(state: s, actions: HistoryEntryActions())) > 0)

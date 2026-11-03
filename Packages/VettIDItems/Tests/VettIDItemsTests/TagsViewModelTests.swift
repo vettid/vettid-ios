@@ -163,6 +163,58 @@ func eventually(within: Duration = .seconds(20), _ condition: @MainActor () -> B
         #expect(vm.state.loadFailure == nil && vm.state.registry != nil)
     }
 
+    /// Reads that overlap: only the latest one's answer is shown.
+    @Test func onlyTheLatestReadIsShown() async {
+        let vm = await loaded()
+        let first = TestHold()
+        sharing.holds["refreshTags"] = first
+        sharing.fail["refreshTags"] = VaultFailure(.network)
+        vm.refresh()
+        vm.refresh()
+        await waitFor { first.count == 2 }
+        first.release(1)
+        await waitFor { !vm.state.loading }
+        first.release(0)
+        await vm.settle()
+        #expect(vm.state.loadFailure == nil, "an older failure does not hide a newer success")
+        let second = TestHold()
+        sharing.holds["refreshTags"] = second
+        vm.refresh()
+        await waitFor { second.count == 1 }
+        sharing.fail["refreshTags"] = VaultFailure(.noResponse)
+        vm.refresh()
+        await waitFor { second.count == 2 }
+        second.release(1)
+        await waitFor { !vm.state.loading }
+        second.release(0)
+        await vm.settle()
+        #expect(vm.state.loadFailure?.kind == .noResponse, "an older success does not clear a newer failure")
+    }
+
+    /// A read that ends while a change is on its way leaves the change busy: it cannot be sent twice.
+    @Test func aReadEndingDuringACreateKeepsItBusy() async {
+        let vm = await loaded()
+        let create = TestHold()
+        sharing.holds["setTag:trips"] = create
+        vm.askCreate()
+        vm.setName("trips")
+        vm.save()
+        await waitFor { create.count == 1 }
+        #expect(vm.state.busy)
+        vm.refresh()
+        await waitFor { !vm.state.loading }
+        #expect(vm.state.busy, "the create is still on its way")
+        create.release(0)
+        await vm.settle()
+        #expect(!vm.state.busy && sharing.calls.count { $0 == "setTag:trips" } == 1)
+    }
+
+    /// Yields until [condition] holds (at most a few thousand turns of the main actor).
+    private func waitFor(_ condition: () -> Bool) async {
+        for _ in 0..<5000 where !condition() { await Task.yield() }
+        #expect(condition())
+    }
+
     @Test func aFailedListSaysWhyAndALimitIsNamed() async {
         sharing.fail["refreshTags"] = VaultFailure(.network)
         let vm = await loaded()

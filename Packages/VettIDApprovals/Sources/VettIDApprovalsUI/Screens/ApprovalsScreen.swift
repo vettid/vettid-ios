@@ -90,12 +90,18 @@ public struct ApprovalsScreen: View {
     /// passes.
     static func offersRetry(_ error: FailureKind) -> Bool { error != .ownerCheckRequired }
 
+    /// The lists' failure's title: a vault on hold is said to be on hold (the open asks' title, also when that list is not
+    /// supported and says nothing itself), not failed.
+    static func readErrorTitle(_ error: FailureKind) -> String {
+        error == .ownerCheckRequired ? ApprovalsStrings.openAsksHeldTitle : ApprovalsStrings.errorTitle
+    }
+
     /// The lists could not be read: why, with "Try again"; in place of the list, or above the rows still shown.
     @ViewBuilder private var readErrorNotice: some View {
         if let error = state.error, Self.showsReadError(state) {
             let retry = Self.offersRetry(error)
             NoticeCard(
-                retry ? .warning : .info, title: ApprovalsStrings.errorTitle, message: error.message(timeScale: timeScale),
+                retry ? .warning : .info, title: Self.readErrorTitle(error), message: error.message(timeScale: timeScale),
                 announce: .polite
             ) {
                 if retry { NoticeAction(label: ApprovalsStrings.retry, identifier: "approvals_retry", action: actions.onRetry) }

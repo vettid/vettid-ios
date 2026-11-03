@@ -58,6 +58,9 @@ public final class ConnectionSharingViewModel {
     @ObservationIgnored private let items: any ItemsRepository
     @ObservationIgnored private let connections: any ConnectionsRepository
     @ObservationIgnored let work = Work()
+    /// Counts the reads started: only the latest one's answer is applied, so that an older answer never replaces a newer
+    /// one.
+    @ObservationIgnored private var reads = 0
     @ObservationIgnored private let follows = TaskBag()
 
     public init(
@@ -79,6 +82,8 @@ public final class ConnectionSharingViewModel {
     }
 
     public func load() {
+        reads += 1
+        let read = reads
         state.loading = true
         state.loadFailure = nil
         let id = state.connectionID
@@ -86,14 +91,14 @@ public final class ConnectionSharingViewModel {
             do {
                 let rules = try await sharing.rules(connectionID: id)
                 let given = try await sharing.grants().given.filter { $0.connectionID == id }
-                guard let self else { return }
+                guard let self, read == reads else { return }
                 state.rules = rules
                 state.given = grantOrder(given)
                 state.loading = false
                 state.loadFailure = nil
                 state.connectionName = connectionName(connections, id) ?? state.connectionName
             } catch {
-                guard let self else { return }
+                guard let self, read == reads else { return }
                 state.loading = false
                 state.loadFailure = LoadFailure(error)
             }

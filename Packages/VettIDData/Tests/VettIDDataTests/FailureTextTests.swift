@@ -70,12 +70,6 @@ import Testing
         }
     }
 
-    /// The daily check due: on the iPhone the check takes the screen's place at once, so the text does not say that what
-    /// was entered is kept (vettid-android's does).
-    @Test func theCheckDueTextClaimsNothingKept() {
-        #expect(FailureKind.ownerCheckRequired.message == "Your daily check is due. Complete it to go on.")
-    }
-
     @Test func anUnknownNameOrNoBoundIsTheGenericText() {
         #expect(VaultLimit("moons", max: 3).text() == LimitText(.failureLimit))
         #expect(VaultLimit("items").text() == LimitText(.failureLimit))

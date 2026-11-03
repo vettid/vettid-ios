@@ -49,6 +49,9 @@ public final class TagsViewModel {
 
     @ObservationIgnored private let sharing: any SharingRepository
     @ObservationIgnored let work = Work()
+    /// Counts the reads started: only the latest one's answer is applied, so that an older answer never replaces a newer
+    /// one.
+    @ObservationIgnored private var reads = 0
 
     /// A tag's description is at most 256 bytes (§10.8); the field stops at 256 characters and the vault checks bytes.
     public static let maxDescription = 256
@@ -61,20 +64,21 @@ public final class TagsViewModel {
 
     deinit { work.cancelAll() }
 
+    /// Reads the tags. Only ``TagsState/loading`` marks it: ``TagsState/busy`` belongs to the changes, which a read ending
+    /// meanwhile must not let be sent again.
     public func refresh() {
-        state.busy = true
+        reads += 1
+        let read = reads
         state.loading = true
         state.loadFailure = nil
         work.launch { [weak self, sharing] in
             do {
                 let r = try await sharing.refreshTags()
-                guard let self else { return }
+                guard let self, read == reads else { return }
                 state.registry = r
-                state.busy = false
                 state.loading = false
             } catch {
-                guard let self else { return }
-                state.busy = false
+                guard let self, read == reads else { return }
                 state.loading = false
                 state.loadFailure = LoadFailure(error)
             }
@@ -201,8 +205,8 @@ public final class TagsViewModel {
         }
     }
 
-    /// Runs [block] as one step of the screen: busy meanwhile, then its change of the state, or its failure shown (an
-    /// `in_use` closes the dialog it came from).
+    /// Runs [block] as one change of the screen (never the read, which is ``TagsState/loading``): busy meanwhile, then its
+    /// change of the state, or its failure shown (an `in_use` closes the dialog it came from).
     private func run(_ block: @escaping @MainActor () async throws -> (inout TagsState) -> Void) {
         state.busy = true
         state.error = nil
@@ -212,12 +216,10 @@ public final class TagsViewModel {
                 guard let self else { return }
                 apply(&state)
                 state.busy = false
-                state.loading = false
             } catch {
                 guard let self else { return }
                 let f = error as? VaultFailure ?? VaultFailure(.other)
                 state.busy = false
-                state.loading = false
                 state.error = f.kind
                 state.errorCode = f.code
                 state.limit = f.limit

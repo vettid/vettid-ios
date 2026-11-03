@@ -77,6 +77,40 @@ import VettIDDataTesting
         #expect(vm.state.error == nil)
     }
 
+    /// Reads that overlap: only the latest one's answer is shown.
+    @Test func onlyTheLatestReadIsShown() async {
+        let vm = ItemsViewModel(items: items)
+        await vm.settle()
+        let first = TestHold()
+        items.refreshHold = first
+        items.fail["refresh"] = VaultFailure(.network)
+        vm.refresh()
+        vm.refresh()
+        await waitFor { first.count == 2 }
+        first.release(1)
+        first.release(0)
+        await vm.settle()
+        #expect(vm.state.error == nil, "an older failure does not hide a newer success")
+        let second = TestHold()
+        items.refreshHold = second
+        vm.refresh()
+        await waitFor { second.count == 1 }
+        items.fail["refresh"] = VaultFailure(.noResponse)
+        vm.refresh()
+        await waitFor { second.count == 2 }
+        second.release(1)
+        await waitFor { vm.state.error != nil }
+        second.release(0)
+        await vm.settle()
+        #expect(vm.state.error == .noResponse, "an older success does not clear a newer failure")
+    }
+
+    /// Yields until [condition] holds (at most a few thousand turns of the main actor).
+    private func waitFor(_ condition: () -> Bool) async {
+        for _ in 0..<5000 where !condition() { await Task.yield() }
+        #expect(condition())
+    }
+
     /// A refresh that fails with items shown keeps them and says why.
     @Test func aFailedRefreshKeepsTheItems() async {
         let vm = ItemsViewModel(items: items)

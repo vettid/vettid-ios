@@ -43,6 +43,9 @@ public final class ItemsViewModel {
     @ObservationIgnored private let items: any ItemsRepository
     @ObservationIgnored private let ownerChecks: (any OwnerCheckRepository)?
     @ObservationIgnored let work = Work()
+    /// Counts the reads started: only the latest one's answer is applied, so that an older answer never replaces a newer
+    /// one.
+    @ObservationIgnored private var reads = 0
     @ObservationIgnored private let follows = TaskBag()
 
     public init(items: any ItemsRepository, ownerChecks: (any OwnerCheckRepository)? = nil) {
@@ -71,16 +74,21 @@ public final class ItemsViewModel {
     }
 
     public func refresh() {
+        reads += 1
+        let read = reads
         error = nil
+        errorCode = nil
         let items = items
         work.launch { [weak self] in
+            var failure: VaultFailure?
             do {
                 try await items.refresh()
             } catch {
-                let f = error as? VaultFailure ?? VaultFailure(.other)
-                self?.errorCode = f.code
-                self?.error = f.kind
+                failure = error as? VaultFailure ?? VaultFailure(.other)
             }
+            guard let self, read == reads else { return }
+            errorCode = failure?.code
+            self.error = failure?.kind
         }
     }
 

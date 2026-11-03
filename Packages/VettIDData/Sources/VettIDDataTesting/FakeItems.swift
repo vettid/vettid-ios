@@ -14,6 +14,9 @@ public final class FakeItems: ItemsRepository {
     public var calls: [String] = []
     /// A failure the next call of that name throws (once).
     public var fail: [String: VaultFailure] = [:]
+    /// When set, each ``refresh()`` waits here before it answers (reads that overlap); a failure set in ``fail`` is
+    /// thrown after the wait.
+    public var refreshHold: TestHold?
     public var password = "correct horse"
     /// Every item with its values, in the order added.
     public private(set) var stored: [ItemDetail] = []
@@ -65,7 +68,10 @@ public final class FakeItems: ItemsRepository {
     }
 
     public func refresh() async throws {
-        try call("refresh")
+        let failure = fail.removeValue(forKey: "refresh")
+        calls.append("refresh")
+        if let refreshHold { await refreshHold.wait() }
+        if let failure { throw failure }
         load = .loaded
         publish()
     }

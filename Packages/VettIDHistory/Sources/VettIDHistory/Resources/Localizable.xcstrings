@@ -122,6 +122,17 @@
         }
       }
     },
+    "history_held_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "History is on hold"
+          }
+        }
+      }
+    },
     "history_retry": {
       "extractionState": "manual",
       "localizations": {

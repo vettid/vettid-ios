@@ -245,6 +245,17 @@
         }
       }
     },
+    "messages_held_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Messages are on hold"
+          }
+        }
+      }
+    },
     "messages_retry": {
       "extractionState": "manual",
       "localizations": {
