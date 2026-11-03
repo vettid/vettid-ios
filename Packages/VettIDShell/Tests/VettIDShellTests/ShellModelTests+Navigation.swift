@@ -181,6 +181,19 @@ import VettIDVault
         #expect(repo.calls.contains("turnHoldOn"))
     }
 
+    /// A banner action that fails says why, and clears when read; it is not left silent.
+    @Test func aFailedBannerActionIsSaid() async {
+        repo.ownerCheck = OwnerCheckView(state: .ok, deadline: nil, hold: false)
+        repo.fail["turnHoldOn"] = VaultFailure(.network)
+        let m = model
+        await m.turnHoldOn()
+        #expect(m.bannerError == .network && !m.bannerBusy)
+        m.clearBannerError()
+        #expect(m.bannerError == nil)
+        await m.turnHoldOn()
+        #expect(m.bannerError == nil && repo.ownerCheck?.hold == true)
+    }
+
     /// The bell opens Notifications once; a feed item's target opens its screen as vettid-android's `openFeedTarget`.
     @Test func theBellAndAFeedItemOpenTheirScreens() {
         let m = model

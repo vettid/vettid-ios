@@ -216,7 +216,8 @@ public struct AppShell: View {
                     BannerArea {
                         alarmBanner
                         OwnerCheckBanners(gate: gate, now: now, onCheckNow: { model.ownerCheck(holdOff: false) },
-                            onHoldOn: { Task { await model.turnHoldOn() } }, onDismissNotices: { Task { await model.dismissNotices() } })
+                            onHoldOn: { Task { await model.turnHoldOn() } }, onDismissNotices: { Task { await model.dismissNotices() } },
+                            busy: model.bannerBusy, error: model.bannerError, onClearError: { model.clearBannerError() })
                         if let releaseUpdates, model.path.last != .releaseUpdate {
                             ReleaseUpdateBanner(updates: releaseUpdates) { model.push(.releaseUpdate) }
                         }

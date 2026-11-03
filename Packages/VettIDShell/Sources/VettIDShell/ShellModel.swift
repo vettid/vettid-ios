@@ -221,8 +221,27 @@ public final class ShellModel {
         }
     }
 
-    /// The hold-off indicator's "Turn on": a failure leaves the indicator; Settings shows it when the member tries there.
-    public func turnHoldOn() async { try? await ownerChecks.turnHoldOn() }
+    /// A banner's action ("Turn on" the hold, "OK" on a notice) is on its way.
+    public private(set) var bannerBusy = false
+    /// Why the last banner action failed (chosen; not in the spec): said under the banners until the member reads it.
+    public private(set) var bannerError: FailureKind?
 
-    public func dismissNotices() async { try? await ownerChecks.dismissNotices() }
+    /// The hold-off indicator's "Turn on": a failure is said under the banners, and the indicator stays.
+    public func turnHoldOn() async { await bannerAction { try await self.ownerChecks.turnHoldOn() } }
+
+    public func dismissNotices() async { await bannerAction { try await self.ownerChecks.dismissNotices() } }
+
+    public func clearBannerError() { bannerError = nil }
+
+    private func bannerAction(_ body: () async throws -> Void) async {
+        guard !bannerBusy else { return }
+        bannerBusy = true
+        bannerError = nil
+        do {
+            try await body()
+        } catch {
+            bannerError = (error as? VaultFailure)?.kind ?? .other
+        }
+        bannerBusy = false
+    }
 }

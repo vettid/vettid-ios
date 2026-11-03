@@ -55,6 +55,16 @@ import VettIDDataTesting
         #expect(vault.phase == .unlocked)
     }
 
+    /// The end of setup after a recovery that fails is said on the open step, not dropped.
+    @Test func aFailedFinishIsSaid() async throws {
+        let vm = await model()
+        vault.phase = .setup(.finishing)
+        vault.fail["finishSetup"] = FakeVaultRepository.failure(.network)
+        vm.finish()
+        await vm.settle()
+        #expect(vm.state.error == .network && vault.phase == .setup(.finishing))
+    }
+
     @Test func aRegisteredPhoneResumesAtTheOpen() async throws {
         for stage in [RecoveryStage.pin, .password] {
             vault.recoveryStageValue = stage

@@ -431,7 +431,17 @@ public final class RecoverViewModel: RecoverActions {
     }
 
     public func finish() {
-        work.launch { [vault] in try? await vault.finishSetup() }
+        // A failure is said where the member looks next: the open step's notice (``RecoverState/error``).
+        work.launch { [weak self, vault] in
+            do {
+                try await vault.finishSetup()
+            } catch {
+                guard let self else { return }
+                let e = Self.failure(of: error)
+                state.error = e.kind
+                state.errorCode = e.code
+            }
+        }
     }
 
     // MARK: - Helpers
