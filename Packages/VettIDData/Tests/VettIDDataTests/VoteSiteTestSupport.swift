@@ -15,6 +15,7 @@ final class FakeVoteSite: VoteSite, @unchecked Sendable {
     private let lock = NSLock()
     private var docs: [String: SiteAnswer] = [:]
     private var log: [String] = []
+    private var limits: [String: Int] = [:]
     var configured = true
     /// Called with a path before it is answered (a test holds a read here); not under the lock.
     nonisolated(unsafe) var hold: (@Sendable (String) async -> Void)?
@@ -30,6 +31,9 @@ final class FakeVoteSite: VoteSite, @unchecked Sendable {
 
     func clearReads() { lock.withLock { log = [] } }
 
+    /// The most bytes the last read of [path] would take.
+    func limit(_ path: String) -> Int? { lock.withLock { limits[path] } }
+
     func get(_ path: String, maxBytes: Int) async -> SiteAnswer {
         // As the real site: a read of cancelled work is not made.
         if Task.isCancelled { return .unreachable }
@@ -37,6 +41,7 @@ final class FakeVoteSite: VoteSite, @unchecked Sendable {
         if Task.isCancelled { return .unreachable }
         return lock.withLock {
             log.append(path)
+            limits[path] = maxBytes
             guard let a = docs[path] else { return .absent }
             if case .found(let b) = a, b.count > maxBytes { return .tooLarge }
             return a

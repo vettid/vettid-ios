@@ -82,6 +82,14 @@ public enum VoteRows {
     /// The largest `rows.json` read at all: ``maxRows`` rows.
     public static let rowsMax = maxRows * rowBytes + rowsOverhead
 
+    /// The most of `rows.json` read for these results: as many rows as their `counts.eligible` (the bound ``ownRow``
+    /// refuses above), and never over ``rowsMax``; ``rowsMax`` when the results do not say.
+    public static func rowsCap(results bytes: [UInt8]) -> Int {
+        guard let eligible = try? StrictJson.parseObject(bytes).obj("counts").uint("eligible", min: 1, max: UInt64(maxRows))
+        else { return rowsMax }
+        return min(rowsMax, Int(eligible) * rowBytes + rowsOverhead)
+    }
+
     /// One row of `rows.json`: its tag, its ballot (`vk`, `choice_id`, `ballot_sig`) as the site has it or nil, and its
     /// leaf in the rows' tree.
     private struct Row {

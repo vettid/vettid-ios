@@ -186,6 +186,11 @@ struct VotesManagerTests: VotesTestCase {
         for hidden in ["Ab\u{200D}stain", "Abs\u{200C}tain", "Abstain\u{FE0F}", "A\u{034F}bstain", "Abst\u{00AD}ain", "\u{2060}Abstain"] {
             #expect(VoteWire.readsAsAbstain(hidden), "\(hidden.unicodeScalars.map { String($0.value, radix: 16) })")
         }
+        // As received text (VAULT-MESSAGING §10.8): U+2800 shows nothing, around the word or in it, and white space is
+        // Unicode's.
+        for blank in ["\u{2800}Abstain\u{2800}", "Abs\u{2800}tain", "\u{2800}\u{2800}abstain", "\u{3000}Abstain\u{2003}"] {
+            #expect(VoteWire.readsAsAbstain(blank), "\(blank.unicodeScalars.map { String($0.value, radix: 16) })")
+        }
         #expect(d.choiceID == "yes")
         #expect(d.text == "Line one\n\nLine two <b>x</b> http://example.test")
         #expect(d.minBallots == 2)

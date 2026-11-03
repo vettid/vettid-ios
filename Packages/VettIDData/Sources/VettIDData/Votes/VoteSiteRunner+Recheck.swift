@@ -43,7 +43,7 @@ extension VoteSiteRunner {
         guard let tag = detail.recordTag.flatMap({ try? Base64s.decodeStd($0, Self.tagSize) }) else { return .notChecked }
         let files: VoteSiteReader.ResultsFiles
         switch try await reader.fetchResults(key.proposalID) {
-        case .tooLarge: return keepRecheck(key, consistent: false)
+        case .tooLarge, .rowsTooLarge: return keepRecheck(key, consistent: false)
         case .siteDown, .notPublished: return .notChecked
         case .files(let f): files = f
         }

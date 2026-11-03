@@ -150,7 +150,7 @@ struct VoteRulesTests {
         for (reason, note) in own {
             #expect(VoteRules.notes(vote(.closed, ballot(.recorded), check(.pending, reason)), resultsDontAddUp: true) == [.closed, .recorded, note])
         }
-        #expect(VoteNote.resultsDontAddUp.severity == .warning)
+        #expect(VoteNote.resultsDontAddUp.severity == .note)
     }
 
     @Test func aClosedVoteWithoutABallotSaysSoOnlyAfterAVerifiedCheck() {

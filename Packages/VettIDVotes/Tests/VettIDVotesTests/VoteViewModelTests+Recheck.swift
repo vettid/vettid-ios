@@ -79,6 +79,23 @@ extension VoteViewModelTests {
         #expect(rechecks == 2)
     }
 
+    /// A lock and unlock with the screen up forget the verdict: the results are checked again once the vote is back.
+    @Test func aLockAndUnlockWithTheScreenUpChecksAgain() async {
+        let m = await verifiedScreen(outcome: .consistent)
+        #expect(rechecks == 1 && Samples.facts(m.state).results != nil)
+        let listed = fake.votes
+        fake.hints = [:]
+        fake.votes = []
+        await m.settle()
+        #expect(Samples.facts(m.state).results == nil)
+        fake.recheckOutcome = .dontAddUp
+        fake.votes = listed
+        await m.settle()
+        #expect(rechecks == 2)
+        let f = Samples.facts(m.state)
+        #expect(f.results == nil && f.notes.map(\.note).contains(.resultsDontAddUp))
+    }
+
     /// The app went to the background during the check (the work was halted): it runs again when the app returns to the
     /// foreground, with the screen still up.
     @Test func aRecheckCutOffByTheBackgroundRunsAgainInTheForeground() async {

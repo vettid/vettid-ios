@@ -376,6 +376,9 @@ final class VoteSiteRunner {
         let files: VoteSiteReader.ResultsFiles
         switch try await reader.fetchResults(key.proposalID) {
         case .tooLarge: return fail(key, .problem, tooLarge: true)
+        // More rows than the results can have: no row with a proof, as when ``VoteRows/ownRow(results:rows:recordTag:)``
+        // refuses them.
+        case .rowsTooLarge: return noRow(key)
         case .siteDown: return unavailable(key, true)
         case .notPublished: return unavailable(key, false)
         case .files(let f): files = f
@@ -393,15 +396,7 @@ final class VoteSiteRunner {
         do {
             checked = try await Task.detached { try VoteRows.ownRow(results: doc, rows: rows, recordTag: tag) }.value
         } catch {
-            // No row with a proof: nothing to submit, and results that don't add up for the screens.
-            let outcome = fail(key, .problem)
-            if !Task.isCancelled {
-                votes.hint(key) {
-                    $0.observerVerdict = false
-                    $0.verdictKept = false
-                }
-            }
-            return outcome
+            return noRow(key)
         }
         // A member's row whose ballot the vault would not read makes it refuse the whole call: nothing is sent
         // (VAULT-MESSAGING 0.81.6 §10.19.8, "Choice ids in results").
@@ -414,6 +409,18 @@ final class VoteSiteRunner {
         // A failure of the observer's check outside the four inputs does not hold the row back (VAULT-MESSAGING 0.83.2
         // §10.19.6 step 1): the vault judges it, and the member is told the rest doesn't add up whatever it answers.
         return try await submit(key, body, dontAddUp: checked.problem != nil || !sameNumbers, quietly: quietly)
+    }
+
+    /// No row with a proof: nothing to submit, and results that don't add up for the screens.
+    private func noRow(_ key: VoteKey) -> ResultsOutcome {
+        let outcome = fail(key, .problem)
+        if !Task.isCancelled {
+            votes?.hint(key) {
+                $0.observerVerdict = false
+                $0.verdictKept = false
+            }
+        }
+        return outcome
     }
 
     /// Hands [body] to the vault and keeps what it answered, and whether the rest of the results [dontAddUp], for

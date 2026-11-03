@@ -91,7 +91,9 @@ public struct VoteFacts: Equatable, Sendable {
             // 2026-11-02).
             // The numbers show only on a passed observer check since the vault opened (``VoteHint/observerVerdict``):
             // an attempt that ran it, or the check again when the screen opened.
-            f.results = s.hint.observerVerdict == true && !s.hint.resultsDontAddUp ? results(d, service) : nil
+            // And only under a `verified` or `unconfirmed` check, whatever the vault sends otherwise.
+            let judged = summary.check?.state == .verified || summary.check?.state == .unconfirmed
+            f.results = judged && s.hint.observerVerdict == true && !s.hint.resultsDontAddUp ? results(d, service) : nil
             f.choices = d.choices.map { AccountNames.isolateOrNull($0.label) ?? $0.id }
         }
         f.notes = VoteRules.notes(

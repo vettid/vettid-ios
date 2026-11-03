@@ -16,8 +16,7 @@ public enum VoteNote: Sendable, CaseIterable {
     /// `vote_results_dont_add_up`, once, under the state of a `verified` or `unconfirmed` check (``inResults`` and
     /// ``inResultsConflict``, ``didntVote``, ``unconfirmed``) when the app's observer check of the results it submitted
     /// failed outside the four inputs the vault checks (VAULT-MESSAGING 0.83.2 §10.19.6 step 1; ANDROID-PLAN 0.1.116 §4
-    /// "Votes"). A warning, never the error colour (the warning: chosen; not in the spec, which says only "no error
-    /// colour").
+    /// "Votes"). A note, as ``inResultsConflict``: never the error colour.
     case resultsDontAddUp
     /// `vote_results_not_rechecked`, under the state of a `verified` or `unconfirmed` check: the published results could
     /// not be checked again when the screen opened, so their numbers are hidden (the screen adds it; owner decision
@@ -40,8 +39,8 @@ public enum VoteNote: Sendable, CaseIterable {
 
     public var severity: Severity {
         switch self {
-        case .inResultsConflict: .note
-        case .unconfirmed, .resultsDontAddUp, .resultsNotRechecked, .checkResultsProblem, .checkResultsTooLarge, .checkGaveUpSite,
+        case .inResultsConflict, .resultsDontAddUp: .note
+        case .unconfirmed, .resultsNotRechecked, .checkResultsProblem, .checkResultsTooLarge, .checkGaveUpSite,
              .checkGaveUpUnpublished, .checkGaveUp,
              .refusedLate, .refusedNotActive, .refusedEnded, .notSignedIn, .closingSoon, .noConnection, .cannotCastOther,
              .notListedLate:

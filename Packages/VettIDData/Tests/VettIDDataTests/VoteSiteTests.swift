@@ -448,6 +448,22 @@ struct VoteSiteTests: VotesTestCase {
         #expect(vault.submits.isEmpty)
     }
 
+    /// `rows.json` is read only up to what the rows of these results can take (their `counts.eligible`: 2 rows, 512 bytes a
+    /// row and 4,096), never to the global maximum: a larger one is refused before it is read in full, and nothing goes.
+    @Test func rowsOverThisVotesCapAreRefusedBeforeTheyAreRead() async throws {
+        let ops = FakeVoteOps()
+        ops.list = listing(closedPending())
+        ops.detail = detail()
+        let m = siteManager(ops)
+        try await m.refresh()
+        VoteResultsFixture.publish(site, pid)
+        let cap = 2 * VoteRows.rowBytes + VoteRows.rowsOverhead
+        site["p/\(pid)/rows.json"] = .found(VoteResultsFixture.rows + [UInt8](repeating: 0x20, count: cap))
+        #expect(try await m.checkResults(key) == .problem)
+        #expect(site.limit("p/\(pid)/rows.json") == cap && cap < VoteSiteLimits.rowsMax)
+        #expect(vault.submits.isEmpty && m.hints[key]?.resultsTooLarge == false && m.hints[key]?.observerVerdict == false)
+    }
+
     @Test func aCheckDueEventRunsTheCheck() async throws {
         VoteResultsFixture.publish(site, pid)
         let ops = FakeVoteOps()

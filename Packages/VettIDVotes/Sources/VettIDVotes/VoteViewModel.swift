@@ -2,23 +2,8 @@ import Foundation
 import Observation
 import VettIDData
 
-/// Where the check of the published results again, when the screen opens, is (owner decision 2026-11-02): the numbers
-/// are shown only once it passed.
-public enum Recheck: Equatable, Sendable { case none, running, done, notChecked }
-
 /// Where the screen is in a cast (ANDROID-PLAN 0.1.102 screens 2 and 3).
 public enum CastStep: Equatable, Sendable { case none, confirm, password, sending }
-
-/// The vault's evidence of a vote, in memory only, handed to the system's file exporter (IOS-PLAN §4.16 "Save the proof"):
-/// the bytes are the vault's evidence unchanged; the name is the proposal's id, never the title or the choice. Its
-/// description shows nothing of it.
-public struct ProofFile: Equatable, Sendable, CustomStringConvertible, CustomDebugStringConvertible {
-    public let bytes: Data
-    public let name: String
-
-    public var description: String { "ProofFile(\(bytes.count) bytes)" }
-    public var debugDescription: String { description }
-}
 
 /// One vote's state (screens 2 to 7). It holds the member's choice (``VoteDetail``), the credential password while the
 /// prompt is open and the vault's evidence while it waits for the exporter: its description and mirror show none of it.
@@ -121,6 +106,8 @@ public final class VoteViewModel {
     @ObservationIgnored private var rechecked = false
     /// Counts the checks started: what an older one comes to (its cancellation included) changes nothing.
     @ObservationIgnored private var recheckRun = 0
+    /// The vote left the list (a lock empties it) since it was last seen.
+    @ObservationIgnored private var summaryGone = false
     @ObservationIgnored private var lastSummary: VoteSummary?
     /// The evidence the vault gave, until the member saves it or leaves; only in memory.
     @ObservationIgnored private var proof: String?
@@ -141,6 +128,8 @@ public final class VoteViewModel {
         refresh()
         // A change of the vote (a ballot answered, a check made) reads it again: the choice and the tally appear then.
         follows.add(follow(self, read: { $0.current }, apply: { $0.onSummary($1) }))
+        // A lock forgets the verdict of the results: once the vote is back, they are checked again.
+        follows.add(follow(self, read: { $0.repo.hints[$0.key]?.observerVerdict }, apply: { $0.onVerdict($1) }))
         if ownerChecks != nil {
             follows.add(follow(self, read: { $0.ownerChecks?.ownerCheck }, apply: { $0.onOwnerCheck($1) }))
         }
@@ -163,16 +152,26 @@ public final class VoteViewModel {
         return s
     }
 
+    private func onVerdict(_ verdict: Bool?) {
+        if verdict == nil, local.recheck != .running { rechecked = false }
+    }
+
     private func onSummary(_ now: VoteSummary?) {
-        guard let now else { return }
+        guard let now else {
+            summaryGone = true
+            return
+        }
+        let returned = summaryGone
+        summaryGone = false
         let changed = lastSummary.map { $0 != now } ?? false
         if changed { loadDetail() }
         lastSummary = now
         // "Is this your vote?" is held back while the cast sheet is up: the vault now waits on the member's answer about an
         // earlier vote, so nothing is cast and the typed password goes.
         if now.confirmPending, local.cast == .confirm || local.cast == .password { dismissCast() }
-        // A check that became verified or unconfirmed while the screen is up (the opening itself is the read's).
-        if changed { recheckIfNeeded() }
+        // A check that became verified or unconfirmed while the screen is up, or a vote back after a lock (the opening
+        // itself is the read's).
+        if changed || returned { recheckIfNeeded() }
         if now.check?.state == .gaveUp {
             let repo = repo
             let key = key

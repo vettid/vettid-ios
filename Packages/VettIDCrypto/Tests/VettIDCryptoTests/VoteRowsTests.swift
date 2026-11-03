@@ -226,6 +226,13 @@ struct VoteRowsTests {
         }
     }
 
+    /// The cap on reading `rows.json` is that of the results' `counts.eligible`, and the global one when they don't say.
+    @Test func theRowsCapIsTheResultsElectorates() throws {
+        let results = Array(try docs.str("results").utf8)
+        #expect(VoteRows.rowsCap(results: results) == 3 * VoteRows.rowBytes + VoteRows.rowsOverhead)
+        #expect(VoteRows.rowsCap(results: Array("nope".utf8)) == VoteRows.rowsMax)
+    }
+
     /// The member's tag on two rows: the rows' order is the problem, and the first of them is the row, with its proof.
     @Test func aTagOnTwoRowsGivesTheFirst() throws {
         let all = try rows()

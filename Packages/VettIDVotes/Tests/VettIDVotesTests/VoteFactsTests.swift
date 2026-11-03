@@ -211,7 +211,7 @@ import Testing
         let verified = facts(Samples.closed(VoteBallot(state: .recorded), check: VoteCheck(state: .verified)))
         #expect(verified.notes.map(\.note) == [.closed, .recorded, .inResults, .resultsDontAddUp])
         #expect(texts(verified).suffix(2) == ["The published results include your vote.", line])
-        #expect(verified.notes.last?.note.severity == .warning && verified.results == nil)
+        #expect(verified.notes.last?.note.severity == .note && verified.results == nil)
         #expect(texts(verified).filter { $0 == line }.count == 1)
         let conflict = facts(Samples.closed(VoteBallot(state: .recorded), check: VoteCheck(state: .verified), conflict: true))
         #expect(conflict.notes.map(\.note) == [.closed, .recorded, .inResults, .inResultsConflict, .resultsDontAddUp])
@@ -230,6 +230,12 @@ import Testing
             $0.hint = VoteHint(observerVerdict: false)
         })
         #expect(after.results == nil && after.notes.map(\.note).suffix(2) == [.unconfirmed, .resultsDontAddUp])
+        // Numbers only under a verified or unconfirmed check, whatever else the vault sends.
+        let failedVote = Samples.closed(VoteBallot(state: .recorded), check: VoteCheck(state: .failed))
+        var failedDetail = Samples.detail(failedVote, choiceID: "yes")
+        failedDetail.tally = ["yes": 3, "no": 1]
+        failedDetail.counts = VoteCounts(eligible: 9, ballots: 4)
+        #expect(Samples.facts(Samples.screen(failedVote, detail: failedDetail) { $0.hint = VoteHint(observerVerdict: true) }).results == nil)
     }
 
     /// Owner behaviour 5: the hints of Votes 2 show as Android shows them.
