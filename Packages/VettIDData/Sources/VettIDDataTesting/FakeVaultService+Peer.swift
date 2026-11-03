@@ -54,6 +54,10 @@ extension FakeVaultService {
         try locked {
             guard let peer = social.connections[id]?.peer ?? social.requests[id]?.peer else { throw CryptoError.format("unknown peer") }
             social.blocks[Ulid.new()] = peer.ik
+            // As `block.add`: the connection is removed, the request declined.
+            if social.requests[id] != nil { social.declinedSent.append(id) }
+            social.connections[id] = nil
+            social.requests[id] = nil
         }
     }
 

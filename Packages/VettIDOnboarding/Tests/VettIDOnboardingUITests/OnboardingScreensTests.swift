@@ -34,6 +34,13 @@ import VettIDUI
             #expect(WaitText.message(kind, retryAt: soon, timeScale: 1).hasPrefix("Too many attempts. Try again in "))
             #expect(WaitText.spoken(kind, retryAt: soon)?.hasPrefix("Too many attempts. Try again in ") == true)
         }
+        // A field's spoken error is the same at every tick: only the visible text counts down.
+        let t0 = Date(), later = t0.addingTimeInterval(1), end = t0.addingTimeInterval(90)
+        func shown(_ now: Date) -> String { WaitText.message(.backoff, retryAt: end, timeScale: 1, now: now) }
+        func spoken(_ now: Date) -> String? { WaitText.steadySpoken(.backoff, retryAt: end, timeScale: 1, now: now) }
+        #expect(shown(t0) != shown(later))
+        #expect(spoken(t0) == spoken(later) && spoken(t0) != nil)
+        #expect(WaitText.steadySpoken(.badPin, retryAt: end, timeScale: 1) == nil)
         // A long wait is h:mm:ss, not "120:00".
         #expect(WaitText.clock(90) == "1:30" && WaitText.clock(3_599) == "59:59" && WaitText.clock(7_200) == "2:00:00")
         #expect(WaitText.message(.badPin, retryAt: soon, timeScale: 1) == FailureKind.badPin.message)

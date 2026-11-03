@@ -233,6 +233,8 @@ public final class FakeVaultRepository: CustomStringConvertible {
     public var lastTransferCode: String?
     /// Completes (or fails) the new phone's wait for the old phone's approval.
     public var transferApproval = TestDeferred<Void>()
+    /// TEST ONLY: when set, ``turnHoldOn()`` waits for it (and fails or goes on as it is completed).
+    public var turnHoldOnGate: TestDeferred<Void>?
     public var offer = TransferOfferView(
         transferID: "01JTRANSFER000000000000000",
         qrPayload: #"{"v":2,"t":"p"}"#,
@@ -377,6 +379,7 @@ extension FakeVaultRepository: OwnerCheckRepository {
     }
 
     public func turnHoldOn() async throws {
+        if let turnHoldOnGate { try await turnHoldOnGate.value() }
         try call("turnHoldOn")
         ownerCheck?.hold = true
         ownerCheck?.holdOffUntil = nil

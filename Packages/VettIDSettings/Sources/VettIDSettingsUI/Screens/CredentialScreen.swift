@@ -267,7 +267,9 @@ struct WindowPasswordSheet: View {
         SecretField(
             CredentialStrings.passwordLabel, text: Binding(get: { state.windowPassword }, set: { actions.setWindowPassword($0) }),
             error: state.windowError.map { WaitText.message($0, retryAt: state.windowRetryAt, timeScale: timeScale, now: now) },
-            spokenError: state.windowError.flatMap { WaitText.spoken($0, retryAt: state.windowRetryAt, now: now) },
+            spokenError: state.windowError.flatMap {
+                WaitText.steadySpoken($0, retryAt: state.windowRetryAt, timeScale: timeScale, now: now)
+            },
             errorPriority: .assertive, onSubmit: actions.openWindow
         )
         .disabled(state.busy)

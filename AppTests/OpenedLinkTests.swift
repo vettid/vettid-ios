@@ -10,7 +10,6 @@ import VettIDData
 struct OpenedLinkTests {
     let link = String(repeating: "A", count: 120)
 
-    /// A setup link on a phone that already has a vault is said to be unused, not queued for a later setup.
     /// A link that came while the phase was being read is dropped once it is a phase with a vault, and not kept for a later setup.
     @Test func aQueuedSetupLinkIsDroppedWhenTheVaultIsKnown() {
         let inbox = SetupLinkInbox()
@@ -23,6 +22,7 @@ struct OpenedLinkTests {
         #expect(!AppRoot.dropSetupLink(phase: .signedOut, inbox: inbox) && inbox.link == nil)
     }
 
+    /// A setup link on a phone that already has a vault is said to be unused, not queued for a later setup.
     @Test func aSetupLinkIsUnusedOnAPhoneWithAVault() {
         for phase in [AppPhase.locked, .unlocked, .deleting] { #expect(AppRoot.hasVault(phase)) }
         for phase in [AppPhase.starting, .signedOut, .setup(.newVault)] { #expect(!AppRoot.hasVault(phase)) }

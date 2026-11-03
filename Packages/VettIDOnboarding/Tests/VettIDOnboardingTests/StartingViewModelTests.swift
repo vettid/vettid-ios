@@ -8,8 +8,17 @@ import Testing
     /// A sleep the test ends by hand.
     actor Gate {
         private var waiters: [CheckedContinuation<Void, Error>] = []
-        func wait() async throws { try await withCheckedThrowingContinuation { waiters.append($0) } }
-        func open() { waiters.forEach { $0.resume() }; waiters = [] }
+        private var opened = false
+        /// Returns at once when opened already (an `open()` before the `wait()` is remembered).
+        func wait() async throws {
+            if opened { return }
+            try await withCheckedThrowingContinuation { waiters.append($0) }
+        }
+        func open() {
+            opened = true
+            waiters.forEach { $0.resume() }
+            waiters = []
+        }
     }
 
     @Test func itIsStuckOnlyAfterTheBound() async {

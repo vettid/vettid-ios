@@ -31,6 +31,12 @@ public enum WaitText {
         return RecoveryStrings.recoverRateLimitedWait(clock(wait))
     }
 
+    /// What a field's error says to VoiceOver while its visible wait counts down: the failure's own text, the same at every tick
+    /// (VoiceOver is told once, not every second), or nil when no wait is shown.
+    public static func steadySpoken(_ kind: FailureKind, retryAt: Date?, timeScale: UInt64, now: Date = Date()) -> String? {
+        waits(kind, retryAt, now: now) == nil ? nil : kind.message(timeScale: timeScale)
+    }
+
     /// What VoiceOver speaks instead of ``message(_:retryAt:timeScale:now:)``, or nil when it is the same text.
     public static func spoken(_ kind: FailureKind, retryAt: Date?, now: Date = Date()) -> String? {
         waits(kind, retryAt, now: now).map { RecoveryStrings.recoverRateLimitedWait(spokenDuration($0)) }

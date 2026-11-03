@@ -201,6 +201,22 @@ import VettIDVault
         #expect(m.bannerError == nil && !m.bannerBusy)
     }
 
+    /// A banner action still running at a lock writes nothing when it ends: no stale error after the next unlock.
+    @Test func aBannerActionEndingAfterTheResetLeavesNoError() async {
+        repo.ownerCheck = OwnerCheckView(state: .ok, deadline: nil, hold: false)
+        let gate = TestDeferred<Void>()
+        repo.turnHoldOnGate = gate
+        let m = model
+        let running = Task { await m.turnHoldOn() }
+        await Task.yield()
+        #expect(m.bannerBusy)
+        m.reset()
+        #expect(!m.bannerBusy)
+        gate.fail(VaultFailure(.network))
+        await running.value
+        #expect(m.bannerError == nil && !m.bannerBusy)
+    }
+
     /// The bell opens Notifications once; a feed item's target opens its screen as vettid-android's `openFeedTarget`.
     @Test func theBellAndAFeedItemOpenTheirScreens() {
         let m = model

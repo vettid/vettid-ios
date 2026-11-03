@@ -36,9 +36,9 @@ public final class RecoverViewModel: RecoverActions {
     @ObservationIgnored private let move: any MoveRepository
     @ObservationIgnored private let vault: any VaultRepository
     @ObservationIgnored private let account: any AccountRepository
-    /// One second of the rate limit's countdown (a virtual clock in the tests).
     /// ``finish()`` is running: a second press does not start another.
     @ObservationIgnored private var finishing = false
+    /// One second of the rate limit's countdown (a virtual clock in the tests).
     @ObservationIgnored private let tick: @Sendable () async throws -> Void
     @ObservationIgnored private let work = Work()
     @ObservationIgnored private var retryTicker: Task<Void, Never>?

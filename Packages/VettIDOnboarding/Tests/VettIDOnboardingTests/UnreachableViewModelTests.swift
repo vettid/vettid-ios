@@ -22,6 +22,48 @@ import VettIDDataTesting
         #expect(vault.calls == ["refresh"] && !vm.retrying)
     }
 
+    /// "Try again" reads through the app's one read at a time when it is given one (a foreground read may be under way), and
+    /// never beside it: while one read runs another ask does nothing.
+    @Test func tryAgainUsesTheAppsSingleRead() async {
+        let vault = FakeVaultRepository(.unreachable(.phoneLocked))
+        let reads = SingleFlight()
+        let gate = TestDeferred<Void>()
+        var started = 0
+        let reread: @MainActor () async -> Void = {
+            await reads.run {
+                started += 1
+                try? await gate.value()
+            }
+        }
+        // A foreground read is under way.
+        let foreground = Task { await reread() }
+        await settle()
+        #expect(reads.running && started == 1)
+        let vm = UnreachableViewModel(account: vault, reread: reread)
+        vm.retry()
+        await settle()
+        #expect(started == 1 && !vault.calls.contains("refresh"), "no second read beside the first")
+        gate.complete(())
+        await foreground.value
+        await settle()
+        #expect(!reads.running && !vm.retrying)
+        vm.retry()
+        await settle()
+        #expect(started == 2)
+    }
+
+    @Test func aSingleFlightRunsOneJobAtATime() async {
+        let flight = SingleFlight()
+        let gate = TestDeferred<Void>()
+        let first = Task { await flight.run { try? await gate.value() } }
+        await settle()
+        let second = await flight.run { Issue.record("ran beside the first") }
+        #expect(!second)
+        gate.complete(())
+        #expect(await first.value)
+        #expect(await flight.run {})
+    }
+
     /// A wipe that did not finish offers "Erase VettID's data on this phone": local only; when it cannot finish the member
     /// is told to remove the app.
     @Test func aFailedWipeOffersToEraseTheData() async {

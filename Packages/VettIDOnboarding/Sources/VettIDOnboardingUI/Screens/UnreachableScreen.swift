@@ -142,12 +142,18 @@ public struct UnreachableFlow: View {
     private let account: any AccountRepository
     private let timeScale: UInt64
     private let onRecover: @MainActor () -> Void
+    private let reread: (@MainActor () async -> Void)?
     @State private var model: UnreachableViewModel?
 
-    /// [timeScale]: the vault's time scale (STAGING-TIME-SCALE §5.2).
-    public init(account: any AccountRepository, timeScale: UInt64, onRecover: @escaping @MainActor () -> Void) {
+    /// [timeScale]: the vault's time scale (STAGING-TIME-SCALE §5.2). [reread]: "Try again" reads the phase through the app's
+    /// one read at a time (a foreground read may be under way); without it the account's own refresh.
+    public init(
+        account: any AccountRepository, timeScale: UInt64, reread: (@MainActor () async -> Void)? = nil,
+        onRecover: @escaping @MainActor () -> Void
+    ) {
         self.account = account
         self.timeScale = timeScale
+        self.reread = reread
         self.onRecover = onRecover
     }
 
@@ -158,7 +164,7 @@ public struct UnreachableFlow: View {
             timeScale: timeScale, onRetry: { model?.retry() }, onStartOver: { model?.startOver($0) }, onRecover: onRecover
         )
         .onAppear {
-            if model == nil { model = UnreachableViewModel(account: account) }
+            if model == nil { model = UnreachableViewModel(account: account, reread: reread) }
         }
     }
 }
