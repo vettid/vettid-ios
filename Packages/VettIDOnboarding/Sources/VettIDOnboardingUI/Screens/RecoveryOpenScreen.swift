@@ -13,6 +13,7 @@ public struct RecoveryOpenActions {
     public var review: @MainActor () -> Void = {}
     public var change: @MainActor () -> Void = {}
     public var send: @MainActor () -> Void = {}
+    public var cancelSend: @MainActor () -> Void = {}
     public var again: @MainActor () -> Void = {}
     public var finishLostOk: @MainActor () -> Void = {}
     public var askErase: @MainActor () -> Void = {}
@@ -30,6 +31,7 @@ public struct RecoveryOpenActions {
         review = { model.review() }
         change = { model.change() }
         send = { model.send() }
+        cancelSend = { model.cancelSend() }
         again = { model.again() }
         finishLostOk = { model.finishLostOk() }
         askErase = { model.askErase() }
@@ -138,7 +140,7 @@ public struct RecoveryOpenContent: View {
             switch state.step {
             case .enter: OpenEntry(state: state, actions: actions, side: side, onStartOver: startOver, pin: pin)
             case .check: OpenCheck(state: state, actions: actions, side: side, timeScale: timeScale)
-            case .sending: OpenSending()
+            case .sending: OpenSending(slow: state.slowWait, onCancel: actions.cancelSend)
             case .answered:
                 OpenAnswer(
                     state: state, actions: actions, side: side, onStartOver: startOver, onNewCode: newCode, timeScale: timeScale
@@ -265,14 +267,6 @@ private struct OpenCheck: View {
         .disabled(side.busy)
         .onAppear { if side.busy { side.probe?("busy") } }
         .accessibilityIdentifier("open_check_step")
-    }
-}
-
-private struct OpenSending: View {
-    var body: some View {
-        FormScaffold(title: RecoveryScreenStrings.recoverTitle, primaryLabel: nil, onPrimary: {}) {
-            WaitingRow(text: RecoveryScreenStrings.iosRecoverOpenSending, identifier: "open_sending")
-        }
     }
 }
 

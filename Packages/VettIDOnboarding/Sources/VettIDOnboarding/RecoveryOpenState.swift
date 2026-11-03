@@ -34,6 +34,8 @@ public struct RecoveryOpenState: Equatable, Sendable, CustomStringConvertible, C
     public static let codeUnreadable = "unreadable_result"
 
     public var step: OpenStep = .enter
+    /// The open has waited long for the vault (it may be starting): the screen says so and offers to stop waiting.
+    public var slowWait = false
     public var pin = ""
     public var password = ""
     public var showPin = false

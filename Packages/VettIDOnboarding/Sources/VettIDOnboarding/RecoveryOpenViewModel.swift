@@ -21,8 +21,17 @@ public final class RecoveryOpenViewModel {
     @ObservationIgnored private let account: any AccountRepository
     @ObservationIgnored private let work = Work()
     @ObservationIgnored private var openingApp = false
+    /// The open being sent, the timer that says its wait is long, and whether the member stopped waiting.
+    @ObservationIgnored private var sendTask: Task<Void, Never>?
+    @ObservationIgnored private var slowTimer: Task<Void, Never>?
+    @ObservationIgnored private var sendCancelled = false
+    @ObservationIgnored private let slowAfter: @Sendable () async throws -> Void
 
-    public init(move: any MoveRepository, account: any AccountRepository) {
+    public init(
+        move: any MoveRepository, account: any AccountRepository,
+        slowAfter: @escaping @Sendable () async throws -> Void = { try await Task.sleep(for: .seconds(10)) }
+    ) {
+        self.slowAfter = slowAfter
         self.move = move
         self.account = account
         state = RecoveryOpenState(used: move.recoveryAttemptsUsed)
@@ -88,7 +97,15 @@ public final class RecoveryOpenViewModel {
         state.step = .sending
         state.failure = nil
         state.failureCode = nil
-        work.launch { [weak self, move] in
+        state.slowWait = false
+        sendCancelled = false
+        slowTimer?.cancel()
+        slowTimer = Task { [weak self, slowAfter] in
+            guard (try? await slowAfter()) != nil else { return }
+            if let self, state.step == .sending { state.slowWait = true }
+        }
+        sendTask = work.launch { [weak self, move] in
+            defer { self?.slowTimer?.cancel() }
             let out: RecoveryOpenOutcome
             do {
                 if finishing && s.lostOk {
@@ -100,7 +117,7 @@ public final class RecoveryOpenViewModel {
                 // No answer, or the vault said `ok` and the rest failed: then the PIN finishes it, nothing is opened again.
                 let opened = (try? await move.recoveryOpened()) ?? finishing
                 let e = (error as? VaultFailure) ?? VaultFailure(.other)
-                guard let self else { return }
+                guard let self, !sendCancelled else { return }
                 state.step = opened ? .finish : .answered
                 state.failure = e.kind
                 state.failureCode = e.code
@@ -108,8 +125,29 @@ public final class RecoveryOpenViewModel {
                 await self.refreshStage()
                 return
             }
+            guard self?.sendCancelled != true else { return }
             self?.answered(out)
             await self?.refreshStage()
+        }
+    }
+
+    /// "Cancel" on the long wait: stops waiting for the vault's answer. The PIN and the password go; the open may still have
+    /// been taken (it may have used an attempt), and what the vault holds is read again (VAULT-MESSAGING §11.14.6): an `ok`
+    /// it already gave goes to the finish, as at the start.
+    public func cancelSend() {
+        guard state.step == .sending else { return }
+        sendCancelled = true
+        sendTask?.cancel()
+        slowTimer?.cancel()
+        move.forgetPairingPin()
+        state.slowWait = false
+        state.step = .enter
+        state.pin = ""
+        state.password = ""
+        work.launch { [weak self, move] in
+            let opened = (try? await move.recoveryOpened()) ?? false
+            if opened, self?.state.step == .enter { self?.state.step = .finish }
+            await self?.refreshStage(startFinish: true)
         }
     }
 

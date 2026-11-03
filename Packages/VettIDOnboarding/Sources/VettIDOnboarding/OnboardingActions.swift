@@ -31,6 +31,8 @@ public protocol OnboardingActions: AnyObject, Sendable {
     func acknowledgeBackupOff(_ ack: Bool)
     func submitBackup()
     func run()
+    /// Stops waiting for the enrollment (offered once the wait is long).
+    func cancelRun()
     func editAfterFailure()
     func finish()
     /// (IOS-PLAN §4.2) The member has seen "Your vault was deleted…" on the welcome screen.
@@ -69,6 +71,7 @@ public final class NoOnboardingActions: OnboardingActions {
     public func acknowledgeBackupOff(_ ack: Bool) {}
     public func submitBackup() {}
     public func run() {}
+    public func cancelRun() {}
     public func editAfterFailure() {}
     public func finish() {}
     public func dismissDeletedNotice() {}

@@ -29,11 +29,21 @@ public final class OnboardingViewModel: OnboardingActions {
     @ObservationIgnored private var failedScan: String?
     /// ``finish()`` is running: a second tap does not ask again.
     @ObservationIgnored private var finishing = false
+    /// The enrollment running, the timer that says its wait is long, and whether the member stopped waiting.
+    @ObservationIgnored private var runTask: Task<Void, Never>?
+    @ObservationIgnored private var slowTimer: Task<Void, Never>?
+    @ObservationIgnored private var runCancelled = false
+    /// How long the enrollment waits before the screen says the vault may be starting.
+    @ObservationIgnored private let slowAfter: @Sendable () async throws -> Void
 
     static let maxEmail = 254
     static let maxCodeInput = 16
 
-    public init(account: any AccountRepository, vault: any VaultRepository, inbox: SetupLinkInbox) {
+    public init(
+        account: any AccountRepository, vault: any VaultRepository, inbox: SetupLinkInbox,
+        slowAfter: @escaping @Sendable () async throws -> Void = { try await Task.sleep(for: .seconds(10)) }
+    ) {
+        self.slowAfter = slowAfter
         self.account = account
         self.vault = vault
         self.inbox = inbox
@@ -150,13 +160,16 @@ public final class OnboardingViewModel: OnboardingActions {
     // MARK: - Tasks
 
     /// Starts [body] as one of this model's tasks.
-    func launch(_ body: @escaping @MainActor () async -> Void) {
+    @discardableResult
+    func launch(_ body: @escaping @MainActor () async -> Void) -> Task<Void, Never> {
         let id = nextWork
         nextWork += 1
-        work[id] = Task { [weak self] in
+        let task = Task { [weak self] in
             await body()
             self?.work[id] = nil
         }
+        work[id] = task
+        return task
     }
 
     /// Marks the flow busy at once (a second tap or scan is ignored), then runs [block]; a failure is shown, and
@@ -437,7 +450,15 @@ public final class OnboardingViewModel: OnboardingActions {
         state.error = nil
         state.errorCode = nil
         state.progress = steps(credentialOnly: credentialOnly).map { ProgressEntry($0, .pending) }
-        launch { [self] in
+        state.slowWait = false
+        runCancelled = false
+        slowTimer?.cancel()
+        slowTimer = Task { [weak self, slowAfter] in
+            guard (try? await slowAfter()) != nil else { return }
+            if let self, state.busy { state.slowWait = true }
+        }
+        runTask = launch { [self] in
+            defer { slowTimer?.cancel() }
             do {
                 if !enrolled {
                     try await vault.enroll(pin: s.pin) { self.mark($0) }
@@ -455,15 +476,34 @@ public final class OnboardingViewModel: OnboardingActions {
                 for i in state.progress.indices { state.progress[i].state = .done }
                 if case .setup = account.phase { go(.done) }
             } catch let e as VaultFailure {
+                if runCancelled { return }
                 failed(e)
             } catch {
+                if runCancelled { return }
                 state.busy = false
             }
         }
     }
 
+    /// "Cancel" on the long wait: stops waiting for the vault. Whatever was typed goes; an enrollment that was posted is
+    /// resumed by the next try, and the next start reads the phase (VAULT-MESSAGING §11.3).
+    public func cancelRun() {
+        guard state.busy, state.step == .progress else { return }
+        runCancelled = true
+        runTask?.cancel()
+        slowTimer?.cancel()
+        state.busy = false
+        state.slowWait = false
+        state.pin = ""
+        state.pinConfirm = ""
+        state.password = ""
+        state.passwordConfirm = ""
+        editAfterFailure()
+    }
+
     private func failed(_ e: VaultFailure) {
         state.busy = false
+        state.slowWait = false
         state.error = e.kind
         state.errorCode = e.code
         for i in state.progress.indices where state.progress[i].state == .active { state.progress[i].state = .failed }

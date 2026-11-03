@@ -46,6 +46,7 @@ extension FakeVaultRepository: VaultRepository {
 
     public func enroll(pin: String, onStep: @MainActor (EnrollStep) -> Void) async throws {
         try call("enroll")
+        try await enrollWait?()
         lastPin = pin
         for s in [EnrollStep.enroll, .waitForVault, .handshake] { onStep(s) }
     }
@@ -250,6 +251,7 @@ extension FakeVaultRepository: MoveRepository {
 
     public func recoveryOpen(pin: String, password: String) async throws -> RecoveryOpenOutcome {
         try call("recoveryOpen")
+        try await recoveryOpenWait?()
         lastPin = pin
         lastPassword = password
         return recoveryOpenOutcomes.isEmpty ? RecoveryOpenOutcome("ok", used: 1) : recoveryOpenOutcomes.removeFirst()

@@ -341,6 +341,14 @@ public struct ProgressScreen: View {
         ) {
             StepList(state.progress.map { ($0.step.label, $0.state.stepState) }).accessibilityIdentifier("progress")
             ErrorNotice(state: state)
+            if state.busy, state.slowWait {
+                // The vault may be starting (Android's text for the same wait of a recovery's registration).
+                VStack(alignment: .leading, spacing: Spacing.m) {
+                    Text(RecoveryScreenStrings.recoverRegisteringStarting).vettIDFont(.bodyMedium)
+                    Button(MoveStrings.transferInCancel) { actions.cancelRun() }
+                        .accessibilityIdentifier("progress_cancel_wait")
+                }
+            }
         }
         // The enrolment waits for the vault to start and answer: the screen stays on while it runs.
         .keepsScreenOn(!failed)
