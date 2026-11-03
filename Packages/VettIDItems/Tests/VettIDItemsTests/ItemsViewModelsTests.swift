@@ -77,6 +77,17 @@ import VettIDDataTesting
         #expect(vm.state.error == nil)
     }
 
+    /// A refresh that fails with items shown keeps them and says why.
+    @Test func aFailedRefreshKeepsTheItems() async {
+        let vm = ItemsViewModel(items: items)
+        await vm.settle()
+        let shown = vm.state.items.map(\.itemID)
+        items.fail["refresh"] = VaultFailure(.noResponse)
+        vm.refresh()
+        await vm.settle()
+        #expect(vm.state.error == .noResponse && vm.state.items.map(\.itemID) == shown && shown.count == 3 && !vm.state.loading)
+    }
+
     @Test func aDataItemShowsItsValues() async {
         let vm = await detail("01P")
         #expect(vm.state.revealed && vm.state.item?.fields.map(\.value) == [.text("123")])

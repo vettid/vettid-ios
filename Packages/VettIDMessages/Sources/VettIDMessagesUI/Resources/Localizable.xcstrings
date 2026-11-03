@@ -476,6 +476,17 @@
         }
       }
     },
+    "messages_new_error_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Could not load connections"
+          }
+        }
+      }
+    },
     "messages_new_empty_title": {
       "extractionState": "manual",
       "localizations": {

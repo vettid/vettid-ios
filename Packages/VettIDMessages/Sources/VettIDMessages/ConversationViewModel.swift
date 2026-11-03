@@ -67,6 +67,8 @@ public struct ConversationState: Equatable, Sendable, CustomStringConvertible, C
     public var tooLong = false
     /// The message the member asked to delete: confirmed first.
     public var deleting: MessageInfo?
+    /// Why the conversation could not be read: said with "Try again", and never "Say hello" in its place.
+    public var loadError: FailureKind?
     public var error: FailureKind?
     /// Older messages remain in the vault (§10.5.2): reaching the top loads them.
     public var olderAvailable = false
@@ -212,6 +214,8 @@ public final class ConversationViewModel {
     }
 
     private func load() {
+        local.loading = true
+        local.loadError = nil
         let (messages, connections, id) = (messages, connections, connectionID)
         work.launch { [weak self] in
             do {
@@ -223,9 +227,15 @@ public final class ConversationViewModel {
                 self?.local.loading = false
             } catch {
                 self?.local.loading = false
-                self?.local.error = failureKind(error)
+                self?.local.loadError = failureKind(error)
             }
         }
+    }
+
+    /// Reads the conversation again, after its read failed.
+    public func retryLoad() {
+        guard local.loadError != nil else { return }
+        load()
     }
 
     public func setDraft(_ v: String) {

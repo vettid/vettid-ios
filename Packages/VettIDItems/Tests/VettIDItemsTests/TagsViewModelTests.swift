@@ -153,13 +153,36 @@ func eventually(within: Duration = .seconds(20), _ condition: @MainActor () -> B
         if case .colour? = vm.state.dialog {} else { Issue.record("the picker stays") }
     }
 
+    /// Refused while the vault was on hold: the failure is kept, and "Try again" (the screen's refresh) reads again.
+    @Test func aHeldReadIsReadAgainOnTryAgain() async {
+        sharing.fail["refreshTags"] = VaultFailure(.ownerCheckRequired)
+        let vm = await loaded()
+        #expect(vm.state.loadFailure?.kind == .ownerCheckRequired)
+        vm.refresh()
+        await vm.settle()
+        #expect(vm.state.loadFailure == nil && vm.state.registry != nil)
+    }
+
     @Test func aFailedListSaysWhyAndALimitIsNamed() async {
         sharing.fail["refreshTags"] = VaultFailure(.network)
         let vm = await loaded()
-        #expect(vm.state.error == .network && !vm.state.loading && vm.state.registry == nil)
+        // A read that failed is its own failure, with "Try again": not "No tags yet", not an action's failure.
+        #expect(vm.state.loadFailure == LoadFailure(.network) && vm.state.error == nil && !vm.state.loading && vm.state.registry == nil)
+        vm.refresh()
+        #expect(vm.state.loadFailure == nil && vm.state.loading)
+        await vm.settle()
+        #expect(vm.state.registry != nil && vm.state.loadFailure == nil)
+        // A refresh that fails with tags listed keeps them.
+        sharing.fail["refreshTags"] = VaultFailure(.noResponse)
         vm.refresh()
         await vm.settle()
-        #expect(vm.state.registry != nil)
+        #expect(vm.state.loadFailure?.kind == .noResponse && vm.state.registry != nil)
+        // A change that brings the tags back clears the failed read.
+        vm.askCreate()
+        vm.setName("trips")
+        vm.save()
+        await vm.settle()
+        #expect(vm.state.loadFailure == nil && vm.state.dialog == nil)
         sharing.fail["setTag:new"] = VaultFailure(.limit, code: "limit", limit: VaultLimit("tag_registry", max: 512))
         vm.askCreate()
         vm.setName("new")

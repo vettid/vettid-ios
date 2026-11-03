@@ -32,7 +32,10 @@ import VettIDUI
         failed.error = .network
         var filtered = ItemsState(items: summaries, load: .loaded)
         filtered.filter.query = "nothing"
-        for s in [ItemsState(), ItemsState(load: .loaded), failed, ItemsState(items: summaries, load: .loaded), filtered] {
+        // A refresh that failed with items shown.
+        var stale = ItemsState(items: summaries, load: .loaded)
+        stale.error = .noResponse
+        for s in [ItemsState(), ItemsState(load: .loaded), failed, ItemsState(items: summaries, load: .loaded), filtered, stale] {
             #expect(height(ItemsScreen(state: s, chrome: chrome, actions: ItemsActions())) > 0)
         }
         #expect(height(TemplatePickerScreen(onBack: {}, onPick: { _ in })) > 0)
@@ -158,7 +161,15 @@ import VettIDUI
         loading.loading = true
         var prompt = s
         prompt.prompt = PasswordPrompt(.save)
-        for f in forms + [data, loading, prompt] {
+        // An item that could not be read.
+        var unread = ItemEditState(itemID: "01L")
+        unread.loadFailure = LoadFailure(.network)
+        // Refused while the vault was on hold: the item is not read again by itself, so "Try again" stays.
+        #expect(LoadFailedNotice.offersRetry(LoadFailure(.ownerCheckRequired), retriesByItself: ItemEditScreen.retriesByItself))
+        var held = unread
+        held.loadFailure = LoadFailure(.ownerCheckRequired)
+        forms.append(held)
+        for f in forms + [data, loading, prompt, unread] {
             #expect(height(ItemEditScreen(state: f, actions: ItemEditActions())) > 0)
         }
         #expect(height(DialogSheet(title: "t", confirm: "c", enabled: true, onCancel: {}, onConfirm: {}) { FieldDialog(title: "Add", confirm: "Add", label: "", kind: FieldKinds.text, actions: ItemEditActions()) }) > 0)

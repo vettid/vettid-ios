@@ -39,7 +39,16 @@ public final class FakeMessages: MessagesRepository {
 
     public func olderAvailable(_ connectionID: String) -> Bool { !(olderPages[connectionID] ?? []).isEmpty }
 
-    public func refreshConversations() async throws { try call("refreshConversations", "") }
+    /// When set, each ``refreshConversations()`` waits here before it answers (reads that overlap); a failure set in
+    /// ``fail`` is thrown after the wait.
+    public var refreshHold: TestHold?
+
+    public func refreshConversations() async throws {
+        let failure = fail.removeValue(forKey: "refreshConversations")
+        calls.append("refreshConversations:")
+        if let refreshHold { await refreshHold.wait() }
+        if let failure { throw failure }
+    }
 
     public func load(_ connectionID: String) async throws { try call("load", connectionID) }
 

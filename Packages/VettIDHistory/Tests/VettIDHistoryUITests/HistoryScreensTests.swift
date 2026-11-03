@@ -70,10 +70,36 @@ import VettIDVault
         failed.error = .network
         var noMatch = loaded
         noMatch.filter = AuditFilter(category: .devices)
-        for s in [HistoryState(), loaded, full, more, broken, local, failed, noMatch] {
+        // A read that failed with entries shown: they stay, under the failure.
+        var stale = full
+        stale.end = false
+        stale.error = .noResponse
+        stale.refreshFailed = true
+        var nextPage = stale
+        nextPage.refreshFailed = false
+        for s in [HistoryState(), loaded, full, more, broken, local, failed, noMatch, stale, nextPage] {
             #expect(height(HistoryScreen(state: s, chrome: chrome, actions: HistoryActions())) > 0, "\(s)")
             #expect(height(HistoryScreen(state: s, chrome: nil, onBack: {}, actions: HistoryActions())) > 0, "\(s)")
         }
+    }
+
+    /// A next page that failed is the footer's "Try again" (`history_retry`); a failed refresh is said above the entries,
+    /// with no "Try again" in the footer. Mirrors vettid-android's footer.
+    @Test func theFooterRetriesOnlyAFailedNextPage() {
+        var s = HistoryState()
+        s.loading = false
+        s.entries = [Self.rec(5, "message.sent")]
+        s.error = .noResponse
+        #expect(HistoryEntryList.footer(s) == .retry)
+        s.refreshFailed = true
+        #expect(HistoryEntryList.footer(s) == .none)
+        s.error = nil
+        s.refreshFailed = false
+        #expect(HistoryEntryList.footer(s) == .more)
+        s.end = true
+        #expect(HistoryEntryList.footer(s) == .end)
+        s.loadingMore = true
+        #expect(HistoryEntryList.footer(s) == .loading)
     }
 
     @Test func everyStateOfAnEntryRenders() {

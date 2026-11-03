@@ -100,6 +100,11 @@ public struct SharedWithYouScreen: View {
 
     private var name: String { ItemsText.sharingName(state.connectionName) }
 
+    /// "<name> shares nothing with you." only after a read that was answered with nothing: never after one that failed.
+    static func saysNone(_ state: SharedWithYouState) -> Bool {
+        !state.loading && state.loadFailure == nil && state.received.isEmpty
+    }
+
     private var askShown: Binding<Bool> {
         Binding(get: { state.ask != nil }, set: { if !$0, state.ask != nil { actions.onOpenAsk(false) } })
     }
@@ -113,11 +118,15 @@ public struct SharedWithYouScreen: View {
                         .vettIDFont(.bodyMedium)
                         .foregroundStyle(colors.onSurfaceVariant)
                         .padding(.horizontal, Spacing.gutter)
+                    if let failure = state.loadFailure {
+                        LoadFailedNotice(failure: failure, identifier: "shared_load_error", onRetry: actions.onRetry)
+                            .padding(.horizontal, Spacing.s)
+                    }
                     SharingErrorNotice(error: state.error, limit: state.limit, code: state.errorCode, onDismiss: actions.onDismissError)
                     Spacer().frame(height: Spacing.m)
                     if state.loading && state.received.isEmpty {
                         ProgressView().tint(colors.primary.color).frame(maxWidth: .infinity).padding(Spacing.xl)
-                    } else if state.received.isEmpty {
+                    } else if Self.saysNone(state) {
                         Text(ItemsStrings.sharedNone(name))
                             .foregroundStyle(colors.onSurfaceVariant)
                             .padding(.horizontal, Spacing.gutter)

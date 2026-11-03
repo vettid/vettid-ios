@@ -41,16 +41,19 @@ import VettIDDataTesting
         connections.connections = []
         let m = ConversationViewModel(connectionID: "c1", messages: messages, connections: connections)
         await m.settle()
-        #expect(m.state.error == .notFound && m.state.connection == nil && !m.state.loading)
+        #expect(m.state.loadError == .notFound && m.state.error == nil && m.state.connection == nil && !m.state.loading)
         #expect(connections.calls == ["connection"] && messages.calls.isEmpty)
     }
 
-    @Test func aFailedLoadSaysWhy() async {
+    /// A conversation that could not be read says so with "Try again", which reads it again; never "Say hello".
+    @Test func aFailedLoadSaysWhyAndIsReadAgain() async {
         messages.fail["load"] = VaultFailure(.network)
         let m = await model()
-        #expect(m.state.error == .network && !m.state.loading)
-        m.dismissError()
-        #expect(m.state.error == nil)
+        #expect(m.state.loadError == .network && m.state.error == nil && !m.state.loading)
+        m.retryLoad()
+        #expect(m.state.loadError == nil && m.state.loading)
+        await m.settle()
+        #expect(m.state.loadError == nil && !m.state.loading && messages.calls == ["load:c1", "load:c1"])
     }
 
     /// Incoming messages are marked read while the conversation is shown: those there when it shows, and each new one; a

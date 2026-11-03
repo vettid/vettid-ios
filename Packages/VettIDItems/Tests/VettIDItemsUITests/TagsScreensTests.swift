@@ -35,6 +35,28 @@ import VettIDUI
         }
     }
 
+    /// Tags that could not be read are never "No tags yet": the failure with "Try again"; with tags listed, the failure is
+    /// said above them.
+    @Test func aFailedReadIsNotTheEmptyState() {
+        var unread = TagsState()
+        unread.loading = false
+        unread.loadFailure = LoadFailure(.network)
+        #expect(TagsScreen.phase(unread) == .failed && !TagsScreen.canCreate(unread))
+        unread.loadFailure = nil
+        #expect(TagsScreen.phase(unread) == .empty)
+        unread.loading = true
+        #expect(TagsScreen.phase(unread) == .loading && !TagsScreen.canCreate(unread))
+        var listed = TagsState(registry: registry)
+        listed.loading = false
+        listed.loadFailure = LoadFailure(.network)
+        #expect(TagsScreen.phase(listed) == .rows && TagsScreen.canCreate(listed))
+        #expect(height(TagsScreen(state: listed, actions: TagsActions())) > 0)
+        #expect(ItemsStrings.errorList == "Your vault could not be read" && ItemsStrings.retry == "Try again")
+        // Refused while the vault was on hold: the tags are not read again by themselves, so "Try again" stays.
+        #expect(LoadFailedNotice.offersRetry(LoadFailure(.ownerCheckRequired), retriesByItself: TagsScreen.retriesByItself))
+        #expect(!LoadFailedNotice.offersRetry(LoadFailure(.ownerCheckRequired), retriesByItself: ItemsScreen.retriesByItself))
+    }
+
     @Test func everyDialogRenders() {
         let travel = registry.tags[2], medical = registry.tags[1]
         let dialogs: [TagDialog] = [

@@ -363,6 +363,21 @@ import VettIDDataTesting
         #expect(sharing.calls.contains("revoke:g1") && vm.state.active.isEmpty && !vm.state.busy)
     }
 
+    /// A failed read is said with "Try again", which reads again; a revoke's failure stays its own.
+    @Test func aFailedReadOfTheRulesIsShownAndReadAgain() async {
+        sharing.fail["rules"] = VaultFailure(.network)
+        sharing.given = [given]
+        let vm = await connectionVM()
+        #expect(vm.state.loadFailure == LoadFailure(.network) && vm.state.error == nil && !vm.state.loading)
+        vm.load()
+        await vm.settle()
+        sharing.fail["revoke:g1"] = VaultFailure(.noResponse)
+        vm.askRevoke(vm.state.active[0])
+        vm.revoke()
+        await vm.settle()
+        #expect(vm.state.error == .noResponse && vm.state.loadFailure == nil && vm.state.active.count == 1, "read again, then a revoke failed")
+    }
+
     // MARK: - What a connection shares with the member
 
     @Test func sharedWithYouIsFetchedOnPurposeAndForgottenOnStop() async {
@@ -557,7 +572,10 @@ extension SharingViewModelsTests {
     @Test func aFailedLoadIsShownAndAnotherFetchWaitsForTheFirst() async {
         sharing.fail["grants"] = VaultFailure(.notFound)
         let vm = await sharedVM()
-        #expect(vm.state.error == .notFound && !vm.state.loading)
+        #expect(vm.state.loadFailure == LoadFailure(.notFound) && vm.state.error == nil && !vm.state.loading)
+        vm.load()
+        await vm.settle()
+        #expect(vm.state.loadFailure == nil && sharing.calls.count { $0 == "grants" } == 2)
         vm.fetch("g1")
         vm.fetch("g2")
         await vm.settle()

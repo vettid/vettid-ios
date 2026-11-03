@@ -109,6 +109,7 @@ public struct ConversationRoute: View {
         a.onAskDelete = { m.askDelete($0) }
         a.onConfirmDelete = { m.confirmDelete() }
         a.onDismissError = { m.dismissError() }
+        a.onRetry = { m.retryLoad() }
         a.onLoadOlder = { m.loadOlder() }
         a.onLink = { m.askOpen($0) }
         a.onConfirmLink = { LinkOpening.perform(m.confirmLink(), open: { openURL($0) }, invite: host.onInviteLink) }
@@ -194,7 +195,8 @@ public struct NewMessageRoute: View {
             state: model?.state ?? NewMessageState(),
             onBack: host.onBack,
             onPick: host.onOpenConversation,
-            onInvite: host.onInvite
+            onInvite: host.onInvite,
+            onRetry: { model?.reload() }
         )
         .onAppear { if model == nil { model = NewMessageViewModel(connections: connections) } }
     }

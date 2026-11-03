@@ -10,7 +10,11 @@ public struct ApprovalsState: Equatable, Sendable, CustomStringConvertible, Cust
     public var approvals: [PendingApproval] = []
     /// Requests the other member declined (0.10.5): told once, until dismissed (here or on Connections).
     public var peerDeclines: [PeerDecline] = []
+    /// Why the last read of the lists failed: in place of the list when there is nothing to show, else above it, with
+    /// "Try again" (never "Nothing to approve" for a list that could not be read).
     public var error: FailureKind?
+    /// Why the last "Resume requests" or "Remove connection" failed: shown above the list, with "OK".
+    public var actionError: FailureKind?
     /// Why the last read of the open asks (`pending.list`, VAULT-MESSAGING 0.70.0 §10.4.2) failed: the screen says so, with
     /// Retry; ``FailureKind/ownerCheckRequired`` says the vault is on hold, without Retry.
     public var openAsksError: FailureKind?
@@ -49,7 +53,7 @@ public struct ApprovalsState: Equatable, Sendable, CustomStringConvertible, Cust
 
     public var description: String {
         "ApprovalsState(loading: \(loading), approvals: \(approvals.count), paused: \(paused.count), "
-            + "error: \(error.map { "\($0)" } ?? "nil"))"
+            + "error: \(error.map { "\($0)" } ?? "nil"), actionError: \(actionError.map { "\($0)" } ?? "nil"))"
     }
     public var debugDescription: String { description }
     public var customMirror: Mirror { Mirror(self, children: [:]) }
@@ -68,6 +72,8 @@ public final class ApprovalsViewModel {
     @ObservationIgnored private let work = Work()
     @ObservationIgnored private let follows = TaskBag()
     private var local = ApprovalsState()
+    /// Counts the reads started: only the latest one's answer is applied.
+    @ObservationIgnored private var reads = 0
 
     /// [ownerChecks]: a list refused because the daily check was due reads again by itself once a check passes, as
     /// vettid-android's `checkCleared`.
@@ -104,17 +110,24 @@ public final class ApprovalsViewModel {
         refresh()
     }
 
+    /// Reads the lists again. Reads may overlap (Try again, a passed check): only the latest one's answer is shown, so that
+    /// an older failure never hides a newer success, nor the other way round.
     public func refresh() {
+        reads += 1
+        let read = reads
         local.error = nil
+        local.loading = true
         let approvals = approvals
         work.launch { [weak self] in
+            var failure: FailureKind?
             do {
                 try await approvals.refreshApprovals()
-                self?.local.loading = false
             } catch {
-                self?.local.loading = false
-                self?.local.error = failureKind(error)
+                failure = failureKind(error)
             }
+            guard let self, read == reads else { return }
+            local.loading = false
+            local.error = failure
         }
     }
 
@@ -138,16 +151,19 @@ public final class ApprovalsViewModel {
     /// The member saw that the other member declined [requestID] (0.10.5): not shown again.
     public func dismissPeerDecline(_ requestID: String) { approvals.dismissPeerDecline(requestID) }
 
+    /// The member read why an action failed.
+    public func dismissActionError() { local.actionError = nil }
+
     private func act(_ body: @escaping @MainActor () async throws -> Void) {
         local.busy = true
-        local.error = nil
+        local.actionError = nil
         work.launch { [weak self] in
             do {
                 try await body()
                 self?.local.busy = false
             } catch {
                 self?.local.busy = false
-                self?.local.error = failureKind(error)
+                self?.local.actionError = failureKind(error)
             }
         }
     }

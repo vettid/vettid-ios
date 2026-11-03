@@ -164,20 +164,23 @@ public final class ItemEditViewModel {
     /// The item's metadata (`item.get`): a data item with its values, a secret or critical one with them kept.
     private func load(_ itemID: String) {
         state.loading = true
-        state.error = nil
+        state.loadFailure = nil
         let items = items
         work.launch { [weak self] in
             do {
                 let d = try await items.get(itemID)
                 self?.edit(d)
             } catch {
-                let f = error as? VaultFailure ?? VaultFailure(.other)
                 self?.state.loading = false
-                self?.state.error = f.kind
-                self?.state.errorCode = f.code
-                self?.state.limit = f.limit
+                self?.state.loadFailure = LoadFailure(error)
             }
         }
+    }
+
+    /// Reads the item to edit again, after its read failed.
+    public func retryLoad() {
+        guard let id = state.itemID, state.loadFailure != nil else { return }
+        load(id)
     }
 
     func edit(_ d: ItemDetail) {

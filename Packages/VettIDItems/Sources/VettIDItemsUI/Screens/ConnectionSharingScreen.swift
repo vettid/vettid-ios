@@ -13,6 +13,8 @@ public struct ConnectionSharingActions {
     public var onAskRevoke: @MainActor (GrantView?) -> Void = { _ in }
     public var onRevoke: @MainActor () -> Void = {}
     public var onDismissError: @MainActor () -> Void = {}
+    /// Reads the rules and grants again after their read failed.
+    public var onRetry: @MainActor () -> Void = {}
 
     public init() {}
 }
@@ -59,6 +61,7 @@ public struct ConnectionSharingRoute: View {
         a.onAskRevoke = { m?.askRevoke($0) }
         a.onRevoke = { m?.revoke() }
         a.onDismissError = { m?.dismissError() }
+        a.onRetry = { m?.load() }
         return a
     }
 }
@@ -87,6 +90,10 @@ public struct ConnectionSharingScreen: View {
                         .vettIDFont(.bodyMedium)
                         .foregroundStyle(colors.onSurfaceVariant)
                         .padding(.horizontal, Spacing.gutter)
+                    if let failure = state.loadFailure {
+                        LoadFailedNotice(failure: failure, identifier: "sharing_load_error", onRetry: actions.onRetry)
+                            .padding(.horizontal, Spacing.s)
+                    }
                     SharingErrorNotice(error: state.error, limit: state.limit, code: state.errorCode, onDismiss: actions.onDismissError)
                     if state.loading && state.rules.isEmpty {
                         ProgressView().tint(colors.primary.color).frame(maxWidth: .infinity).padding(Spacing.xl)
@@ -112,10 +119,19 @@ public struct ConnectionSharingScreen: View {
         )
     }
 
+    /// Whether the screen may say that nothing is shared: only after a read that was answered, never while reading or after
+    /// a read that failed, when what the connection can see is unknown.
+    static func saysNone(_ state: ConnectionSharingState) -> Bool { !state.loading && state.loadFailure == nil }
+
+    /// "Add a rule": not at the limit, and not while the rules are unknown (their first read under way, or a read failed).
+    static func canAddRule(_ state: ConnectionSharingState) -> Bool {
+        !state.atRuleLimit && state.loadFailure == nil && !(state.loading && state.rules.isEmpty)
+    }
+
     /// The connection's rules, each with its own settings (§10.12), and "Add a rule" up to 64.
     @ViewBuilder private var rules: some View {
         SettingsSectionHeader(ItemsStrings.sharingRules)
-        if !state.loading && state.rules.isEmpty {
+        if Self.saysNone(state) && state.rules.isEmpty {
             Text(ItemsStrings.sharingNoRules(name))
                 .foregroundStyle(colors.onSurfaceVariant)
                 .padding(.horizontal, Spacing.gutter)
@@ -128,7 +144,7 @@ public struct ConnectionSharingScreen: View {
         }
         if state.atRuleLimit { RuleLimitNotice().padding(.horizontal, Spacing.s) }
         SecondaryButton(ItemsStrings.sharingNewRule) { actions.onNewRule() }
-            .disabled(state.atRuleLimit)
+            .disabled(!Self.canAddRule(state))
             .padding(.horizontal, Spacing.gutter)
             .padding(.vertical, Spacing.s)
             .accessibilityIdentifier("sharing_new_rule")
@@ -137,7 +153,7 @@ public struct ConnectionSharingScreen: View {
     /// What the connection can fetch now, and the critical items it can only ask to use.
     @ViewBuilder private var given: some View {
         SettingsSectionHeader(ItemsStrings.sharingCanSee(name))
-        if state.active.isEmpty && state.usable.isEmpty {
+        if Self.saysNone(state) && state.active.isEmpty && state.usable.isEmpty {
             Text(ItemsStrings.sharingNothing(name))
                 .foregroundStyle(colors.onSurfaceVariant)
                 .padding(.horizontal, Spacing.gutter)

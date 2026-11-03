@@ -35,7 +35,16 @@ public final class FakeConnections: ConnectionsRepository, ConnectionRequestsRep
         if let f = fail.removeValue(forKey: name) { throw f }
     }
 
-    public func refresh() async throws { try call("refresh") }
+    /// When set, each ``refresh()`` waits here before it answers (reads that overlap); a failure set in ``fail`` is thrown
+    /// after the wait.
+    public var refreshHold: TestHold?
+
+    public func refresh() async throws {
+        let failure = fail.removeValue(forKey: "refresh")
+        calls.append("refresh")
+        if let refreshHold { await refreshHold.wait() }
+        if let failure { throw failure }
+    }
 
     public func connection(_ id: String) async throws -> ConnectionInfo {
         try call("connection")

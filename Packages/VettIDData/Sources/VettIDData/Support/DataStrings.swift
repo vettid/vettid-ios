@@ -385,12 +385,11 @@ enum DataStrings {
     static var failureRejected: String {
         String(localized: "data_failure_rejected", defaultValue: "Rejected on your phone.", bundle: .module)
     }
+    /// Not vettid-android's text, which says that what was entered is kept: on the iPhone the check takes the shell's place
+    /// at once, and the screen's input goes with it (chosen; not in the spec).
     static var failureOwnerCheckRequired: String {
         String(
-            localized: "data_failure_owner_check_required",
-            defaultValue: """
-                Your daily check is due. What you entered is kept: the check opens when you leave this screen.
-                """,
+            localized: "data_failure_owner_check_required", defaultValue: "Your daily check is due. Complete it to go on.",
             bundle: .module
         )
     }

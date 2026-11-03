@@ -36,6 +36,8 @@ public struct ItemEditActions {
     public var onRemoveField: @MainActor (Int) -> Void = { _ in }
     public var onMoveField: @MainActor (Int, Int) -> Void = { _, _ in }
     public var onSave: @MainActor () -> Void = {}
+    /// Reads the item again after its read failed.
+    public var onRetry: @MainActor () -> Void = {}
     public var onDismissError: @MainActor () -> Void = {}
     public var onPassword: @MainActor (String) -> Void = { _ in }
     public var onSubmitPassword: @MainActor () -> Void = {}
@@ -127,6 +129,7 @@ public struct ItemEditRoute: View {
         a.onRemoveField = { m.removeField($0) }
         a.onMoveField = { m.moveField($0, by: $1) }
         a.onSave = { m.save() }
+        a.onRetry = { m.retryLoad() }
         a.onDismissError = { m.dismissError() }
         a.onPassword = { m.setPassword($0) }
         a.onSubmitPassword = { m.submitPassword() }
@@ -162,6 +165,9 @@ public struct ItemEditScreen: View {
         self.actions = actions
     }
 
+    /// The item is not read again by itself after a refusal while the vault is on hold: "Try again" stays.
+    static let retriesByItself = false
+
     public var body: some View {
         // A ZStack keeps its identity whichever step it shows, so that the gesture block below stays on one probe.
         ZStack {
@@ -172,6 +178,20 @@ public struct ItemEditScreen: View {
                 )
             } else if state.loading {
                 ProgressView().tint(colors.primary.color).frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if let failure = state.loadFailure {
+                // No form to save: the item could not be read.
+                DetailScaffold(onBack: actions.onBack) {
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 0) {
+                            LargeTitle(ItemsStrings.editTitle)
+                            LoadFailedNotice(
+                                failure: failure, identifier: "item_edit_load_error", retriesByItself: Self.retriesByItself,
+                                onRetry: actions.onRetry
+                            )
+                                .padding(.horizontal, Spacing.s)
+                        }
+                    }
+                }
             } else {
                 form
             }

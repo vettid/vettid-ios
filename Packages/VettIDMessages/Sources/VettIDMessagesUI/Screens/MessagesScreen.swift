@@ -64,14 +64,20 @@ public struct MessagesScreen: View {
         .accessibilityIdentifier("messages_screen")
     }
 
+    /// What the screen shows: conversations that could not be read are never the empty state.
+    static func phase(_ state: MessagesState) -> ListPhase {
+        ListPhase.of(loading: state.loading, empty: state.conversations.isEmpty, failed: state.error != nil)
+    }
+
     @ViewBuilder private var content: some View {
-        if state.loading && state.conversations.isEmpty {
+        let phase = Self.phase(state)
+        if phase == .loading {
             ProgressView().tint(colors.primary.color).frame(maxWidth: .infinity, maxHeight: .infinity)
                 .accessibilityIdentifier("messages_loading")
-        } else if let error = state.error, state.conversations.isEmpty {
-            MessagesError(kind: error, actionLabel: MessagesStrings.retry, action: actions.onRetry)
-                .padding(Spacing.xl)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else if phase == .failed, let error = state.error {
+            ScrollView {
+                MessagesError(kind: error, actionLabel: MessagesStrings.retry, action: actions.onRetry).padding(Spacing.xl)
+            }
         } else if state.conversations.isEmpty && state.searching {
             EmptyState(icon: .search, title: MessagesStrings.noMatchTitle, message: MessagesStrings.noMatchBody)
                 .accessibilityIdentifier("messages_no_match")
@@ -81,6 +87,11 @@ public struct MessagesScreen: View {
         } else {
             ScrollView {
                 LazyVStack(spacing: 0) {
+                    // A refresh that failed keeps the conversations shown and says why.
+                    if phase.failedAbove(failed: state.error != nil), let error = state.error {
+                        MessagesError(kind: error, actionLabel: MessagesStrings.retry, action: actions.onRetry)
+                            .padding(.horizontal, Spacing.gutter).padding(.vertical, Spacing.s)
+                    }
                     ForEach(state.conversations) { c in
                         ConversationItem(summary: c) { actions.onOpen(c.connection.id) }
                     }
@@ -150,10 +161,13 @@ struct MessagesError: View {
     @Environment(\.vettIDColors) private var colors
     let kind: FailureKind
     let actionLabel: String
+    var title = MessagesStrings.errorTitle
+    /// Spoken when it appears: a failed read waits its turn, an action's failure interrupts.
+    var announce = Announce.polite
     let action: @MainActor () -> Void
 
     var body: some View {
-        NoticeCard(.warning, title: MessagesStrings.errorTitle, message: kind.message(timeScale: timeScale)) {
+        NoticeCard(.warning, title: title, message: kind.message(timeScale: timeScale), announce: announce) {
             Button(action: action) {
                 Text(actionLabel).vettIDFont(.labelLarge, weight: .semibold).foregroundStyle(colors.primary)
             }

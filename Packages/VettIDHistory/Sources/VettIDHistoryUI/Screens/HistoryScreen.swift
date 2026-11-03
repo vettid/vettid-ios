@@ -160,6 +160,7 @@ struct HistorySearchField: View {
 struct HistoryEntryList: View {
     @Environment(\.vettIDColors) private var colors
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.vettIDTimeScale) private var timeScale
     let state: HistoryState
     let actions: HistoryActions
     /// The next page is asked for this many rows before the end.
@@ -169,6 +170,17 @@ struct HistoryEntryList: View {
         let shown = state.shown
         ScrollView {
             LazyVStack(spacing: 0) {
+                // A refresh that failed with entries shown keeps them and says why, with "Try again".
+                if let error = state.error, state.refreshFailed {
+                    NoticeCard(
+                        .warning, title: error.title(or: HistoryStrings.errorTitle), message: error.message(timeScale: timeScale),
+                        announce: .polite
+                    ) {
+                        Button(HistoryStrings.retry, action: actions.onRetry).accessibilityIdentifier("history_retry")
+                    }
+                    .padding(.horizontal, Spacing.gutter).padding(.vertical, Spacing.s)
+                    .accessibilityIdentifier("history_error")
+                }
                 ForEach(Array(shown.enumerated()), id: \.element.seq) { i, e in
                     let row = state.row(e)
                     VettIDListRow(
@@ -187,8 +199,29 @@ struct HistoryEntryList: View {
         .accessibilityIdentifier("history_list")
     }
 
+    /// What the list's footer shows. Mirrors vettid-android `HistoryScreen`'s footer.
+    enum Footer: Equatable {
+        /// A page on its way.
+        case loading
+        /// A refresh failed: said above the entries, with "Try again"; nothing here.
+        case none
+        /// The next page failed: "Try again" (`history_retry`).
+        case retry
+        /// The start of the history.
+        case end
+        /// Not at the end yet: coming into view asks for more.
+        case more
+    }
+
+    static func footer(_ state: HistoryState) -> Footer {
+        if state.loadingMore || (state.loading && !state.entries.isEmpty) { return .loading }
+        if state.error != nil { return state.refreshFailed ? .none : .retry }
+        return state.end ? .end : .more
+    }
+
     @ViewBuilder private var footer: some View {
-        if state.loadingMore || (state.loading && !state.entries.isEmpty) {
+        switch Self.footer(state) {
+        case .loading:
             VStack(spacing: Spacing.s) {
                 ProgressView().tint(colors.primary.color).accessibilityIdentifier("history_loading_more")
                 if state.partial || state.filter.q != nil {
@@ -197,12 +230,13 @@ struct HistoryEntryList: View {
             }
             .accessibilityElement(children: .combine)
             .accessibilityLabel(HistoryStrings.loadingMore)
-        } else if state.error != nil {
+        case .none:
+            EmptyView()
+        case .retry:
             Button(HistoryStrings.retry, action: actions.onRetry).accessibilityIdentifier("history_retry")
-        } else if state.end {
+        case .end:
             Text(HistoryStrings.end).vettIDFont(.bodySmall).foregroundStyle(colors.onSurfaceVariant)
-        } else {
-            // Not at the end yet: the footer coming into view asks for more (a list shorter than the screen).
+        case .more:
             Color.clear.frame(height: 1).onAppear(perform: actions.onLoadMore)
         }
     }

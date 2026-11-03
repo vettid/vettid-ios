@@ -445,7 +445,10 @@ public final class ApprovalsManager: ApprovalsRepository {
 
     public func refreshApprovals() async throws { try await refreshApprovals(quietly: false) }
 
-    /// [requests] false: the connection requests are read by the caller.
+    /// [requests] false: the connection requests are read by the caller. What was read is shown even when another list
+    /// failed; then that list's failure is thrown, so that the screen does not say there is nothing to approve when it
+    /// could not tell. A list the vault does not have (an older release) is no failure; the open asks' failure is
+    /// ``openAsksError``.
     func refreshApprovals(quietly: Bool, requests: Bool = true) async throws {
         rereadDeviceSessions()
         let g = generation
@@ -460,7 +463,7 @@ public final class ApprovalsManager: ApprovalsRepository {
             decidedLog.removeAll { $0.at <= floor }
             batchLog.removeAll { $0.at <= floor }
         }
-        if requests { try? await connections.refreshRequests(quietly: quietly) }
+        let requestsFailure = requests ? await readRequests(quietly: quietly) : nil
         let o = try await guarded { quietly ? try await quietOps() : try await ops() }
         let lists = await readLists(o, at: t)
         let pending = await readPendingAsks(o, generation: g)
@@ -491,6 +494,7 @@ public final class ApprovalsManager: ApprovalsRepository {
             mergePendingAsks(asks, readTs: readTs, at: t, since: since, changed: changed)
         }
         withdrawnBatchesListed()
+        if let failure = requestsFailure ?? lists.failures.first { throw failure }
     }
 
     /// The ids of the items each share question's batches brought after change [since].
@@ -506,47 +510,6 @@ public final class ApprovalsManager: ApprovalsRepository {
         let b = JsonBuilder()
         for (name, value) in o.members where name != "items" { b.raw(name, value.raw) }
         return StoredEvent(type: e.type, body: b.raw("items", JsonBuilder.array(left.map(\.raw))).build(), at: e.at)
-    }
-
-    /// What the vault listed: grant requests, critical-item requests and share decisions, each nil when the vault did not
-    /// answer (an older release without the list: nothing listed for it, and nothing dropped by it).
-    struct Lists {
-        var grants: JsonObject?
-        var critical: JsonObject?
-        var shares: [ShareDecision]?
-
-        func approvals(at t: Date) -> [PendingApproval] {
-            var out: [PendingApproval] = shares.map { $0.map(PendingApproval.share) } ?? []
-            if let grants {
-                out += VaultJSON.objects(grants, "pending").compactMap { ApprovalParser.grant($0, at: t) }
-                    .map(PendingApproval.grant)
-            }
-            if let critical {
-                out += VaultJSON.objects(critical, "incoming").compactMap { ApprovalParser.critical($0, at: t) }
-                    .map(PendingApproval.critical)
-            }
-            return out
-        }
-
-        /// Whether a list that was read says which requests of [p]'s kind are still waiting.
-        func covers(_ p: PendingApproval) -> Bool {
-            switch p {
-            case .grant: grants != nil
-            case .critical: critical != nil
-            case .share: shares != nil
-            default: false
-            }
-        }
-    }
-
-    private func readLists(_ o: any ApprovalOps, at t: Date) async -> Lists {
-        let names = itemNames()
-        // The share decisions (§10.12): nil when the vault answered neither list.
-        let shares = try? await SharePending.decisions(
-            pendingPage: { try await o.sharePendingPage(after: $0, limit: SharePending.page) },
-            rulePage: { try await o.shareRulePage(after: $0) }, names: names, at: t
-        )
-        return Lists(grants: try? await o.grantList(), critical: try? await o.criticalUseList(), shares: shares)
     }
 
     /// At most this many share decisions, and as many batches, are remembered for reads on their way: past that, the

@@ -21,6 +21,9 @@ public struct TagsState: Equatable, Sendable {
     public var loading = true
     public var busy = false
     public var dialog: TagDialog?
+    /// Why the last read of the tags failed: the screen says so with "Try again", and not "No tags yet".
+    public var loadFailure: LoadFailure?
+    /// Why the last change failed.
     public var error: FailureKind?
     /// The code an unmapped refusal names (shown with ``error``), or nil.
     public var errorCode: String?
@@ -59,9 +62,22 @@ public final class TagsViewModel {
     deinit { work.cancelAll() }
 
     public func refresh() {
-        run { [sharing] in
-            let r = try await sharing.refreshTags()
-            return { $0.registry = r }
+        state.busy = true
+        state.loading = true
+        state.loadFailure = nil
+        work.launch { [weak self, sharing] in
+            do {
+                let r = try await sharing.refreshTags()
+                guard let self else { return }
+                state.registry = r
+                state.busy = false
+                state.loading = false
+            } catch {
+                guard let self else { return }
+                state.busy = false
+                state.loading = false
+                state.loadFailure = LoadFailure(error)
+            }
         }
     }
 
@@ -177,7 +193,11 @@ public final class TagsViewModel {
         let r = sharing.tags
         return { s in
             s.dialog = nil
-            if let r { s.registry = r }
+            // The tags are known again: a read that failed before is no longer the news.
+            if let r {
+                s.registry = r
+                s.loadFailure = nil
+            }
         }
     }
 

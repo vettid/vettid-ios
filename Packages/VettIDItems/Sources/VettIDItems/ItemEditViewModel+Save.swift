@@ -6,7 +6,8 @@ import VettIDData
 extension ItemEditViewModel {
     public func save() {
         let s = state
-        guard !s.busy, !s.loading else { return }
+        // An item that could not be read is never saved over (its version is unknown).
+        guard !s.busy, !s.loading, s.loadFailure == nil else { return }
         let check = checkOf(s.draft, s)
         guard check.ok else {
             state.check = check

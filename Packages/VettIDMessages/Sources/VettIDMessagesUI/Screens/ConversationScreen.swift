@@ -14,6 +14,8 @@ public struct ConversationActions {
     public var onAskDelete: @MainActor (MessageInfo?) -> Void = { _ in }
     public var onConfirmDelete: @MainActor () -> Void = {}
     public var onDismissError: @MainActor () -> Void = {}
+    /// Reads the conversation again, after its read failed.
+    public var onRetry: @MainActor () -> Void = {}
     /// The connection's page.
     public var onDetails: @MainActor () -> Void = {}
     /// The list reached its top while older messages remain (VAULT-MESSAGING §10.5.2).
@@ -55,8 +57,13 @@ public struct ConversationScreen: View {
                 CenteredTitle(name)
                 ConversationBody(state: state, name: isolated, actions: actions)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+                // A read that failed with messages shown: they stay, and the failure is said with "Try again".
+                if let error = state.loadError, !state.messages.isEmpty {
+                    ConversationBody.loadFailure(error, actions: actions)
+                        .padding(.horizontal, Spacing.gutter).padding(.vertical, Spacing.s)
+                }
                 if let error = state.error {
-                    MessagesError(kind: error, actionLabel: MessagesStrings.ok, action: actions.onDismissError)
+                    MessagesError(kind: error, actionLabel: MessagesStrings.ok, announce: .assertive, action: actions.onDismissError)
                         .padding(.horizontal, Spacing.gutter).padding(.vertical, Spacing.s)
                         .accessibilityIdentifier("conversation_error")
                 }
@@ -112,11 +119,32 @@ struct ConversationBody: View {
     let name: String
     let actions: ConversationActions
 
+    /// What the body shows: a conversation that could not be read is never "Say hello".
+    static func phase(_ state: ConversationState) -> ListPhase {
+        ListPhase.of(loading: state.loading, empty: state.messages.isEmpty, failed: state.loadError != nil)
+    }
+
+    /// Whether a failed read offers "Try again": not when the connection is gone (`not_found`), which reading again cannot
+    /// change; "OK" then leaves the conversation.
+    static func retries(_ error: FailureKind) -> Bool { error != .notFound }
+
+    /// The conversation could not be read: why, with "Try again", or "OK" for a connection that is gone.
+    static func loadFailure(_ error: FailureKind, actions: ConversationActions) -> some View {
+        let retry = retries(error)
+        return MessagesError(
+            kind: error, actionLabel: retry ? MessagesStrings.retry : MessagesStrings.ok, action: retry ? actions.onRetry : actions.onBack
+        )
+        .accessibilityIdentifier("conversation_load_error")
+    }
+
     var body: some View {
-        if state.loading && state.messages.isEmpty {
+        let phase = Self.phase(state)
+        if phase == .loading {
             ProgressView().tint(colors.primary.color).frame(maxWidth: .infinity, maxHeight: .infinity)
                 .accessibilityIdentifier("conversation_loading")
-        } else if state.messages.isEmpty {
+        } else if phase == .failed, let error = state.loadError {
+            ScrollView { Self.loadFailure(error, actions: actions).padding(Spacing.xl) }
+        } else if phase == .empty {
             EmptyState(icon: .messages, title: MessagesStrings.conversationEmptyTitle, message: MessagesStrings.conversationEmptyBody(name))
                 .accessibilityIdentifier("conversation_empty")
         } else {

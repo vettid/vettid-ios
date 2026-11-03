@@ -91,23 +91,33 @@ public struct ItemsScreen: View {
         .accessibilityIdentifier("items")
     }
 
+    /// The list reads again by itself once the daily check passes (``ItemsViewModel`` follows the owner check): a vault on
+    /// hold offers no "Try again".
+    static let retriesByItself = true
+
     @ViewBuilder private var content: some View {
         if state.loading {
             ProgressView().tint(colors.primary.color).frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if let e = state.error, state.items.isEmpty {
-            NoticeCard(
-                .warning, title: ItemsStrings.errorList, message: ItemsText.failure(e, shownCode: state.errorCode),
-                announce: .polite
-            ) {
-                Button(ItemsStrings.retry) { actions.onRetry() }
+            ScrollView {
+                LoadFailedNotice(
+                    failure: LoadFailure(e, code: state.errorCode), identifier: "items_error", retriesByItself: Self.retriesByItself,
+                    onRetry: actions.onRetry
+                )
+                    .padding(Spacing.xl)
             }
-            .padding(Spacing.xl)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .accessibilityIdentifier("items_error")
         } else if state.items.isEmpty {
             EmptyState(icon: .vault, title: ItemsStrings.emptyTitle, message: ItemsStrings.emptyBody).accessibilityIdentifier("items_empty")
         } else {
             VStack(spacing: 0) {
+                // A refresh that failed keeps the items shown and says why.
+                if let e = state.error {
+                    LoadFailedNotice(
+                        failure: LoadFailure(e, code: state.errorCode), identifier: "items_error", retriesByItself: Self.retriesByItself,
+                        onRetry: actions.onRetry
+                    )
+                        .padding(.horizontal, Spacing.s).padding(.vertical, Spacing.xs)
+                }
                 ItemsFilterRow(state: state, actions: actions)
                 if state.visible.isEmpty {
                     // The one way to clear is "✕ Clear" in the filter row above.
