@@ -39,7 +39,6 @@ import VettIDVault
         let r = try outgoing(#","peer_kind":"service","ik":"\#(Self.ikStd)""#)
         #expect(r.ik == Self.ikBytes)
         #expect(r.keyFingerprint == (try IkFingerprint.format(Self.ikBytes)))
-        #expect(try outgoing(#","ik":"\#(Self.ikURL)""#).ik == Self.ikBytes)
     }
 
     /// The same from an outgoing entry of `connection.request.list`.
@@ -56,7 +55,17 @@ import VettIDVault
     /// A malformed `ik` does not break the request: it is shown without one.
     @Test func aMalformedIkIsDroppedAndTheRequestKept() throws {
         let short = Data([UInt8](0..<31)).base64EncodedString()
-        for bad in [#""ik":"""#, #""ik":"!!!""#, #""ik":"\#(short)""#, #""ik":7"#, #""ik":null"#, #""ik":"\#(Self.ikStd)00""#] {
+        // Non-canonical: non-zero padding bits (the last character changed to one with the same high bits), a line break,
+        // base64url (unpadded and padded).
+        var chars = Array(Self.ikStd)
+        chars[chars.count - 2] = "9"
+        let padBits = String(chars)
+        // A key whose standard form has "+" and "/", so that its URL-safe form really differs.
+        let std = Base64s.encodeStd([UInt8](repeating: 0xFB, count: 32))
+        let padded = std.replacingOccurrences(of: "+", with: "-").replacingOccurrences(of: "/", with: "_")
+        #expect(padded != std && padded.hasSuffix("="))
+        #expect(padBits != Self.ikStd && Data(base64Encoded: padBits) != nil)
+        for bad in [#""ik":"\#(padBits)""#, #""ik":"\#(Self.ikStd.prefix(20))\n\#(Self.ikStd.dropFirst(20))""#, #""ik":"\#(Self.ikURL)""#, #""ik":"\#(padded)""#, #""ik":"""#, #""ik":"!!!""#, #""ik":"\#(short)""#, #""ik":7"#, #""ik":null"#, #""ik":"\#(Self.ikStd)00""#] {
             let r = try outgoing(#","peer_kind":"service",\#(bad)"#)
             #expect(r.ik == nil && r.sas == "654321" && r.isService, "\(bad)")
         }

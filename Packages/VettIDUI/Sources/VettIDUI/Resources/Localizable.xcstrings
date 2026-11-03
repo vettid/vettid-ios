@@ -467,7 +467,7 @@
         }
       }
     },
-    "service_request_fingerprint": {
+    "core_ui_vault_key_fingerprint": {
       "extractionState": "manual",
       "localizations": {
         "en": {

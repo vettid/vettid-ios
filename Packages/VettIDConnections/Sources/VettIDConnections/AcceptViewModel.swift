@@ -37,9 +37,9 @@ public struct AcceptState: Equatable, Sendable, CustomStringConvertible, CustomD
     /// The invitation declared a service (`peer_kind`, VAULT-MESSAGING §6.4): the request says so before the member
     /// approves. From the accept answer or the outgoing request; never inferred from a name.
     public var service = false
-    /// The fingerprint of the service's `ik` (VAULT-MESSAGING 0.83.7 §6.4, §10.4), shown on a service's request beside its
-    /// name; nil without `ik` (an older vault) and for a person's request (chosen; not in the spec, which lets an app
-    /// show it for any outgoing request).
+    /// The fingerprint of the service's `ik` (VAULT-MESSAGING 0.83.7 §6.4, §10.4), set for any outgoing request that has an
+    /// `ik`; nil without one (an older vault). Only a service's request screen shows it (chosen; not in the spec, which
+    /// lets an app show it for any outgoing request).
     public var keyFingerprint: String?
     /// ``AcceptStep/connected``: the new connection is a service (it cannot message the member). Mirrors vettid-android
     /// `connectedService`.

@@ -220,7 +220,7 @@ struct ConnectionRequestContent: View {
 
 /// A service's request before the member approves (VAULT-MESSAGING §6.4 "Service connections"): its name labelled "Name
 /// given by the service" (never the name on a VettID account), then "This is a service, not a person." and its small
-/// print, above the code. Beside the name, the fingerprint of the service's `ik` when the vault sent one (0.83.7
+/// print, above the code. After them, the fingerprint of the service's `ik` when the vault sent one (0.83.7
 /// §6.4, §10.8; none from an older vault).
 struct ServiceRequestHeader: View {
     let name: String?
@@ -235,8 +235,8 @@ struct ServiceRequestHeader: View {
                     .accessibilityIdentifier("request_name")
             }
             .accessibilityElement(children: .combine)
-            if let fingerprint { ServiceFingerprintLine(fingerprint: fingerprint) }
             ServiceRequestLines()
+            if let fingerprint { ServiceFingerprintLine(fingerprint: fingerprint) }
         }
         .padding(.bottom, Spacing.l)
     }
