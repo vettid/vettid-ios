@@ -251,7 +251,7 @@ final class FakeConnectionOps: ConnectionOps, @unchecked Sendable {
         #expect(ops.calls.suffix(4) == ["update:c1:5", "get:c1", "update:c1:5", "get:c1"])
     }
 
-    @Test func asksAreShownAtOnceAndRemoveAndBlockForget() async throws {
+    @Test func asksAreShownAtOnceAndRemoveForgets() async throws {
         ops.connections = [Self.connection("c1"), Self.connection("c2")]
         let m = manager()
         try await m.refresh()
@@ -264,7 +264,8 @@ final class FakeConnectionOps: ConnectionOps, @unchecked Sendable {
         try await quiet.resumeAsks("c1")
         #expect(quiet.connections.first?.asks == AskState(muted: true))
         try await m.remove("c1")
-        #expect(m.connections.isEmpty && ops.calls.suffix(1) == ["remove:c1"])
+        try await m.remove("c2")
+        #expect(m.connections.isEmpty && ops.calls.suffix(2) == ["remove:c1", "remove:c2"])
     }
 
     /// Locked or held (IOS-PLAN §6.9: both ``ConnectionsManager/forgetOpenVault()``): what was read from the vault goes,
