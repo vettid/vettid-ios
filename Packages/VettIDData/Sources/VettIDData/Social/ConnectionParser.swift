@@ -50,7 +50,17 @@ public enum ConnectionParser {
         r.peerApproved = VaultJSON.bool(o, "peer_approved") ?? false
         r.introducedBy = VaultJSON.string(o, "introduced_by")
         r.isService = VaultJSON.string(o, "peer_kind") == "service"
+        if sas != nil { r.ik = ik(VaultJSON.string(o, "ik")) }
         return r
+    }
+
+    /// An outgoing request's `ik` (0.83.7 §10.4): the base64 of 32 bytes, standard as the connection's `ik` is (§10.8) or
+    /// unpadded URL-safe (chosen; not in the spec, which does not name the alphabet). Anything else is nil: the request
+    /// is shown as without an `ik`, not refused, since the fingerprint is an extra check and the safety code still
+    /// decides (chosen; not in the spec).
+    static func ik(_ s: String?) -> [UInt8]? {
+        guard let s else { return nil }
+        return (try? Base64s.decodeStd(s, IkFingerprint.ikSize)) ?? (try? Base64s.decodeRawUrl(s, IkFingerprint.ikSize))
     }
 
     /// A `<connection>` (§10.4) with its peer's profile (§10.8): the title's names from the profile's core, the display

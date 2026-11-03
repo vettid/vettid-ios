@@ -82,6 +82,27 @@ import VettIDUI
         #expect(height(AcceptScreen(state: state(true), actions: AcceptActions())) > 0)
     }
 
+    /// The fingerprint of the service's `ik` beside its name on the compare screen (0.83.7 §6.4); none without `ik`, and none
+    /// for a person's request (chosen; not in the spec).
+    @Test func theRequestOfAServiceShowsTheFingerprintOfItsIk() {
+        func state(service: Bool, fingerprint: String?) -> AcceptState {
+            var s = AcceptState()
+            s.step = .compare
+            s.sas = "042817"
+            s.name = "Example Bank"
+            s.service = service
+            s.keyFingerprint = fingerprint
+            return s
+        }
+        let fp = "0123 4567 89ab cdef 0123 4567 89ab cdef"
+        func compare(_ s: AcceptState) -> CGFloat { height(CompareContent(state: s, who: "Example Bank")) }
+        let line = height(ServiceFingerprintLine(fingerprint: fp))
+        #expect(line > 30)
+        #expect(compare(state(service: true, fingerprint: fp)) >= compare(state(service: true, fingerprint: nil)) + line - 1)
+        #expect(compare(state(service: false, fingerprint: fp)) == compare(state(service: false, fingerprint: nil)))
+        #expect(height(AcceptScreen(state: state(service: true, fingerprint: fp), actions: AcceptActions())) > 0)
+    }
+
     /// The Services section is there only with a service. Rendering the screens is a smoke check only.
     @Test func theServicesSectionIsThereOnlyWithAService() {
         var people = ConnectionsState()

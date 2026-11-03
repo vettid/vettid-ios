@@ -30,6 +30,12 @@ public enum ServiceTexts {
         String(localized: "service_name_label", defaultValue: "Name given by the service", bundle: .module)
     }
 
+    /// The label of the fingerprint of a service's `ik` on its connection request: the words of the connection page's
+    /// "Vault key fingerprint" (ANDROID-PLAN 0.1.118; no new text).
+    public static var fingerprintLabel: String {
+        String(localized: "service_request_fingerprint", defaultValue: "Vault key fingerprint", bundle: .module)
+    }
+
     /// The card of a service's page that says what it can ask.
     public static var canAskTitle: String {
         String(localized: "service_detail_can_ask_title", defaultValue: "What this service can ask", bundle: .module)
@@ -153,5 +159,24 @@ public struct ServiceRequestLines: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier("service_request")
+    }
+}
+
+/// The fingerprint of a service's `ik` on its connection request, beside the name and above the code (VAULT-MESSAGING
+/// §6.4 "What the member sees before approving", §10.8): the label "Vault key fingerprint" and the fingerprint as the
+/// connection's page shows it. The member can compare it with one the service publishes where they trust it; the safety
+/// code does not say who holds the key. Shown only with an `ik`.
+public struct ServiceFingerprintLine: View {
+    let fingerprint: String
+
+    public init(fingerprint: String) { self.fingerprint = fingerprint }
+
+    public var body: some View {
+        VStack(alignment: .leading, spacing: Spacing.xs) {
+            Text(ServiceTexts.fingerprintLabel).vettIDFont(.labelLarge)
+            Text(fingerprint).font(.system(.body, design: .monospaced)).accessibilityIdentifier("request_fingerprint")
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .combine)
     }
 }

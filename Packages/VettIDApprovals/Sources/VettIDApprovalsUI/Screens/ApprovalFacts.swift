@@ -112,11 +112,15 @@ struct Facts: View {
 
     /// An invitation this member accepted. From a service (its invitation said `peer_kind: "service"`, VAULT-MESSAGING
     /// §6.4): its name is "Name given by the service", and "This is a service, not a person." with its small print comes
-    /// under the name and above the code. The request carries no `ik`: the fingerprint is on the connection's page.
+    /// under the name and above the code, with the fingerprint of its `ik` when the vault sent one (0.83.7 §6.4, §10.8). An
+    /// incoming request has no `ik`, and a person's outgoing one shows none (chosen; not in the spec).
     @ViewBuilder private func outgoing(_ r: OutgoingRequest) -> some View {
         FactLabel(Self.outgoingNameLabel(r))
         Text(AccountNames.isolateOrNull(r.name) ?? ApprovalsStrings.nameNotShared).vettIDFont(.titleLarge, weight: .semibold)
-        if r.isService { ServiceRequestLines().padding(.top, Spacing.s) }
+        if r.isService {
+            if let fp = r.keyFingerprint { ServiceFingerprintLine(fingerprint: fp).padding(.top, Spacing.s) }
+            ServiceRequestLines().padding(.top, Spacing.s)
+        }
         if let code = r.sas { sas(code) }
         if r.state == .approved { waiting(r.name) }
         expires(r.exp)

@@ -29,6 +29,56 @@ import VettIDVault
         }
     }
 
+    // 32 bytes 0x00...0x1f: the vector-free shape check; the fingerprint is IkFingerprint's (which has the vectors).
+    static let ikBytes = [UInt8](0..<32)
+    static let ikStd = Data(ikBytes).base64EncodedString()
+    static let ikURL = ikStd.replacingOccurrences(of: "+", with: "-").replacingOccurrences(of: "/", with: "_").replacingOccurrences(of: "=", with: "")
+
+    /// `ik` of `connection.request.outgoing` (0.83.7 §10.4) decodes to its 32 bytes and the fingerprint of the crypto package.
+    @Test func theOutgoingEventCarriesIk() throws {
+        let r = try outgoing(#","peer_kind":"service","ik":"\#(Self.ikStd)""#)
+        #expect(r.ik == Self.ikBytes)
+        #expect(r.keyFingerprint == (try IkFingerprint.format(Self.ikBytes)))
+        #expect(try outgoing(#","ik":"\#(Self.ikURL)""#).ik == Self.ikBytes)
+    }
+
+    /// The same from an outgoing entry of `connection.request.list`.
+    @Test func theListEntryCarriesIk() throws {
+        let o = try StrictJson.parseObject(#"{"connection_id":"c1","sas":"654321","ik":"\#(Self.ikStd)","state":"pending","remote":false,"peer_approved":false,"created_at":"2026-11-03T10:00:00Z","exp":"2026-11-10T10:00:00Z","peer_kind":"service"}"#)
+        #expect(try #require(ConnectionParser.outgoing(o, at: at)).ik == Self.ikBytes)
+    }
+
+    @Test func noIkFromAnOlderVault() throws {
+        let r = try outgoing(#","peer_kind":"service""#)
+        #expect(r.ik == nil && r.keyFingerprint == nil)
+    }
+
+    /// A malformed `ik` does not break the request: it is shown without one.
+    @Test func aMalformedIkIsDroppedAndTheRequestKept() throws {
+        let short = Data([UInt8](0..<31)).base64EncodedString()
+        for bad in [#""ik":"""#, #""ik":"!!!""#, #""ik":"\#(short)""#, #""ik":7"#, #""ik":null"#, #""ik":"\#(Self.ikStd)00""#] {
+            let r = try outgoing(#","peer_kind":"service",\#(bad)"#)
+            #expect(r.ik == nil && r.sas == "654321" && r.isService, "\(bad)")
+        }
+    }
+
+    /// `ik` comes with `sas`: an entry without a code (`waiting`) shows none.
+    @Test func ikWithoutASasIsIgnored() throws {
+        let o = try StrictJson.parseObject(#"{"connection_id":"c1","state":"waiting","ik":"\#(Self.ikStd)"}"#)
+        let r = try #require(ConnectionParser.outgoing(o, at: at))
+        #expect(r.ik == nil && r.state == .waiting)
+    }
+
+    /// The waiting entry has no `ik`; the event that follows brings it, and a later one without it keeps it.
+    @Test func ikIsKeptAcrossAMerge() throws {
+        let waiting = OutgoingRequest(connectionID: "c1", sas: nil, remote: false, name: "Example Bank", state: .waiting, receivedAt: at, exp: nil)
+        let withIk = try outgoing(#","ik":"\#(Self.ikStd)""#)
+        let noIk = try outgoing("")
+        guard case .outgoing(let a) = PendingConnection.outgoing(waiting).merged(.outgoing(withIk)),
+              case .outgoing(let b) = PendingConnection.outgoing(withIk).merged(.outgoing(noIk)) else { Issue.record("not outgoing"); return }
+        #expect(a.ik == Self.ikBytes && b.ik == Self.ikBytes)
+    }
+
     /// A later event without the marker keeps it, as it keeps the name and the code.
     @Test func theMarkerIsKeptAcrossAMerge() throws {
         var waiting = OutgoingRequest(connectionID: "c1", sas: nil, remote: false, name: "Example Bank", state: .waiting, receivedAt: at, exp: nil)

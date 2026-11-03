@@ -169,7 +169,7 @@ struct CompareContent: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            if state.service { ServiceRequestHeader(name: state.name ?? state.connectionName) }
+            if state.service { ServiceRequestHeader(name: state.name ?? state.connectionName, fingerprint: state.keyFingerprint) }
             if let sas = state.sas { LabeledSas(sas: sas) }
             if state.step == .approved { WaitingRow(text: ConnectStrings.waitingPeer(who)).padding(.top, Spacing.xl) }
             FailureLine(kind: state.error)
