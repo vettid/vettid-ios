@@ -207,7 +207,7 @@ public struct SecretTextInput: UIViewRepresentable {
     }
 
     public func makeUIView(context: Context) -> UITextField {
-        let f = UITextField()
+        let f = PasteOnlyTextField()
         SecretInput.configure(f, visible: visible)
         f.placeholder = placeholder
         if let style {
@@ -270,4 +270,28 @@ enum SecretFocus {
         below.0.becomeFirstResponder()
         UIAccessibility.post(notification: .layoutChanged, argument: below.0)
     }
+}
+
+/// A text field whose menu only pastes into it, selects and deletes: no Copy or Cut, which would put the secret on the general
+/// pasteboard without an expiry and on the member's other devices, and no other action that hands its text away (IOS-PLAN
+/// §6.5; the copy the app offers goes through ``SecurePasteboard``).
+final class PasteOnlyTextField: UITextField {
+    private static let allowed: [Selector] = [
+        #selector(UIResponderStandardEditActions.paste(_:)), #selector(UIResponderStandardEditActions.select(_:)),
+        #selector(UIResponderStandardEditActions.selectAll(_:)), #selector(UIResponderStandardEditActions.delete(_:)),
+    ]
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        textDragInteraction?.isEnabled = false
+    }
+
+    required init?(coder: NSCoder) { fatalError("not from a nib") }
+
+    override func canPerformAction(_ action: Selector, withSender sender: Any?) -> Bool {
+        Self.allowed.contains(action) && super.canPerformAction(action, withSender: sender)
+    }
+
+    override func copy(_ sender: Any?) {}
+    override func cut(_ sender: Any?) {}
 }

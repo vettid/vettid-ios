@@ -11,5 +11,18 @@ public enum SecurePasteboard {
             [[UIPasteboard.typeAutomatic: text]],
             options: [.localOnly: true, .expirationDate: Date().addingTimeInterval(lifetime)]
         )
+        ownCopy = (pasteboard.name, pasteboard.changeCount)
+    }
+
+    /// The pasteboard and its `changeCount` right after the app's last copy; nil once cleared or taken over.
+    private static var ownCopy: (name: UIPasteboard.Name, changeCount: Int)?
+
+    /// Empties the pasteboard when it still holds what the app copied last, and only then: if anything else has been
+    /// copied since (`changeCount` moved), it is the member's and stays. Called when the vault is no longer open
+    /// (IOS-PLAN §6.5, §6.9). [pasteboard]: tests give a named one; it must be the one that was copied to.
+    public static func clearIfOwn(pasteboard: UIPasteboard = .general) {
+        guard let own = ownCopy, own.name == pasteboard.name else { return }
+        ownCopy = nil
+        if pasteboard.changeCount == own.changeCount { pasteboard.items = [] }
     }
 }

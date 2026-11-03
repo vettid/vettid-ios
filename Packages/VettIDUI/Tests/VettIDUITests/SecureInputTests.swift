@@ -109,6 +109,31 @@ import UIKit
         UIPasteboard.remove(withName: board.name)
     }
 
+    /// At the vault lock the app's own copy goes; anything copied since stays (IOS-PLAN §6.5, §6.9).
+    @Test func theLockClearsOnlyTheAppsOwnCopy() throws {
+        let board = try #require(UIPasteboard(name: UIPasteboard.Name("vettid.test.\(UUID().uuidString)"), create: true))
+        SecurePasteboard.copy("ABCD-EFGH", pasteboard: board)
+        SecurePasteboard.clearIfOwn(pasteboard: board)
+        #expect(board.string == nil)
+        SecurePasteboard.copy("ABCD-EFGH", pasteboard: board)
+        board.string = "the member's own"
+        SecurePasteboard.clearIfOwn(pasteboard: board)
+        #expect(board.string == "the member's own")
+        UIPasteboard.remove(withName: board.name)
+    }
+
+    /// A secret field's menu never copies or cuts (the app's copy goes through ``SecurePasteboard``).
+    @Test func aSecretFieldNeverCopies() {
+        let f = PasteOnlyTextField()
+        f.text = "hunter2"
+        for action in [#selector(UIResponderStandardEditActions.copy(_:)), #selector(UIResponderStandardEditActions.cut(_:))] {
+            #expect(!f.canPerformAction(action, withSender: nil), "\(action)")
+        }
+        f.copy(nil)
+        f.cut(nil)
+        #expect(f.text == "hunter2")
+    }
+
     @Test func theCoverAndTheCaptureTextRender() {
         let cover = UIHostingController(rootView: PrivacyCover())
         cover.view.frame = CGRect(x: 0, y: 0, width: 390, height: 844)
