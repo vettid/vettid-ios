@@ -33,6 +33,20 @@ import VettIDDataTesting
         _ = keeper
     }
 
+    /// A vault that answers every colour write with `conflict` and lists the same registry each time: the keeper's run
+    /// stops after its conflicts (the first write and `maxConflicts` more) and is not started again, since the registry
+    /// read again after a conflict replaces the one published in one step, never seen as nil.
+    @Test func aVaultThatAlwaysConflictsEndsTheKeeperAfterOneRun() async throws {
+        let ops = ConflictingTagOps(version: 3, tags: ["travel"])
+        let manager = SharingManager(ops: { ops })
+        let keeper = TagColorsKeeper(sharing: manager, gated: { false }, next: next, rereadDelay: .milliseconds(10))
+        let oneRun = SharingManager.maxConflicts + 1
+        #expect(await eventually { ops.writes == oneRun })
+        try await Task.sleep(for: .milliseconds(300))
+        #expect(ops.writes == oneRun, "no second run")
+        _ = keeper
+    }
+
     @Test func aGatedQuietReadKeepsTheHashColours() async {
         sharing.gated = true
         let keeper = TagColorsKeeper(sharing: sharing, gated: { true }, next: next, rereadDelay: .milliseconds(10))

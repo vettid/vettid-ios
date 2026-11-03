@@ -66,12 +66,20 @@ public final class FakeSharing: SharingRepository {
         let failure = fail.removeValue(forKey: n)
         calls.append(n)
         if let hold = holds[n] { await hold.wait() }
-        if let failure { throw failure }
+        if let failure { throw refused(n, failure) }
     }
 
     private func call(_ n: String) throws {
         calls.append(n)
-        if let f = fail.removeValue(forKey: n) { throw f }
+        if let f = fail.removeValue(forKey: n) { throw refused(n, f) }
+    }
+
+    /// As ``SharingManager``: a tag write (`setTag:`, `rename…`, `delete…`) refused as `conflict` drops the registry
+    /// published, so that the next read publishes whatever its version.
+    private func refused(_ n: String, _ f: VaultFailure) -> VaultFailure {
+        let tagWrite = n.hasPrefix("setTag:") || n.hasPrefix("rename") || n.hasPrefix("delete:") || n.hasPrefix("deleteDry:")
+        if f.kind == .conflict, tagWrite { tags = nil }
+        return f
     }
 
     private func replaced(_ tag: String, _ change: (inout TagView) -> Void) -> [TagView] {
