@@ -73,6 +73,8 @@ import VettIDRelay
         #expect(kind(AppAttestError.pendingFull) == .retry, "temporary: the next request frees the slots")
         let f = VaultFailures.map(KeysError.corrupt("account record")) as? VaultFailure
         #expect(f?.kind == .other && f?.code == VaultFailures.codeKeystore)
+        let unreadable = VaultFailures.map(StoredStateUnreadable(underlying: "DecodingError")) as? VaultFailure
+        #expect(unreadable?.code == VaultFailures.codeKeystore)
         #expect(VaultFailures.map(CancellationError()) is CancellationError)
         #expect(kind(VaultStateError(message: "no vault.enrolled within 90 s")) == .noResponse)
         #expect(kind(VaultStateError(message: "credential.create: no response")) == .noResponse)

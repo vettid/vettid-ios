@@ -75,6 +75,15 @@ public struct VaultStateError: Error, Equatable, Sendable, CustomStringConvertib
     public var description: String { "vault client: \(message)" }
 }
 
+/// The device state this phone stored cannot be read (it does not decode, for instance after an update that added a
+/// required field): the app says the phone's own state is unreadable and offers the way out (IOS-PLAN §4.4), not "cannot
+/// connect".
+public struct StoredStateUnreadable: Error, Equatable, Sendable, CustomStringConvertible {
+    public let underlying: String
+
+    public var description: String { "stored device state: \(underlying)" }
+}
+
 /// The owner rejected this device's pairing or transfer on their phone after its `hs.fin` (`device.pair.rejected`,
 /// VAULT-MESSAGING §6.7, 0.10.5). The device has dropped the handshake's epoch and the request token.
 public struct PairingRejected: Error, Equatable, Sendable {}
