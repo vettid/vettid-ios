@@ -344,9 +344,9 @@ public enum VoteWire {
 
     /// Whether [label] (already cleaned of control and bidirectional-override characters) is the reserved "Abstain":
     /// with surrounding white space trimmed it equals "Abstain", ignoring case (ANDROID-PLAN 0.1.116 §4 "Votes"). What
-    /// shows nothing is dropped first, by the rules of received text (VAULT-MESSAGING §10.8, as ``AccountNames``):
-    /// default-ignorable code points (joiners, variation selectors, U+034F and the like) and U+2800, and white space is
-    /// Unicode's. Lookalike letters are not folded.
+    /// shows nothing is dropped first, using the set VAULT-MESSAGING §10.8 step 4 sets aside when it decides whether a
+    /// text is blank (as ``AccountNames``): default-ignorable code points (joiners, variation selectors, U+034F and the
+    /// like) and U+2800, and white space is Unicode's. Lookalike letters are not folded. (chosen; not in the spec)
     static func readsAsAbstain(_ label: String) -> Bool {
         var shown = String.UnicodeScalarView()
         shown.append(contentsOf: label.unicodeScalars.filter {
