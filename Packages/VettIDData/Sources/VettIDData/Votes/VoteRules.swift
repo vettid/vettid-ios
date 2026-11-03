@@ -216,8 +216,6 @@ public enum VoteRules {
     ) {
         let check = s.check
         let recorded = s.ballot?.state == .recorded
-        // Before the vault's check passed, the app's find reads as a problem with the published results.
-        let resultsProblem = resultsProblem || dontAddUp
         switch check?.state {
         case .verified?:
             if s.ballot == nil {
@@ -244,7 +242,10 @@ public enum VoteRules {
             }
         case .pending?:
             let reason = check?.reason
-            if reason == "input" || resultsProblem {
+            // Before the vault's check passed, the results not adding up reads as a problem with the published results,
+            // except under a reason of the vault's own, whose text it leaves (chosen; not in the spec).
+            let vaultsOwn = reason == "clock" || reason == "trust_root" || reason == "service_list"
+            if reason == "input" || resultsProblem || (dontAddUp && !vaultsOwn) {
                 out.append(.checkResultsProblem)
             } else {
                 // A `pending` check whose reason is the vault's own (service_list, trust_root, clock) says so.
@@ -258,7 +259,7 @@ public enum VoteRules {
         case .unknown?, nil: break
         }
         // The app's own find in the site's results while the vault has not judged them yet.
-        if resultsProblem, check == nil, s.state == .closed { out.append(.checkResultsProblem) }
+        if resultsProblem || dontAddUp, check == nil, s.state == .closed { out.append(.checkResultsProblem) }
     }
     // swiftlint:enable cyclomatic_complexity
 

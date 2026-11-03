@@ -35,7 +35,7 @@ public struct ResultsProblem: Error, Equatable, Sendable {
 /// `VoteRows` (the hash, order and tree), with the signatures, the tally and `record_root` added.
 public enum VoteRows {
     /// The most rows read: far above any electorate a vote is held for, and small enough to bound the work on a hostile
-    /// `rows.json` (the app fetches at most about 256 bytes a row of it).
+    /// `rows.json` (the app reads at most ``rowsMax`` bytes of it).
     public static let maxRows = 100_000
 
     /// The label of `ballot_sig` (BALLOT-PROTOCOL §5), its `0x00` included (§2).
@@ -68,12 +68,19 @@ public enum VoteRows {
         let proposalID: String
     }
 
-    /// The most bytes a row takes in `rows.json` (a full ballot is about 250), and the most the rest of it takes: a
-    /// larger `rows.json` is not the one the results name, and is refused before it is hashed or parsed. The app's own
-    /// bound on the work a hostile site can cause, not one of the vault's inputs (VAULT-MESSAGING 0.83.2 §10.19.6 step
-    /// 1): such rows could make no tree the app would build anyway.
-    private static let rowBytes = 256
-    private static let rowsOverhead = 4_096
+    /// The longest row of a valid `rows.json` written compactly, with the comma after it (BALLOT-PROTOCOL §8.5):
+    /// `{"ballot":{"ballot_sig":"…","choice_id":"…","vk":"…"},"record_tag":"…"},` with a 64-byte `ballot_sig`, a
+    /// 32-byte `vk` and a 32-byte `record_tag` in standard base64 (88, 44 and 44 characters) and a `choice_id` of at
+    /// most 32 characters of `[a-z0-9-]` (VAULT-MESSAGING §10.19.4 step 2), which no JSON escape lengthens: 276 bytes.
+    public static let longestRow = 276
+    /// The most bytes a row may take in `rows.json`: ``longestRow`` with room for white space (BALLOT-PROTOCOL does not
+    /// make `rows.json` JCS, so it may be indented), and the most the rest of it may take. A larger `rows.json` is
+    /// refused before it is hashed or parsed: the app's own bound on the work a hostile site can cause, not one of the
+    /// vault's inputs (VAULT-MESSAGING 0.83.2 §10.19.6 step 1), so it stops the submit (chosen; not in the spec).
+    public static let rowBytes = 512
+    public static let rowsOverhead = 4_096
+    /// The largest `rows.json` read at all: ``maxRows`` rows.
+    public static let rowsMax = maxRows * rowBytes + rowsOverhead
 
     /// One row of `rows.json`: its tag, its ballot (`vk`, `choice_id`, `ballot_sig`) as the site has it or nil, and its
     /// leaf in the rows' tree.
@@ -235,6 +242,7 @@ public enum VoteRows {
     /// whose leaf can't be made at all, or a document nested deeper than a ballot, is thrown.
     private static func readRows(_ bytes: [UInt8], eligible: UInt64) throws -> ReadRows {
         do {
+            // No deeper than a ballot: a deeper document makes no tree, and stops the submit (chosen; not in the spec).
             let top = try StrictJson.parseObject(bytes, maxDepth: 4)
             let items = try top.array("rows")
             if UInt64(items.count) != eligible { throw ResultsProblem("rows_count") }
@@ -262,7 +270,8 @@ public enum VoteRows {
 
     /// One row with its leaf, and its problem when it is not exactly `record_tag` and `ballot`, a ballot exactly `vk`,
     /// `choice_id` and `ballot_sig` (§8.5: a verifier refuses unknown or missing fields), or a ballot the vault would not
-    /// read. Throws when no leaf can be made of it.
+    /// read. Throws when no leaf can be made of it: no tag of 32 bytes, or a ballot that is neither null nor an object
+    /// (chosen; not in the spec: without a leaf there is no tree, and nothing to submit).
     private static func readRow(_ e: JsonValue) throws -> (Row, ResultsProblem?) {
         let row = try e.asObject()
         let tag = try row.base64("record_tag", VoteMerkle.hashSize)

@@ -406,10 +406,10 @@ struct VoteSiteTests: VotesTestCase {
         vault.submitAnswer = #"{"proposal_id":"\#(pid)","check":{"state":"pending","reason":"input"}}"#
         #expect(try await m.checkResults(key) == .submitted(.pending))
         #expect(m.hints[key]?.resultsDontAddUp == true && m.hints[key]?.resultsProblem == true)
-        // An attempt that submits nothing does not clear it.
+        // An attempt that submits nothing clears it: the screens say what that attempt came to.
         site["p/\(pid)/results.json"] = .unreachable
         #expect(try await m.checkResults(key) == .siteUnreachable)
-        #expect(m.hints[key]?.resultsDontAddUp == true)
+        #expect(m.hints[key]?.resultsDontAddUp == false && m.hints[key]?.gaveUp == .site)
         // Rows that are not what `rows_hash` names, but make the published tree: sent too.
         VoteResultsFixture.publish(site, pid)
         let hash = try StrictJson.parseObject(VoteResultsFixture.results).string("rows_hash")

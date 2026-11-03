@@ -65,7 +65,11 @@ struct VoteRowsTests {
         let all = try rows()
         let leaves = try all.map { row -> [UInt8] in
             let tag = try row.base64("record_tag", 32)
-            if case .object(let b)? = row["ballot"] { return try VoteRows.leaf(tag: tag, ballot: b) }
+            if case .object(let b)? = row["ballot"] {
+                // The loose leaf the tests' tree helper uses is the strict one for every valid row.
+                #expect(try VoteRows.looseLeaf(tag: tag, ballot: b) == VoteRows.leaf(tag: tag, ballot: b))
+                return try VoteRows.leaf(tag: tag, ballot: b)
+            }
             return tag
         }
         for (i, row) in all.enumerated() {
@@ -191,6 +195,34 @@ struct VoteRowsTests {
         let otherRoot = JsonBuilder.quote(Base64s.encodeStd(rep(1, 32)))
         #expect(throws: ResultsProblem("rows_root")) {
             try VoteRows.ownRow(results: try results(["rows_root": otherRoot], rows: rowsBytes), rows: rowsBytes, recordTag: tag)
+        }
+    }
+
+    /// Rows of the longest ids the vault takes (a 32-character `choice_id`), every member having voted, written compactly
+    /// or indented: within the bound.
+    @Test func theLongestRowsAtFullTurnoutAreWithinTheBound() throws {
+        let n = 1_000
+        let choice = "approve-budget-2027-and-the-plan"
+        #expect(choice.utf8.count == 32)
+        let tags = (0..<n).map { Bytes.sha256(Array("tag \($0)".utf8)) }.sorted { $0.lexicographicallyPrecedes($1) }
+        let (sig, vk) = (Base64s.encodeStd(rep(2, 64)), Base64s.encodeStd(rep(1, 32)))
+        let compact = tags.map { tag in
+            #"{"ballot":{"ballot_sig":"\#(sig)","choice_id":"\#(choice)","vk":"\#(vk)"},"record_tag":"\#(Base64s.encodeStd(tag))"}"#
+        }
+        #expect(compact.allSatisfy { $0.utf8.count + 1 == VoteRows.longestRow })
+        let indented = tags.map { tag in
+            "\n    {\n      \"ballot\": {\n        \"ballot_sig\": \"\(sig)\",\n        \"choice_id\": \"\(choice)\",\n"
+                + "        \"vk\": \"\(vk)\"\n      },\n      \"record_tag\": \"\(Base64s.encodeStd(tag))\"\n    }"
+        }
+        let base = try StrictJson.parseObject(docs.str("rows"))
+        let counts = #"{"ballots":\#(n),"eligible":\#(n),"removed":0,"unhandled":0}"#
+        for rowsJson in [compact, indented] {
+            let bytes = Array(rebuild(base, ["rows": "[" + rowsJson.joined(separator: ",") + "\n  ]"]).utf8)
+            #expect(bytes.count > n * 256 + 4_096, "over the former bound")
+            #expect(bytes.count <= n * VoteRows.rowBytes + VoteRows.rowsOverhead)
+            let published = try results(["counts": counts], rows: bytes)
+            let checked = try VoteRows.ownRow(results: published, rows: bytes, recordTag: tags[0])
+            #expect(checked.own.index == 0 && checked.own.treeSize == UInt64(n))
         }
     }
 
@@ -398,7 +430,7 @@ struct VoteRowsTests {
     /// no row.
     @Test func rowsLargerThanTheElectorateCanMakeAreAProblem() throws {
         let tag = try rows()[0].base64("record_tag", 32)
-        let big = Array(try docs.str("rows").utf8) + [UInt8](repeating: 0x20, count: 3 * 256 + 4_096)
+        let big = Array(try docs.str("rows").utf8) + [UInt8](repeating: 0x20, count: 3 * VoteRows.rowBytes + VoteRows.rowsOverhead)
         let anyRoot = ["rows_root": JsonBuilder.quote(Base64s.encodeStd(rep(1, 32)))]
         #expect(throws: ResultsProblem("rows")) {
             try VoteRows.ownRow(results: try results(anyRoot, rows: big), rows: big, recordTag: tag)

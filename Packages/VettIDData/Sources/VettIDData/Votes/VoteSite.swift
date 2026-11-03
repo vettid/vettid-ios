@@ -1,4 +1,5 @@
 import Foundation
+import VettIDCrypto
 import VettIDRelay
 
 /// What one read of the public votes site came to (VAULT-MESSAGING 0.81.6 §10.19.8; ANDROID-PLAN 0.1.107).
@@ -44,8 +45,8 @@ public enum VoteSiteLimits {
     public static let bundleMax = 64 * 1024
     /// The vault's `MaxResultsDoc`.
     public static let resultsMax = 196_608
-    /// `rows.json`, bounded by the rows the app reads (about 256 bytes a row).
-    public static let rowsMax = 100_000 * 256
+    /// `rows.json`, bounded by the rows the app reads (``VoteRows/rowsMax``).
+    public static let rowsMax = VoteRows.rowsMax
     public static let indexMax = 8 << 20
     /// An `index` element is read only up to this (VAULT-MESSAGING 0.81.6 §10.19.8): the vault reads only its `service_id`.
     public static let indexElementMax = 65_536

@@ -344,8 +344,12 @@ public enum VoteWire {
 
     /// Whether [label] (already cleaned of control and bidirectional-override characters) is the reserved "Abstain":
     /// with surrounding white space trimmed it equals "Abstain", ignoring case (ANDROID-PLAN 0.1.116 §4 "Votes").
+    /// Default-ignorable code points (joiners, variation selectors, U+034F and the like) are dropped first, as they show
+    /// nothing (chosen; not in the spec); lookalike letters are not folded.
     static func readsAsAbstain(_ label: String) -> Bool {
-        label.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "abstain"
+        var shown = String.UnicodeScalarView()
+        shown.append(contentsOf: label.unicodeScalars.filter { !$0.properties.isDefaultIgnorableCodePoint })
+        return String(shown).trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "abstain"
     }
 
     /// The `ballot.state` of a `vote.cast` or `vote.confirm` answer.

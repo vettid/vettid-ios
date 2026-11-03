@@ -137,13 +137,18 @@ struct VoteRulesTests {
             (vote(.closed, ballot(.waiting), check(.unconfirmed)), [.closed, .waiting, .unconfirmed, .resultsDontAddUp]),
             (vote(.closed, ballot(.recorded), check(.failed)), [.closed, .recorded, .failed]),
             (vote(.closed, ballot(.recorded), check(.pending)), [.closed, .recorded, .checkResultsProblem]),
-            (vote(.closed, ballot(.recorded), check(.pending, "clock")), [.closed, .recorded, .checkResultsProblem]),
+            (vote(.closed, ballot(.recorded), check(.pending, "input")), [.closed, .recorded, .checkResultsProblem]),
             (vote(.closed, ballot(.recorded)), [.closed, .recorded, .checkResultsProblem]),
         ]
         for (v, want) in table {
             #expect(VoteRules.notes(v, resultsDontAddUp: true) == want, "\(v.check?.state as Any) \(v.ballot?.state as Any)")
             #expect(VoteRules.notes(v, resultsProblem: true, resultsDontAddUp: true) == want, "with the app's own find")
             #expect(!VoteRules.notes(v).contains(.resultsDontAddUp))
+        }
+        // A pending check on a reason of the vault's own keeps its text.
+        let own: [(String, VoteNote)] = [("clock", .checkingClock), ("trust_root", .checkingTrust), ("service_list", .checkingList)]
+        for (reason, note) in own {
+            #expect(VoteRules.notes(vote(.closed, ballot(.recorded), check(.pending, reason)), resultsDontAddUp: true) == [.closed, .recorded, note])
         }
         #expect(VoteNote.resultsDontAddUp.severity == .warning)
     }

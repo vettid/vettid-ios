@@ -396,8 +396,8 @@ final class VoteSiteRunner {
             // No row with a proof: nothing to submit.
             return fail(key, .problem)
         }
-        // A member's row whose ballot the vault would not read makes it refuse the whole call: nothing is sent (chosen;
-        // not in the spec).
+        // A member's row whose ballot the vault would not read makes it refuse the whole call: nothing is sent
+        // (VAULT-MESSAGING 0.81.6 §10.19.8, "Choice ids in results").
         guard let body = Self.submitBody(key, doc: doc, sig: sig, bundle: bundle, own: checked.own) else { return fail(key, .problem) }
         try Task.checkCancellation()
         // A failure of the observer's check outside the four inputs does not hold the row back (VAULT-MESSAGING 0.83.2
@@ -474,6 +474,8 @@ final class VoteSiteRunner {
             $0.gaveUp = why ?? $0.gaveUp
             $0.resultsProblem = outcome == .problem
             $0.resultsTooLarge = tooLarge
+            // Nothing was submitted this time: what the screens say is this attempt's.
+            $0.resultsDontAddUp = false
         }
         return outcome
     }

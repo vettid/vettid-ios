@@ -182,6 +182,10 @@ struct VotesManagerTests: VotesTestCase {
         }
         #expect(!VoteWire.readsAsAbstain("Abstain from it") && !VoteWire.readsAsAbstain("No"))
         #expect(VoteWire.readsAsAbstain(" ABSTAIN ") && VoteWire.readsAsAbstain("abstain\n"))
+        // Code points that show nothing are dropped first: a joiner, a non-joiner, a variation selector, U+034F, a soft hyphen.
+        for hidden in ["Ab\u{200D}stain", "Abs\u{200C}tain", "Abstain\u{FE0F}", "A\u{034F}bstain", "Abst\u{00AD}ain", "\u{2060}Abstain"] {
+            #expect(VoteWire.readsAsAbstain(hidden), "\(hidden.unicodeScalars.map { String($0.value, radix: 16) })")
+        }
         #expect(d.choiceID == "yes")
         #expect(d.text == "Line one\n\nLine two <b>x</b> http://example.test")
         #expect(d.minBallots == 2)
