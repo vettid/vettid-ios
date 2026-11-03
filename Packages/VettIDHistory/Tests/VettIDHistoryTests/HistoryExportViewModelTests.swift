@@ -173,7 +173,7 @@ import VettIDVault
         m.start(ctx)
         await m.settle()
         #expect(m.step != .refused(.oldVault))
-        guard case .failed(let kind) = m.step else { Issue.record("not a failure: \(m.step)"); return }
+        guard case .failed(let kind, _) = m.step, let kind else { Issue.record("not a failure: \(m.step)"); return }
         #expect(kind.message.contains("bad_request"))
     }
 
