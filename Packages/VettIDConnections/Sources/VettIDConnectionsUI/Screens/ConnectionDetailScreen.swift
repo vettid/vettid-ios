@@ -234,10 +234,9 @@ struct DetailContent: View {
         let c = connection
         return VStack(spacing: 0) {
             // A service's logo, if it shared one; else the service icon in place of the initial.
-            InitialTile(
-                title, size: 72, style: c.favorite ? .favorite : .connection, photo: ProfilePhotos.decode(c.photo),
-                icon: c.isService ? .service : nil
-            )
+            ProfilePhotoLoading(c.photo) { photo in
+                InitialTile(title, size: 72, style: c.favorite ? .favorite : .connection, photo: photo, icon: c.isService ? .service : nil)
+            }
             Spacer().frame(height: Spacing.m)
             ServiceNamed(service: c.isService, alignment: .center) {
                 Text(title)

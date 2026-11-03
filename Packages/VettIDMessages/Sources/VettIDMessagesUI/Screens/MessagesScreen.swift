@@ -128,16 +128,18 @@ struct ConversationItem: View {
     var body: some View {
         let c = summary.connection
         let name = Self.name(c)
-        VettIDListRow(
-            title: name,
-            supporting: Self.supporting(summary),
-            meta: summary.last.map { MessageTimes.short($0.sentAt) },
-            tileName: Self.tileName(c),
-            tileStyle: c.favorite ? .favorite : .connection,
-            emphasized: summary.unread > 0,
-            tilePhoto: ProfilePhotos.decode(c.photo),
-            onTap: onTap
-        )
+        ProfilePhotoLoading(c.photo) { photo in
+            VettIDListRow(
+                title: name,
+                supporting: Self.supporting(summary),
+                meta: summary.last.map { MessageTimes.short($0.sentAt) },
+                tileName: Self.tileName(c),
+                tileStyle: c.favorite ? .favorite : .connection,
+                emphasized: summary.unread > 0,
+                tilePhoto: photo,
+                onTap: onTap
+            )
+        }
         .accessibilityIdentifier("conversation_\(c.id)")
     }
 

@@ -143,3 +143,48 @@ struct BubbleLinksTests {
         #expect(MessageBubble.linkURLs(AttributedString("plain")).isEmpty)
     }
 }
+
+/// The photos decoded for the lists are kept in memory and none outlives the lock (IOS-PLAN §4.7).
+@MainActor
+struct ProfilePhotoCacheTests {
+    private func photo(_ side: Int, _ color: UIColor) -> String {
+        let f = UIGraphicsImageRendererFormat()
+        f.scale = 1
+        return UIGraphicsImageRenderer(size: CGSize(width: side, height: side), format: f).pngData { ctx in
+            color.setFill()
+            ctx.fill(CGRect(x: 0, y: 0, width: side, height: side))
+        }.base64EncodedString()
+    }
+
+    @Test func aPhotoIsDecodedOnceAndThenHeld() async {
+        let cache = ProfilePhotoCache()
+        let a = photo(64, .red)
+        #expect(cache.cached(a) == nil, "nothing is decoded on the main actor by a lookup")
+        let first = await cache.image(a)
+        #expect(first != nil)
+        #expect(cache.cached(a) === first)
+        #expect(await cache.image(a) === first)
+    }
+
+    @Test func aPhotoThatDoesNotDecodeIsNotHeld() async {
+        let cache = ProfilePhotoCache()
+        #expect(await cache.image("not base64 !!!") == nil)
+        #expect(await cache.image(nil) == nil && cache.cached(nil) == nil && cache.cached("") == nil)
+        #expect(cache.cached("not base64 !!!") == nil)
+    }
+
+    /// The lock empties the cache, and a decode that was under way when it came is not stored after it.
+    @Test func theLockEmptiesTheCacheAndADecodeUnderWay() async {
+        let cache = ProfilePhotoCache()
+        let a = photo(32, .green), b = photo(48, .blue)
+        _ = await cache.image(a)
+        #expect(cache.cached(a) != nil)
+        cache.clear()
+        #expect(cache.cached(a) == nil)
+        let late = Task { await cache.image(b) }
+        await Task.yield() // the decode has started
+        cache.clear()
+        _ = await late.value
+        #expect(cache.cached(b) == nil)
+    }
+}

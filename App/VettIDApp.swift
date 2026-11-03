@@ -221,7 +221,11 @@ struct AppRoot: View {
     /// the root is held.
     private func closeIfNotOpen() {
         // A secret item value copied while open does not outlive the vault's lock (IOS-PLAN §6.5, §6.9).
-        if vault.phase != .unlocked { SecurePasteboard.clearIfOwn() }
+        if vault.phase != .unlocked {
+            SecurePasteboard.clearIfOwn()
+            // The profile photos decoded for the lists are vault data: none outlives the lock.
+            ProfilePhotoCache.shared.clear()
+        }
         guard vault.phase != .unlocked, !RootHold.holds(phase: vault.phase, finishingMove: vault.finishingMove) else { return }
         shell.reset()
         // The vault is no longer open (locked, signed out, unreachable): the allowance ends.
