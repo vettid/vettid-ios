@@ -45,6 +45,9 @@ import VettIDUI
         #expect(Set(codes.map { refusalText($0, 5) }).count == codes.count)
         #expect(refusalText("approval", 5) == "Your vault could not verify this phone's approval.")
         #expect(refusalText("not_moved", 5) == "Your vault did not move (not_moved).")
+        // A release status the vault does not have is not shown as it came.
+        #expect(OnboardingStrings.releaseStatusTitle(3, "retired") == "Release 3 is retired")
+        #expect(OnboardingStrings.releaseStatusTitle(3, "Odd!") == OnboardingStrings.releaseUpdateTitle)
         // A word that is not a code is not shown as it came.
         #expect(refusalText("Not Moved!", 5) == "Your vault did not move (unknown).")
         #expect(OnboardingStrings.unlockUpdateRefused(refusalText("downgrade", 5))

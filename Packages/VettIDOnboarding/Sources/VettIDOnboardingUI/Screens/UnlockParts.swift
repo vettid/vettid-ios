@@ -35,7 +35,7 @@ struct PreflightNotices: View {
         if p.routed.status == "deprecated" || p.routed.status == "retired" {
             NoticeCard(
                 p.routed.status == "retired" ? .urgent : .warning,
-                title: OnboardingStrings.unlockStatusTitle(Int(p.routed.number), p.routed.status),
+                title: OnboardingStrings.releaseStatusTitle(Int(p.routed.number), p.routed.status),
                 message: p.routed.endsAt.map { OnboardingStrings.unlockStatusBodyEnds($0.formatted(date: .abbreviated, time: .omitted)) }
                     ?? OnboardingStrings.unlockStatusBody
             )

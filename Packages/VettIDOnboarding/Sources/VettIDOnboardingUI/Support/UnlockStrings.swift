@@ -76,6 +76,11 @@ extension OnboardingStrings {
             bundle: .module
         )
     }
+    /// "Release N is deprecated / retired" for the two statuses the vault has; any other word is not shown as it came, and the
+    /// title is the general "Update your vault" (chosen; not in the spec).
+    static func releaseStatusTitle(_ release: Int, _ status: String) -> String {
+        ["deprecated", "retired"].contains(status) ? unlockStatusTitle(release, status) : releaseUpdateTitle
+    }
     static func unlockStatusTitle(_ release: Int, _ status: String) -> String {
         String(localized: "unlock_status_title", defaultValue: "Release \(release) is \(status)", bundle: .module)
     }
