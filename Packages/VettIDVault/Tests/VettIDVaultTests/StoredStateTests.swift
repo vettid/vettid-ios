@@ -6,8 +6,9 @@ import VettIDRelay
 // swiftlint:disable line_length
 extension VaultDeviceTests {
     /// The shape of the device state as builds store it today, every field present. A later build must still decode it: a field
-    /// added to the state, the vault record, the recovery record or an outbox entry is optional (or decoded with a default), or
-    /// this test fails and every installed phone would stop reading its own state. Never edit this fixture to make it pass.
+    /// added to the state, the vault record, the recovery record or an outbox entry is optional, or decoded in a hand-written
+    /// `init(from:)` with `decodeIfPresent` (synthesized `Codable` needs every non-optional field, whatever its default), or this
+    /// test fails and every installed phone would stop reading its own state. Never edit this fixture to make it pass.
     static let storedStateToday = """
     {"role":"device","name":"phone","relayURL":"https://relay.example.invalid","vaultID":"v-1","deviceID":"d-1",
     "vault":{"ik":"aWs=","kem":"a2Vt","relayURL":"https://relay.example.invalid","mailbox":"mb-1","relayPk":"cGs=","token":"t","tokenExpMs":1790000000000,"sessions":"","suite":1,

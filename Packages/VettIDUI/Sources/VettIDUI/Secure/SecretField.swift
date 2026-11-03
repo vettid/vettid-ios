@@ -28,6 +28,7 @@ public enum SecretInput {
         field.keyboardType = .asciiCapable
         field.isSecureTextEntry = !visible
         field.clearsOnBeginEditing = false
+        if #available(iOS 18.0, *) { field.writingToolsBehavior = .none }
     }
 }
 
