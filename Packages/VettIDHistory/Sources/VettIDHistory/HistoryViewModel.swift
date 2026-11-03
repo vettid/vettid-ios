@@ -208,8 +208,11 @@ public final class HistoryViewModel {
 
     /// "Try again": with nothing shown, a full reload; with entries shown, what failed again (the refresh of the newest
     /// page, or the next page).
+    /// With no failure and the "does not match" banner up, "Try again" reads the list afresh (the banner's action; it
+    /// clears only if the chain then checks out).
     public func retry() {
-        if local.entries.isEmpty {
+        if local.entries.isEmpty || (local.chainBroken && local.error == nil) {
+            local.chainBroken = false
             reload()
         } else if local.refreshFailed {
             local.refreshFailed = false
