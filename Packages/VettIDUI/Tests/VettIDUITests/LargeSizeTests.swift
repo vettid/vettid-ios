@@ -100,21 +100,30 @@ struct LargeSizeTests {
         window.rootViewController = host
         window.isHidden = false
         defer { window.isHidden = true }
+        // The area is a plain stack at first and becomes the scroll view once it has measured its banners: wait for that end
+        // state (a scroll view without scroll-to-top, and the banner placed), then a little more for the layout to settle.
+        func areaScrolls() -> Bool {
+            Self.views(in: window).contains { ($0 as? UIScrollView).map { !$0.scrollsToTop } == true }
+        }
         let end = ContinuousClock.now.advanced(by: .seconds(2))
-        while box.minY < 0, ContinuousClock.now < end {
+        while !(areaScrolls() && box.minY >= 0), ContinuousClock.now < end {
             window.layoutIfNeeded()
             try? await Task.sleep(for: .milliseconds(50))
         }
-        window.layoutIfNeeded()
-        #expect(host.view.safeAreaInsets.top > 0, "the window has a top inset")
-        #expect(box.minY >= host.view.safeAreaInsets.top - 0.5, "\(box.minY) vs \(host.view.safeAreaInsets.top)")
-        // The area's scroll view keeps the system's inset: its content starts below the inset, not under it.
+        for _ in 0..<4 {
+            window.layoutIfNeeded()
+            try? await Task.sleep(for: .milliseconds(50))
+        }
+        let top = host.view.safeAreaInsets.top
+        #expect(top > 0, "the window has a top inset")
+        #expect(box.minY >= top - 0.5, "\(box.minY) vs \(top)")
+        // The area's scroll view keeps the system's inset: its content starts below the window's inset, not under it.
         let scrolls = Self.views(in: window).compactMap { $0 as? UIScrollView }.filter { !$0.scrollsToTop }
         #expect(scrolls.count == 1)
         for scroll in scrolls {
             #expect(scroll.contentInsetAdjustmentBehavior != .never)
             let adjusted = scroll.adjustedContentInset.top
-            #expect(adjusted >= scroll.safeAreaInsets.top - 0.5, "\(adjusted) vs \(scroll.safeAreaInsets.top)")
+            #expect(adjusted >= top - 0.5, "\(adjusted) vs \(top)")
         }
     }
 
