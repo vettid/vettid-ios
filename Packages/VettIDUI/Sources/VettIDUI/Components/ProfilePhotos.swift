@@ -104,7 +104,17 @@ public final class ProfilePhotoCache {
 
     init() {}
 
-    private func key(_ base64: String) -> NSData { Data(SHA256.hash(data: Data(base64.utf8))) as NSData }
+    /// The digests made so far, newest last: a photo's digest is made once per change, and a body that evaluates again finds it by
+    /// comparing the strings (identical storage compares at once), not by hashing 80 KiB again.
+    private var digests: [(photo: String, digest: NSData)] = []
+
+    private func key(_ base64: String) -> NSData {
+        if let known = digests.last(where: { $0.photo == base64 }) { return known.digest }
+        let digest = Data(SHA256.hash(data: Data(base64.utf8))) as NSData
+        digests.append((base64, digest))
+        if digests.count > 32 { digests.removeFirst(digests.count - 32) } // (chosen; not in the spec) the strings are shared with the lists
+        return digest
+    }
 
     /// The photo [base64] decoded earlier, if it is still held.
     public func cached(_ base64: String?) -> UIImage? {
@@ -130,6 +140,7 @@ public final class ProfilePhotoCache {
     /// Drops every photo, and the ones being decoded: the vault is no longer open.
     public func clear() {
         generation += 1
+        digests.removeAll()
         store.removeAllObjects()
     }
 }
