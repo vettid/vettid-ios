@@ -93,11 +93,10 @@ public struct WaitingContent<Content: View>: View {
     }
 
     /// One `TimelineView` always, so that the content keeps its identity (a scanner's camera is not torn down when the wait ends):
-    /// it ticks each second while the wait runs and not at all otherwise.
+    /// it ticks each second while the wait runs, and once a day (in effect never) otherwise.
     public var body: some View {
-        let schedule: AnyTimelineSchedule = wait?.isRunning() == true
-            ? AnyTimelineSchedule(PeriodicTimelineSchedule(from: .now, by: 1)) : AnyTimelineSchedule(ExplicitTimelineSchedule([Date]()))
-        TimelineView(schedule) { _ in content(wait?.isRunning() == true) }
+        let running = wait?.isRunning() == true
+        TimelineView(.periodic(from: .now, by: running ? 1 : 86_400)) { _ in content(wait?.isRunning() == true) }
     }
 }
 #endif
