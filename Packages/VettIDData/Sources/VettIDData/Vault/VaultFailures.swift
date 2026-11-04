@@ -40,6 +40,11 @@ enum VaultFailures {
         case let n as NotATransferCode:
             VaultFailure(n.expired ? .inviteExpired : .inviteInvalid, code: VaultManager.codeNotTransfer, cause: n)
         case let p as PairingRejected: VaultFailure(.rejected, code: "rejected", cause: p)
+        // The pairing's fin did not reach the vault: the code is spent, the member scans a new one.
+        case let p as PairingNotCompleted: VaultFailure(.inviteUnavailable, code: "pairing_not_completed", cause: p)
+        // The link's open token (a pairing or transfer code) is spent, revoked or expired (VAULT-MESSAGING §8.6).
+        case let o as OpenTokenRefused:
+            VaultFailure(o.relay.code == RelayError.tokenExpired ? .inviteExpired : .inviteUnavailable, code: o.relay.code, cause: o)
         case let r as RelayError: relay(r)
         case let u as URLError: VaultFailure(u.code == .notConnectedToInternet ? .offline : .network, cause: u)
         case let k as KeysError: keys(k)
@@ -64,8 +69,10 @@ enum VaultFailures {
             return VaultFailure(.rateLimited, code: r.code, retryAfterSeconds: Int64(r.retryAfterSeconds), cause: r)
         case RelayError.quotaExceeded: return VaultFailure(.relayQuota, code: r.code, cause: r)
         case RelayError.payloadTooLarge: return VaultFailure(.payloadTooLarge, code: r.code, cause: r)
-        // §8.6: an expired token is refreshed, or the connection made again, by the app itself; to the member it is a passing
-        // failure (chosen; not in the spec). `token_invalid` is not cured by trying again: a refusal.
+        // A response over the size read (not the relay's 413): a network or server failure.
+        case RelayError.responseTooLarge: return VaultFailure(.network, code: r.code, cause: r)
+        // §8.6: a standing token that expired is refreshed, or the connection made again, by the app itself; to the member it is
+        // a passing failure (chosen; not in the spec). An open token's is the link's (``OpenTokenRefused``). `token_invalid` is not cured by trying again: a refusal.
         case RelayError.tokenExpired: return VaultFailure(.network, code: r.code, cause: r)
         default:
             // 4xx the relay meant (a revoked or expired token, an unknown mailbox, a bad signature): not a passing state of

@@ -1,5 +1,6 @@
 import Foundation
 import VettIDCrypto
+import VettIDRelay
 
 /// A message from the vault: an event (no `re`) or a response.
 public struct VaultMessage: Sendable, CustomStringConvertible {
@@ -87,6 +88,16 @@ public struct StoredStateUnreadable: Error, Equatable, Sendable, CustomStringCon
 /// The owner rejected this device's pairing or transfer on their phone after its `hs.fin` (`device.pair.rejected`,
 /// VAULT-MESSAGING §6.7, 0.10.5). The device has dropped the handshake's epoch and the request token.
 public struct PairingRejected: Error, Equatable, Sendable {}
+
+/// The device's `hs.fin` was refused for good by the relay, or dropped after its time: the vault will not finish the pairing or
+/// transfer, whose code is spent. The member scans a new code.
+public struct PairingNotCompleted: Error, Equatable, Sendable {}
+
+/// A pairing or transfer link's token (an open token) was refused by the relay for the `hs.init` (`token_used`,
+/// `token_revoked` or `token_expired`, also after the wait of VAULT-MESSAGING §8.6): the link is spent or has expired.
+public struct OpenTokenRefused: Error, Equatable, Sendable {
+    public let relay: RelayError
+}
 
 /// The device's own keys (§3.2), from the Secure Enclave and the encrypted file store for the device's lifetime.
 public final class DeviceSecrets: Sendable {

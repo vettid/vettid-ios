@@ -133,7 +133,12 @@ extension VaultDevice {
     public func awaitPairingSas() async throws -> String {
         let stream = sasBroadcast.stream()
         if let s = pairingSas { return s }
-        for await s in stream { return s }
+        if mem.withLock({ finFailed }) { throw PairingNotCompleted() }
+        for await s in stream {
+            // The empty text says the fin failed (``notifyFinFailed()``).
+            if s.isEmpty { throw PairingNotCompleted() }
+            return s
+        }
         throw CancellationError()
     }
 

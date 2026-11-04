@@ -117,43 +117,46 @@ extension VaultDevice {
         do {
             try refuseSending()
             _ = try await relayFor(e.relayURL).deposit(mailboxID: e.mailbox, token: e.token, payload: try Base64s.decodeStd(e.envelope))
-            mem.withLock { st.outbox.removeAll { $0.id == e.id && $0.envelope == e.envelope } }
-            try save()
+            try await withLockSaving { st.outbox.removeAll { $0.id == e.id && $0.envelope == e.envelope } }
         } catch let x as RelayError {
             // §8.6: a quota the recipient's mailbox ran out of is not cured by a fresh token; the deposit waits in the
             // outbox and goes out at a later flush (vettid-android drops it).
             if keepOnFailure, x.retryable || x.code == RelayError.quotaExceeded {
-                noteAttempt(e)
+                await noteAttempt(e)
                 throw x
             }
             countRefusal(x, mailbox: e.mailbox, token: e.token)
-            mem.withLock { st.outbox.removeAll { $0.id == e.id && $0.envelope == e.envelope } }
-            try save()
+            try? await withLockSaving { st.outbox.removeAll { $0.id == e.id && $0.envelope == e.envelope } }
             throw x
         } catch let u as URLError {
-            // A transport failure counts as an attempt too (it bounds an hs.fin that never gets through).
+            // A transport failure counts as an attempt too.
             if keepOnFailure {
-                noteAttempt(e)
+                await noteAttempt(e)
             } else {
-                mem.withLock { st.outbox.removeAll { $0.id == e.id } }
-                try? save()
+                try? await withLockSaving { st.outbox.removeAll { $0.id == e.id } }
             }
             throw u
         } catch {
             // Refused to send, cancelled, or an unreadable entry: a request reported as failed is not kept either.
-            if !keepOnFailure {
-                mem.withLock { st.outbox.removeAll { $0.id == e.id } }
-                try? save()
-            }
+            if !keepOnFailure { try? await withLockSaving { st.outbox.removeAll { $0.id == e.id } } }
             throw error
         }
     }
 
-    private func noteAttempt(_ e: OutboxEntry) {
-        mem.withLock {
+    /// Changes the state and saves it under the device lock. What follows a deposit is booked here, not beside it: a save made
+    /// outside the lock could store another task's work that is half done (a message marked seen and not yet processed, a
+    /// transfer pinned and not yet prepared), and a kill after it would lose that work.
+    func withLockSaving(_ change: @Sendable () -> Void) async throws {
+        try await lock.withLock {
+            mem.withLock { change() }
+            try save()
+        }
+    }
+
+    private func noteAttempt(_ e: OutboxEntry) async {
+        try? await withLockSaving {
             if let i = st.outbox.firstIndex(where: { $0.id == e.id }) { st.outbox[i].attempts += 1 }
         }
-        try? save()
     }
 
     /// A deposit to this device's vault under the vault's current token that the relay refused with `token_revoked`
@@ -202,20 +205,29 @@ extension VaultDevice {
     /// Re-deposits what the outbox still holds (after a restart or a transport failure). The deposits are made outside the
     /// device lock, one flush at a time: a slow relay holds up the flush and nothing else.
     public func flushOutbox() async {
-        let (entries, mine): ([OutboxEntry], Bool) = mem.withLock {
-            if flushing { return ([], false) }
-            flushing = true
-            return (st.outbox, true)
+        // One flush at a time. A caller that comes while one runs waits for it and then runs its own, so that it always sees a
+        // flush that began after it asked (the credential settle wait relies on it).
+        var entries: [OutboxEntry] = []
+        while true {
+            let mine: Bool = mem.withLock {
+                if flushing { return false }
+                flushing = true
+                entries = st.outbox
+                return true
+            }
+            if mine { break }
+            if (try? await Task.sleep(nanoseconds: 25_000_000)) == nil { return }
         }
-        guard mine else { return }
+        let nowMs = Self.ms(now())
         for e in entries {
             // Not one that is being deposited just now (a renewal reported as failed must not go out later).
             guard mem.withLock({ st.outbox.contains(e) && outboxInFlight.insert(e.id).inserted }) else { continue }
             defer { mem.withLock { _ = outboxInFlight.remove(e.id) } }
-            // A handshake's fin that was tried this often will not arrive: the handshake's code is lost either way.
-            if e.type == Self.typeHsFin, e.attempts >= Self.finAttempts {
-                mem.withLock { st.outbox.removeAll { $0.id == e.id } }
-                try? save()
+            // A handshake's fin past its time will not arrive in time: the handshake's code is lost either way, and the flow
+            // that waits for the pairing is told (chosen; not in the spec).
+            if e.type == Self.typeHsFin, let dropAfter = e.dropAfterMs, nowMs >= dropAfter {
+                try? await withLockSaving { st.outbox.removeAll { $0.id == e.id } }
+                notifyFinFailed()
                 continue
             }
             try? await deliver(e)
@@ -300,6 +312,8 @@ extension VaultDevice {
             let (found, waiter): (VaultMessage?, OneShot<Bool>?) = try mem.withLock {
                 if halted { throw Self.haltedError }
                 if let i = inbox.firstIndex(where: { types.contains($0.type) && match($0) }) { return (inbox.remove(at: i), nil) }
+                // A pairing that waits for device.paired cannot finish: its fin did not reach the vault.
+                if types.contains("device.paired"), finFailed { throw PairingNotCompleted() }
                 let w = OneShot<Bool>()
                 inboxWaiters.append(w)
                 return (nil, w)
@@ -332,8 +346,6 @@ extension VaultDevice {
 extension VaultDevice {
     /// `hs.fin` (VAULT-MESSAGING §6.2).
     static let typeHsFin = "hs.fin"
-    /// How many failed flushes an `hs.fin` survives.
-    static let finAttempts = 20
 
     /// Runs [work] once the lock the caller holds is released: a deposit made while handling a message must not hold the
     /// lock across the network (``handle(_:)`` runs it). Callers hold ``lock``.

@@ -196,7 +196,7 @@ final class Recorder<T: Sendable>: @unchecked Sendable {
 
     @Test func aBlobLargerThanTheBoundIsRefused() async throws {
         server.enqueue(.bytes(200, [UInt8](repeating: 1, count: 100)))
-        await #expect(throws: RelayError(status: 200, code: RelayError.payloadTooLarge, message: "response")) {
+        await #expect(throws: RelayError(status: 200, code: RelayError.responseTooLarge, message: "response")) {
             _ = try await client().getBlob("b1", maxBytes: 50)
         }
         server.enqueue(.bytes(200, [UInt8](repeating: 1, count: 50)))

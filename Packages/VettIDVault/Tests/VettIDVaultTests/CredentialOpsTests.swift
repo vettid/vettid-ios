@@ -126,6 +126,23 @@ import VettIDCrypto
         #expect(d.ackPendingVersion == nil)
     }
 
+    /// A pending ack the vault answers for good is not sent again.
+    @Test func aTerminalAnswerToAnAckSettlesIt() async throws {
+        let (d, v) = try await base.pairedDevice(cfg: base.config(InMemoryDeviceStateStore(), timeout: 0.3))
+        let api = VaultApi(device: d) { true }
+        let (utks, _) = try pool(2)
+        let create = Task { try await api.credentialCreate(password: "a long password", pin: "123456") }
+        try await answer(v, d, "credential.utk.get", utks)
+        try await answer(v, d, "credential.create", #"{"credential":"AQID","version":1,"key":"x"}"#)
+        _ = try await base.relay.nextDeposit() // the ack goes unanswered
+        try await create.value
+        #expect(d.ackPendingVersion == 1)
+        let flush = Task { await d.flushOutbox() }
+        try await answer(v, d, "credential.ack", code: "credential_frozen", errorBody: "{}")
+        await flush.value
+        #expect(d.ackPendingVersion == nil, "parked: not retried for ever")
+    }
+
     /// Before release R the password goes as typed and without a PIN.
     @Test func beforeReleaseRThePasswordIsSentAsTyped() async throws {
         let (d, v) = try await base.pairedDevice()

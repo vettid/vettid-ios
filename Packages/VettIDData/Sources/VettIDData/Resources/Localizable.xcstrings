@@ -508,7 +508,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "VettID's message relay is full for now. Nothing was sent. Try again later."
+            "value": "VettID's message relay is full for now. This wasn't sent. Try again later."
           }
         }
       }

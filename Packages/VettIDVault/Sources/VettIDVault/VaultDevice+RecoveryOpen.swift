@@ -238,8 +238,7 @@ extension VaultDevice {
         do {
             try await sendInit(prepared)
         } catch {
-            mem.withLock { st.recovery?.pairing = earlier }
-            try? save()
+            try? await withLockSaving { st.recovery?.pairing = earlier }
             throw error
         }
         _ = try await awaitPaired(timeout: timeout)

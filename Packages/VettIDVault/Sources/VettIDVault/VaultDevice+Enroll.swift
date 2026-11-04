@@ -122,18 +122,30 @@ extension VaultDevice {
         // an hs.fin that never arrives leaves the code burnt. It goes out after the lock (``afterLock(_:)``) and again at
         // each flush.
         let fin = mem.withLock {
-            let e = OutboxEntry(
+            // Dropped when the token it is sent under expires, at the latest after a handshake's lifetime (chosen; not in the
+            // spec).
+            let limit = Self.ms(t.addingTimeInterval(Self.handshakeTTL))
+            let expiry = heldFromVault(v.token).map(Self.ms) ?? limit
+            var e = OutboxEntry(
                 id: Ulid.new(t), type: Self.typeHsFin, relayURL: v.relayURL, mailbox: v.mailbox, token: v.token,
                 envelope: Base64s.encodeStd(res.fin)
             )
+            e.dropAfterMs = min(expiry, limit)
             st.outbox.append(e)
+            outboxInFlight.insert(e.id) // until the deposit below: a flush in between leaves it alone
             return e
         }
         try save()
         // The code is shown once the fin has gone out, or, when the relay would not take it, is kept for the next flush.
         let shown = res.sas
         afterLock { [self] in
-            try? await deliver(fin)
+            let delivered = (try? await deliver(fin)) != nil
+            // Refused for good (the entry is gone): the pairing cannot finish, and the flow that waits is told, with no code.
+            let owed = mem.withLock { st.outbox.contains { $0.id == fin.id } }
+            guard delivered || owed else {
+                notifyFinFailed()
+                return
+            }
             if let s = shown {
                 mem.withLock { sas = s }
                 sasBroadcast.emit(s)
@@ -244,11 +256,24 @@ extension VaultDevice {
             ini?.abort()
             ini = i
             answeredInit = nil
+            finFailed = false
             st.outbox.removeAll { $0.type == Self.typeHsFin }
         }
         return PreparedInit(
             initiator: i, vault: v, depositToken: depositToken, tokenExp: claims?.exp, tokenIsOpen: claims?.isOpen == true
         )
+    }
+
+    /// The `hs.fin` will not reach the vault: the waiting flows are told (``PairingNotCompleted``), and no code is shown.
+    func notifyFinFailed() {
+        let waiters: [OneShot<Bool>] = mem.withLock {
+            finFailed = true
+            sas = nil
+            defer { inboxWaiters.removeAll() }
+            return inboxWaiters
+        }
+        for w in waiters { w.complete(true) }
+        sasBroadcast.emit("")
     }
 
     /// Whether the vault's `hs.resp` was handled for [p]'s handshake.
@@ -293,6 +318,10 @@ extension VaultDevice {
                 return false
             }
             if reached { return }
+            if p.tokenIsOpen, let x = error as? RelayError,
+               [RelayError.tokenUsed, RelayError.tokenRevoked, RelayError.tokenExpired].contains(x.code) {
+                throw OpenTokenRefused(relay: x)
+            }
             throw error
         }
     }
@@ -309,7 +338,7 @@ extension VaultDevice {
             }
             if isAnswered { return true }
             if isGone || now() >= deadline || cfg.uptime() >= cap { return false }
-            try await Task.sleep(nanoseconds: 20_000_000)
+            try await Task.sleep(nanoseconds: 250_000_000)
         }
     }
 
@@ -348,14 +377,22 @@ extension VaultDevice {
     /// How long a `credential.ack` is waited for, and how often one is tried again.
     static let ackWait: TimeInterval = 15
     static let ackRetryEvery: TimeInterval = 30
+    static let ackTerminal: Set<String> = [
+        CredentialOps.codeStaleCredential, "credential_frozen", "credential_required", CredentialOps.codeForbidden,
+    ]
 
     /// Sends `credential.ack` for [version] once and, taken, settles it. Throws what the vault answers or the cancel.
     func sendAck(_ version: Int64) async throws {
         let body = JsonBuilder().uint("version", UInt64(version)).bytes()
         do {
             _ = try await opOnce("credential.ack", body: body, timeout: min(Self.ackWait, cfg.requestTimeout(for: "credential.ack")))
-        } catch let e as VaultOpError where e.code == CredentialOps.codeStaleCredential {
-            // The vault has moved past this version: nothing is owed for it any more (chosen; not in the spec).
+        } catch let e as VaultOpError where Self.ackTerminal.contains(e.code) {
+            // The vault has moved past this version (`stale_credential`), or answers for good that it will not take it
+            // (`credential_frozen`, `credential_required`, `forbidden`): nothing more is sent for it (chosen; not in the spec).
+            // `forbidden` still reaches the caller, who acts on it.
+            try? await ackSettled(version)
+            if e.code == CredentialOps.codeForbidden { throw e }
+            return
         }
         try? await ackSettled(version)
     }

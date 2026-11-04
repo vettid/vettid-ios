@@ -140,6 +140,40 @@ extension VaultDeviceTests {
         #expect(kept.type == "hs.fin" && kept.attempts >= 1)
     }
 
+    /// A save that follows a deposit is made under the device lock: it cannot store the half-done work of a message that is
+    /// being handled (marked seen, not yet processed), which a kill would turn into a lost message.
+    @Test func aSaveAfterADepositDoesNotStoreHalfDoneWork() async throws {
+        let store = InMemoryDeviceStateStore()
+        let (d, _) = try await pairedDevice(store: store)
+        let gate = FakeHTTPServer.Gate()
+        relay.holdDeposits = gate
+        let renewing = Task { try await d.renewStandingToken() }
+        for _ in 0..<500 where gate.waiting == 0 { try await Task.sleep(for: .milliseconds(10)) }
+        try await d.lock.withLock {
+            d.mem.withLock { d.st.seen["half-done"] = 1 } // a message handled under the lock, not yet processed
+            gate.open() // the deposit ends meanwhile
+            try await Task.sleep(for: .milliseconds(500))
+            #expect(try savedState(store).seen["half-done"] == nil, "not stored before the handling is done")
+        }
+        try await renewing.value
+    }
+
+    /// A second caller of the flush waits for the running one and then flushes itself.
+    @Test func aSecondFlushWaitsForTheRunningOne() async throws {
+        let (d, _) = try await pairedDevice()
+        d.mem.withLock { d.flushing = true } // a flush is running
+        let done = Box<Bool>(false)
+        let second = Task {
+            await d.flushOutbox()
+            done.value = true
+        }
+        try await Task.sleep(for: .milliseconds(300))
+        #expect(!done.value, "it waits for the running flush")
+        d.mem.withLock { d.flushing = false }
+        await second.value
+        #expect(done.value)
+    }
+
     /// A kill between the save and the deposit of a handshake's fin: the next process finds it in the store and sends it.
     @Test func aFinSavedBeforeAKillIsSentByTheNextProcess() async throws {
         let store = InMemoryDeviceStateStore()

@@ -121,7 +121,7 @@ import VettIDRelay
         #expect(!outcome.finished, "inside the bound")
         offset.value = 400 // past the open token's exp (5 minutes) plus 60 s
         for _ in 0..<200 where !outcome.finished { try await settle(0.05) }
-        #expect((outcome.error as? RelayError)?.code == RelayError.tokenRevoked)
+        #expect((outcome.error as? OpenTokenRefused)?.relay.code == RelayError.tokenRevoked)
         #expect(!d.hasVault)
     }
 
@@ -208,7 +208,7 @@ import VettIDRelay
         #expect(!outcome.finished)
         d.mem.withLock { d.ini = nil }
         for _ in 0..<100 where !outcome.finished { try await settle(0.05) }
-        #expect((outcome.error as? RelayError)?.code == RelayError.tokenUsed, "it stopped waiting at once")
+        #expect((outcome.error as? OpenTokenRefused)?.relay.code == RelayError.tokenUsed, "it stopped waiting at once")
     }
 
     /// A transfer whose `hs.init` could not be saved leaves nothing pinned or attested.
@@ -251,6 +251,70 @@ import VettIDRelay
         #expect(!d.hasVault && d.altState.transferAttestKeyID == nil)
     }
 
+    /// `token_used` on the first try of a link's open token is the link's refusal, not a lost answer.
+    @Test func tokenUsedOnTheFirstTryOfAnOpenTokenIsTheLinksRefusal() async throws {
+        let (d, v) = try await newPhone()
+        let (qr, _) = try codeFor(v, d)
+        base.relay.refuseStatus = 403
+        base.relay.refuseDeposits = RelayError.tokenUsed
+        let outcome = transfer(d, qr)
+        for _ in 0..<100 where !outcome.finished { try await settle(0.05) }
+        #expect((outcome.error as? OpenTokenRefused)?.relay.code == RelayError.tokenUsed)
+        #expect(!d.hasVault)
+    }
+
+    /// The relay refuses the `hs.fin` for good: the flow that waits for the code is told the pairing cannot finish, and no
+    /// code is shown.
+    @Test func aFinRefusedForGoodReachesTheWaitingFlow() async throws {
+        let (d, v) = try await newPhone()
+        let (qr, inviteID) = try codeFor(v, d)
+        try await d.startTransfer(link: try qr.link(), attester: TestIOSAttester()) { _, _ in nil }
+        let (_, initMsg) = try await base.relay.nextDeposit()
+        base.relay.refuseStatus = 403
+        base.relay.refuseDeposits = RelayError.tokenRevoked
+        let waiting = Task { try await d.awaitPairingSas() }
+        try await d.handle(try v.respondOpening(initMsg, d, ctx: inviteID).message)
+        await #expect(throws: PairingNotCompleted.self) { _ = try await waiting.value }
+        #expect(d.pairingSas == nil)
+        #expect(d.mem.withLock { d.st.outbox.isEmpty })
+    }
+
+    /// A fin the relay could not take in time is dropped by age (the token's exp, at most a handshake's lifetime), not by the
+    /// number of flushes, and the flow is told.
+    @Test func aFinPastItsTimeIsDroppedAndTheFlowIsTold() async throws {
+        let offset = Box<TimeInterval>(0)
+        let (d, v) = try await newPhone(now: { Date().addingTimeInterval(offset.value) })
+        let (qr, inviteID) = try codeFor(v, d)
+        try await d.startTransfer(link: try qr.link(), attester: TestIOSAttester()) { _, _ in nil }
+        let (_, initMsg) = try await base.relay.nextDeposit()
+        base.relay.refuseStatus = 503
+        base.relay.refuseDeposits = "unavailable"
+        try await d.handle(try v.respondOpening(initMsg, d, ctx: inviteID).message)
+        #expect(d.mem.withLock { d.st.outbox.map(\.type) } == ["hs.fin"], "kept: the refusal was a passing one")
+        #expect(d.mem.withLock { d.st.outbox.first?.dropAfterMs } != nil)
+        await d.flushOutbox()
+        #expect(d.mem.withLock { d.st.outbox.count } == 1, "still owed while its time has not come")
+        offset.value = 17 * 86_400 // past a handshake's lifetime
+        await d.flushOutbox()
+        #expect(d.mem.withLock { d.st.outbox.isEmpty }, "dropped by age")
+        await #expect(throws: PairingNotCompleted.self) { _ = try await d.awaitPairingSas() }
+    }
+
+    /// A fin is not left marked in flight once its deposit ended, passing refusal or not.
+    @Test func aFinLeavesNoInFlightMarkBehind() async throws {
+        let (d, v) = try await newPhone()
+        let (qr, inviteID) = try codeFor(v, d)
+        try await d.startTransfer(link: try qr.link(), attester: TestIOSAttester()) { _, _ in nil }
+        let (_, initMsg) = try await base.relay.nextDeposit()
+        base.relay.refuseStatus = 503
+        base.relay.refuseDeposits = "unavailable"
+        base.relay.refuseOnly = 3
+        try await d.handle(try v.respondOpening(initMsg, d, ctx: inviteID).message)
+        #expect(d.mem.withLock { d.outboxInFlight.isEmpty && d.st.outbox.count == 1 })
+        await d.flushOutbox() // it can still go out
+        #expect(d.mem.withLock { d.st.outbox.isEmpty })
+    }
+
     /// `token_used` to a first attempt (no retry before it) is not a lost answer: the handshake fails at once.
     @Test func tokenUsedOnAFirstAttemptFailsAtOnce() async throws {
         let (d, _) = try await enrolled()
@@ -278,7 +342,7 @@ import VettIDRelay
         #expect(!again.hasVault && again.altState.transferAttestKeyID == nil)
     }
 
-    private func codeFor(_ v: FakeVault, _ d: VaultDevice, claimID: String = "abcdefghijklmnopqrstuvwxyz") throws -> (qr: InviteQr, inviteID: String) {
+    func codeFor(_ v: FakeVault, _ d: VaultDevice, claimID: String = "abcdefghijklmnopqrstuvwxyz") throws -> (qr: InviteQr, inviteID: String) {
         // The transfer suite shares this suite's fake relay for the claim.
         let exp = Date(timeIntervalSince1970: (Date().timeIntervalSince1970 + 600).rounded(.down))
         let inviteID = Ulid.new()

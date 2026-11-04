@@ -16,6 +16,8 @@ public struct RelayError: Error, Equatable, Sendable, CustomStringConvertible {
     public static let claimUnknown = "claim_unknown"
     public static let notFound = "not_found"
     public static let payloadTooLarge = "payload_too_large"
+    /// Made by the client: a response over the size it reads (a proxy's page, a blob over the cap); the relay did not say it.
+    public static let responseTooLarge = "response_too_large"
     public static let quotaExceeded = "quota_exceeded"
     public static let rateLimited = "rate_limited"
     public static let internalError = "internal"
@@ -240,7 +242,7 @@ public final class RelayClient: Sendable {
                 try request(c)
             }
         } catch let e as BodyTooLarge {
-            throw RelayError(status: e.status, code: RelayError.payloadTooLarge, message: "response")
+            throw RelayError(status: e.status, code: RelayError.responseTooLarge, message: "response")
         }
         if a.status >= 400 { throw Self.error(a) }
         return a

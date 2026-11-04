@@ -72,6 +72,12 @@ import VettIDRelay
         #expect(kind(relay(403, RelayError.tokenRevoked)) == .relayRefused)
         #expect(kind(relay(401, RelayError.tokenExpired)) == .network)
         #expect(kind(relay(401, RelayError.tokenInvalid)) == .relayRefused)
+        // An over-cap response is no 413 of the relay's; an open token's refusal is the link's.
+        #expect(kind(relay(200, RelayError.responseTooLarge)) == .network)
+        #expect(kind(OpenTokenRefused(relay: relay(403, RelayError.tokenUsed))) == .inviteUnavailable)
+        #expect(kind(OpenTokenRefused(relay: relay(403, RelayError.tokenRevoked))) == .inviteUnavailable)
+        #expect(kind(OpenTokenRefused(relay: relay(401, RelayError.tokenExpired))) == .inviteExpired)
+        #expect(kind(PairingNotCompleted()) == .inviteUnavailable)
         #expect(kind(relay(500, RelayError.internalError)) == .network)
         #expect(kind(relay(502, "http_502")) == .network)
         #expect(kind(URLError(.notConnectedToInternet)) == .offline)

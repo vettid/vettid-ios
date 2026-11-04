@@ -194,11 +194,10 @@ extension VaultDevice {
                 // Refused: the vault never sees this hs.resp. Otherwise it may have arrived: the responder stays for its
                 // hs.fin, and expires if none comes.
                 if !e.retryable {
-                    mem.withLock {
+                    try? await withLockSaving {
                         awaiting.removeAll { $0.resp === a.resp }
                         a.resp.abort()
                     }
-                    try? save()
                 }
             } catch {}
         }

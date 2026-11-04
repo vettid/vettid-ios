@@ -16,7 +16,7 @@ extension DataStrings {
         String(
             localized: "data_failure_relay_quota",
             defaultValue: """
-                VettID's message relay is full for now. Nothing was sent. Try again later.
+                VettID's message relay is full for now. This wasn't sent. Try again later.
                 """,
             bundle: .module
         )
