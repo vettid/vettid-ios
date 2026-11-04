@@ -194,6 +194,8 @@ public final class VaultDevice: @unchecked Sendable {
     var inbox: [VaultMessage] = []
     /// The types of event a call is about to wait for, with how many calls (``keepingEvents(_:_:)``): ``clearInbox()`` keeps them.
     var keptTypes: [String: Int] = [:]
+    /// The ids of the outbox entries the last successful write stored (``save()``).
+    var savedOutbox: Set<String> = []
     var inboxWaiters: [OneShot<Bool>] = []
     let eventBroadcast = Broadcast<VaultMessage>()
     let timeDropBroadcast = Broadcast<String>()
@@ -383,8 +385,8 @@ public final class VaultDevice: @unchecked Sendable {
     func save() throws {
         // One write at a time, in the order of the snapshots: an older snapshot must not be stored after a newer one.
         try saveOrder.withLock {
-            let data: Data? = try mem.withLock {
-                if forgotten { return nil }
+            let (data, outboxIDs): (Data?, Set<String>) = try mem.withLock {
+                if forgotten { return (nil, []) }
                 if halted { throw Self.haltedError }
                 if st.vault != nil {
                     st.vault?.sessions = Base64s.encodeStd(try keyring.export())
@@ -393,9 +395,12 @@ public final class VaultDevice: @unchecked Sendable {
                         (try? a.resp.export()).map { AwaitingRekey(createdMs: a.createdMs, state: Base64s.encodeStd($0)) }
                     }
                 }
-                return try JSONEncoder().encode(st)
+                return (try JSONEncoder().encode(st), Set(st.outbox.map(\.id)))
             }
-            if let data { try cfg.store.save(Array(data)) }
+            if let data {
+                try cfg.store.save(Array(data))
+                mem.withLock { savedOutbox = outboxIDs }
+            }
         }
     }
 

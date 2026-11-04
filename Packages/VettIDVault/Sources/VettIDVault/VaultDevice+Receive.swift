@@ -28,6 +28,7 @@ extension VaultDevice {
         try await lock.withLock {
             let t = now()
             let outboxBefore: Set<String> = mem.withLock { Set(st.outbox.map(\.id)) }
+            let seenBefore = mem.withLock { (st.seen, st.seenInner) }
             let fresh: Bool = mem.withLock {
                 guard st.seen[m.msgID] == nil else { return false }
                 st.seen[m.msgID] = Self.ms(t)
@@ -38,8 +39,13 @@ extension VaultDevice {
             do {
                 try await handleFresh(m, t)
             } catch {
-                // Nothing was stored for what the handling queued: the entries it made are taken out again.
-                mem.withLock { st.outbox.removeAll { !outboxBefore.contains($0.id) } }
+                // The message is not taken as handled (its ids are forgotten, so that the relay's redelivery is handled and
+                // answered, not acked unanswered), and the entries the handling queued that no write stored are taken out
+                // again; one a write did store (an `hs.fin` saved by the handling itself) stays, as on disk.
+                mem.withLock {
+                    (st.seen, st.seenInner) = seenBefore
+                    st.outbox.removeAll { !outboxBefore.contains($0.id) && !savedOutbox.contains($0.id) }
+                }
                 throw error
             }
         }

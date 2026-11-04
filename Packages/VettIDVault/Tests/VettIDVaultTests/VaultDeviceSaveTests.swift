@@ -77,11 +77,21 @@ extension VaultDeviceTests {
         private var b: [UInt8]?
         private var armed = false
 
+        private var allowed: Int?
+
         func arm() { lock.withLock { armed = true } }
+        func disarm() { lock.withLock { armed = false; allowed = nil } }
+        /// The next [n] writes succeed, then every write fails.
+        func failAfter(_ n: Int) { lock.withLock { allowed = n } }
         func load() -> [UInt8]? { lock.withLock { b } }
         func clear() { lock.withLock { b = nil } }
+        var state: DeviceState? { lock.withLock { b }.flatMap { try? JSONDecoder().decode(DeviceState.self, from: Data($0)) } }
         func save(_ state: [UInt8]) throws {
             try lock.withLock {
+                if let n = allowed {
+                    if n == 0 { throw CocoaError(.fileWriteOutOfSpace) }
+                    allowed = n - 1
+                }
                 if armed { throw CocoaError(.fileWriteOutOfSpace) }
                 b = state
             }
@@ -100,6 +110,40 @@ extension VaultDeviceTests {
         #expect(d.outboxIDs.isEmpty)
         await #expect(throws: (any Error).self) { try await d.handle(v.msg(try v.rekey(d).envelope)) }
         #expect(await relay.noDeposit(within: 0.3), "no hs.resp before the responder is stored")
+    }
+
+    /// A message whose handling failed to save is handled again when the relay delivers it again, and answered: it was not
+    /// taken as seen.
+    @Test func aMessageWhoseSaveFailedIsAnsweredWhenDeliveredAgain() async throws {
+        let store = FlakyStore()
+        let (d, v) = try await pairedDevice(store: store)
+        let refresh = try v.seal("relay.token.refresh", "{}")
+        store.arm()
+        await #expect(throws: (any Error).self) { try await d.handle(refresh) }
+        store.disarm()
+        try await d.handle(refresh)
+        let answer = try v.open(try await relay.nextDeposit().payload)
+        #expect(answer.type == "relay.token.refresh" && answer.re != nil, "the redelivery was answered, not acked unanswered")
+    }
+
+    /// An `hs.fin` that the handling itself wrote to disk is not taken out of memory when the final write fails: the next
+    /// good write does not lose it.
+    @Test func anHsFinOnDiskIsNotLostByAFailedFinalSave() async throws {
+        let store = FlakyStore()
+        let d = try await VaultDevice.create(config(store), secrets: try DeviceSecrets.generate())
+        let v = try FakeVault(relayURL: relay.baseURL)
+        try await d.handle(try v.enrolled(d))
+        try await d.awaitEnrolled(timeout: 1)
+        let paired = Task { try await d.completeEnrollment(timeout: 2) }
+        let (_, initMsg) = try await relay.nextDeposit()
+        store.failAfter(1) // the fin's own write, then the final write fails
+        await #expect(throws: (any Error).self) { try await d.handle(try v.respond(initMsg, d)) }
+        store.disarm()
+        paired.cancel()
+        #expect(d.outboxIDs.count == 1, "the fin that is on disk stays in memory")
+        #expect(store.state?.outbox.count == 1)
+        try d.save()
+        #expect(store.state?.outbox.count == 1, "the next good write keeps it")
     }
 }
 
