@@ -141,6 +141,30 @@ import VettIDDataTesting
         #expect(vm.state.step == .welcome && vm.state.waiting)
     }
 
+    /// A wait set in the inbox after the model was built is followed: the redeem is held.
+    @Test func aWaitSetInTheInboxLaterHoldsTheRedeem() async {
+        let vault = FakeVaultRepository()
+        let inbox = SetupLinkInbox()
+        let vm = OnboardingViewModel(account: vault, vault: vault, inbox: inbox)
+        await vm.settle()
+        vm.start()
+        vm.typeCode()
+        vm.setEmail("sam@example.org")
+        vm.setCode("K7QM-4XRP")
+        #expect(!vm.state.waiting)
+        inbox.codeWait = WaitDeadline(seconds: 120)
+        await vm.settle()
+        #expect(vm.state.waiting)
+        vm.submitCode()
+        await vm.settle()
+        #expect(!vault.calls.contains("redeemSetupCode"), "held by the wait the app set")
+        inbox.codeWait = nil
+        await vm.settle()
+        vm.submitCode()
+        await vm.settle()
+        #expect(vault.calls.contains("redeemSetupCode"))
+    }
+
     /// The setup code's wait is the app's: a flow built again (the move left through an unreachable phase unmounted it) finds it,
     /// and the redeem is still held (VAULT-MESSAGING §10.1).
     @Test func theWaitSurvivesTheFlowBeingBuiltAgain() async {

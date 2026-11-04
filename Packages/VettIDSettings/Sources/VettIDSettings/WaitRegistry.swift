@@ -3,7 +3,7 @@ import VettIDData
 
 /// The wait the vault asked for after a PIN or password attempt, kept where it outlives the screen (VAULT-MESSAGING §10.1: the
 /// app does not resend before the wait ends): closing and reopening the screen, or the app leaving the foreground, does not end
-/// it. One per operation. The app owns one (``shared``) and clears it when the vault is no longer open (a lock, a wipe).
+/// it, nor does a lock. One per operation, in memory. The app owns one (``shared``) and clears it at a wipe.
 @MainActor
 public final class WaitRegistry {
     /// The operations that send a PIN or a password and can be told to wait.
@@ -37,6 +37,6 @@ public final class WaitRegistry {
         return deadline
     }
 
-    /// The vault is no longer open: nothing is kept.
+    /// A wipe: nothing is kept for the vault that was here.
     public func clearAll() { waits = [:] }
 }

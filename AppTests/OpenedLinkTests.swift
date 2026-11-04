@@ -43,8 +43,9 @@ struct OpenedLinkTests {
         #expect(waits.current(.rotate) == nil)
     }
 
-    /// The start screen's "Try again" is the member's: the closure it is given is forced, so it reads a known phase too.
-    @Test func theStartScreensTryAgainIsForced() async {
+    /// "Try again" on the start and unreachable screens is the member's: the closure both are given (`AppRoot.tryAgain`) is forced, so
+    /// it reads a known phase too. The screens' use of it is not tested here.
+    @Test func theTryAgainOfTheStartAndUnreachableScreensIsForced() async {
         final class Reads { var count = 0 }
         let reads = Reads()
         let reader = PhaseReader(phase: { .locked }, refresh: { reads.count += 1 })

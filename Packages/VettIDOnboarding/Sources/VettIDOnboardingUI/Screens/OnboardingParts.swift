@@ -11,7 +11,7 @@ struct ErrorNotice: View {
     let state: OnboardingState
     var override: FailureKind?
     var overrideText: String?
-    /// The wait of the operation this screen sends (the setup code's or the end of setup's): counted down beside no failure too,
+    /// The wait of the operation this screen sends (the setup code's): counted down beside no failure too,
     /// since the send stays held after the failure was cleared by leaving a step.
     var hold: WaitDeadline?
     @Environment(\.vettIDTimeScale) private var timeScale

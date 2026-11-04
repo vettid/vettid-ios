@@ -233,7 +233,7 @@ struct AppRoot: View {
         guard vault.phase != .unlocked, !RootHold.holds(phase: vault.phase, finishingMove: vault.finishingMove) else { return }
         shell.reset()
         AcceptedScans.reset()
-        // A wait the vault asked for outlives a screen and a lock; it ends with a wipe or another vault (chosen; not in the spec).
+        // A wait the vault asked for outlives a screen and a lock; it ends at a wipe, `.signedOut` (chosen; not in the spec).
         if Self.waitsEnd(with: vault.phase) { WaitRegistry.shared.clearAll() }
         // The vault is no longer open (locked, signed out, unreachable): the allowance ends.
         screenshots.vaultClosed()
