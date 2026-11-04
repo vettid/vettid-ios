@@ -197,20 +197,26 @@ import VettIDVault
 
     /// The reset's own `ok`, then its `credential.ack` refused (a follow-up, not the reset's refusal): the stored blob is
     /// the outcome, so the reset succeeds at once and nothing is left undecided; the refused ack stays pending until an
-    /// outbox flush sends it again or an operation that presents the blob (the owner check) succeeds.
+    /// outbox flush sends it again.
     @Test func anAckRefusedAfterTheResetsOkIsNotItsRefusal() async throws {
         defer { phone.close() }
         try await setUp()
-        service.refuse("credential.ack", with: "stale_credential", times: 1)
+        let device = try #require(m.session?.device)
+        // No flush may send the owed ack on its own meanwhile: the last one counts as just tried.
+        device.holdBackAckRetries(true)
+        service.refuse("credential.ack", with: "retry", times: 1)
         try await m.newCredential(pin: pin, password: password, newPassword: newPassword)
         #expect(m.changeCheck == nil && m.heldChange == nil)
         #expect(try m.phoneSecrets.unresolvedChange() == nil)
-        #expect(m.session?.device.credentialVersion == service.vaultCredentialVersion)
+        #expect(device.credentialVersion == service.vaultCredentialVersion)
         #expect(service.resets.count == 1 && service.currentPassword == newPassword)
-        #expect(m.session?.device.credentialAckPending == true, "pending after the refused ack")
+        #expect(device.credentialAckPending, "pending after the refused ack")
+        // The flush sends it (the owner check, which would also settle it, has not run yet).
+        let before = count("credential.ack")
+        device.holdBackAckRetries(false)
+        await device.flushOutbox()
+        #expect(count("credential.ack") == before + 1 && !device.credentialAckPending)
         #expect(try await m.ownerChecks.check(pin: pin, password: newPassword, holdOff: nil) == .passed)
-        #expect(count("credential.ack") >= 1, "the refused one, and whatever the flows and flushes sent")
-        #expect(m.session?.device.credentialAckPending == false, "settled: by that ack, or by the operation that presented the blob")
         #expect(service.alarmState == nil && m.alarm == nil && service.ownerCheckFailures == 0)
     }
 

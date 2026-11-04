@@ -208,7 +208,6 @@ extension VaultDevice {
             return (st.outbox, true)
         }
         guard mine else { return }
-        defer { mem.withLock { flushing = false } }
         for e in entries {
             // Not one that is being deposited just now (a renewal reported as failed must not go out later).
             guard mem.withLock({ st.outbox.contains(e) && outboxInFlight.insert(e.id).inserted }) else { continue }
@@ -221,6 +220,8 @@ extension VaultDevice {
             }
             try? await deliver(e)
         }
+        // The flush is over before the ack is tried: a vault that does not answer holds up the ack, not every flush.
+        mem.withLock { flushing = false }
         await sendPendingAck()
     }
 

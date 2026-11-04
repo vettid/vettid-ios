@@ -279,28 +279,36 @@ extension VaultDevice {
                (try? await waitForAnswer(p)) == true {
                 return
             }
-            mem.withLock {
+            initRaceHook?(p.initiator)
+            // Answered or dropped is decided in one look: an `hs.resp` that lands now has set the answer and cleared the
+            // handshake together, and a pairing that succeeded must not be undone.
+            let reached: Bool = mem.withLock {
+                if answeredInit == ObjectIdentifier(p.initiator) { return true }
                 if ini === p.initiator {
                     p.initiator.abort()
                     ini = nil
                 }
+                return false
             }
+            if reached { return }
             throw error
         }
     }
 
-    /// Waits until the handshake of [p] is answered (true), or the token's `exp` plus ``initGrace`` has passed by the device's
-    /// clock (false). Throws when cancelled.
+    /// Waits until the handshake of [p] is answered (true), or it is gone, or the token's `exp` plus ``initGrace`` has passed
+    /// by the device's clock, or 11 minutes have passed on the monotonic clock (false). Throws when cancelled.
     private func waitForAnswer(_ p: PreparedInit) async throws -> Bool {
-        let cap = now().addingTimeInterval(Self.initWaitFallback + Self.initGrace)
-        let deadline = min((p.tokenExp ?? cap).addingTimeInterval(Self.initGrace), cap)
-        while !answered(p) {
-            // The handshake is gone (dropped, rejected, replaced): nothing to wait for.
-            if mem.withLock({ ini !== p.initiator }) { return false }
-            if now() >= deadline { return false }
+        let cap = cfg.uptime() + Self.initWaitFallback + Self.initGrace
+        let deadline = (p.tokenExp ?? now().addingTimeInterval(Self.initWaitFallback)).addingTimeInterval(Self.initGrace)
+        while true {
+            // Answered, or gone (dropped, rejected, replaced), read together: the answer clears the handshake.
+            let (isAnswered, isGone): (Bool, Bool) = mem.withLock {
+                (answeredInit == ObjectIdentifier(p.initiator), ini !== p.initiator)
+            }
+            if isAnswered { return true }
+            if isGone || now() >= deadline || cfg.uptime() >= cap { return false }
             try await Task.sleep(nanoseconds: 20_000_000)
         }
-        return true
     }
 
     static let userGuidMax = 128
@@ -342,7 +350,11 @@ extension VaultDevice {
     /// Sends `credential.ack` for [version] once and, taken, settles it. Throws what the vault answers or the cancel.
     func sendAck(_ version: Int64) async throws {
         let body = JsonBuilder().uint("version", UInt64(version)).bytes()
-        _ = try await opOnce("credential.ack", body: body, timeout: min(Self.ackWait, cfg.requestTimeout(for: "credential.ack")))
+        do {
+            _ = try await opOnce("credential.ack", body: body, timeout: min(Self.ackWait, cfg.requestTimeout(for: "credential.ack")))
+        } catch let e as VaultOpError where e.code == "stale_credential" {
+            // The vault has moved past this version: nothing is owed for it any more (chosen; not in the spec).
+        }
         try? await ackSettled(version)
     }
 
@@ -365,6 +377,9 @@ extension VaultDevice {
         guard go, !mem.withLock({ halted }) else { return }
         try? await sendAck(pending)
     }
+
+    /// TEST ONLY: makes an outbox flush leave a pending `credential.ack` alone (it counts as just tried), or lets it go out.
+    public func holdBackAckRetries(_ hold: Bool) { mem.withLock { lastAckTry = hold ? cfg.uptime() : nil } }
 
     /// Whether the stored blob's `credential.ack` is still to be sent.
     public var credentialAckPending: Bool { ackPendingVersion != nil }

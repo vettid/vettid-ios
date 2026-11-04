@@ -82,7 +82,8 @@ extension VaultDevice {
                 try save()
                 return (p, attest)
             } catch {
-                discardFailedTransfer(attest, attester, handshake: nil)
+                // Nothing was sent, and what this call pinned and attested is its own whatever handshake is in flight.
+                discardFailedTransfer(attest, attester, handshake: nil, alwaysOurs: true)
                 throw error
             }
         }
@@ -102,11 +103,14 @@ extension VaultDevice {
     /// The `hs.init` could not be sent: the key it attested is bound by no vault (IOS-PLAN §6.2), and the handshake and the
     /// pinned vault go with it.
     /// Callers hold ``lock``. A newer transfer that replaced this one, or one that paired meanwhile, is left alone.
-    private func discardFailedTransfer(_ attest: DeviceAttest, _ attester: any Attester, handshake: Initiator?) {
-        // Ours when the handshake in flight is this one's, or none is (it was dropped), whatever the key ids say (they may both
-        // be absent).
+    private func discardFailedTransfer(
+        _ attest: DeviceAttest, _ attester: any Attester, handshake: Initiator?, alwaysOurs: Bool = false
+    ) {
+        // Ours when the handshake in flight is this one's, or none is and none was answered (it was dropped), whatever the key
+        // ids say (they may both be absent). [alwaysOurs]: the caller is inside the call that pinned and attested, under the lock.
         let ours: Bool = mem.withLock {
-            st.deviceID == nil && alt().transferAttestKeyID == attest.iosKeyID && (ini == nil || ini === handshake)
+            alwaysOurs || (st.deviceID == nil && alt().transferAttestKeyID == attest.iosKeyID
+                && (ini === handshake || (ini == nil && answeredInit == nil)))
         }
         guard ours else { return }
         if let key = attest.iosKeyID { try? attester.discard(keyID: key) }

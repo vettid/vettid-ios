@@ -23,6 +23,15 @@ final class Recorder<T: Sendable>: @unchecked Sendable {
     let key = Ed25519PrivateKey.generate()
     let sleeps = Recorder<TimeInterval>()
 
+    /// ``RelayError/afterRetry`` is the client's note on the attempt, not part of what the relay said.
+    @Test func equalityIgnoresTheClientsNoteOnTheAttempt() {
+        var a = RelayError(status: 403, code: RelayError.tokenUsed)
+        let b = RelayError(status: 403, code: RelayError.tokenUsed)
+        a.afterRetry = true
+        #expect(a == b)
+        #expect(a != RelayError(status: 403, code: RelayError.tokenRevoked))
+    }
+
     func client(maxAttempts: Int = RelayClient.defaultAttempts, transport: HTTPTransport? = nil) -> RelayClient {
         let sleeps = sleeps
         return RelayClient(

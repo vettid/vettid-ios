@@ -134,6 +134,103 @@ import VettIDRelay
         #expect((outcome.error as? RelayError)?.code == RelayError.tokenUsed)
     }
 
+    /// A store whose writes fail once armed.
+    final class FlakyStore: DeviceStateStore, @unchecked Sendable {
+        private let inner = InMemoryDeviceStateStore()
+        private let lock = NSLock()
+        private var failing = false
+        func fail() { lock.withLock { failing = true } }
+        func load() throws -> [UInt8]? { try inner.load() }
+        func save(_ state: [UInt8]) throws {
+            if lock.withLock({ failing }) { throw URLError(.cannotWriteToFile) }
+            try inner.save(state)
+        }
+        func clear() throws { try inner.clear() }
+    }
+
+    /// An `hs.resp` that lands between the failure of the deposit and the drop of the handshake leaves the pairing alone.
+    @Test func anAnswerLandingBeforeTheCleanupKeepsTheHandshake() async throws {
+        let (d, _) = try await enrolled()
+        d.initRaceHook = { [d] i in d.mem.withLock { d.answeredInit = ObjectIdentifier(i); d.ini = nil } }
+        base.relay.refuseStatus = 503
+        base.relay.refuseDeposits = "unavailable"
+        base.relay.refuseOnly = 3
+        let outcome = enroll(d)
+        try await settle(2.5)
+        #expect(!outcome.finished, "on to device.paired, not failed")
+    }
+
+    /// The record of an answered handshake does not outlive it: a new one starts with none.
+    @Test func aNewHandshakeStartsWithNoAnsweredRecord() async throws {
+        let (d, _) = try await enrolled()
+        d.mem.withLock { d.answeredInit = ObjectIdentifier(d) }
+        let outcome = enroll(d)
+        _ = try await base.relay.nextDeposit()
+        #expect(d.mem.withLock { d.answeredInit } == nil)
+        _ = outcome
+    }
+
+    /// An outbox entry whose save failed is neither kept in the outbox nor marked in flight.
+    @Test func aFailedSaveLeavesNoEntryAndNoMark() async throws {
+        let store = FlakyStore()
+        let d = try await VaultDevice.create(base.config(store), secrets: try DeviceSecrets.generate())
+        let v = try FakeVault(relayURL: base.relay.baseURL)
+        try await d.handle(try v.enrolled(d))
+        try await d.awaitEnrolled(timeout: 1)
+        let completing = Task { try await d.completeEnrollment(timeout: 5) }
+        let (_, initMsg) = try await base.relay.nextDeposit()
+        try await d.handle(try v.respond(initMsg, d))
+        completing.cancel()
+        store.fail()
+        await #expect(throws: (any Error).self) {
+            _ = try await d.lock.withLock {
+                try d.enqueueLocked(id: nil, type: "relay.token.refresh", body: VaultJSON.empty, re: nil, status: nil, exp: nil)
+            }
+        }
+        let (kept, marks) = d.mem.withLock { (d.st.outbox.filter { $0.type == "relay.token.refresh" }.count, d.outboxInFlight.count) }
+        #expect(kept == 0 && marks == 0)
+    }
+
+    /// The wait for the resp ends when the handshake is gone (dropped, rejected, replaced).
+    @Test func theWaitEndsWhenTheHandshakeIsGone() async throws {
+        let (d, v) = try await newPhone()
+        let (qr, _) = try codeFor(v, d)
+        retryRefused(RelayError.tokenUsed)
+        let outcome = transfer(d, qr)
+        _ = try await base.relay.nextDeposit()
+        try await settle(0.3)
+        #expect(!outcome.finished)
+        d.mem.withLock { d.ini = nil }
+        for _ in 0..<100 where !outcome.finished { try await settle(0.05) }
+        #expect((outcome.error as? RelayError)?.code == RelayError.tokenUsed, "it stopped waiting at once")
+    }
+
+    /// A transfer whose `hs.init` could not be saved leaves nothing pinned or attested.
+    @Test func aTransferWhoseStateCouldNotBeSavedLeavesNothing() async throws {
+        let store = FlakyStore()
+        let secrets = DeviceSecrets(identity: Ed25519PrivateKey.generate(), kem: try KemPrivateKey.generate(), relay: Ed25519PrivateKey.generate(), apiKey: [UInt8](repeating: 0x30, count: 91))
+        let d = try await VaultDevice.create(base.config(store), secrets: secrets)
+        let v = try FakeVault(relayURL: base.relay.baseURL)
+        let (qr, _) = try codeFor(v, d)
+        let attester = RecordingAttester()
+        store.fail()
+        await #expect(throws: (any Error).self) { try await d.startTransfer(link: try qr.link(), attester: attester) { _, _ in nil } }
+        #expect(!d.hasVault && d.altState.transferAttestKeyID == nil && attester.discarded.count == 1)
+    }
+
+    /// A second transfer that fails before its handshake is built, while the first one's is in flight, cleans up too.
+    @Test func aSecondTransferThatFailsToPrepareLeavesNothing() async throws {
+        let (d, v) = try await newPhone()
+        let (first, _) = try codeFor(v, d, claimID: "abcdefghijklmnopqrstuvwxyz")
+        let attester = RecordingAttester()
+        try await d.startTransfer(link: try first.link(), attester: attester) { _, _ in nil }
+        #expect(d.hasVault)
+        let (second, _) = try codeFor(v, d, claimID: "bcdefghijklmnopqrstuvwxyza")
+        d.quiet() // the next handshake is refused before it is built
+        await #expect(throws: (any Error).self) { try await d.startTransfer(link: try second.link(), attester: attester) { _, _ in nil } }
+        #expect(!d.hasVault && d.altState.transferAttestKeyID == nil)
+    }
+
     /// `token_used` to a first attempt (no retry before it) is not a lost answer: the handshake fails at once.
     @Test func tokenUsedOnAFirstAttemptFailsAtOnce() async throws {
         let (d, _) = try await enrolled()
@@ -161,15 +258,15 @@ import VettIDRelay
         #expect(!again.hasVault && again.altState.transferAttestKeyID == nil)
     }
 
-    private func codeFor(_ v: FakeVault, _ d: VaultDevice) throws -> (qr: InviteQr, inviteID: String) {
+    private func codeFor(_ v: FakeVault, _ d: VaultDevice, claimID: String = "abcdefghijklmnopqrstuvwxyz") throws -> (qr: InviteQr, inviteID: String) {
         // The transfer suite shares this suite's fake relay for the claim.
         let exp = Date(timeIntervalSince1970: (Date().timeIntervalSince1970 + 600).rounded(.down))
         let inviteID = Ulid.new()
         let open = try DepositTokens.mintOpen(v.relayKey, audience: base.relay.baseURL, now: Date())
         let bundle = InviteBundle(kind: .app, inviteID: inviteID, remote: false, vault: v.principal, token: open, exp: exp, capabilities: [Capabilities.recoveryR])
         let sealed = try InviteBundle.seal(try bundle.marshal())
-        base.relay.putClaim("abcdefghijklmnopqrstuvwxyz", sealed.blob)
-        return (InviteQr(kind: .app, relay: base.relay.baseURL, claimID: "abcdefghijklmnopqrstuvwxyz", hash: sealed.hash, key: sealed.key, exp: UInt64(exp.timeIntervalSince1970)), inviteID)
+        base.relay.putClaim(claimID, sealed.blob)
+        return (InviteQr(kind: .app, relay: base.relay.baseURL, claimID: claimID, hash: sealed.hash, key: sealed.key, exp: UInt64(exp.timeIntervalSince1970)), inviteID)
     }
 }
 

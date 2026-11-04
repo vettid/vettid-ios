@@ -109,6 +109,19 @@ import VettIDCrypto
         #expect(d.ackPendingVersion == nil)
     }
 
+    /// `stale_credential` to a `credential.ack`: the vault has moved past that version, so nothing is owed for it.
+    @Test func aStaleAckIsSettled() async throws {
+        let (d, v) = try await base.pairedDevice()
+        let api = VaultApi(device: d) { true }
+        let (utks, _) = try pool(2)
+        let create = Task { try await api.credentialCreate(password: "a long password", pin: "123456") }
+        try await answer(v, d, "credential.utk.get", utks)
+        try await answer(v, d, "credential.create", #"{"credential":"AQID","version":1,"key":"x"}"#)
+        try await answer(v, d, "credential.ack", code: "stale_credential", errorBody: "{}")
+        try await create.value
+        #expect(d.ackPendingVersion == nil)
+    }
+
     /// Before release R the password goes as typed and without a PIN.
     @Test func beforeReleaseRThePasswordIsSentAsTyped() async throws {
         let (d, v) = try await base.pairedDevice()

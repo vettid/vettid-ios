@@ -50,8 +50,8 @@ struct CredentialOps: Sendable {
         }
         try await device.keepCredential(blob: blob, version: v, awaitingAck: true)
         // The blob is stored: that is the outcome of the operation. A confirmation that is lost does not undo it (chosen; not
-        // in the spec, and unlike vettid-android, which throws): the version stays pending until an operation presents the
-        // blob, which confirms it (VAULT-MESSAGING §3.5.3), see ``credOpAnswer``.
+        // in the spec, and unlike vettid-android, which throws): the ack stays pending and goes out at the next outbox flush
+        // (``VaultDevice/sendPendingAck()``), or is dropped when a later operation that presents the blob succeeds.
         try await confirm(v)
         return utks
     }
@@ -175,9 +175,12 @@ struct CredentialOps: Sendable {
         }
     }
 
-    /// Runs an operation that presents the stored blob. Presenting the version confirms it (VAULT-MESSAGING §3.5.3), so a
-    /// `credential.ack` that was lost for it is no longer owed once the vault answered; none is sent again, which would add
-    /// a wait inside the credential lock while the vault cannot be reached. Callers hold the credential lock.
+    /// Runs an operation that presents the stored blob. When it succeeds the vault has accepted the version as the holder's
+    /// current one and moves on from it, so a `credential.ack` still owed for it is dropped; none is sent from here, which
+    /// would add a wait inside the credential lock while the vault cannot be reached. The vault this follows, vettid-vault,
+    /// confirms a version by `credential.ack` alone (and the rotation after it), while VAULT-MESSAGING §3.5.3 and §3.5.9 also
+    /// count presenting it: dropping the ack after a success is chosen; not in the spec. An operation refused after the blob
+    /// check leaves the version unconfirmed, and the ack goes out at the next flush. Callers hold the credential lock.
     private func presenting<T>(_ body: () async throws -> T) async throws -> T {
         let presented = device.credentialVersion
         let out = try await body()
