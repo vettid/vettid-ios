@@ -78,6 +78,12 @@ extension VaultDevice {
                 }
                 // CryptoError.early: a message of the new epoch ahead of its hs.fin (handle leaves it for redelivery).
                 let fr = try awaiting[i].resp.handleFin(raw, collectSender: sender, now: t)
+                // A fin still owed follows its handshake's epoch into the rekey's.
+                if let old = keyring.current()?.ctx {
+                    for j in st.outbox.indices where st.outbox[j].epochIDs?.contains(old) == true {
+                        if st.outbox[j].epochIDs?.contains(fr.epoch.ctx) != true { st.outbox[j].epochIDs?.append(fr.epoch.ctx) }
+                    }
+                }
                 keyring.activate(fr.epoch, now: t)
                 awaiting.remove(at: i)
             }
@@ -122,7 +128,10 @@ extension VaultDevice {
             storeVaultToken(body)
             // The first handshake's `device.paired` (pairing, enrollment, transfer): a fin still owed for it is of no use, and
             // its age must not later tell a paired device that the pairing failed.
-            mem.withLock { if st.deviceID == nil { st.outbox.removeAll { $0.type == Self.typeHsFin } } }
+            // Only the fins of the epoch it opened under: a retired epoch's message must not clear a newer handshake's fin.
+            mem.withLock {
+                if st.deviceID == nil { st.outbox.removeAll { $0.type == Self.typeHsFin && $0.epochIDs?.contains(ep.ctx) == true } }
+            }
             // A transfer's `device.paired` is applied before the message is acked (VAULT-MESSAGING §11.14.10 rule 5: a paired
             // transfer completes at any later start): the event in memory is lost with the process, the state is not.
             if mem.withLock({ st.deviceID == nil && (VaultJSON.bool(body, "transfer") == true || alt().transferAttestKeyID != nil) }) {
@@ -159,6 +168,7 @@ extension VaultDevice {
     /// `hs.resp`. Nothing is sent back; a redelivery finds no epoch to open it and is dropped.
     func dropPairing() {
         mem.withLock {
+            handshakeGeneration &+= 1 // an after-lock closure of the dropped handshake shows nothing
             sas = nil
             ini?.abort()
             ini = nil

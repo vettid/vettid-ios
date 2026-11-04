@@ -136,7 +136,7 @@ extension VaultManager: MoveRepository {
     /// at the deadline, **11 minutes after the `hs.init` was started** (§11.14.10 rule 5, owner decision 2026-10-23: one
     /// deadline, stored with the transfer, which no user action extends). At the deadline, and not before, the mailbox is
     /// collected once: a `device.paired{transfer}` it brings is applied and the move completes instead; otherwise the
-    /// transfer is dropped. A fin the relay refused for good (``PairingNotCompleted``) before the deadline drops the transfer too; after
+    /// transfer is dropped. A fin the relay refused for good at its first deposit (``PairingNotCompleted``) before the deadline drops the transfer too; after
     /// it the collect runs all the same. Any other failure before the deadline is rethrown and the transfer kept. True when the vault gave
     /// this phone the member's `user_guid` (§6.7.1, 0.17.0), which its unlocks need.
     public func awaitTransferIn() async throws -> Bool {
@@ -158,7 +158,7 @@ extension VaultManager: MoveRepository {
                 await dropTransfer(s.device)
                 throw rejected
             } catch let notCompleted as PairingNotCompleted {
-                // The fin was refused for good or dropped: the pairing cannot finish; the same.
+                // The fin was refused for good at its first deposit: the pairing cannot finish; the same.
                 await dropTransfer(s.device)
                 throw notCompleted
             }

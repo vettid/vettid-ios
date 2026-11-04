@@ -135,7 +135,7 @@ extension VaultDevice {
         if let s = pairingSas { return s }
         if mem.withLock({ finFailed }) { throw PairingNotCompleted() }
         for await s in stream {
-            // The empty text says the fin failed (``notifyFinFailed()``).
+            // The empty text says the fin failed (``notifyFinFailed(ifOwed:)``).
             if s.isEmpty { throw PairingNotCompleted() }
             return s
         }

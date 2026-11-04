@@ -229,18 +229,42 @@ import VettIDDataTesting
         #expect(phone.attester.discarded == phone.attester.attested)
     }
 
-    /// A fin the relay refuses for good while the phone waits for the approval (the code shown, the fin owed after a lost
-    /// answer) still drops the transfer, before the deadline.
-    @Test func aFinRefusedForGoodWhileWaitingDropsTheTransfer() async throws {
+    /// A fin sent again and refused for good (the vault took the first, whose answer was lost, and the owner approved while the
+    /// app was suspended) is no failure: the deadline's collect finds the `device.paired` and the transfer completes. A refusal
+    /// that told the flow would have dropped a transfer the vault already paired.
+    @Test func aResentFinRefusedForGoodLeavesTheDeadlineToCollectThePaired() async throws {
         defer { phone.close() }
         service.transferLosesFinAnswers = true
+        service.transferRequestTokenTTL = 600
         _ = try await scanned()
-        let waiting = Task { try await m.awaitTransferIn() }
-        try await Task.sleep(for: .milliseconds(100))
+        m.session?.device.stop() // the collector is not running while the app is suspended
+        service.approveTransferIn()
         service.transferLosesFinAnswers = false
+        phone.clockAhead = 600
+        let ended = EndedFlag()
+        let waiting = Task {
+            defer { ended.set() }
+            return try await m.awaitTransferIn()
+        }
+        let pauses = phone.deadlinePauses
+        for _ in 0..<500 where pauses.lengths.isEmpty { try await Task.sleep(for: .milliseconds(10)) }
         service.transferRevokesFin = true
-        await m.session?.device.flushOutbox() // the fin is refused for good now
-        let failure = await vaultFailure { _ = try await waiting.value }
+        await m.session?.device.flushOutbox() // the fin sent again is refused for good, silently
+        try await Task.sleep(for: .milliseconds(200))
+        #expect(!ended.isSet, "the transfer still waits for its deadline")
+        service.transferRevokesFin = false
+        phone.clockAhead = 700
+        pauses.release()
+        #expect(try await waiting.value)
+        #expect(m.finishMovePending && deviceHoldsVault)
+    }
+
+    /// A fin refused for good at its first deposit is a failure at once: the vault never took it, and the transfer is dropped.
+    @Test func aFirstFinRefusedForGoodDropsTheTransfer() async throws {
+        defer { phone.close() }
+        service.holdsTransferApproval = true
+        service.transferRevokesFin = true
+        let failure = await vaultFailure { _ = try await m.transferIn(code: try code()) }
         #expect(failure?.kind == .inviteUnavailable && failure?.code == "pairing_not_completed")
         #expect(!deviceHoldsVault && !pendingRecord)
         #expect(phone.attester.discarded == phone.attester.attested)
@@ -456,3 +480,11 @@ import VettIDDataTesting
 }
 
 // swiftlint:enable line_length
+
+/// Set when a task ends.
+private final class EndedFlag: @unchecked Sendable {
+    private let lock = NSLock()
+    private var ended = false
+    func set() { lock.withLock { ended = true } }
+    var isSet: Bool { lock.withLock { ended } }
+}

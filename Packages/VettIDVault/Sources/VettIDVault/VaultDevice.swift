@@ -153,10 +153,19 @@ public final class VaultDevice: @unchecked Sendable {
     /// TEST ONLY: runs in ``sendInit(_:)`` after a failed deposit, before the handshake is dropped.
     #if DEBUG
     var initRaceHook: (@Sendable (Initiator) -> Void)?
+    /// TEST ONLY: runs in ``storeFin`` once the fin is stored, with its id.
+    var finStoredHook: (@Sendable (String) -> Void)?
+    /// TEST ONLY: runs after a fin deposit was counted, just before it is sent.
+    var finSendHook: (@Sendable () -> Void)?
+    /// TEST ONLY: runs before a fin deposit is counted, after the flush chose the entry.
+    var finCountHook: (@Sendable () -> Void)?
     #endif
     /// The handshake whose `hs.resp` was handled last (``VaultDevice/sendInit(_:)`` reads it). Under ``mem``.
     var answeredInit: ObjectIdentifier?
-    /// The `hs.fin` of the handshake was refused for good (``notifyFinFailed()``). Under ``mem``.
+    /// Counts the handshakes started (``prepareInit``): what an after-lock closure compares to know that its handshake is still
+    /// the current one (an object identity could be reused). Under ``mem``.
+    var handshakeGeneration: UInt64 = 0
+    /// The `hs.fin` of the handshake was refused for good (``notifyFinFailed(ifOwed:)``). Under ``mem``.
     var finFailed = false
 
     /// A vault rekey this device answered (`hs.resp` sent), awaiting its `hs.fin` (§6.5).
@@ -500,6 +509,7 @@ public final class VaultDevice: @unchecked Sendable {
             stop()
             mem.withLock {
                 forgotten = true
+                handshakeGeneration &+= 1
                 keyring.destroy()
                 ini?.abort()
                 ini = nil
@@ -525,6 +535,7 @@ public final class VaultDevice: @unchecked Sendable {
             stop()
             let (shots, waiters): ([OneShot<Inner>], [OneShot<Bool>]) = mem.withLock {
                 halted = true
+                handshakeGeneration &+= 1
                 ini?.abort()
                 ini = nil
                 for a in awaiting { a.resp.abort() }

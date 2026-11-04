@@ -148,6 +148,10 @@ struct OutboxEntry: Codable, Sendable, Equatable {
     var attempts = 0
     /// A handshake's fin: the time (epoch ms) after which it is dropped, not sent again (nil for any other entry).
     var dropAfterMs: Int64?
+    /// A handshake's fin: the ids (``Epoch/ctx``) of the epoch it was sealed under and of the epochs a rekey moved that
+    /// handshake to, so that the `device.paired` that opened under any of them removes it and no other handshake's does (nil
+    /// for any other entry).
+    var epochIDs: [String]?
 }
 
 /// Where the device state is kept. [save] must be durable before it returns (ack after persist, §8.3).

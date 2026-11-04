@@ -89,7 +89,7 @@ public struct StoredStateUnreadable: Error, Equatable, Sendable, CustomStringCon
 /// VAULT-MESSAGING §6.7, 0.10.5). The device has dropped the handshake's epoch and the request token.
 public struct PairingRejected: Error, Equatable, Sendable {}
 
-/// The device's `hs.fin` was refused for good by the relay, or dropped after its time: the vault will not finish the pairing or
+/// The device's `hs.fin` was refused for good by the relay at its first deposit: the vault will not finish the pairing or
 /// transfer, whose code is spent. The member scans a new code.
 public struct PairingNotCompleted: Error, Equatable, Sendable {}
 

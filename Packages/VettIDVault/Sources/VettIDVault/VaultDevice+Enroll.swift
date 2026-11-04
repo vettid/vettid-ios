@@ -96,6 +96,7 @@ extension VaultDevice {
 
     /// The first handshake's hs.resp: activates the epoch, keeps the token and sends hs.fin.
     func handleResp(_ raw: [UInt8], sender: [UInt8], _ t: Date) async throws {
+        var generation: UInt64 = 0 // this handshake, as ``handshakeGeneration`` counts it while it is the current one
         let (res, v): (InitiatorResult, VaultRecord) = try mem.withLock {
             guard let i = ini else { throw VaultStateError(message: "no handshake") }
             let res: InitiatorResult
@@ -106,6 +107,7 @@ extension VaultDevice {
                 throw e
             }
             answeredInit = ObjectIdentifier(i)
+            generation = handshakeGeneration
             ini = nil
             // (IOS-PLAN 0.1.39 §4.9) The recovered phone's handshake the vault answered: its `ctx` names the registration whose
             // attested key the vault binds. Saved with the epoch.
@@ -121,30 +123,31 @@ extension VaultDevice {
         // The fin is kept in the outbox until the relay accepts it: a pairing or transfer code is spent by its handshake, and
         // an hs.fin that never arrives leaves the code burnt. It goes out after the lock (``afterLock(_:)``) and again at
         // each flush.
-        let fin = try storeFin(res.fin, vault: v, at: t)
+        let fin = try storeFin(res.fin, vault: v, epoch: res.epoch.ctx, at: t)
         // The code is shown once the fin has gone out, or, when the relay would not take it, is kept for the next flush.
         let shown = res.sas
+        let mine = generation
         afterLock { [self] in
             do {
                 try await deliver(fin)
             } catch let x as RelayError where Self.isTerminal(x) {
-                // Refused for good: the pairing cannot finish, and the flow that waits is told, with no code.
-                notifyFinFailed()
-                return
+                // Refused for good: when the flow was told (``deliver``: the fin's first attempt), it gets no code.
+                if mem.withLock({ finFailed }) { return }
             } catch {
                 // A passing failure: the fin stays owed, and the code is shown.
             }
-            if let s = shown {
-                mem.withLock { sas = s }
+            // Only while this handshake is the current one: a new one bumps ``handshakeGeneration``, and its flow must not be
+            // handed the old code.
+            if let s = shown, mem.withLock({ guard handshakeGeneration == mine else { return false }; sas = s; return true }) {
                 sasBroadcast.emit(s)
             }
         }
     }
 
-    /// Stores the `hs.fin` in the outbox, marked in flight until its deposit, and saves. Dropped when the token it is sent under expires (a minute past it, as the wait for an hs.resp is: a phone
-    /// clock that runs ahead must not drop a fin the relay would still take), at the latest after a handshake's lifetime
-    /// (chosen; not in the spec). Callers hold ``lock``.
-    private func storeFin(_ fin: [UInt8], vault v: VaultRecord, at t: Date) throws -> OutboxEntry {
+    /// Stores the `hs.fin` in the outbox, marked in flight until its deposit, and saves. Dropped when the token it is sent
+    /// under expires (a minute past it, as the wait for an hs.resp is: a phone clock that runs ahead must not drop a fin the
+    /// relay would still take), at the latest after a handshake's lifetime (chosen; not in the spec). Callers hold ``lock``.
+    private func storeFin(_ fin: [UInt8], vault v: VaultRecord, epoch: String, at t: Date) throws -> OutboxEntry {
         let entry = mem.withLock {
             let limit = Self.ms(t.addingTimeInterval(Self.handshakeTTL))
             let expiry = heldFromVault(v.token).map { Self.ms($0.addingTimeInterval(Self.initGrace)) } ?? limit
@@ -153,13 +156,19 @@ extension VaultDevice {
                 envelope: Base64s.encodeStd(fin)
             )
             e.dropAfterMs = min(expiry, limit)
+            e.epochIDs = [epoch]
             st.outbox.append(e)
             outboxInFlight.insert(e.id) // until the deposit: a flush in between leaves it alone
             return e
         }
-        // A failed save loses nothing: the entry stays in memory, is deposited now, and is saved with the next write. It is
-        // unmarked so that a flush may take it up if the deposit below does not run.
-        if (try? save()) == nil { mem.withLock { _ = outboxInFlight.remove(entry.id) } }
+        // A failed save loses nothing: the entry stays in memory and is saved with the next write; its deposit waits for a save
+        // that works (``deliver``). It stays marked: the deposit that follows always runs (``handle`` runs the after-lock work)
+        // and its `deliver` unmarks it, so that no flush deposits the fin next to it. Save failures are treated as transient
+        // (chosen; not in the spec).
+        _ = try? save()
+        #if DEBUG
+        finStoredHook?(entry.id)
+        #endif
         return entry
     }
 
@@ -266,6 +275,7 @@ extension VaultDevice {
             ini?.abort()
             ini = i
             answeredInit = nil
+            handshakeGeneration &+= 1
             finFailed = false
             st.outbox.removeAll { $0.type == Self.typeHsFin }
         }
@@ -275,13 +285,19 @@ extension VaultDevice {
     }
 
     /// The `hs.fin` will not reach the vault: the waiting flows are told (``PairingNotCompleted``), and no code is shown.
-    func notifyFinFailed() {
-        let waiters: [OneShot<Bool>] = mem.withLock {
+    ///
+    /// Only when the fin entry [owed] is still in the outbox: a new handshake removes the fins and resets the failure
+    /// under ``mem`` in one step, and the check here is in the same step as the signal, so a fin of the old handshake cannot
+    /// fail the new one.
+    func notifyFinFailed(ifOwed owed: String) {
+        let waiters: [OneShot<Bool>]? = mem.withLock {
+            guard st.outbox.contains(where: { $0.id == owed }) else { return nil }
             finFailed = true
             sas = nil
             defer { inboxWaiters.removeAll() }
             return inboxWaiters
         }
+        guard let waiters else { return }
         for w in waiters { w.complete(true) }
         sasBroadcast.emit("")
     }
