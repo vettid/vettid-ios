@@ -199,7 +199,7 @@ public struct ConnectionRow: View {
     }
 }
 
-/// Outlined content card of a detail screen (Proton message card): the screen's colour, a hairline border, rounded
+/// Outlined content card of a detail screen (Proton message card): the screen's colour, a 3:1 `outline` border, rounded
 /// corners. Mirrors vettid-android `DetailCard`.
 public struct DetailCard<Content: View>: View {
     @Environment(\.vettIDColors) private var colors
