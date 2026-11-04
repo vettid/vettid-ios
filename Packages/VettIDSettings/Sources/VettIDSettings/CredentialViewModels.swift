@@ -66,8 +66,16 @@ public final class CredentialViewModel {
     @ObservationIgnored private let repo: any CredentialRepository
     @ObservationIgnored private let work = Work()
 
-    public init(repo: any CredentialRepository) {
+    @ObservationIgnored private let waits: WaitRegistry
+
+    /// [waits]: where a wait the vault asked for is kept, so that it outlives the dialog and this screen.
+    public init(repo: any CredentialRepository, waits: WaitRegistry = WaitRegistry()) {
         self.repo = repo
+        self.waits = waits
+        if let w = waits.current(.unlockWindow) {
+            local.windowError = w.kind
+            local.windowRetryAt = w.deadline
+        }
         refresh()
     }
 
@@ -100,13 +108,19 @@ public final class CredentialViewModel {
     public func showWindowDialog(_ show: Bool) {
         local.windowDialog = show
         local.windowPassword = ""
-        local.windowError = nil
-        local.windowRetryAt = nil
+        // A wait that runs outlives the dialog (VAULT-MESSAGING §10.1).
+        if let w = waits.current(.unlockWindow) {
+            local.windowError = w.kind
+            local.windowRetryAt = w.deadline
+        } else {
+            local.windowError = nil
+            local.windowRetryAt = nil
+        }
     }
 
     public func setWindowPassword(_ v: String) {
         local.windowPassword = v
-        local.windowError = nil
+        if !local.windowWaiting { local.windowError = nil }
     }
 
     public func openWindow() {
@@ -124,7 +138,7 @@ public final class CredentialViewModel {
             } catch {
                 self?.local.busy = false
                 self?.local.windowError = failureKind(error)
-                self?.local.windowRetryAt = failureRetryAt(error)
+                self?.local.windowRetryAt = self?.waits.record(.unlockWindow, error: error)
                 self?.local.windowPassword = ""
             }
         }
@@ -197,6 +211,13 @@ public struct ChangePasswordState: Equatable, Sendable, CustomStringConvertible,
     public var same = false
     public var busy = false
     public var error: FailureKind?
+    /// The end of the wait the failure asked for (`retry_after`), or nil (``WaitText``).
+    public var errorRetryAt: WaitDeadline?
+    /// The wait runs: the send is held back until it ends (VAULT-MESSAGING §10.1: the app does not resend before it ends).
+    public var waiting: Bool { errorRetryAt?.isRunning() == true }
+
+    /// Clears the failure, except while its wait runs (the notice says why the send is held back).
+    public mutating func clearError() { if !waiting { error = nil } }
     public var done = false
     /// (VAULT-MESSAGING §11.14.9 "A lost answer") The last change got no answer and is being decided
     /// (``ChangeCheck/Status/checking``, ``ChangeCheck/Status/unreachable``), or was decided as not applied
@@ -210,7 +231,7 @@ public struct ChangePasswordState: Equatable, Sendable, CustomStringConvertible,
 
     /// Every field the change needs is filled in.
     public func canSubmit(pinTyped: Int) -> Bool {
-        !current.isEmpty && !password.isEmpty && !confirm.isEmpty && pinReady(typed: pinTyped) && !refused && rule.passes
+        !waiting && !current.isEmpty && !password.isEmpty && !confirm.isEmpty && pinReady(typed: pinTyped) && !refused && rule.passes
     }
 
     public var description: String {
@@ -232,10 +253,15 @@ public final class ChangePasswordViewModel {
     @ObservationIgnored private let work = Work()
     @ObservationIgnored private let followers = TaskBag()
 
-    public init(repo: any CredentialRepository, vault: any VaultRepository) {
+    @ObservationIgnored private let waits: WaitRegistry
+
+    /// [waits]: where a wait the vault asked for is kept, so that it outlives this screen.
+    public init(repo: any CredentialRepository, vault: any VaultRepository, waits: WaitRegistry = WaitRegistry()) {
         self.repo = repo
         self.vault = vault
+        self.waits = waits
         state = ChangePasswordState(askPin: vault.usesPhoneSecret)
+        keepWait()
         followers.add(follow(self, read: { $0.vault.changeCheck }, apply: { $0.decided($1) }))
     }
 
@@ -282,12 +308,12 @@ public final class ChangePasswordViewModel {
     public func setPin(_ v: String) {
         state.pin = String(v.filter { $0.isASCII && $0.isNumber }.prefix(PinPolicy.maxLength))
         if !state.refused && !state.password.isEmpty { state.rule = PasswordRule.check(state.password, pin: state.pin) }
-        state.error = nil
+        state.clearError()
     }
 
     public func setCurrent(_ v: String) {
         state.current = v
-        state.error = nil
+        state.clearError()
     }
 
     public func setPassword(_ v: String) {
@@ -311,11 +337,19 @@ public final class ChangePasswordViewModel {
         state = ChangePasswordState(askPin: state.askPin)
         state.busy = busy
         state.check = check
+        keepWait()
+    }
+
+    /// A wait the vault asked for outlives the screen and the app's foreground: the failure and its wait come back.
+    private func keepWait() {
+        guard let w = waits.current(.changePassword) else { return }
+        state.error = w.kind
+        state.errorRetryAt = w.deadline
     }
 
     public func submit() {
         let s = state
-        guard !s.current.isEmpty, s.pinReady(typed: 0) else {
+        guard !s.waiting, !s.current.isEmpty, s.pinReady(typed: 0) else {
             state.pin = ""
             return
         }
@@ -392,6 +426,7 @@ public final class ChangePasswordViewModel {
             state.error = nil
         } else {
             state.error = failure.kind
+            state.errorRetryAt = waits.record(.changePassword, error: failure)
         }
     }
 

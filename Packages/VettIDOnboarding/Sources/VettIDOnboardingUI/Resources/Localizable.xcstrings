@@ -5283,7 +5283,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Your daily check comes first. Do it, then return to the earlier release."
+            "value": "The owner check comes first. Finish it, then return to the earlier release."
           }
         }
       }
@@ -5294,7 +5294,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "A change of your PIN or password is still being decided. Try again when it has been."
+            "value": "A change of your PIN or password is still being decided. Try again once it is decided."
           }
         }
       }
@@ -5305,7 +5305,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "There is no earlier release to return to any more."
+            "value": "Going back to the earlier release isn't possible right now."
           }
         }
       }
@@ -5316,7 +5316,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Still opening your vault"
+            "value": "Still opening VettID"
           }
         }
       }
@@ -5327,7 +5327,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "This is taking longer than usual. VettID keeps trying, or you can try again."
+            "value": "This is taking longer than usual. VettID is still waiting for an answer."
           }
         }
       }

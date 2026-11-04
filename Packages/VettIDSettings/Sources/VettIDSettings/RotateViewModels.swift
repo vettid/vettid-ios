@@ -36,9 +36,13 @@ public final class RotateViewModel {
 
     @ObservationIgnored private let repo: any CredentialRepository
     @ObservationIgnored private let work = Work()
+    @ObservationIgnored private let waits: WaitRegistry
 
-    public init(repo: any CredentialRepository) {
+    /// [waits]: where a wait the vault asked for is kept, so that it outlives this screen.
+    public init(repo: any CredentialRepository, waits: WaitRegistry = WaitRegistry()) {
         self.repo = repo
+        self.waits = waits
+        if let w = waits.current(.rotate) { state = RotateState(error: w.kind, retryAt: w.deadline) }
     }
 
     deinit { work.cancelAll() }
@@ -59,7 +63,7 @@ public final class RotateViewModel {
                 try await repo.rotate(password: pw)
                 self?.state = RotateState(done: true)
             } catch {
-                self?.state = RotateState(error: failureKind(error), retryAt: failureRetryAt(error))
+                self?.state = RotateState(error: failureKind(error), retryAt: waits.record(.rotate, error: error))
             }
         }
     }

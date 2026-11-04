@@ -17,7 +17,7 @@ struct ErrorNotice: View {
         if let kind = state.error {
             let text = override != nil && kind == override
                 ? overrideText ?? kind.message(timeScale: timeScale) : Self.message(kind, state.errorRetryAt, timeScale: timeScale)
-            let wait = state.errorRetryAt.map { WaitDeadline(date: $0) }
+            let wait = state.errorWait
             let spoken = kind == .rateLimited ? WaitText.spoken(kind, retryAt: wait) : nil
             Group {
                 if kind == .rateLimited, WaitText.seconds(until: wait) != nil {
@@ -36,10 +36,6 @@ extension ErrorNotice {
     /// The failure's text at the vault's [timeScale]; a refused start-over (iPhone only) says from when it is possible.
     static func message(_ kind: FailureKind, _ retryAt: Date?, timeScale: UInt64) -> String {
         if kind == .enrollmentStarted, let retryAt { return FailureKind.enrollmentStartedText(after: retryAt) }
-        // A `429`'s wait (`Retry-After`), in Android's words for the recovery's (RecoveryStrings.recoverRateLimitedWait).
-        if kind == .rateLimited, let retryAt, WaitText.seconds(until: WaitDeadline(date: retryAt)) != nil {
-            return WaitText.message(kind, retryAt: WaitDeadline(date: retryAt), timeScale: timeScale)
-        }
         return kind.message(timeScale: timeScale)
     }
 }

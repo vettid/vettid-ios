@@ -48,9 +48,13 @@ public final class NewPhoneSecretViewModel {
 
     @ObservationIgnored private let vault: any VaultRepository
     @ObservationIgnored private let work = Work()
+    @ObservationIgnored private let waits: WaitRegistry
 
-    public init(vault: any VaultRepository) {
+    /// [waits]: where a wait the vault asked for is kept, so that it outlives this screen.
+    public init(vault: any VaultRepository, waits: WaitRegistry = WaitRegistry()) {
         self.vault = vault
+        self.waits = waits
+        if let w = waits.current(.newPhoneSecret) { state = NewPhoneSecretState(error: w.kind, retryAt: w.deadline) }
     }
 
     deinit { work.cancelAll() }
@@ -78,7 +82,7 @@ public final class NewPhoneSecretViewModel {
                 self?.state = NewPhoneSecretState(done: true)
             } catch {
                 // Neither entry is kept after an answer.
-                self?.state = NewPhoneSecretState(error: failureKind(error), retryAt: failureRetryAt(error))
+                self?.state = NewPhoneSecretState(error: failureKind(error), retryAt: waits.record(.newPhoneSecret, error: error))
             }
         }
     }

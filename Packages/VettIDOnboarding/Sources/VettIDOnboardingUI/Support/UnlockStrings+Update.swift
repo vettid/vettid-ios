@@ -37,12 +37,12 @@ extension OnboardingStrings {
     }
 
     static var rootStartingSlowTitle: String {
-        String(localized: "ios_root_starting_slow_title", defaultValue: "Still opening your vault", bundle: .module)
+        String(localized: "ios_root_starting_slow_title", defaultValue: "Still opening VettID", bundle: .module)
     }
     static var rootStartingSlowBody: String {
         String(
             localized: "ios_root_starting_slow_body",
-            defaultValue: "This is taking longer than usual. VettID keeps trying, or you can try again.",
+            defaultValue: "This is taking longer than usual. VettID is still waiting for an answer.",
             bundle: .module
         )
     }
@@ -57,21 +57,21 @@ extension OnboardingStrings {
     static var returnRefusedCheckFirst: String {
         String(
             localized: "ios_unlock_return_check_first",
-            defaultValue: "Your daily check comes first. Do it, then return to the earlier release.",
+            defaultValue: "The owner check comes first. Finish it, then return to the earlier release.",
             bundle: .module
         )
     }
     static var returnRefusedChangeHeld: String {
         String(
             localized: "ios_unlock_return_change_held",
-            defaultValue: "A change of your PIN or password is still being decided. Try again when it has been.",
+            defaultValue: "A change of your PIN or password is still being decided. Try again once it is decided.",
             bundle: .module
         )
     }
     static var returnRefusedGone: String {
         String(
             localized: "ios_unlock_return_gone",
-            defaultValue: "There is no earlier release to return to any more.",
+            defaultValue: "Going back to the earlier release isn't possible right now.",
             bundle: .module
         )
     }

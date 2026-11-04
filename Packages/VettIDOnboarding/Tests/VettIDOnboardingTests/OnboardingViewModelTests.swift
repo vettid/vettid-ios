@@ -134,7 +134,8 @@ import VettIDDataTesting
         #expect(vm.state.step == .confirmAccount)
     }
 
-    @Test func aRefusedCodeSaysSoAndNotMyAccountStartsOver() async throws {
+    /// A `429`'s wait is kept on the monotonic clock and holds the next send back (VAULT-MESSAGING §10.1); the failure stays.
+    @Test func aRateLimitedCodeHoldsTheSendBack() async throws {
         let vm = vm()
         await vm.settle()
         vm.start()
@@ -144,8 +145,21 @@ import VettIDDataTesting
         vault.fail["redeemSetupCode"] = FakeVaultRepository.failure(.rateLimited, retry: 120)
         vm.submitCode()
         await vm.settle()
-        let retryAt = try #require(vm.state.errorRetryAt)
-        #expect(vm.state.error == .rateLimited && abs(retryAt.timeIntervalSinceNow - 120) < 30)
+        let wait = try #require(vm.state.errorWait)
+        #expect(vm.state.error == .rateLimited && vm.state.waiting && (90...120).contains(wait.remaining()))
+        let sent = vault.calls.filter { $0 == "redeemSetupCode" }.count
+        vm.submitCode()
+        await vm.settle()
+        #expect(vault.calls.filter { $0 == "redeemSetupCode" }.count == sent && vm.state.error == .rateLimited)
+    }
+
+    @Test func aRefusedCodeSaysSoAndNotMyAccountStartsOver() async throws {
+        let vm = vm()
+        await vm.settle()
+        vm.start()
+        vm.typeCode()
+        vm.setEmail("sam@example.org")
+        vm.setCode("K7QM-4XRP")
         vault.fail["redeemSetupCode"] = FakeVaultRepository.failure(.setupCodeInvalid, code: "invalid_code")
         vm.submitCode()
         #expect(vm.state.busy, "busy at once: a second tap is ignored")

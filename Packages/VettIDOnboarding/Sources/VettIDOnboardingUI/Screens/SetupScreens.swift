@@ -127,12 +127,17 @@ public struct SetupTypeScreen: View {
     }
 
     public var body: some View {
+        // Built again each second while a `429`'s wait runs: the send is held back for all of it (VAULT-MESSAGING §10.1).
+        WaitingContent(until: state.errorWait) { waiting in form(waiting: waiting) }
+    }
+
+    @ViewBuilder private func form(waiting: Bool) -> some View {
         let actions = actions
         FormScaffold(
             title: OnboardingStrings.setupTypeTitle,
             message: OnboardingStrings.setupTypeBody,
             primaryLabel: OnboardingStrings.continueLabel,
-            primaryEnabled: !state.email.trimmingCharacters(in: .whitespaces).isEmpty
+            primaryEnabled: !waiting && !state.email.trimmingCharacters(in: .whitespaces).isEmpty
                 && !state.codeInput.trimmingCharacters(in: .whitespaces).isEmpty,
             busy: state.busy,
             onPrimary: actions.submitCode,

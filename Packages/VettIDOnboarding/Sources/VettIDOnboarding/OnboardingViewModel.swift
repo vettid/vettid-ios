@@ -68,7 +68,7 @@ public final class OnboardingViewModel: OnboardingActions {
                 if !vaultSteps.union(accountSteps).contains(s.step) && !moving {
                     state.step = .confirmAccount
                     state.busy = false
-                    state.error = nil
+                    state.clearError()
                     state.errorCode = nil
                     if state.emailHint.isEmpty { state.emailHint = account.account?.emailHint ?? "" }
                 }
@@ -78,7 +78,7 @@ public final class OnboardingViewModel: OnboardingActions {
                 if s.step != .recover {
                     state.step = .recover
                     state.busy = false
-                    state.error = nil
+                    state.clearError()
                 }
             case .needsCredential:
                 if s.step != .progress && s.step != .backup {
@@ -107,7 +107,7 @@ public final class OnboardingViewModel: OnboardingActions {
     func go(_ step: OnboardingStep) {
         state.step = step
         state.busy = false
-        state.error = nil
+        state.clearError()
         state.errorCode = nil
     }
 
@@ -119,7 +119,7 @@ public final class OnboardingViewModel: OnboardingActions {
         if s.busy { return true }
         if to == .welcome || to == .setupScan { failedScan = nil }
         state.step = to
-        state.error = nil
+        state.clearError()
         switch to {
         case .pinCreate:
             state.pinConfirm = ""
@@ -167,7 +167,7 @@ public final class OnboardingViewModel: OnboardingActions {
         _ block: @escaping @MainActor () async throws -> Void
     ) {
         if marksBusy { state.busy = true }
-        state.error = nil
+        state.clearError()
         state.errorCode = nil
         launch { [self] in
             do {
@@ -177,8 +177,9 @@ public final class OnboardingViewModel: OnboardingActions {
                 state.busy = false
                 state.error = e.kind
                 state.errorCode = e.code
-                state.errorRetryAt = (e.kind == .enrollmentStarted || e.kind == .rateLimited) && e.retryAfterSeconds > 0
+                state.errorRetryAt = e.kind == .enrollmentStarted && e.retryAfterSeconds > 0
                     ? Date().addingTimeInterval(Double(e.retryAfterSeconds)) : nil
+                state.errorWait = e.kind == .rateLimited && e.retryAfterSeconds > 0 ? WaitDeadline(seconds: e.retryAfterSeconds) : nil
                 onFailure()
             } catch {
                 // Only a cancellation gets here: every repository failure is a VaultFailure.
@@ -206,7 +207,7 @@ public final class OnboardingViewModel: OnboardingActions {
         failedScan = nil
         state.step = .setupScan
         state.scanRefusal = nil
-        state.error = nil
+        state.clearError()
     }
 
     /// Welcome: "I lost my phone": the recovery (§11.11), with the portal's recovery QR.
@@ -238,13 +239,13 @@ public final class OnboardingViewModel: OnboardingActions {
         state.step = .setupType
         state.scanRefusal = nil
         state.codeInvalid = false
-        state.error = nil
+        state.clearError()
     }
 
     /// A QR the camera read: only this environment's setup QR is redeemed; nothing is sent anywhere else.
     public func scanned(_ text: String) {
         let s = state
-        guard !s.busy, s.step == .setupScan else { return }
+        guard !s.busy, !s.waiting, s.step == .setupScan else { return }
         if text == failedScan { return }
         failedScan = nil
         switch SetupCodes.parseScanned(text, api: account.apiOrigin) {
@@ -280,12 +281,12 @@ public final class OnboardingViewModel: OnboardingActions {
     public func setCode(_ v: String) {
         state.codeInput = String(v.prefix(Self.maxCodeInput))
         state.codeInvalid = SetupCodes.hasForeignCharacter(v)
-        state.error = nil
+        state.clearError()
     }
 
     public func submitCode() {
-        // The keyboard's Done reaches here while a redeem runs.
-        guard !state.busy else { return }
+        // The keyboard's Done reaches here while a redeem runs, or while a `429`'s wait does.
+        guard !state.busy, !state.waiting else { return }
         let s = state
         let email = s.email.trimmingCharacters(in: .whitespacesAndNewlines)
         let code = SetupCodes.normalize(s.codeInput)
@@ -300,7 +301,7 @@ public final class OnboardingViewModel: OnboardingActions {
 
     /// Redeems [code]; [scanned] is the QR text it came from, not redeemed again after a failure.
     private func redeem(_ code: SetupCodeInput, scanned: String? = nil) {
-        guard !state.busy else { return }
+        guard !state.busy, !state.waiting else { return }
         attempt(onFailure: { [weak self] in self?.failedScan = scanned }) { [self] in
             let hint = try await account.redeemSetupCode(code)
             state.emailHint = hint
@@ -317,7 +318,7 @@ public final class OnboardingViewModel: OnboardingActions {
     public func useAnotherCode() {
         guard !state.busy else { return }
         state.busy = true
-        state.error = nil
+        state.clearError()
         state.errorCode = nil
         launch { [self] in
             do {
@@ -434,7 +435,7 @@ public final class OnboardingViewModel: OnboardingActions {
         let credentialOnly = s.credentialOnly || enrolled
         state.step = .progress
         state.busy = true
-        state.error = nil
+        state.clearError()
         state.errorCode = nil
         state.progress = steps(credentialOnly: credentialOnly).map { ProgressEntry($0, .pending) }
         launch { [self] in
@@ -484,14 +485,14 @@ public final class OnboardingViewModel: OnboardingActions {
         state.progress = []
         state.passwordRule = PasswordRule.fromVault(e.weakPasswordReason)
         state.passwordRefused = true
-        state.error = nil
+        state.clearError()
     }
 
     /// Leaves the progress screen after a failure, back to the PIN (before enrollment) or the password.
     public func editAfterFailure() {
         state.step = enrolled ? .password : .pinCreate
         state.credentialOnly = enrolled
-        state.error = nil
+        state.clearError()
         state.progress = []
     }
 

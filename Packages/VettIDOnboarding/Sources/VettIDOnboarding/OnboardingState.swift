@@ -101,6 +101,14 @@ public struct OnboardingState: Equatable, Sendable, CustomStringConvertible, Cus
     public var errorCode: String?
     /// When the failed action becomes possible, when the failure says (``FailureKind/enrollmentStarted``).
     public var errorRetryAt: Date?
+    /// The end of a `429`'s wait (`retry_after`) on the monotonic clock: a setup code is not sent again before it ends
+    /// (VAULT-MESSAGING §10.1).
+    public var errorWait: WaitDeadline?
+    /// The wait runs.
+    public var waiting: Bool { errorWait?.isRunning() == true }
+
+    /// Clears the failure, except while its wait runs (the notice says why the send is held back).
+    public mutating func clearError() { if !waiting { error = nil } }
     public var devHint: String?
 
     public init(step: OnboardingStep = .welcome, devHint: String? = nil) {

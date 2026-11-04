@@ -24,8 +24,8 @@ import VettIDUI
         await stuck.watch()
         #expect(stuck.stuck && height(StartingScreen(model: stuck)) > 0)
         // A read that is still running says so; it does not claim a connection failed.
-        #expect(OnboardingStrings.rootStartingSlowTitle == "Still opening your vault")
-        #expect(OnboardingStrings.rootStartingSlowBody.contains("keeps trying"))
+        #expect(OnboardingStrings.rootStartingSlowTitle == "Still opening VettID")
+        #expect(OnboardingStrings.rootStartingSlowBody.contains("still waiting"))
         #expect(height(StartingScreen()) > 0)
         #expect(height(StartingScreen(reread: {}, stuckAfter: .zero)) > 0)
     }

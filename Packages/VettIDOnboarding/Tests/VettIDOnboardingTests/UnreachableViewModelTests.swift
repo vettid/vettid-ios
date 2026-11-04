@@ -101,6 +101,38 @@ import VettIDDataTesting
         #expect(quiet.count == 1 && !flight.running)
     }
 
+    /// A cold start whose first read ends on a phase that needs no more reading (locked) is not read again for the asks made
+    /// during it; a member's own "Try again" is always answered.
+    @Test func theExtraReadIsMadeOnlyWhileItIsStillNeeded() async {
+        let flight = SingleFlight()
+        let gate = TestDeferred<Void>()
+        let ran = Counter()
+        let phaseIsLocked = Counter() // 1: the first read ended on .locked
+        let first = Task {
+            await flight.run(stillNeeded: { phaseIsLocked.count == 0 }) { ran.count += 1; try? await gate.value() }
+        }
+        await settle()
+        let asked = Task { await flight.run { Issue.record("ran beside") } }
+        await settle()
+        phaseIsLocked.count = 1
+        gate.complete(())
+        _ = await first.value
+        _ = await asked.value
+        #expect(ran.count == 1 && !flight.running, "no second read of a phase that is already known")
+        // A member's ask is answered whatever the phase became.
+        let again = TestDeferred<Void>()
+        let second = Task {
+            await flight.run(stillNeeded: { false }) { ran.count += 1; try? await again.value() }
+        }
+        await settle()
+        let forced = Task { await flight.run(forced: true) { Issue.record("ran beside") } }
+        await settle()
+        again.complete(())
+        _ = await second.value
+        _ = await forced.value
+        #expect(ran.count == 3)
+    }
+
     /// A cancelled caller leaves nothing set.
     @Test func aCancelledCallerLeavesTheFlightClear() async {
         let flight = SingleFlight()

@@ -137,9 +137,7 @@ public final class ReleaseUpdateManager: ReleaseUpdateRepository {
     }
 
     public func returnToPrevious(pin: String, generation: Int?) -> Bool {
-        guard !running, !pin.isEmpty, let m = ops.unconfirmedMove(), m.failed, !ops.ownerCheckDue(), ops.changeHold() == nil else {
-            return false
-        }
+        guard !pin.isEmpty, returnRefusal() == nil, let m = ops.unconfirmedMove() else { return false }
         progress = UpdateProgress(step: .abandoning, from: m.from, to: m.to, canAbandon: true)
         let pin = taken(pin, generation)
         launch { [self] in await wayBack(pin) }

@@ -68,9 +68,17 @@ public final class NewCredentialViewModel {
     @ObservationIgnored private let work = Work()
     @ObservationIgnored private let followers = TaskBag()
 
-    public init(repo: any CredentialRepository, vault: any VaultRepository) {
+    @ObservationIgnored private let waits: WaitRegistry
+
+    /// [waits]: where a wait the vault asked for is kept, so that it outlives this screen.
+    public init(repo: any CredentialRepository, vault: any VaultRepository, waits: WaitRegistry = WaitRegistry()) {
         self.repo = repo
         self.vault = vault
+        self.waits = waits
+        if let w = waits.current(.newCredential) {
+            state.error = w.kind
+            state.errorRetryAt = w.deadline
+        }
         followers.add(follow(self, read: { $0.vault.changeCheck }, apply: { $0.decided($1) }))
     }
 
@@ -206,7 +214,7 @@ public final class NewCredentialViewModel {
             state.error = nil
         } else {
             state.error = kind
-            state.errorRetryAt = failureRetryAt(error)
+            state.errorRetryAt = waits.record(.newCredential, error: error)
         }
     }
 

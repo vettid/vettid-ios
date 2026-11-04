@@ -71,9 +71,14 @@ public final class ChangePinViewModel {
     @ObservationIgnored private let work = Work()
     @ObservationIgnored private let followers = TaskBag()
 
-    public init(vault: any VaultRepository, fromAttempts: Bool = false) {
+    @ObservationIgnored private let waits: WaitRegistry
+
+    /// [waits]: where a wait the vault asked for is kept, so that it outlives this screen.
+    public init(vault: any VaultRepository, fromAttempts: Bool = false, waits: WaitRegistry = WaitRegistry()) {
         self.vault = vault
+        self.waits = waits
         state = ChangePinState(withPassword: vault.usesPhoneSecret, fromAttempts: fromAttempts)
+        keepWait()
         followers.add(follow(self, read: { $0.vault.changeCheck }, apply: { $0.decided($1) }))
     }
 
@@ -207,6 +212,14 @@ public final class ChangePinViewModel {
         let check = state.check
         state = ChangePinState(withPassword: state.withPassword, fromAttempts: state.fromAttempts)
         state.check = check
+        keepWait()
+    }
+
+    /// A wait the vault asked for outlives the screen and the app's foreground: the failure and its wait come back.
+    private func keepWait() {
+        guard let w = waits.current(.changePin) else { return }
+        state.error = w.kind
+        state.errorRetryAt = w.deadline
     }
 
     public func submit() {
@@ -271,7 +284,7 @@ public final class ChangePinViewModel {
                 state.check = check.status
                 vault.acknowledgeChangeCheck()
             } else {
-                self.failed(failed.kind, kept: s, retryAt: failureRetryAt(failed))
+                self.failed(failed.kind, kept: s, retryAt: waits.record(.changePin, error: failed))
                 vault.acknowledgeChangeCheck()
             }
         }

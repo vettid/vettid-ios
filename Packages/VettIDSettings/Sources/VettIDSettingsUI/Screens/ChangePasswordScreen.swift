@@ -43,7 +43,7 @@ public struct ChangePasswordContent: View {
     }
 
     public var body: some View {
-        steps.holdsInput(state.holdsInput)
+        WaitingContent(until: state.errorRetryAt) { _ in steps }.holdsInput(state.holdsInput)
     }
 
     @ViewBuilder private var steps: some View {
@@ -89,10 +89,7 @@ public struct ChangePasswordContent: View {
                     NoticeCard(.info, title: CredentialStrings.title, message: text).accessibilityIdentifier("change_check")
                 }
                 if let error = state.error {
-                    NoticeCard(
-                        .urgent, title: error.title(or: CredentialStrings.title), message: error.message(timeScale: timeScale),
-                        announce: .assertive
-                    )
+                    WaitNotice(error, title: error.title(or: CredentialStrings.title), retryAt: state.errorRetryAt)
                         .accessibilityIdentifier("error")
                 }
             }

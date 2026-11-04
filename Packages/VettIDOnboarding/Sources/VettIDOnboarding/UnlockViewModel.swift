@@ -19,9 +19,9 @@ public final class UnlockViewModel: UnlockActions {
     @ObservationIgnored let account: any AccountRepository
     @ObservationIgnored private let releaseNotes: (any ReleaseNotesRepository)?
     @ObservationIgnored private var notesTask: Task<Void, Never>?
-    /// One second of a countdown (a virtual clock in the tests).
     /// The release the last unlock asked to approve: what a refusal of it is about.
     @ObservationIgnored private var approvedRelease: Int?
+    /// One second of a countdown (a virtual clock in the tests).
     @ObservationIgnored private let tick: @Sendable () async throws -> Void
     @ObservationIgnored private let followers = TaskBag()
     @ObservationIgnored private let countdowns = TaskBag()

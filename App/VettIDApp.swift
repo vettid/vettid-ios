@@ -232,6 +232,8 @@ struct AppRoot: View {
         guard vault.phase != .unlocked, !RootHold.holds(phase: vault.phase, finishingMove: vault.finishingMove) else { return }
         shell.reset()
         AcceptedScans.reset()
+        // A wait the vault asked for outlives a screen, not the open vault.
+        WaitRegistry.shared.clearAll()
         // The vault is no longer open (locked, signed out, unreachable): the allowance ends.
         screenshots.vaultClosed()
     }
@@ -285,7 +287,9 @@ struct AppRoot: View {
     /// [anyPhase]: the member asked ("Try again" on the unreachable screen), whatever failed the read.
     private func refreshAgain(anyPhase: Bool = false) async {
         guard anyPhase || Self.readsAgain(vault.phase) else { return }
-        await reads.run { try? await vault.refresh() }
+        // An extra read for an ask made during one is made only while the phase is still one that could not be read; the
+        // member's own "Try again" is always answered.
+        await reads.run(forced: anyPhase, stillNeeded: { Self.readsAgain(vault.phase) }) { try? await vault.refresh() }
     }
 
     /// IOS-PLAN §6.6: what is in flight (a lock's first attempt, the outbox, a vote window's lock) is finished in a
