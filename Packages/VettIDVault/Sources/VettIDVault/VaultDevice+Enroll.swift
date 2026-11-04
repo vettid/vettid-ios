@@ -271,11 +271,15 @@ extension VaultDevice {
         ))
         try refuseSending()
         let claims = (try? Base64s.decodeStd(v.relayPk)).flatMap { try? DepositTokens.verify(depositToken, issuer: $0) }
+        #if DEBUG
+        beforePrepareInitHook?()
+        #endif
         mem.withLock {
             ini?.abort()
             ini = i
             answeredInit = nil
             handshakeGeneration &+= 1
+            sas = nil // a code the old handshake's closure showed meanwhile is not the new flow's
             finFailed = false
             st.outbox.removeAll { $0.type == Self.typeHsFin }
         }

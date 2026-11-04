@@ -133,6 +133,31 @@ final class AsyncLock: @unchecked Sendable {
     }
 }
 
+/// The timer of one wait (``OneShot/wait(timeout:)``): cancelled when the wait ends, also when that happens before the timer
+/// task has been handed over.
+private final class TimeoutTask: @unchecked Sendable {
+    private let lock = NSLock()
+    private var task: Task<Void, Never>?
+    private var cancelled = false
+
+    func set(_ t: Task<Void, Never>) {
+        let already: Bool = lock.withLock {
+            if cancelled { return true }
+            task = t
+            return false
+        }
+        if already { t.cancel() }
+    }
+
+    func cancel() {
+        let t: Task<Void, Never>? = lock.withLock {
+            cancelled = true
+            return task
+        }
+        t?.cancel()
+    }
+}
+
 /// A one-shot value that one side completes and the other awaits with a timeout (a response to a request). Each wait
 /// has its own continuation, resumed exactly once: by the completion, or by its own timeout.
 final class OneShot<T: Sendable>: @unchecked Sendable {
@@ -140,6 +165,11 @@ final class OneShot<T: Sendable>: @unchecked Sendable {
     private var value: T?
     private var aborted = false
     private var waiters: [UUID: CheckedContinuation<T?, Never>] = [:]
+    #if DEBUG
+    private var liveTimers = 0
+    /// TEST ONLY: the timeout timers that still run, read under the lock.
+    var liveTimerCount: Int { lock.withLock { liveTimers } }
+    #endif
 
     /// Completes with [v]; later completions are ignored.
     func complete(_ v: T) {
@@ -167,6 +197,8 @@ final class OneShot<T: Sendable>: @unchecked Sendable {
     /// The value, or nil after [timeout] seconds, at once when the waiting task is cancelled, or once aborted.
     func wait(timeout: TimeInterval) async -> T? {
         let token = UUID()
+        let timer = TimeoutTask()
+        defer { timer.cancel() } // the timer ends with the wait, whichever way it ended
         return await withTaskCancellationHandler {
             await withCheckedContinuation { (c: CheckedContinuation<T?, Never>) in
                 let (ready, ended): (T?, Bool) = lock.withLock {
@@ -180,10 +212,16 @@ final class OneShot<T: Sendable>: @unchecked Sendable {
                     return
                 }
                 if Task.isCancelled { giveUp(token) }
-                Task {
-                    try? await Task.sleep(nanoseconds: UInt64(max(timeout, 0) * 1e9))
+                #if DEBUG
+                lock.withLock { liveTimers += 1 }
+                #endif
+                timer.set(Task {
+                    #if DEBUG
+                    defer { self.lock.withLock { self.liveTimers -= 1 } }
+                    #endif
+                    do { try await Task.sleep(nanoseconds: UInt64(max(timeout, 0) * 1e9)) } catch { return } // cancelled: the wait ended
                     self.giveUp(token)
-                }
+                })
             }
         } onCancel: {
             self.giveUp(token)

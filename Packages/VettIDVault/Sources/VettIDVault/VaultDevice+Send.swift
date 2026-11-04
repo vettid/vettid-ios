@@ -272,14 +272,18 @@ extension VaultDevice {
         // flush that began after it asked (the credential settle wait relies on it).
         var entries: [OutboxEntry] = []
         while true {
-            let mine: Bool = mem.withLock {
-                if flushing { return false }
+            let (mine, running): (Bool, OneShot<Bool>?) = mem.withLock {
+                if flushing { return (false, flushEnded) }
                 flushing = true
+                flushEnded = OneShot<Bool>()
                 entries = st.outbox
-                return true
+                return (true, nil)
             }
             if mine { break }
-            if (try? await Task.sleep(nanoseconds: 25_000_000)) == nil { return }
+            // Woken when the running flush ends; a cancelled waiter returns at once. The timeout only bounds one wait: the
+            // loop looks again.
+            _ = await running?.wait(timeout: 60)
+            if Task.isCancelled { return }
         }
         let nowMs = Self.ms(now())
         for e in entries {
@@ -298,7 +302,12 @@ extension VaultDevice {
             } catch {} // (a fin refused for good is told to the flow, or not, by ``deliver``)
         }
         // The flush is over before the ack is tried: a vault that does not answer holds up the ack, not every flush.
-        mem.withLock { flushing = false }
+        let ended: OneShot<Bool>? = mem.withLock {
+            flushing = false
+            defer { flushEnded = nil }
+            return flushEnded
+        }
+        ended?.complete(true)
         await sendPendingAck()
     }
 
@@ -419,6 +428,10 @@ extension VaultDevice {
     /// Runs [work] once the lock the caller holds is released: a deposit made while handling a message must not hold the
     /// lock across the network. The work belongs to the ``handle(_:)`` call that queued it (a task-local box), so that a
     /// concurrent handling never deposits another's entry before that one has saved. Callers hold ``lock``.
+    ///
+    /// Contract: only from code that ``handle(_:)`` runs. Outside it there is no box to take the work, and the work would be
+    /// lost; that is a programming error, caught by an assertion in debug builds. A release build does not crash on it (the
+    /// work is dropped, which a deposit owed in the outbox survives).
     func afterLock(_ work: @escaping @Sendable () async -> Void) {
         assert(AfterLockWork.current != nil, "afterLock outside handle(_:): the work would be lost")
         AfterLockWork.current?.add(work)

@@ -371,6 +371,16 @@ extension InitDepositTests {
         await handling.value
         #expect(d.pairingSas == nil, "the dropped handshake's code is not shown")
     }
+
+    /// The match code that the closure of the previous handshake set meanwhile (between the new transfer's clearing of it and
+    /// the new handshake) is not the new flow's.
+    @Test func aCodeShownMeanwhileIsClearedByTheNewHandshake() async throws {
+        let (d, v) = try await newPhone()
+        let (qr, _) = try codeFor(v, d)
+        d.beforePrepareInitHook = { [d] in d.mem.withLock { d.sas = "123456" } } // the old closure finishing
+        try await d.startTransfer(link: try qr.link(), attester: TestIOSAttester()) { _, _ in nil }
+        #expect(d.pairingSas == nil, "no code until this handshake's own hs.resp")
+    }
 }
 
 // swiftlint:enable line_length

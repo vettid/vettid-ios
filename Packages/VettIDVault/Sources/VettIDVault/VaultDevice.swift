@@ -131,6 +131,8 @@ public final class VaultDevice: @unchecked Sendable {
     let lock = AsyncLock()
     /// A flush of the outbox runs (``flushOutbox()``). Read and written under ``mem``.
     var flushing = false
+    /// Completed when the running flush ends: the flushes that wait for it wake up. Under ``mem``.
+    var flushEnded: OneShot<Bool>?
     /// When a pending `credential.ack` was last tried (the device's uptime). Under ``mem``.
     var lastAckTry: TimeInterval?
     /// The ids of outbox entries being deposited now (``deliver(_:keepOnFailure:)``). Under ``mem``.
@@ -155,6 +157,8 @@ public final class VaultDevice: @unchecked Sendable {
     var initRaceHook: (@Sendable (Initiator) -> Void)?
     /// TEST ONLY: runs in ``storeFin`` once the fin is stored, with its id.
     var finStoredHook: (@Sendable (String) -> Void)?
+    /// TEST ONLY: runs in ``prepareInit`` before the new handshake replaces the old one.
+    var beforePrepareInitHook: (@Sendable () -> Void)?
     /// TEST ONLY: runs after a fin deposit was counted, just before it is sent.
     var finSendHook: (@Sendable () -> Void)?
     /// TEST ONLY: runs before a fin deposit is counted, after the flush chose the entry.
@@ -372,11 +376,10 @@ public final class VaultDevice: @unchecked Sendable {
 
     // MARK: - Persistence
 
-    /// Writes the state (with the keyring and the awaiting rekeys) to the store. Callers hold ``lock``, except a deposit that
-    /// ends outside it (``deliver(_:)``).
+    /// Writes the state (with the keyring and the awaiting rekeys) to the store. Callers hold ``lock``: what follows a deposit
+    /// that ended outside it is saved through ``withLockSaving(_:)``.
     func save() throws {
-        // One write at a time, in the order of the snapshots: a deposit that ends outside ``lock`` saves too, and an older
-        // snapshot must not be stored after a newer one.
+        // One write at a time, in the order of the snapshots: an older snapshot must not be stored after a newer one.
         try saveOrder.withLock {
             let data: Data? = try mem.withLock {
                 if forgotten { return nil }
