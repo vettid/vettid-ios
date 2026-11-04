@@ -156,22 +156,54 @@ extension VaultDeviceTests {
         let store = FlakyStore()
         let (d, v) = try await pairedDevice(store: store)
         let refresh = try v.seal("relay.token.refresh", "{}")
+        let reached = AsyncStream<Bool>.makeStream()
+        d.flushSeen = { reached.continuation.yield($0) }
         d.beforeFinalSave = { [d] in
-            // In the window: the answer is queued and not saved. (Run apart and given a moment: a flush that did reach the
-            // entry would wait for the lock this handling holds.)
+            // In the window: the answer is queued and not saved. The flush runs apart (one that did take the entry would wait
+            // for the lock this handling holds) and the handling goes on once it has reached the entry, left alone or taken.
             Task { await d.flushOutbox() }
-            try? await Task.sleep(for: .milliseconds(300))
+            for await _ in reached.stream { break }
             store.arm()
         }
         await #expect(throws: (any Error).self) { try await d.handle(refresh) }
         #expect(await relay.noDeposit(within: 0.3), "the flush deposited nothing")
         d.beforeFinalSave = nil
+        d.flushSeen = nil
         store.disarm()
         try await d.handle(refresh)
         _ = try await relay.nextDeposit()
         #expect(await relay.noDeposit(within: 0.3), "one answer")
     }
     #endif
+
+    /// A standing token minted by a handling that failed is forgotten with it: the redelivery issues the token (the vault must
+    /// not be left with the old one).
+    @Test func aRenewalDueIsIssuedByTheRedeliveryAfterAFailedSave() async throws {
+        let store = FlakyStore()
+        let (d, v) = try await pairedDevice(store: store)
+        d.mem.withLock { d.st.issuedExpMs = 1_000 } // the renewal is due
+        let event = try v.seal("message.new", #"{"n":1}"#)
+        store.arm()
+        await #expect(throws: (any Error).self) { try await d.handle(event) }
+        #expect(d.mem.withLock { d.st.issuedExpMs } == 1_000, "the minted token is forgotten with the handling")
+        store.disarm()
+        try await d.handle(event)
+        let issued = try v.open(try await relay.nextDeposit().payload)
+        #expect(issued.type == "relay.token.issued", "the redelivery issued it")
+    }
+
+    /// The responder of a rekey whose answer was dropped (the handling failed) does not stay among the awaiting ones.
+    @Test func aDroppedRekeyAnswerLeavesNoResponderAwaiting() async throws {
+        let store = FlakyStore()
+        let (d, v) = try await pairedDevice(store: store)
+        let before = d.mem.withLock { d.awaiting.count }
+        store.arm()
+        await #expect(throws: (any Error).self) { try await d.handle(v.msg(try v.rekey(d).envelope)) }
+        #expect(d.mem.withLock { d.awaiting.count } == before, "no stale responder takes a slot")
+        store.disarm()
+        try await d.handle(v.msg(try v.rekey(d).envelope))
+        #expect(d.mem.withLock { d.awaiting.count } == before + 1)
+    }
 
     /// An event is published once, though its message is handled again after a failed save.
     @Test func anEventIsPublishedOnceAfterAFailedSave() async throws {
@@ -189,7 +221,7 @@ extension VaultDeviceTests {
     /// An `hs.fin` that the handling itself wrote to disk is not taken out of memory when the final write fails: the next
     /// good write does not lose it.
     @Test func anHsFinOnDiskIsNotLostByAFailedFinalSave() async throws {
-        let (d, store) = try await respondingWithAFailingFinalSave(relayTakesTheFin: false)
+        let (d, store) = try await respondingWithAFailingFinalSave()
         #expect(d.outboxIDs.count == 1, "the fin that is on disk stays in memory")
         #expect(store.state?.outbox.count == 1)
         try d.save()
@@ -200,14 +232,14 @@ extension VaultDeviceTests {
     /// write before it is sent, so none goes out while they fail): a pairing code is spent by its handshake.
     @Test func theFinStoredByTheHandlingIsDepositedAfterAFailedFinalSave() async throws {
         // (The code of a transfer, ``theCodeIsShownAfterAFailedFinalSave``, goes with it; an app pairing shows none.)
-        let (d, _) = try await respondingWithAFailingFinalSave(relayTakesTheFin: true)
+        let (d, _) = try await respondingWithAFailingFinalSave()
         #expect(await relay.noDeposit(within: 0.3), "nothing is sent while the writes fail")
         await d.flushOutbox()
         _ = try await relay.nextDeposit()
         #expect(d.outboxIDs.isEmpty, "the relay took it")
     }
 
-    private func respondingWithAFailingFinalSave(relayTakesTheFin: Bool) async throws -> (VaultDevice, FlakyStore) {
+    private func respondingWithAFailingFinalSave() async throws -> (VaultDevice, FlakyStore) {
         let store = FlakyStore()
         let d = try await VaultDevice.create(config(store), secrets: try DeviceSecrets.generate())
         let v = try FakeVault(relayURL: relay.baseURL)
@@ -215,10 +247,6 @@ extension VaultDeviceTests {
         try await d.awaitEnrolled(timeout: 1)
         let paired = Task { try await d.completeEnrollment(timeout: 2) }
         let (_, initMsg) = try await relay.nextDeposit()
-        if !relayTakesTheFin {
-            relay.refuseStatus = 503
-            relay.refuseDeposits = "unavailable"
-        }
         store.failAfter(1) // the fin's own write, then the final write fails
         await #expect(throws: (any Error).self) { try await d.handle(try v.respond(initMsg, d)) }
         store.disarm()

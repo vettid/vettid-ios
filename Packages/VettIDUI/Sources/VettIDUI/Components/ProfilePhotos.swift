@@ -112,8 +112,10 @@ public final class ProfilePhotoCache {
     /// comparing the strings (identical storage compares at once), not by hashing 80 KiB again.
     private var digests: [(photo: String, digest: NSData)] = []
 
+    #if DEBUG
     /// The photos whose digest is remembered, least recently used first (tests).
     var memoizedPhotos: [String] { digests.map(\.photo) }
+    #endif
 
     private func key(_ base64: String) -> NSData {
         if let i = digests.lastIndex(where: { $0.photo == base64 }) {

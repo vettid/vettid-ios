@@ -131,6 +131,7 @@ public final class VaultDevice: @unchecked Sendable {
     let lock = AsyncLock()
     #if DEBUG
     var beforeFinalSave: (@Sendable () async -> Void)? // TEST ONLY: before the write that ends a handling
+    var flushSeen: (@Sendable (Bool) -> Void)? // TEST ONLY: a flush reached an entry (true: it left it alone)
     #endif
     /// A flush of the outbox runs (``flushOutbox()``). Read and written under ``mem``.
     var flushing = false
@@ -195,9 +196,8 @@ public final class VaultDevice: @unchecked Sendable {
     }
     var pending: [String: OneShot<Inner>] = [:]
     var inbox: [VaultMessage] = []
-    /// Event types calls wait for, and the events a clear spared (``keepingEvents(_:_:)``).
-    var keptTypes: [String: Int] = [:]
-    var sparedEvents: Set<String> = []
+    var keptTypes: [String: Int] = [:] // event types calls wait for (``keepingEvents(_:_:)``)
+    var sparedEvents: Set<String> = [] // the events a clear spared for them
     /// Outbox entries a handling stored by a write of its own (an `hs.fin`).
     var keptOnError: Set<String> = []
     var publishedOrder: [String] = [] // the ids of the events published (``publishOnce(_:)``), in order

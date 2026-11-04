@@ -28,8 +28,12 @@ extension VaultDevice {
     private func handleLocked(_ m: RelayMessage) async throws {
         try await lock.withLock {
             let t = now()
-            let outboxBefore: Set<String> = mem.withLock { Set(st.outbox.map(\.id)) }
-            let seenBefore = mem.withLock { (st.seen, st.seenInner) }
+            let before = mem.withLock {
+                HandlingStart(
+                    seen: st.seen, seenInner: st.seenInner, issuedExpMs: st.issuedExpMs,
+                    outbox: Set(st.outbox.map(\.id)), awaiting: Set(awaiting.map { ObjectIdentifier($0.resp) })
+                )
+            }
             mem.withLock { keptOnError = [] }
             let fresh: Bool = mem.withLock {
                 guard st.seen[m.msgID] == nil else { return false }
@@ -45,20 +49,34 @@ extension VaultDevice {
                 // answered, not acked unanswered), and the entries the handling queued are taken out again, so that the
                 // redelivery's answer is the only one: even one that another write happened to store. The exception is what
                 // the handling stored by a write of its own (an `hs.fin`, ``keptOnError``): it is on disk by that write.
-                forgetHandling(seenBefore: seenBefore, outboxBefore: outboxBefore)
+                forgetHandling(before)
                 throw error
             }
         }
     }
 
-    /// A failed handling is undone: its message ids are forgotten and the entries it queued are taken out (and are no longer in
-    /// flight: their deposit was dropped with the handling's work after the lock).
-    private func forgetHandling(seenBefore: ([String: Int64], [String: Int64]), outboxBefore: Set<String>) {
+    /// What a handling can change in the state without a write of its own, as it was when the handling began.
+    struct HandlingStart {
+        let seen: [String: Int64]
+        let seenInner: [String: Int64]
+        let issuedExpMs: Int64
+        let outbox: Set<String>
+        let awaiting: Set<ObjectIdentifier>
+    }
+
+    /// A failed handling is undone: its message ids are forgotten, the entries it queued are taken out (and are no longer in
+    /// flight: their deposit was dropped with the handling's work after the lock), the standing token it minted is forgotten
+    /// (the redelivery issues one), and the rekey responders it made are dropped (their `hs.resp` never went out).
+    private func forgetHandling(_ before: HandlingStart) {
         mem.withLock {
-            (st.seen, st.seenInner) = seenBefore
-            let gone = Set(st.outbox.map(\.id)).subtracting(outboxBefore).subtracting(keptOnError)
+            st.seen = before.seen
+            st.seenInner = before.seenInner
+            st.issuedExpMs = before.issuedExpMs
+            let gone = Set(st.outbox.map(\.id)).subtracting(before.outbox).subtracting(keptOnError)
             st.outbox.removeAll { gone.contains($0.id) }
             outboxInFlight.subtract(gone)
+            for a in awaiting where !before.awaiting.contains(ObjectIdentifier(a.resp)) { a.resp.abort() }
+            awaiting.removeAll { !before.awaiting.contains(ObjectIdentifier($0.resp)) }
         }
     }
 

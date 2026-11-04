@@ -290,7 +290,11 @@ extension VaultDevice {
         let nowMs = Self.ms(now())
         for e in entries {
             // Not one that is being deposited just now (a renewal reported as failed must not go out later).
-            guard mem.withLock({ st.outbox.contains(e) && outboxInFlight.insert(e.id).inserted }) else { continue }
+            let taken = mem.withLock { st.outbox.contains(e) && outboxInFlight.insert(e.id).inserted }
+            #if DEBUG
+            flushSeen?(!taken)
+            #endif
+            guard taken else { continue }
             defer { mem.withLock { _ = outboxInFlight.remove(e.id) } }
             // A handshake's fin past its time is not sent again (chosen; not in the spec). That is no failure of the pairing: the
             // fin may have reached the vault, whose answer was lost, and the transfer's `device.paired` may wait in the mailbox
