@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 import VettIDCrypto
+import VettIDTesting
 import VettIDRelay
 @testable import VettIDVault
 
@@ -89,29 +90,45 @@ extension VaultDeviceTests {
     }
 
     /// A deposit that stalls holds up its own caller only: the device lock is free while the relay has not answered
-    /// (the standing token's renewal is sealed and saved under the lock and deposited after it).
-    @Test func aStalledRenewalDoesNotHoldTheDeviceLock() async throws {
+    /// (the standing token's renewal is sealed and saved under the lock and deposited after it), and a flush leaves the entry
+    /// that is being deposited alone, so that a renewal reported as failed is never deposited later.
+    @Test func aStalledRenewalDoesNotHoldTheDeviceLockAndIsNotFlushedMeanwhile() async throws {
         let (d, _) = try await pairedDevice()
-        let gate = DispatchSemaphore(value: 0)
-        let entered = StoredCounts()
-        relay.onDeposit = {
-            entered.add(1)
-            gate.wait()
-        }
+        let gate = FakeHTTPServer.Gate()
+        relay.holdDeposits = gate
         let renewing = Task { try await d.renewStandingToken() }
-        for _ in 0..<500 where entered.all.isEmpty { try await Task.sleep(for: .milliseconds(10)) }
-        #expect(!entered.all.isEmpty, "the renewal reached the relay")
-        let free = Task { try await d.dropFromOutbox("none") }
-        let finished = StoredCounts()
-        Task {
-            _ = try? await free.value
-            finished.add(1)
-        }
-        for _ in 0..<200 where finished.all.isEmpty { try await Task.sleep(for: .milliseconds(10)) }
-        #expect(!finished.all.isEmpty, "something that needs the lock ran while the deposit was stalled")
-        // (The hook runs under the fake relay's own lock: it is let go before the relay is touched again.)
-        gate.signal()
+        for _ in 0..<500 where gate.waiting == 0 { try await Task.sleep(for: .milliseconds(10)) }
+        #expect(gate.waiting == 1, "the renewal reached the relay")
+        // Something that needs the lock runs while the deposit is stalled.
+        let dropped = try await d.dropFromOutbox("none")
+        #expect(dropped == 0)
+        await d.flushOutbox()
+        #expect(gate.waiting == 1, "the flush did not deposit the entry in flight again")
+        gate.open()
         try await renewing.value
+    }
+
+    /// A kill between the save and the deposit of a handshake's fin: the next process finds it in the store and sends it.
+    @Test func aFinSavedBeforeAKillIsSentByTheNextProcess() async throws {
+        let store = InMemoryDeviceStateStore()
+        let secrets = try DeviceSecrets.generate()
+        let d = try await VaultDevice.create(config(store), secrets: secrets)
+        let v = try FakeVault(relayURL: relay.baseURL)
+        try await d.handle(try v.enrolled(d))
+        try await d.awaitEnrolled(timeout: 1)
+        let waiting = Task { try await d.completeEnrollment(timeout: 10) }
+        let (_, initMsg) = try await relay.nextDeposit()
+        relay.refuseStatus = 503
+        relay.refuseDeposits = "unavailable"
+        relay.refuseOnly = 3
+        try await d.handle(try v.respond(initMsg, d))
+        waiting.cancel()
+        d.stop() // the process ends with the fin in the store only
+        #expect(try savedState(store).outbox.map(\.type) == ["hs.fin"])
+        let again = try #require(try VaultDevice.load(config(store), secrets: secrets))
+        await again.flushOutbox()
+        try v.fin(try await relay.nextDeposit().payload, again)
+        #expect(try savedState(store).outbox.isEmpty)
     }
 }
 

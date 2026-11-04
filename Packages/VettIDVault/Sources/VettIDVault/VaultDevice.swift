@@ -133,6 +133,8 @@ public final class VaultDevice: @unchecked Sendable {
     var afterWork: [@Sendable () async -> Void] = []
     /// A flush of the outbox runs (``flushOutbox()``). Read and written under ``mem``.
     var flushing = false
+    /// The ids of outbox entries being deposited now (``deliver(_:keepOnFailure:)``). Under ``mem``.
+    var outboxInFlight: Set<String> = []
     /// Orders the writes of the state to the store (``save()``).
     let saveOrder = NSLock()
     /// Serializes the credential operations (§3.5.3): one UTK taken, sealed and answered at a time.
@@ -148,6 +150,8 @@ public final class VaultDevice: @unchecked Sendable {
     var relays: [String: RelayClient] = [:]
     var keyring: Keyring
     var ini: Initiator?
+    /// The handshake whose `hs.resp` was handled last (``VaultDevice/sendInit(_:)`` reads it). Under ``mem``.
+    var answeredInit: ObjectIdentifier?
 
     /// A vault rekey this device answered (`hs.resp` sent), awaiting its `hs.fin` (§6.5).
     struct Awaiting {

@@ -49,15 +49,16 @@ struct CredentialOps: Sendable {
             throw VaultStateError(message: "credential without version")
         }
         try await device.keepCredential(blob: blob, version: v, awaitingAck: true)
-        // The blob is stored: that is the outcome of the operation. A confirmation that is lost does not undo it, and it is
-        // sent again before the next credential operation (``settleAck()``).
+        // The blob is stored: that is the outcome of the operation. A confirmation that is lost does not undo it (chosen; not
+        // in the spec, and unlike vettid-android, which throws): the version stays pending until an operation presents the
+        // blob, which confirms it (VAULT-MESSAGING §3.5.3), see ``credOpAnswer``.
         try await confirm(v)
         return utks
     }
 
     static let ackWait: TimeInterval = 15
 
-    /// Sends `credential.ack` for [version] once; a failure leaves it pending (``settleAck()``). Only a `forbidden` (this
+    /// Sends `credential.ack` for [version] once; a failure leaves it pending. Only a `forbidden` (this
     /// device is not the holder, §3.5.9) and a cancellation are thrown: they say something the caller must act on.
     private func confirm(_ version: Int64) async throws {
         // Once, and not for long: it is no reason to hold an operation up when the vault cannot be reached.
@@ -73,17 +74,6 @@ struct CredentialOps: Sendable {
             return
         }
         try? await device.ackSettled(version)
-    }
-
-    /// Sends the `credential.ack` of the stored blob if an earlier one did not get through. Before every operation that
-    /// carries the blob, so that the vault is told before it is asked to rely on the confirmed version.
-    func settleAck() async throws {
-        guard let pending = device.ackPendingVersion else { return }
-        guard let held = device.credentialVersion, held == pending else {
-            try? await device.ackSettled(pending)
-            return
-        }
-        try await confirm(pending)
     }
 
     /// An unexpired UTK, fetching a pool (`credential.utk.get`) when the device holds none. A UTK is spent once the
@@ -172,23 +162,32 @@ struct CredentialOps: Sendable {
         return try await device.credentialLock.withLock {
             // Nothing is taken from the pool for an operation that cannot be sent.
             if device.credentialBlob == nil { throw VaultStateError(message: "no credential on this device") }
-            try await settleAck()
             // Under the lock: a change that started after the caller's own check is seen here, and one that went out
             // (and was even decided) while this waited for the lock.
             try await gate(Self.carriesPin(fields))
             try noSecretSent(since, type)
             do {
                 await options.beforeSend?()
-                return try await sealedAt(type, utk: try await takeUTK(), fields: fields, options)
+                return try await presenting { try await sealedAt(type, utk: try await takeUTK(), fields: fields, options) }
             } catch let e as VaultOpError where e.code == Self.codeStaleCredential {
                 try await fetch()
                 // Never resent with the typed secrets while a change may have moved them (§11.14.9 step 4).
                 try await gate(Self.carriesPin(fields))
                 try noSecretSent(since, type)
                 await options.beforeSend?()
-                return try await sealedAt(type, utk: try await takeUTK(), fields: fields, options)
+                return try await presenting { try await sealedAt(type, utk: try await takeUTK(), fields: fields, options) }
             }
         }
+    }
+
+    /// Runs an operation that presents the stored blob. Presenting the version confirms it (VAULT-MESSAGING §3.5.3), so a
+    /// `credential.ack` that was lost for it is no longer owed once the vault answered; none is sent again, which would add
+    /// a wait inside the credential lock while the vault cannot be reached. Callers hold the credential lock.
+    private func presenting<T>(_ body: () async throws -> T) async throws -> T {
+        let presented = device.credentialVersion
+        let out = try await body()
+        if let presented { try? await device.ackSettled(presented) }
+        return out
     }
 
     /// (VAULT-MESSAGING 0.47.0 §11.14.9 step 2) Refused with nothing sent when a change or a renew went out since

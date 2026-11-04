@@ -90,8 +90,12 @@ extension VaultDevice {
         do {
             try inner.checkTime(now: t, durable: inner.exp == nil)
         } catch let e as CryptoError where e.kind == .time {
-            // Dropped, as any message that fails a check; but said, so that a phone whose clock is wrong can be told.
-            timeDropBroadcast.emit(inner.type)
+            // Dropped, as any message that fails a check. Said, so that a phone whose clock is wrong can be told, only when
+            // the evidence points at the clock: a `ts` beyond the allowed skew in the future, or a durable message older
+            // than any delivery delay explains. A plain expiry (a call signal or a ping collected late) is no evidence.
+            let future = inner.ts.timeIntervalSince(t) > Inner.maxClockSkewFuture
+            let tooOld = inner.exp == nil && t.timeIntervalSince(inner.ts) > Inner.maxDurableAge
+            if future || tooOld { timeDropBroadcast.emit(inner.type) }
             throw e
         }
         noteVaultTime(inner.ts)

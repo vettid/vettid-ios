@@ -28,6 +28,9 @@ public struct RelayError: Error, Equatable, Sendable, CustomStringConvertible {
     public let retryAfterSeconds: Int
     /// `quota_exceeded`'s `quota` (0.9.2): `token`, `mailbox`, `mailbox_blobs` or `sender_blobs`; nil otherwise.
     public let quota: String?
+    /// Set by the client: the answer came to a request it had already sent before (a transport failure or a retryable answer
+    /// came first), so an earlier attempt may have been delivered (VAULT-MESSAGING §8.6, 0.83.0).
+    public var afterRetry = false
 
     public init(status: Int, code: String, message: String = "", retryAfterSeconds: Int = 0, quota: String? = nil) {
         self.status = status
@@ -207,8 +210,11 @@ public final class RelayClient: Sendable {
             }
             do {
                 return try await once(c)
-            } catch let e as RelayError {
-                guard e.retryable else { throw e }
+            } catch var e as RelayError {
+                guard e.retryable else {
+                    e.afterRetry = i > 0
+                    throw e
+                }
                 last = e
             } catch let e as URLError {
                 // A certificate or pin that does not match, or a cancelled call, is not a passing state of the network.

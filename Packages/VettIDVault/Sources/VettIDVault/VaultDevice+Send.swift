@@ -73,14 +73,6 @@ extension VaultDevice {
         try Self.okBody(type, try await requestOnce(type, body: body, timeout: timeout, exp: exp))
     }
 
-    func sendLocked( // swiftlint:disable:this function_parameter_count
-        id: String?, type: String, body: [UInt8], re: String?, status: String?, exp: Date?
-    ) async throws -> String {
-        let entry = try enqueueLocked(id: id, type: type, body: body, re: re, status: status, exp: exp)
-        try await deliver(entry)
-        return entry.id
-    }
-
     /// Seals a message into the outbox and saves; the caller delivers it (``deliver(_:)``). Callers hold ``lock``.
     func enqueueLocked( // swiftlint:disable:this function_parameter_count
         id: String?, type: String, body: [UInt8], re: String?, status: String?, exp: Date?
@@ -98,6 +90,7 @@ extension VaultDevice {
                 id: iid, type: type, relayURL: v.relayURL, mailbox: v.mailbox, token: v.token, envelope: Base64s.encodeStd(env)
             )
             st.outbox.append(e)
+            outboxInFlight.insert(e.id)
             return e
         }
         try save()
@@ -106,27 +99,45 @@ extension VaultDevice {
 
     /// Deposits an outbox entry; removes it once the relay accepted it, or on a terminal relay error (rethrown). A
     /// transport failure, `429 rate_limited`, 5xx and a stale or replayed signature keep it for the next flush.
-    func deliver(_ e: OutboxEntry) async throws {
-        try refuseSending()
+    ///
+    /// The entry is in flight meanwhile (``flushOutbox()`` leaves it alone). With [keepOnFailure] false a failure removes
+    /// it, so that a request reported as failed is never deposited later.
+    func deliver(_ e: OutboxEntry, keepOnFailure: Bool = true) async throws {
+        mem.withLock { _ = outboxInFlight.insert(e.id) }
+        defer { mem.withLock { _ = outboxInFlight.remove(e.id) } }
         do {
+            try refuseSending()
             _ = try await relayFor(e.relayURL).deposit(mailboxID: e.mailbox, token: e.token, payload: try Base64s.decodeStd(e.envelope))
             mem.withLock { st.outbox.removeAll { $0.id == e.id && $0.envelope == e.envelope } }
             try save()
         } catch let x as RelayError {
             // §8.6: a quota the recipient's mailbox ran out of is not cured by a fresh token; the deposit waits in the
             // outbox and goes out at a later flush (vettid-android drops it).
-            if x.retryable || x.code == RelayError.quotaExceeded {
-                mem.withLock {
-                    if let i = st.outbox.firstIndex(of: e) { st.outbox[i].attempts += 1 }
-                }
-                try save()
+            if keepOnFailure, x.retryable || x.code == RelayError.quotaExceeded {
+                noteAttempt(e)
                 throw x
             }
             countRefusal(x, mailbox: e.mailbox, token: e.token)
             mem.withLock { st.outbox.removeAll { $0.id == e.id && $0.envelope == e.envelope } }
             try save()
             throw x
+        } catch let u as URLError {
+            // A transport failure counts as an attempt too (it bounds an hs.fin that never gets through).
+            if keepOnFailure {
+                noteAttempt(e)
+            } else {
+                mem.withLock { st.outbox.removeAll { $0.id == e.id } }
+                try? save()
+            }
+            throw u
         }
+    }
+
+    private func noteAttempt(_ e: OutboxEntry) {
+        mem.withLock {
+            if let i = st.outbox.firstIndex(where: { $0.id == e.id }) { st.outbox[i].attempts += 1 }
+        }
+        try? save()
     }
 
     /// A deposit to this device's vault under the vault's current token that the relay refused with `token_revoked`
@@ -168,7 +179,8 @@ extension VaultDevice {
 
     /// The only types the outbox keeps (``send(_:body:id:)``): the standing tokens given to the vault and the refresh
     /// (§7.2), which mean the same when they arrive late, and the `hs.fin` of a handshake (§6.2), which is the same message
-    /// whenever it arrives and is lost with its code if it does not. Anything else an earlier version left there is dropped at load.
+    /// whenever it arrives and is lost with its code if it does not (chosen; not in the spec: vettid-android's outbox types
+    /// have no `hs.fin`). Anything else an earlier version left there is dropped at load.
     static let outboxTypes: Set<String> = ["relay.token.issued", "relay.token.refresh", VaultDevice.typeHsFin]
 
     /// Re-deposits what the outbox still holds (after a restart or a transport failure). The deposits are made outside the
@@ -182,7 +194,9 @@ extension VaultDevice {
         guard mine else { return }
         defer { mem.withLock { flushing = false } }
         for e in entries {
-            guard mem.withLock({ st.outbox.contains(e) }) else { continue }
+            // Not one that is being deposited just now (a renewal reported as failed must not go out later).
+            guard mem.withLock({ st.outbox.contains(e) && outboxInFlight.insert(e.id).inserted }) else { continue }
+            defer { mem.withLock { _ = outboxInFlight.remove(e.id) } }
             // A handshake's fin that was tried this often will not arrive: the handshake's code is lost either way.
             if e.type == Self.typeHsFin, e.attempts >= Self.finAttempts {
                 mem.withLock { st.outbox.removeAll { $0.id == e.id } }

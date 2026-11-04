@@ -90,7 +90,9 @@ extension VaultDevice {
         do {
             try await sendInit(prepared)
         } catch {
-            discardFailedTransfer(attest, attester)
+            // Saved under the lock, as ``abandonTransfer()`` does: a kill after a refused deposit finds no pinned vault
+            // without a device id and no attest key id that no vault binds.
+            try? await lock.withLock { discardFailedTransfer(attest, attester) }
             throw error
         }
     }
@@ -99,7 +101,10 @@ extension VaultDevice {
 
     /// The `hs.init` could not be sent: the key it attested is bound by no vault (IOS-PLAN §6.2), and the handshake and the
     /// pinned vault go with it.
+    /// Callers hold ``lock``. A newer transfer that replaced this one, or one that paired meanwhile, is left alone.
     private func discardFailedTransfer(_ attest: DeviceAttest, _ attester: any Attester) {
+        let ours: Bool = mem.withLock { st.deviceID == nil && alt().transferAttestKeyID == attest.iosKeyID }
+        guard ours else { return }
         if let key = attest.iosKeyID { try? attester.discard(keyID: key) }
         dropPairing()
         mem.withLock {
@@ -108,6 +113,7 @@ extension VaultDevice {
             a.transferAttestKeyID = nil
             setAlt(a)
         }
+        try? save()
     }
 
     /// The SAS of the pairing handshake, once the vault's `hs.resp` checked out (§6.3): at once when it is there, else when
@@ -170,14 +176,8 @@ extension VaultDevice {
             let tok = try mintForVault()
             return try enqueueLocked(id: nil, type: "relay.token.issued", body: Self.standing(tok), re: nil, status: nil, exp: nil)
         }
-        do {
-            try await deliver(entry)
-        } catch {
-            // A renewal that failed is not kept for a later flush: it would go out after the approval, whose token it is not.
-            mem.withLock { st.outbox.removeAll { $0.id == entry.id } }
-            try? save()
-            throw error
-        }
+        // A renewal that failed is not kept for a later flush: it would go out after the approval, whose token it is not.
+        try await deliver(entry, keepOnFailure: false)
     }
 
     // MARK: - The new app: one collect before the drop (§11.14.10 rule 5)

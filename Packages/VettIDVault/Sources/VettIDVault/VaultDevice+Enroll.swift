@@ -105,6 +105,7 @@ extension VaultDevice {
                 ini = nil
                 throw e
             }
+            answeredInit = ObjectIdentifier(i)
             ini = nil
             // (IOS-PLAN 0.1.39 §4.9) The recovered phone's handshake the vault answered: its `ctx` names the registration whose
             // attested key the vault binds. Saved with the epoch.
@@ -209,11 +210,19 @@ extension VaultDevice {
         let initiator: Initiator
         let vault: VaultRecord
         let depositToken: String
+        /// When the token the deposit uses expires, if it can be read (VAULT-MESSAGING §8.6, 0.83.0).
+        let tokenExp: Date?
     }
+
+    /// How long past the token's `exp` a retried `hs.init` answered `token_used` or `token_revoked` waits for the `hs.resp`
+    /// that its first attempt may have brought (VAULT-MESSAGING §8.6, 0.83.0).
+    static let initGrace: TimeInterval = 60
+    /// Without a readable `exp` the wait is the pairing link's 10 minutes (§8.6).
+    static let initWaitFallback: TimeInterval = 600
 
     /// Builds the `hs.init` and makes it the handshake in flight, so that an `hs.resp` that arrives before the deposit call
     /// returns finds it. Callers hold ``lock``, save, leave it, and then deposit with ``sendInit(_:)``: a slow relay must not
-    /// hold the lock.
+    /// hold the lock. The `hs.fin` of a handshake this one replaces is dropped.
     func prepareInit(
         purpose: Purpose, ctx: String, depositToken: String, profile: [UInt8]? = nil, at: Date? = nil,
         deviceAttest: DeviceAttest? = nil, id: String? = nil, apiKey: [UInt8]? = nil, unlockSecret: [UInt8]? = nil
@@ -228,21 +237,39 @@ extension VaultDevice {
             policy: .vaultToDevice, id: id, now: at ?? now()
         ))
         try refuseSending()
+        let exp = (try? Base64s.decodeStd(v.relayPk)).flatMap { try? DepositTokens.verify(depositToken, issuer: $0).exp }
         mem.withLock {
             ini?.abort()
             ini = i
+            st.outbox.removeAll { $0.type == Self.typeHsFin }
         }
-        return PreparedInit(initiator: i, vault: v, depositToken: depositToken)
+        return PreparedInit(initiator: i, vault: v, depositToken: depositToken, tokenExp: exp)
     }
 
-    /// Deposits a prepared `hs.init`, outside the lock. When the relay does not take it the handshake is dropped (unless a
-    /// newer one replaced it) and the error is thrown.
+    /// Whether the vault's `hs.resp` was handled for [p]'s handshake.
+    private func answered(_ p: PreparedInit) -> Bool {
+        mem.withLock { answeredInit == ObjectIdentifier(p.initiator) }
+    }
+
+    /// Deposits a prepared `hs.init`, outside the lock.
+    ///
+    /// - A deposit that fails after the vault's `hs.resp` was handled for this handshake did reach the vault: it is a
+    ///   success, and nothing is undone.
+    /// - `token_used` or `token_revoked` to a deposit the relay client had already tried before (``RelayError/afterRetry``) mean
+    ///   the first attempt may have been delivered: it waits for `hs.resp` until the token's `exp` plus 60 s (VAULT-MESSAGING §8.6, 0.83.0), and fails
+    ///   only then.
+    /// - Any other failure drops the handshake, unless a newer one replaced it, and throws.
     func sendInit(_ p: PreparedInit) async throws {
         do {
             try refuseSending()
             let relay = relayFor(p.vault.relayURL)
             _ = try await relay.deposit(mailboxID: p.vault.mailbox, token: p.depositToken, payload: p.initiator.envelope)
         } catch {
+            if answered(p) { return }
+            if let x = error as? RelayError, x.afterRetry, x.code == RelayError.tokenUsed || x.code == RelayError.tokenRevoked,
+               (try? await waitForAnswer(p)) == true {
+                return
+            }
             mem.withLock {
                 if ini === p.initiator {
                     p.initiator.abort()
@@ -251,6 +278,17 @@ extension VaultDevice {
             }
             throw error
         }
+    }
+
+    /// Waits until the handshake of [p] is answered (true), or the token's `exp` plus ``initGrace`` has passed by the device's
+    /// clock (false). Throws when cancelled.
+    private func waitForAnswer(_ p: PreparedInit) async throws -> Bool {
+        let deadline = (p.tokenExp ?? now().addingTimeInterval(Self.initWaitFallback)).addingTimeInterval(Self.initGrace)
+        while !answered(p) {
+            if now() >= deadline { return false }
+            try await Task.sleep(nanoseconds: 20_000_000)
+        }
+        return true
     }
 
     static let userGuidMax = 128

@@ -67,8 +67,9 @@ import VettIDCrypto
     }
 
     /// A `credential.ack` that gets no answer does not undo the operation: the blob is stored, which is its outcome. The
-    /// confirmation stays pending and goes out before the next operation that carries the blob.
-    @Test func aLostAckLeavesTheOperationSuccessfulAndIsSentAgain() async throws {
+    /// confirmation stays pending until a real operation presents the blob (which confirms it, §3.5.3): no second ack is
+    /// sent, and the pending mark is cleared by the vault's answer.
+    @Test func aLostAckLeavesTheOperationSuccessfulAndAnOperationPresentingTheBlobSettlesIt() async throws {
         let (d, v) = try await base.pairedDevice(cfg: base.config(InMemoryDeviceStateStore(), timeout: 0.3))
         let api = VaultApi(device: d) { true }
         let (utks, _) = try pool(3)
@@ -78,11 +79,12 @@ import VettIDCrypto
         _ = try await base.relay.nextDeposit() // the ack goes unanswered
         try await create.value
         #expect(d.credentialVersion == 1 && d.ackPendingVersion == 1)
-        let settling = Task { try await api.credential.settleAck() }
-        let ack = try await answer(v, d, "credential.ack")
-        #expect(VaultJSON.int(VaultJSON.object(ack.body), "version") == 1)
-        try await settling.value
+        let approve = Task { try await api.criticalUseApprove("r7", password: "pw", payloadSha256: Bytes.sha256(Array("x".utf8))) }
+        let req = try await answer(v, d, "critical-secret-use.approve", #"{"request_id":"r7","status":"ok"}"#)
+        #expect(try StrictJson.parseObject(req.body).string("credential") == "AQID", "the blob is presented")
+        #expect(try await approve.value == "ok")
         #expect(d.ackPendingVersion == nil)
+        #expect(await base.relay.noDeposit(within: 0.3), "no credential.ack was sent again")
     }
 
     /// Before release R the password goes as typed and without a PIN.
