@@ -31,12 +31,15 @@ final class Box<T: Sendable>: @unchecked Sendable {
     let appKey = SoftAppKey()
     let sleeps = Box<[TimeInterval]>([])
 
-    func api(_ auth: MemberAuth, now: @escaping @Sendable () -> Date = { Date() }) -> MemberApiClient {
+    func api(
+        _ auth: MemberAuth, now: @escaping @Sendable () -> Date = { Date() },
+        uptime: @escaping @Sendable () -> TimeInterval = MemberApiClient.monotonicNow
+    ) -> MemberApiClient {
         let sleeps = sleeps
         return MemberApiClient(
             apiBase: server.baseURL, manifestURL: server.baseURL + MemberApiClient.manifestPath,
             transport: HTTPTransport(session: server.session, sleep: { _ in }), auth: auth,
-            sleep: { sleeps.value.append($0) }, now: now
+            sleep: { sleeps.value.append($0) }, now: now, uptime: uptime
         )
     }
 
@@ -222,7 +225,7 @@ final class Box<T: Sendable>: @unchecked Sendable {
     /// The poll of an enrollment, an unlock or a recovery open ends at its deadline instead of at the slot's own 15 minutes.
     @Test func aPollWithADeadlineEndsAtIt() async throws {
         let clock = Box<TimeInterval>(0)
-        let a = api(appAuth(Box(Self.vid)), now: { Date(timeIntervalSince1970: clock.value) })
+        let a = api(appAuth(Box(Self.vid)), uptime: { clock.value })
         server.handle { _ in
             clock.value += 70
             return .json(200, #"{"status":"queued"}"#)

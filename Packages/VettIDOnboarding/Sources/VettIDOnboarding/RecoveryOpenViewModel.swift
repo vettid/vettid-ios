@@ -24,7 +24,8 @@ public final class RecoveryOpenViewModel {
     /// The open being sent, the timer that says its wait is long, and whether the member stopped waiting.
     @ObservationIgnored private var sendTask: Task<Void, Never>?
     @ObservationIgnored private var slowTimer: Task<Void, Never>?
-    @ObservationIgnored private var sendCancelled = false
+    /// Counts the sends: a task of an earlier one (cancelled, or slow to notice it) changes nothing.
+    @ObservationIgnored private var sendGeneration = 0
     @ObservationIgnored private let slowAfter: @Sendable () async throws -> Void
 
     public init(
@@ -98,14 +99,16 @@ public final class RecoveryOpenViewModel {
         state.failure = nil
         state.failureCode = nil
         state.slowWait = false
-        sendCancelled = false
+        sendGeneration += 1
+        let generation = sendGeneration
         slowTimer?.cancel()
-        slowTimer = Task { [weak self, slowAfter] in
+        let timer = Task { [weak self, slowAfter] in
             guard (try? await slowAfter()) != nil else { return }
-            if let self, state.step == .sending { state.slowWait = true }
+            if let self, generation == sendGeneration, state.step == .sending { state.slowWait = true }
         }
+        slowTimer = timer
         sendTask = work.launch { [weak self, move] in
-            defer { self?.slowTimer?.cancel() }
+            defer { timer.cancel() }
             let out: RecoveryOpenOutcome
             do {
                 if finishing && s.lostOk {
@@ -117,7 +120,7 @@ public final class RecoveryOpenViewModel {
                 // No answer, or the vault said `ok` and the rest failed: then the PIN finishes it, nothing is opened again.
                 let opened = (try? await move.recoveryOpened()) ?? finishing
                 let e = (error as? VaultFailure) ?? VaultFailure(.other)
-                guard let self, !sendCancelled else { return }
+                guard let self, generation == sendGeneration else { return }
                 state.step = opened ? .finish : .answered
                 state.failure = e.kind
                 state.failureCode = e.code
@@ -125,7 +128,7 @@ public final class RecoveryOpenViewModel {
                 await self.refreshStage()
                 return
             }
-            guard self?.sendCancelled != true else { return }
+            guard self?.sendGeneration == generation else { return }
             self?.answered(out)
             await self?.refreshStage()
         }
@@ -136,7 +139,7 @@ public final class RecoveryOpenViewModel {
     /// it already gave goes to the finish, as at the start.
     public func cancelSend() {
         guard state.step == .sending else { return }
-        sendCancelled = true
+        sendGeneration += 1
         sendTask?.cancel()
         slowTimer?.cancel()
         move.forgetPairingPin()

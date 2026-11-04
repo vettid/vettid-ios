@@ -32,7 +32,8 @@ public final class OnboardingViewModel: OnboardingActions {
     /// The enrollment running, the timer that says its wait is long, and whether the member stopped waiting.
     @ObservationIgnored private var runTask: Task<Void, Never>?
     @ObservationIgnored private var slowTimer: Task<Void, Never>?
-    @ObservationIgnored private var runCancelled = false
+    /// Counts the attempts: a task of an earlier one (cancelled, or slow to notice it) changes nothing.
+    @ObservationIgnored private var runGeneration = 0
     /// How long the enrollment waits before the screen says the vault may be starting.
     @ObservationIgnored private let slowAfter: @Sendable () async throws -> Void
 
@@ -441,7 +442,7 @@ public final class OnboardingViewModel: OnboardingActions {
     }
 
     /// Runs (or resumes) enrollment and the credential steps.
-    public func run() {
+    public func run() { // swiftlint:disable:this cyclomatic_complexity
         guard !state.busy else { return }
         let s = state
         let credentialOnly = s.credentialOnly || enrolled
@@ -451,23 +452,28 @@ public final class OnboardingViewModel: OnboardingActions {
         state.errorCode = nil
         state.progress = steps(credentialOnly: credentialOnly).map { ProgressEntry($0, .pending) }
         state.slowWait = false
-        runCancelled = false
+        runGeneration += 1
+        let generation = runGeneration
         slowTimer?.cancel()
-        slowTimer = Task { [weak self, slowAfter] in
+        let timer = Task { [weak self, slowAfter] in
             guard (try? await slowAfter()) != nil else { return }
-            if let self, state.busy { state.slowWait = true }
+            if let self, generation == runGeneration, state.busy { state.slowWait = true }
         }
+        slowTimer = timer
         runTask = launch { [self] in
-            defer { slowTimer?.cancel() }
+            defer { timer.cancel() }
             do {
                 if !enrolled {
-                    try await vault.enroll(pin: s.pin) { self.mark($0) }
+                    try await vault.enroll(pin: s.pin) { if generation == self.runGeneration { self.mark($0) } }
                     enrolled = true
                 }
+                // Stopped waiting meanwhile: the typed secrets are gone and are not sent.
+                guard generation == runGeneration else { return }
                 // Release R (§11.14.9): the PIN goes with credential.create (sent only to a vault with a phone secret).
                 try await vault.createCredential(password: s.password, backup: s.backup, pin: s.pin.isEmpty ? nil : s.pin) {
-                    self.mark($0)
+                    if generation == self.runGeneration { self.mark($0) }
                 }
+                guard generation == runGeneration else { return }
                 state.busy = false
                 state.pin = ""
                 state.pinConfirm = ""
@@ -476,10 +482,10 @@ public final class OnboardingViewModel: OnboardingActions {
                 for i in state.progress.indices { state.progress[i].state = .done }
                 if case .setup = account.phase { go(.done) }
             } catch let e as VaultFailure {
-                if runCancelled { return }
+                guard generation == runGeneration else { return }
                 failed(e)
             } catch {
-                if runCancelled { return }
+                guard generation == runGeneration else { return }
                 state.busy = false
             }
         }
@@ -489,7 +495,7 @@ public final class OnboardingViewModel: OnboardingActions {
     /// resumed by the next try, and the next start reads the phase (VAULT-MESSAGING §11.3).
     public func cancelRun() {
         guard state.busy, state.step == .progress else { return }
-        runCancelled = true
+        runGeneration += 1
         runTask?.cancel()
         slowTimer?.cancel()
         state.busy = false

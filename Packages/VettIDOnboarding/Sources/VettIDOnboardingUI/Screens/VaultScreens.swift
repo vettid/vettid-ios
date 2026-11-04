@@ -351,7 +351,7 @@ public struct ProgressScreen: View {
             }
         }
         // The enrolment waits for the vault to start and answer: the screen stays on while it runs.
-        .keepsScreenOn(!failed)
+        .keepsScreenOn(state.busy)
     }
 }
 

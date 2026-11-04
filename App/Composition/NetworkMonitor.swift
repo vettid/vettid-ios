@@ -17,7 +17,8 @@ final class NetworkMonitor: @unchecked Sendable {
     @MainActor private(set) var restoreCount = 0
 
     init() {
-        monitor.pathUpdateHandler = { [weak self] path in self?.update(path.status == .satisfied) }
+        // Only `.unsatisfied` is offline: `.requiresConnection` (a connection the system opens on demand) is usable.
+        monitor.pathUpdateHandler = { [weak self] path in self?.update(path.status != .unsatisfied) }
         monitor.start(queue: DispatchQueue(label: "org.vettid.network-monitor", qos: .utility))
     }
 
