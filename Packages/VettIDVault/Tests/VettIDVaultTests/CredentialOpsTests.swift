@@ -66,10 +66,10 @@ import VettIDCrypto
         #expect(d.credentialVersion == 1 && d.utkCount == 2)
     }
 
-    /// A `credential.ack` that gets no answer does not undo the operation: the blob is stored, which is its outcome. The
-    /// confirmation stays pending until a real operation presents the blob (which confirms it, §3.5.3): no second ack is
-    /// sent, and the pending mark is cleared by the vault's answer.
-    @Test func aLostAckLeavesTheOperationSuccessfulAndAnOperationPresentingTheBlobSettlesIt() async throws {
+    /// A `credential.ack` that gets no answer does not undo the operation: the blob is stored, which is its outcome. Only
+    /// `credential.ack` confirms a version (as in vettid-vault), so a later operation that presents the blob and succeeds
+    /// leaves the ack pending, and the next flush sends it.
+    @Test func aLostAckStaysPendingThroughAPresentingOperationAndAFlushSendsIt() async throws {
         let (d, v) = try await base.pairedDevice(cfg: base.config(InMemoryDeviceStateStore(), timeout: 0.3))
         let api = VaultApi(device: d) { true }
         let (utks, _) = try pool(3)
@@ -83,8 +83,12 @@ import VettIDCrypto
         let req = try await answer(v, d, "critical-secret-use.approve", #"{"request_id":"r7","status":"ok"}"#)
         #expect(try StrictJson.parseObject(req.body).string("credential") == "AQID", "the blob is presented")
         #expect(try await approve.value == "ok")
+        #expect(d.ackPendingVersion == 1, "presenting does not confirm: the ack is still owed")
+        let flush = Task { await d.flushOutbox() }
+        let ack = try await answer(v, d, "credential.ack")
+        #expect(VaultJSON.int(VaultJSON.object(ack.body), "version") == 1)
+        await flush.value
         #expect(d.ackPendingVersion == nil)
-        #expect(await base.relay.noDeposit(within: 0.3), "no credential.ack was sent again")
     }
 
     /// An operation refused after the blob check (a wrong password) leaves the version unconfirmed: the pending ack stays, and

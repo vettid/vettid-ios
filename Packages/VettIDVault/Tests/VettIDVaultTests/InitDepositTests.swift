@@ -194,7 +194,7 @@ import VettIDRelay
             }
         }
         let (kept, marks) = d.mem.withLock { (d.st.outbox.filter { $0.type == "relay.token.refresh" }.count, d.outboxInFlight) }
-        #expect(kept == 0 && marks == marksBefore, "no entry of that kind, and no mark left behind")
+        #expect(kept == 0 && marks.isSubset(of: marksBefore), "no entry of that kind, and no mark left behind")
     }
 
     /// The wait for the resp ends when the handshake is gone (dropped, rejected, replaced).

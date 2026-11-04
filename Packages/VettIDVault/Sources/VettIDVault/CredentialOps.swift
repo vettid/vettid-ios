@@ -51,7 +51,9 @@ struct CredentialOps: Sendable {
         try await device.keepCredential(blob: blob, version: v, awaitingAck: true)
         // The blob is stored: that is the outcome of the operation. A confirmation that is lost does not undo it (chosen; not
         // in the spec, and unlike vettid-android, which throws): the ack stays pending and goes out at the next outbox flush
-        // (``VaultDevice/sendPendingAck()``), or is dropped when a later operation that presents the blob succeeds.
+        // (``VaultDevice/sendPendingAck()``), outside the credential lock. Only `credential.ack` confirms a version, as in
+        // vettid-vault (which sets `Acked` through the ack alone); VAULT-MESSAGING §3.5.3 and §3.5.9 also count presenting the
+        // blob (an erratum is pending), so an operation that presents it does not settle the ack.
         try await confirm(v)
         return utks
     }
@@ -163,29 +165,16 @@ struct CredentialOps: Sendable {
             try noSecretSent(since, type)
             do {
                 await options.beforeSend?()
-                return try await presenting { try await sealedAt(type, utk: try await takeUTK(), fields: fields, options) }
+                return try await sealedAt(type, utk: try await takeUTK(), fields: fields, options)
             } catch let e as VaultOpError where e.code == Self.codeStaleCredential {
                 try await fetch()
                 // Never resent with the typed secrets while a change may have moved them (§11.14.9 step 4).
                 try await gate(Self.carriesPin(fields))
                 try noSecretSent(since, type)
                 await options.beforeSend?()
-                return try await presenting { try await sealedAt(type, utk: try await takeUTK(), fields: fields, options) }
+                return try await sealedAt(type, utk: try await takeUTK(), fields: fields, options)
             }
         }
-    }
-
-    /// Runs an operation that presents the stored blob. When it succeeds the vault has accepted the version as the holder's
-    /// current one and moves on from it, so a `credential.ack` still owed for it is dropped; none is sent from here, which
-    /// would add a wait inside the credential lock while the vault cannot be reached. The vault this follows, vettid-vault,
-    /// confirms a version by `credential.ack` alone (and the rotation after it), while VAULT-MESSAGING §3.5.3 and §3.5.9 also
-    /// count presenting it: dropping the ack after a success is chosen; not in the spec. An operation refused after the blob
-    /// check leaves the version unconfirmed, and the ack goes out at the next flush. Callers hold the credential lock.
-    private func presenting<T>(_ body: () async throws -> T) async throws -> T {
-        let presented = device.credentialVersion
-        let out = try await body()
-        if let presented { try? await device.ackSettled(presented) }
-        return out
     }
 
     /// (VAULT-MESSAGING 0.47.0 §11.14.9 step 2) Refused with nothing sent when a change or a renew went out since
