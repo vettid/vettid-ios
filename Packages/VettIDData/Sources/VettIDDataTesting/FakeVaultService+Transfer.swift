@@ -33,6 +33,8 @@ struct FakeTransferStore {
     var listRequests = 0
     var listAnswer: FakeVaultService.DeviceListAnswer?
     var revokesDeposits = false
+    /// The vault's relay refuses the deposit that follows its `hs.resp` (the new phone's `hs.fin`) as revoked.
+    var revokesFin = false
     var revokedDeposits = 0
     var collectRefused = false
     var collectFailures = 0
@@ -102,6 +104,12 @@ extension FakeVaultService {
     public var holdsTransferApproval: Bool {
         get { locked { transfer.holdApproval } }
         set { locked { transfer.holdApproval = newValue } }
+    }
+
+    /// The vault's relay refuses the new phone's `hs.fin` for good (`token_revoked`) while the `hs.init` was taken.
+    public var transferRevokesFin: Bool {
+        get { locked { transfer.revokesFin } }
+        set { locked { transfer.revokesFin = newValue } }
     }
 
     /// The vault drops the new phone's `hs.init` unanswered (a spent link, a failed attestation, §6.7.1 step 2).
@@ -236,6 +244,10 @@ extension FakeVaultService {
 
     /// Called with the vault relay's deposit: true when it is refused as revoked. Callers hold ``cond``.
     func refusesDeposit() -> Bool {
+        if transfer.revokesFin, responder != nil {
+            transfer.revokedDeposits += 1
+            return true
+        }
         guard transfer.revokesDeposits else { return false }
         transfer.revokedDeposits += 1
         return true

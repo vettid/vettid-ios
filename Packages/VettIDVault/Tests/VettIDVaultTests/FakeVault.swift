@@ -217,8 +217,14 @@ final class FakeVault: @unchecked Sendable {
 
     var principal: Principal { Principal(ik: ik.publicKey, kem: kem.publicKey, relay: RelayAddr(url: relayURL, mailbox: mailbox, pk: relayKey.publicKey)) }
 
+    /// The lifetime of the request token that `hs.resp` carries, when a test needs the short one of a pairing (§6.7).
+    var requestTokenTTL: TimeInterval?
+
     func token(for d: VaultDevice) throws -> String {
-        try DepositTokens.mintStanding(relayKey, sender: RelayAuth.encodeKey(d.relayAddr.pk), audience: d.relayAddr.url, now: Date())
+        try DepositTokens.mintStanding(
+            relayKey, sender: RelayAuth.encodeKey(d.relayAddr.pk), audience: d.relayAddr.url, now: Date(),
+            ttl: requestTokenTTL ?? DepositTokens.standingTTL
+        )
     }
 
     func msg(_ payload: [UInt8], from: String? = nil) -> RelayMessage {

@@ -121,36 +121,53 @@ extension VaultDevice {
         // The fin is kept in the outbox until the relay accepts it: a pairing or transfer code is spent by its handshake, and
         // an hs.fin that never arrives leaves the code burnt. It goes out after the lock (``afterLock(_:)``) and again at
         // each flush.
-        let fin = mem.withLock {
-            // Dropped when the token it is sent under expires, at the latest after a handshake's lifetime (chosen; not in the
-            // spec).
-            let limit = Self.ms(t.addingTimeInterval(Self.handshakeTTL))
-            let expiry = heldFromVault(v.token).map(Self.ms) ?? limit
-            var e = OutboxEntry(
-                id: Ulid.new(t), type: Self.typeHsFin, relayURL: v.relayURL, mailbox: v.mailbox, token: v.token,
-                envelope: Base64s.encodeStd(res.fin)
-            )
-            e.dropAfterMs = min(expiry, limit)
-            st.outbox.append(e)
-            outboxInFlight.insert(e.id) // until the deposit below: a flush in between leaves it alone
-            return e
-        }
-        try save()
+        let fin = try storeFin(res.fin, vault: v, at: t)
         // The code is shown once the fin has gone out, or, when the relay would not take it, is kept for the next flush.
         let shown = res.sas
         afterLock { [self] in
-            let delivered = (try? await deliver(fin)) != nil
-            // Refused for good (the entry is gone): the pairing cannot finish, and the flow that waits is told, with no code.
-            let owed = mem.withLock { st.outbox.contains { $0.id == fin.id } }
-            guard delivered || owed else {
+            do {
+                try await deliver(fin)
+            } catch let x as RelayError where Self.isTerminal(x) {
+                // Refused for good: the pairing cannot finish, and the flow that waits is told, with no code.
                 notifyFinFailed()
                 return
+            } catch {
+                // A passing failure: the fin stays owed, and the code is shown.
             }
             if let s = shown {
                 mem.withLock { sas = s }
                 sasBroadcast.emit(s)
             }
         }
+    }
+
+    /// Stores the `hs.fin` in the outbox, marked in flight until its deposit, and saves; on a failed save it is neither kept
+    /// nor marked. Dropped when the token it is sent under expires (a minute past it, as the wait for an hs.resp is: a phone
+    /// clock that runs ahead must not drop a fin the relay would still take), at the latest after a handshake's lifetime
+    /// (chosen; not in the spec). Callers hold ``lock``.
+    private func storeFin(_ fin: [UInt8], vault v: VaultRecord, at t: Date) throws -> OutboxEntry {
+        let entry = mem.withLock {
+            let limit = Self.ms(t.addingTimeInterval(Self.handshakeTTL))
+            let expiry = heldFromVault(v.token).map { Self.ms($0.addingTimeInterval(Self.initGrace)) } ?? limit
+            var e = OutboxEntry(
+                id: Ulid.new(t), type: Self.typeHsFin, relayURL: v.relayURL, mailbox: v.mailbox, token: v.token,
+                envelope: Base64s.encodeStd(fin)
+            )
+            e.dropAfterMs = min(expiry, limit)
+            st.outbox.append(e)
+            outboxInFlight.insert(e.id) // until the deposit: a flush in between leaves it alone
+            return e
+        }
+        do {
+            try save()
+        } catch {
+            mem.withLock {
+                outboxInFlight.remove(entry.id)
+                st.outbox.removeAll { $0.id == entry.id }
+            }
+            throw error
+        }
+        return entry
     }
 
     /// Waits for vault.enrolled (§11.3), which pins the vault and gives this device its first token.
@@ -378,7 +395,7 @@ extension VaultDevice {
     static let ackWait: TimeInterval = 15
     static let ackRetryEvery: TimeInterval = 30
     static let ackTerminal: Set<String> = [
-        CredentialOps.codeStaleCredential, "credential_frozen", "credential_required", CredentialOps.codeForbidden,
+        CredentialOps.codeStaleCredential, "credential_frozen",
     ]
 
     /// Sends `credential.ack` for [version] once and, taken, settles it. Throws what the vault answers or the cancel.
@@ -387,11 +404,12 @@ extension VaultDevice {
         do {
             _ = try await opOnce("credential.ack", body: body, timeout: min(Self.ackWait, cfg.requestTimeout(for: "credential.ack")))
         } catch let e as VaultOpError where Self.ackTerminal.contains(e.code) {
-            // The vault has moved past this version (`stale_credential`), or answers for good that it will not take it
-            // (`credential_frozen`, `credential_required`, `forbidden`): nothing more is sent for it (chosen; not in the spec).
+            // The vault has moved past this version (`stale_credential`), or has frozen the credential (`credential_frozen`):
+            // nothing more is sent for it (chosen; not in the spec). `forbidden` (a phone still recovering) and
+            // `credential_required` (no holder yet) are passing states: the ack stays owed and is tried again at the usual rate.
             // `forbidden` still reaches the caller, who acts on it.
+            _ = e
             try? await ackSettled(version)
-            if e.code == CredentialOps.codeForbidden { throw e }
             return
         }
         try? await ackSettled(version)

@@ -89,7 +89,15 @@ extension VaultManager: MoveRepository {
             learnTimeScale(scale, since: rec)
             recoveryOffered = ReleasePath.recoveryOffered(capabilities)
             // §6.7.1 step 2 (0.10.6): a dropped hs.init is never answered; stop after 60 s and say why it may be.
-            guard let sas = try await sasWithinLimit(d) else {
+            let sas: String?
+            do {
+                sas = try await sasWithinLimit(d)
+            } catch let notCompleted as PairingNotCompleted {
+                // The fin did not reach the vault: the code is spent, nothing is kept (as for a rejection).
+                await dropTransfer(d)
+                throw notCompleted
+            }
+            guard let sas else {
                 await dropTransfer(d)
                 throw VaultFailure(.noResponse, code: MoveCodes.hsUnanswered)
             }
@@ -148,6 +156,10 @@ extension VaultManager: MoveRepository {
                 // Rejected: nothing was approved, so nothing changes; the handshake state is dropped.
                 await dropTransfer(s.device)
                 throw rejected
+            } catch let notCompleted as PairingNotCompleted {
+                // The fin was refused for good or dropped: the pairing cannot finish; the same.
+                await dropTransfer(s.device)
+                throw notCompleted
             }
             switch settled {
             case .completed(let guid): return guid != nil
@@ -184,7 +196,8 @@ extension VaultManager: MoveRepository {
                     return try await group.next() ?? .deadline
                 }
             } catch {
-                if error is CancellationError || error is PairingRejected || config.now() < deadline { throw error }
+                if error is CancellationError || error is PairingRejected || error is PairingNotCompleted { throw error }
+                if config.now() < deadline { throw error }
                 return .deadline
             }
             if case .paired = first { return first }

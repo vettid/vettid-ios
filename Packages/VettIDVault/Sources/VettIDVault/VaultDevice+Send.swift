@@ -117,11 +117,12 @@ extension VaultDevice {
         do {
             try refuseSending()
             _ = try await relayFor(e.relayURL).deposit(mailboxID: e.mailbox, token: e.token, payload: try Base64s.decodeStd(e.envelope))
-            try await withLockSaving { st.outbox.removeAll { $0.id == e.id && $0.envelope == e.envelope } }
+            // The deposit is made: a failure to save what follows it is not a failure of the deposit.
+            try? await withLockSaving { st.outbox.removeAll { $0.id == e.id && $0.envelope == e.envelope } }
         } catch let x as RelayError {
             // §8.6: a quota the recipient's mailbox ran out of is not cured by a fresh token; the deposit waits in the
             // outbox and goes out at a later flush (vettid-android drops it).
-            if keepOnFailure, x.retryable || x.code == RelayError.quotaExceeded {
+            if keepOnFailure, !Self.isTerminal(x) {
                 await noteAttempt(e)
                 throw x
             }
@@ -152,6 +153,9 @@ extension VaultDevice {
             try save()
         }
     }
+
+    /// A relay answer that trying again will not cure (it is kept for a later flush when it is not).
+    static func isTerminal(_ x: RelayError) -> Bool { !(x.retryable || x.code == RelayError.quotaExceeded) }
 
     private func noteAttempt(_ e: OutboxEntry) async {
         try? await withLockSaving {
@@ -230,7 +234,12 @@ extension VaultDevice {
                 notifyFinFailed()
                 continue
             }
-            try? await deliver(e)
+            do {
+                try await deliver(e)
+            } catch let x as RelayError where e.type == Self.typeHsFin && Self.isTerminal(x) {
+                // Refused for good: the pairing cannot finish, and the flow that waits for it is told.
+                notifyFinFailed()
+            } catch {}
         }
         // The flush is over before the ack is tried: a vault that does not answer holds up the ack, not every flush.
         mem.withLock { flushing = false }
@@ -348,16 +357,26 @@ extension VaultDevice {
     static let typeHsFin = "hs.fin"
 
     /// Runs [work] once the lock the caller holds is released: a deposit made while handling a message must not hold the
-    /// lock across the network (``handle(_:)`` runs it). Callers hold ``lock``.
+    /// lock across the network. The work belongs to the ``handle(_:)`` call that queued it (a task-local box), so that a
+    /// concurrent handling never deposits another's entry before that one has saved. Callers hold ``lock``.
     func afterLock(_ work: @escaping @Sendable () async -> Void) {
-        mem.withLock { afterWork.append(work) }
+        AfterLockWork.current?.add(work)
     }
+}
 
-    func runAfterLock() async {
-        let work: [@Sendable () async -> Void] = mem.withLock {
-            defer { afterWork.removeAll() }
-            return afterWork
+/// The deposits one ``VaultDevice/handle(_:)`` call makes after it released the lock.
+final class AfterLockWork: @unchecked Sendable {
+    @TaskLocal static var current: AfterLockWork?
+    private let lock = NSLock()
+    private var work: [@Sendable () async -> Void] = []
+
+    func add(_ w: @escaping @Sendable () async -> Void) { lock.withLock { work.append(w) } }
+
+    func run() async {
+        let all: [@Sendable () async -> Void] = lock.withLock {
+            defer { work.removeAll() }
+            return work
         }
-        for w in work { await w() }
+        for w in all { await w() }
     }
 }

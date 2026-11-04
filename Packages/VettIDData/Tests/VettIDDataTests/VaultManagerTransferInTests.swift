@@ -217,6 +217,18 @@ import VettIDDataTesting
         #expect(phone.attester.discarded == phone.attester.attested && !pendingRecord)
     }
 
+    /// The relay refuses the new phone's `hs.fin` for good: no code is shown, the transfer and the key are dropped, and the
+    /// member is told the invitation is no longer available.
+    @Test func aFinRefusedForGoodDropsTheTransferAndTheKey() async throws {
+        defer { phone.close() }
+        service.holdsTransferApproval = true
+        service.transferRevokesFin = true
+        let failure = await vaultFailure { _ = try await m.transferIn(code: try code()) }
+        #expect(failure?.kind == .inviteUnavailable && failure?.code == "pairing_not_completed")
+        #expect(!deviceHoldsVault && !pendingRecord && !m.movedIn)
+        #expect(phone.attester.discarded == phone.attester.attested)
+    }
+
     @Test func abandoningBeforeTheApprovalDropsEverything() async throws {
         defer { phone.close() }
         _ = try await scanned()

@@ -9,14 +9,15 @@ extension VaultDevice {
     /// (``LeaveUnacked``): the relay delivers it again, and it is opened once `hs.fin` has arrived (§6.3, §8.4).
     public func handle(_ m: RelayMessage) async throws {
         var failure: (any Error)?
+        let after = AfterLockWork()
         do {
-            try await handleLocked(m)
+            try await AfterLockWork.$current.withValue(after) { try await handleLocked(m) }
         } catch {
             failure = error
         }
         // The replies to the vault go out after the lock: a relay that stalls holds up this message's ack, not the
-        // answers to every other request.
-        await runAfterLock()
+        // answers to every other request. They are this call's own.
+        await after.run()
         if let failure { throw failure }
     }
 
@@ -123,6 +124,9 @@ extension VaultDevice {
             // transfer completes at any later start): the event in memory is lost with the process, the state is not.
             if mem.withLock({ st.deviceID == nil && (VaultJSON.bool(body, "transfer") == true || alt().transferAttestKeyID != nil) }) {
                 applyPaired(body)
+                // Paired: a fin still owed for this handshake is of no use, and its age must not later tell a paired device
+                // that the pairing failed.
+                mem.withLock { st.outbox.removeAll { $0.type == Self.typeHsFin } }
             }
         // §6.7 (0.10.5): only a device still waiting for device.paired acts on it; a paired one drops it.
         case Self.typePairRejected:

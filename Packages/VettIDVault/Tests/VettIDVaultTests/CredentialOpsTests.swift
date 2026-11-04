@@ -143,6 +143,23 @@ import VettIDCrypto
         #expect(d.ackPendingVersion == nil, "parked: not retried for ever")
     }
 
+    /// `forbidden` (a phone still recovering) and `credential_required` (no holder yet) are passing states: the ack stays owed.
+    @Test(arguments: ["credential_required", "forbidden"])
+    func aPassingAnswerToAnAckLeavesItOwed(code: String) async throws {
+        let (d, v) = try await base.pairedDevice(cfg: base.config(InMemoryDeviceStateStore(), timeout: 0.3))
+        let api = VaultApi(device: d) { true }
+        let (utks, _) = try pool(2)
+        let create = Task { try await api.credentialCreate(password: "a long password", pin: "123456") }
+        try await answer(v, d, "credential.utk.get", utks)
+        try await answer(v, d, "credential.create", #"{"credential":"AQID","version":1,"key":"x"}"#)
+        _ = try await base.relay.nextDeposit() // the ack goes unanswered
+        try await create.value
+        let flush = Task { await d.flushOutbox() }
+        try await answer(v, d, "credential.ack", code: code, errorBody: "{}")
+        await flush.value
+        #expect(d.ackPendingVersion == 1, "still owed")
+    }
+
     /// Before release R the password goes as typed and without a PIN.
     @Test func beforeReleaseRThePasswordIsSentAsTyped() async throws {
         let (d, v) = try await base.pairedDevice()

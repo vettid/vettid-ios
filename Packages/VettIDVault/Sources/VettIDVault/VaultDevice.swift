@@ -129,8 +129,6 @@ public final class VaultDevice: @unchecked Sendable {
     let secrets: DeviceSecrets
     let st: DeviceState
     let lock = AsyncLock()
-    /// Deposits to make once the lock of the message being handled is released (``afterLock(_:)``). Under ``mem``.
-    var afterWork: [@Sendable () async -> Void] = []
     /// A flush of the outbox runs (``flushOutbox()``). Read and written under ``mem``.
     var flushing = false
     /// When a pending `credential.ack` was last tried (the device's uptime). Under ``mem``.

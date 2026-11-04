@@ -88,7 +88,7 @@ import VettIDRelay
         base.relay.refuseStatus = 503
         base.relay.refuseDeposits = "unavailable"
         base.relay.refuseOnly = 1
-        base.relay.thenRefuse = (403, code)
+        base.relay.thenRefuse = (code == RelayError.tokenUsed ? 409 : 403, code) // the relay's statuses (RELAY-PROTOCOL §7.1)
         base.relay.recordRefused = true
     }
 
@@ -255,7 +255,7 @@ import VettIDRelay
     @Test func tokenUsedOnTheFirstTryOfAnOpenTokenIsTheLinksRefusal() async throws {
         let (d, v) = try await newPhone()
         let (qr, _) = try codeFor(v, d)
-        base.relay.refuseStatus = 403
+        base.relay.refuseStatus = 409
         base.relay.refuseDeposits = RelayError.tokenUsed
         let outcome = transfer(d, qr)
         for _ in 0..<100 where !outcome.finished { try await settle(0.05) }
@@ -315,10 +315,79 @@ import VettIDRelay
         #expect(d.mem.withLock { d.st.outbox.isEmpty })
     }
 
+    /// The relay takes the fin's deposit but saving what follows fails: the fin was deposited, so the pairing is not failed.
+    @Test func aFailedSaveAfterAGoodFinDepositIsNotAFailedFin() async throws {
+        let store = FlakyStore()
+        let secrets = DeviceSecrets(identity: Ed25519PrivateKey.generate(), kem: try KemPrivateKey.generate(), relay: Ed25519PrivateKey.generate(), apiKey: [UInt8](repeating: 0x30, count: 91))
+        let d = try await VaultDevice.create(base.config(store), secrets: secrets)
+        let v = try FakeVault(relayURL: base.relay.baseURL)
+        let (qr, inviteID) = try codeFor(v, d)
+        try await d.startTransfer(link: try qr.link(), attester: TestIOSAttester()) { _, _ in nil }
+        let (_, initMsg) = try await base.relay.nextDeposit()
+        base.relay.onDeposit = { store.fail() } // from the fin's deposit on, the store refuses writes
+        try await d.handle(try v.respondOpening(initMsg, d, ctx: inviteID).message)
+        let sas = try await d.awaitPairingSas()
+        #expect(!sas.isEmpty)
+        #expect(!d.mem.withLock { d.finFailed })
+    }
+
+    /// A fin refused for good by a flush (after a passing failure showed the code) tells the flow that waits.
+    @Test func aFinRefusedForGoodByAFlushReachesTheWaitingFlow() async throws {
+        let (d, v) = try await newPhone()
+        let (qr, inviteID) = try codeFor(v, d)
+        try await d.startTransfer(link: try qr.link(), attester: TestIOSAttester()) { _, _ in nil }
+        let (_, initMsg) = try await base.relay.nextDeposit()
+        base.relay.failDeposits = .notConnectedToInternet
+        try await d.handle(try v.respondOpening(initMsg, d, ctx: inviteID).message)
+        #expect(d.pairingSas != nil, "the code is shown: the failure was a passing one")
+        base.relay.failDeposits = nil
+        base.relay.refuseStatus = 403
+        base.relay.refuseDeposits = RelayError.tokenRevoked
+        await d.flushOutbox()
+        #expect(d.mem.withLock { d.st.outbox.isEmpty })
+        await #expect(throws: PairingNotCompleted.self) { _ = try await d.awaitPairingSas() }
+    }
+
+    /// The fin is dropped a minute past its token's exp (the 10-minute request token of a pairing), by the device's clock.
+    @Test func aFinIsDroppedPastItsTokensExp() async throws {
+        let offset = Box<TimeInterval>(0)
+        let (d, v) = try await newPhone(now: { Date().addingTimeInterval(offset.value) })
+        v.requestTokenTTL = 600
+        let (qr, inviteID) = try codeFor(v, d)
+        try await d.startTransfer(link: try qr.link(), attester: TestIOSAttester()) { _, _ in nil }
+        let (_, initMsg) = try await base.relay.nextDeposit()
+        base.relay.refuseStatus = 503
+        base.relay.refuseDeposits = "unavailable"
+        try await d.handle(try v.respondOpening(initMsg, d, ctx: inviteID).message)
+        offset.value = 500 // inside the token's time
+        await d.flushOutbox()
+        #expect(d.mem.withLock { d.st.outbox.count } == 1)
+        offset.value = 700 // past the exp and the minute
+        await d.flushOutbox()
+        #expect(d.mem.withLock { d.st.outbox.isEmpty })
+        await #expect(throws: PairingNotCompleted.self) { _ = try await d.awaitPairingSas() }
+    }
+
+    /// `device.paired` removes a fin still owed, so that its age cannot later fail a pairing that finished.
+    @Test func aPairedDeviceOwesNoFin() async throws {
+        let (d, v) = try await newPhone()
+        let (qr, inviteID) = try codeFor(v, d)
+        try await d.startTransfer(link: try qr.link(), attester: TestIOSAttester()) { _, _ in nil }
+        let (_, initMsg) = try await base.relay.nextDeposit()
+        base.relay.refuseStatus = 503
+        base.relay.refuseDeposits = "unavailable"
+        base.relay.recordRefused = true
+        try await d.handle(try v.respondOpening(initMsg, d, ctx: inviteID).message)
+        try v.fin(try await base.relay.nextDeposit().payload, d)
+        #expect(d.mem.withLock { d.st.outbox.count } == 1)
+        try await d.handle(try v.seal("device.paired", #"{"device_id":"dev-2","role":"app","vault_id":"\#(v.vaultID)","transfer":true,"user_guid":"guid-1234"}"#))
+        #expect(d.mem.withLock { d.st.outbox.isEmpty })
+    }
+
     /// `token_used` to a first attempt (no retry before it) is not a lost answer: the handshake fails at once.
     @Test func tokenUsedOnAFirstAttemptFailsAtOnce() async throws {
         let (d, _) = try await enrolled()
-        base.relay.refuseStatus = 403
+        base.relay.refuseStatus = 409
         base.relay.refuseDeposits = RelayError.tokenUsed
         let outcome = enroll(d)
         for _ in 0..<100 where !outcome.finished { try await settle(0.05) }
