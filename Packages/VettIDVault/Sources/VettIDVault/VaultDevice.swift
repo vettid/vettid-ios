@@ -196,12 +196,8 @@ public final class VaultDevice: @unchecked Sendable {
     }
     var pending: [String: OneShot<Inner>] = [:]
     var inbox: [VaultMessage] = []
-    var keptTypes: [String: Int] = [:] // event types calls wait for (``keepingEvents(_:_:)``)
-    var sparedEvents: Set<String> = [] // the events a clear spared for them
-    /// Outbox entries a handling stored by a write of its own (an `hs.fin`).
-    var keptOnError: Set<String> = []
-    var publishedOrder: [String] = [] // the ids of the events published (``publishOnce(_:)``), in order
-    var publishedIDs: Set<String> = []
+    /// What the handling and the inbox remember between calls (``EventMemory``). Under ``mem``.
+    var memory = EventMemory()
     var inboxWaiters: [OneShot<Bool>] = []
     let eventBroadcast = Broadcast<VaultMessage>()
     let timeDropBroadcast = Broadcast<String>()

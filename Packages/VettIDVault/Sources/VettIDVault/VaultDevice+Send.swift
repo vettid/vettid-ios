@@ -421,30 +421,30 @@ extension VaultDevice {
     public func clearInbox() {
         mem.withLock {
             // The events spared are noted by their ids: only those go when the last call that kept their type ends.
-            for m in inbox where keptTypes[m.type, default: 0] > 0 { sparedEvents.insert("\(m.type)/\(m.id)") }
-            inbox.removeAll { keptTypes[$0.type, default: 0] == 0 }
+            for m in inbox where memory.keptTypes[m.type, default: 0] > 0 { memory.sparedEvents.insert("\(m.type)/\(m.id)") }
+            inbox.removeAll { memory.keptTypes[$0.type, default: 0] == 0 }
         }
     }
 
     /// Runs [body], during which ``clearInbox()`` keeps the events of [types]: for a call that sends a request and then waits
     /// for the event that answers it (the answer to the request may come before the wait begins).
     public func keepingEvents<T>(_ types: Set<String>, _ body: () async throws -> T) async rethrows -> T {
-        mem.withLock { for t in types { keptTypes[t, default: 0] += 1 } }
+        mem.withLock { for t in types { memory.keptTypes[t, default: 0] += 1 } }
         defer {
             mem.withLock {
-                for t in types { keptTypes[t] = max(0, (keptTypes[t] ?? 1) - 1) }
+                for t in types { memory.keptTypes[t] = max(0, (memory.keptTypes[t] ?? 1) - 1) }
                 // The events a clear spared for a type no call keeps any more, and that nobody took, go; those that arrived
                 // after the clear are the inbox's as ever.
-                let ended = types.filter { keptTypes[$0, default: 0] == 0 }
-                inbox.removeAll { ended.contains($0.type) && sparedEvents.contains("\($0.type)/\($0.id)") }
-                sparedEvents = sparedEvents.filter { !ended.contains(String($0.prefix { $0 != "/" })) }
+                let ended = types.filter { memory.keptTypes[$0, default: 0] == 0 }
+                inbox.removeAll { ended.contains($0.type) && memory.sparedEvents.contains("\($0.type)/\($0.id)") }
+                memory.sparedEvents = memory.sparedEvents.filter { !ended.contains(String($0.prefix { $0 != "/" })) }
             }
         }
         return try await body()
     }
 
     /// How many calls keep the events of [type] (tests).
-    func keptCount(_ type: String) -> Int { mem.withLock { keptTypes[type, default: 0] } }
+    func keptCount(_ type: String) -> Int { mem.withLock { memory.keptTypes[type, default: 0] } }
 
     /// The ids of the outbox's entries (tests).
     var outboxIDs: [String] { mem.withLock { st.outbox.map(\.id) } }
@@ -456,9 +456,9 @@ extension VaultDevice {
     /// when the relay delivers it again, and its event must not be shown twice (chosen; not in the spec: the last 512 ids).
     func publishOnce(_ m: VaultMessage) {
         let first: Bool = mem.withLock {
-            guard publishedIDs.insert(m.id).inserted else { return false }
-            publishedOrder.append(m.id)
-            if publishedOrder.count > 512 { publishedIDs.remove(publishedOrder.removeFirst()) }
+            guard memory.publishedIDs.insert(m.id).inserted else { return false }
+            memory.publishedOrder.append(m.id)
+            if memory.publishedOrder.count > 512 { memory.publishedIDs.remove(memory.publishedOrder.removeFirst()) }
             return true
         }
         if first { publish(m) }
@@ -466,9 +466,9 @@ extension VaultDevice {
 
     /// Forgets what the inbox's bookkeeping remembers of events (the device is forgotten). Callers hold ``mem``.
     func forgetEventMemory() {
-        publishedOrder.removeAll()
-        publishedIDs.removeAll()
-        sparedEvents.removeAll()
+        memory.publishedOrder.removeAll()
+        memory.publishedIDs.removeAll()
+        memory.sparedEvents.removeAll()
     }
 
     func publish(_ m: VaultMessage) {
@@ -522,4 +522,16 @@ final class AfterLockWork: @unchecked Sendable {
 
     /// Forgets the work queued by the handling without running it.
     func drop() { lock.withLock { work.removeAll { !$0.keep } } }
+}
+
+/// What the device remembers of events and of a handling in hand, between calls; all under ``VaultDevice``'s `mem`.
+struct EventMemory {
+    /// Event types calls wait for (``VaultDevice/keepingEvents(_:_:)``), and the events a clear spared for them.
+    var keptTypes: [String: Int] = [:]
+    var sparedEvents: Set<String> = []
+    /// Outbox entries a handling stored by a write of its own (an `hs.fin`): kept if it fails.
+    var keptOnError: Set<String> = []
+    /// The ids of the events published (``VaultDevice/publishOnce(_:)``), in order and as a set.
+    var publishedOrder: [String] = []
+    var publishedIDs: Set<String> = []
 }

@@ -34,7 +34,7 @@ extension VaultDevice {
                     outbox: Set(st.outbox.map(\.id)), awaiting: Set(awaiting.map { ObjectIdentifier($0.resp) })
                 )
             }
-            mem.withLock { keptOnError = [] }
+            mem.withLock { memory.keptOnError = [] }
             let fresh: Bool = mem.withLock {
                 guard st.seen[m.msgID] == nil else { return false }
                 st.seen[m.msgID] = Self.ms(t)
@@ -48,7 +48,7 @@ extension VaultDevice {
                 // The message is not taken as handled (its ids are forgotten, so that the relay's redelivery is handled and
                 // answered, not acked unanswered), and the entries the handling queued are taken out again, so that the
                 // redelivery's answer is the only one: even one that another write happened to store. The exception is what
-                // the handling stored by a write of its own (an `hs.fin`, ``keptOnError``): it is on disk by that write.
+                // the handling stored by a write of its own (an `hs.fin`, ``memory.keptOnError``): it is on disk by that write.
                 forgetHandling(before)
                 throw error
             }
@@ -72,7 +72,7 @@ extension VaultDevice {
             st.seen = before.seen
             st.seenInner = before.seenInner
             st.issuedExpMs = before.issuedExpMs
-            let gone = Set(st.outbox.map(\.id)).subtracting(before.outbox).subtracting(keptOnError)
+            let gone = Set(st.outbox.map(\.id)).subtracting(before.outbox).subtracting(memory.keptOnError)
             st.outbox.removeAll { gone.contains($0.id) }
             outboxInFlight.subtract(gone)
             for a in awaiting where !before.awaiting.contains(ObjectIdentifier(a.resp)) { a.resp.abort() }

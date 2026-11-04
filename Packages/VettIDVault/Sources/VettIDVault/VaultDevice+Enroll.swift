@@ -125,7 +125,7 @@ extension VaultDevice {
         // each flush.
         let fin = try storeFin(res.fin, vault: v, epoch: res.epoch.ctx, at: t)
         // Stored by that write: kept, with its deposit and the code, when the handling's final write fails.
-        mem.withLock { _ = keptOnError.insert(fin.id) }
+        mem.withLock { _ = memory.keptOnError.insert(fin.id) }
         // The code is shown once the fin has gone out, or, when the relay would not take it, is kept for the next flush.
         let shown = res.sas
         let mine = generation
