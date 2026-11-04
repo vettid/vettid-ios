@@ -23,8 +23,11 @@ extension VaultDeviceTests {
             try await d.handle(try v.seal("message.new", "{}"))
             d.clearInbox()
             #expect(d.inboxCount == 1)
-            _ = try await d.awaitEvent("grant.value", timeout: 1)
+            // Another fetch's answer that nobody takes goes when the last call that kept the type ends, after a clear.
+            try await d.handle(try v.seal("grant.value", #"{"fetch_id":"f2"}"#))
+            _ = try await d.awaitEvent("grant.value", timeout: 1) { VaultJSON.string($0.object, "fetch_id") == "f1" }
         }
+        #expect(d.inboxCount == 0, "f2 was dropped with the end of the call")
         await #expect(throws: VaultStateError.self) { _ = try await d.awaitEvent("message.new", timeout: 0.2) }
         // Events after the clear are kept again.
         try await d.handle(try v.seal("message.new", #"{"n":9}"#))

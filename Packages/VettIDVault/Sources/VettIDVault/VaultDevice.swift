@@ -194,6 +194,8 @@ public final class VaultDevice: @unchecked Sendable {
     var inbox: [VaultMessage] = []
     /// The types of event a call is about to wait for, with how many calls (``keepingEvents(_:_:)``): ``clearInbox()`` keeps them.
     var keptTypes: [String: Int] = [:]
+    /// How many times ``clearInbox()`` ran.
+    var inboxClears = 0
     /// The ids of the outbox entries the last successful write stored (``save()``).
     var savedOutbox: Set<String> = []
     var inboxWaiters: [OneShot<Bool>] = []

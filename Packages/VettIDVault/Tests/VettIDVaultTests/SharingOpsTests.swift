@@ -69,6 +69,10 @@ import VettIDCrypto
         let api = VaultApi(device: d)
         let content = Array(#"{"item_id":"x9","version":1,"name":"Card","category":"insurance","fields":[]}"#.utf8)
         let fetch = Task { try await api.grantFetch("01GRANT", timeout: 5) }
+        // The `grant.value` is announced before the request is sent, and released when the call ends (a hold in between
+        // keeps the answer).
+        for _ in 0..<200 where d.keptCount("grant.value") == 0 { try await Task.sleep(for: .milliseconds(5)) }
+        #expect(d.keptCount("grant.value") == 1)
         var req = try await ops.answer(v, d, "grant.fetch", #"{"fetch_id":"01FETCH"}"#)
         let sent = try StrictJson.parseObject(req.body)
         let granted = try sent.string("grant_id")
@@ -77,6 +81,7 @@ import VettIDCrypto
         let sealed = try GrantSeal.sealValue(reply: key, grantID: "01GRANT", fetchID: "01FETCH", value: content)
         try await d.handle(try v.seal("grant.value", JsonBuilder().string("connection_id", "c1").string("fetch_id", "01FETCH").string("grant_id", "01GRANT").base64("value_sealed", sealed).uint("uses_left", 4).build()))
         let got = try await fetch.value
+        #expect(d.keptCount("grant.value") == 0)
         #expect(got.error == nil && got.usesLeft == 4 && got.retryAfter == nil && got.takeContent() == content && got.takeContent() == nil)
         #expect(!"\(got)".contains("Card"))
 
