@@ -130,8 +130,7 @@ public final class VaultDevice: @unchecked Sendable {
     let st: DeviceState
     let lock = AsyncLock()
     #if DEBUG
-    /// TEST ONLY. Called by the handling of a message right before the write that ends it.
-    var beforeFinalSave: (@Sendable () -> Void)?
+    var beforeFinalSave: (@Sendable () async -> Void)? // TEST ONLY: before the write that ends a handling
     #endif
     /// A flush of the outbox runs (``flushOutbox()``). Read and written under ``mem``.
     var flushing = false
@@ -196,17 +195,13 @@ public final class VaultDevice: @unchecked Sendable {
     }
     var pending: [String: OneShot<Inner>] = [:]
     var inbox: [VaultMessage] = []
-    /// The types of event a call is about to wait for, with how many calls (``keepingEvents(_:_:)``): ``clearInbox()`` keeps them.
+    /// Event types calls wait for, and the events a clear spared (``keepingEvents(_:_:)``).
     var keptTypes: [String: Int] = [:]
-    /// The outbox entries the handling of the message in hand stored with a write of its own (an `hs.fin`): kept when the
-    /// handling ends in an error, with the work after the lock that belongs to them.
-    var keptOnError: Set<String> = []
-    /// The ids of the events published, newest last, and the same as a set: an event is published once, though a message whose
-    /// handling failed is handled again (``publishOnce(_:)``). Bounded, memory only, gone with the device.
-    var publishedOrder: [String] = []
-    var publishedIDs: Set<String> = []
-    /// The (type, id) of the events a clear spared for a running call (``keepingEvents(_:_:)``).
     var sparedEvents: Set<String> = []
+    /// Outbox entries a handling stored by a write of its own (an `hs.fin`).
+    var keptOnError: Set<String> = []
+    var publishedOrder: [String] = [] // the ids of the events published (``publishOnce(_:)``), in order
+    var publishedIDs: Set<String> = []
     var inboxWaiters: [OneShot<Bool>] = []
     let eventBroadcast = Broadcast<VaultMessage>()
     let timeDropBroadcast = Broadcast<String>()
@@ -528,9 +523,7 @@ public final class VaultDevice: @unchecked Sendable {
             mem.withLock {
                 forgotten = true
                 handshakeGeneration &+= 1
-                publishedOrder.removeAll()
-                publishedIDs.removeAll()
-                sparedEvents.removeAll()
+                forgetEventMemory()
                 keyring.destroy()
                 ini?.abort()
                 ini = nil

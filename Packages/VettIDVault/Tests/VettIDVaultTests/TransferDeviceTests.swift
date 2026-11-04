@@ -51,7 +51,7 @@ final class RecordingAttester: Attester, @unchecked Sendable {
     }
 
     /// The code of a transfer is shown, and the fin goes out, though the final write of the handling of the vault's answer
-    /// failed: the fin was stored by the handling's own write.
+    /// failed: the fin was stored by the handling's own write, and goes out at the next flush.
     @Test func theCodeIsShownAfterAFailedFinalSave() async throws {
         let store = VaultDeviceTests.FlakyStore()
         let secrets = DeviceSecrets(identity: Ed25519PrivateKey.generate(), kem: try KemPrivateKey.generate(), relay: Ed25519PrivateKey.generate(), apiKey: [UInt8](repeating: 0x30, count: 91))
@@ -64,7 +64,9 @@ final class RecordingAttester: Attester, @unchecked Sendable {
         store.failAfter(1) // the fin's own write, then the final write fails
         await #expect(throws: (any Error).self) { try await d.handle(resp) }
         #expect(d.pairingSas != nil, "the code is shown")
-        _ = try await base.relay.nextDeposit() // and the fin went out
+        store.disarm()
+        await d.flushOutbox()
+        _ = try await base.relay.nextDeposit() // and the fin goes out at the next flush
     }
 
     @Test func theAttestedHsInitCarriesTheAppKeyAndTheUnlockSecretAndThePairedEventCompletesIt() async throws {

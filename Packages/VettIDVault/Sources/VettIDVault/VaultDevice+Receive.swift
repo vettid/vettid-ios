@@ -45,12 +45,20 @@ extension VaultDevice {
                 // answered, not acked unanswered), and the entries the handling queued are taken out again, so that the
                 // redelivery's answer is the only one: even one that another write happened to store. The exception is what
                 // the handling stored by a write of its own (an `hs.fin`, ``keptOnError``): it is on disk by that write.
-                mem.withLock {
-                    (st.seen, st.seenInner) = seenBefore
-                    st.outbox.removeAll { !outboxBefore.contains($0.id) && !keptOnError.contains($0.id) }
-                }
+                forgetHandling(seenBefore: seenBefore, outboxBefore: outboxBefore)
                 throw error
             }
+        }
+    }
+
+    /// A failed handling is undone: its message ids are forgotten and the entries it queued are taken out (and are no longer in
+    /// flight: their deposit was dropped with the handling's work after the lock).
+    private func forgetHandling(seenBefore: ([String: Int64], [String: Int64]), outboxBefore: Set<String>) {
+        mem.withLock {
+            (st.seen, st.seenInner) = seenBefore
+            let gone = Set(st.outbox.map(\.id)).subtracting(outboxBefore).subtracting(keptOnError)
+            st.outbox.removeAll { gone.contains($0.id) }
+            outboxInFlight.subtract(gone)
         }
     }
 
@@ -69,7 +77,7 @@ extension VaultDevice {
             // would end the collector, and without the ack the same message would fail again at every start.
         }
         #if DEBUG
-        beforeFinalSave?()
+        await beforeFinalSave?()
         #endif
         try save()
     }

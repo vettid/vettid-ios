@@ -149,6 +149,30 @@ extension VaultDeviceTests {
     }
     #endif
 
+    #if DEBUG
+    /// A flush that runs between the queueing of an answer and the write that stores it deposits nothing of it: the entry is in
+    /// flight from its queueing, and the failed final write then leaves no answer to have gone out.
+    @Test func aFlushBeforeTheFinalSaveDepositsNoUnsavedAnswer() async throws {
+        let store = FlakyStore()
+        let (d, v) = try await pairedDevice(store: store)
+        let refresh = try v.seal("relay.token.refresh", "{}")
+        d.beforeFinalSave = { [d] in
+            // In the window: the answer is queued and not saved. (Run apart and given a moment: a flush that did reach the
+            // entry would wait for the lock this handling holds.)
+            Task { await d.flushOutbox() }
+            try? await Task.sleep(for: .milliseconds(300))
+            store.arm()
+        }
+        await #expect(throws: (any Error).self) { try await d.handle(refresh) }
+        #expect(await relay.noDeposit(within: 0.3), "the flush deposited nothing")
+        d.beforeFinalSave = nil
+        store.disarm()
+        try await d.handle(refresh)
+        _ = try await relay.nextDeposit()
+        #expect(await relay.noDeposit(within: 0.3), "one answer")
+    }
+    #endif
+
     /// An event is published once, though its message is handled again after a failed save.
     @Test func anEventIsPublishedOnceAfterAFailedSave() async throws {
         let store = FlakyStore()
@@ -172,11 +196,13 @@ extension VaultDeviceTests {
         #expect(store.state?.outbox.count == 1, "the next good write keeps it")
     }
 
-    /// The fin that the handling stored goes out all the same, with the code (the work after the lock that belongs to it is
-    /// kept): a pairing code is spent by its handshake.
+    /// The fin that the handling stored stays owed and goes out at the next flush once writes work again (it is counted by a
+    /// write before it is sent, so none goes out while they fail): a pairing code is spent by its handshake.
     @Test func theFinStoredByTheHandlingIsDepositedAfterAFailedFinalSave() async throws {
         // (The code of a transfer, ``theCodeIsShownAfterAFailedFinalSave``, goes with it; an app pairing shows none.)
         let (d, _) = try await respondingWithAFailingFinalSave(relayTakesTheFin: true)
+        #expect(await relay.noDeposit(within: 0.3), "nothing is sent while the writes fail")
+        await d.flushOutbox()
         _ = try await relay.nextDeposit()
         #expect(d.outboxIDs.isEmpty, "the relay took it")
     }

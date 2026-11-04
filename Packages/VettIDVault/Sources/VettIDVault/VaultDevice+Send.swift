@@ -460,6 +460,13 @@ extension VaultDevice {
         if first { publish(m) }
     }
 
+    /// Forgets what the inbox's bookkeeping remembers of events (the device is forgotten). Callers hold ``mem``.
+    func forgetEventMemory() {
+        publishedOrder.removeAll()
+        publishedIDs.removeAll()
+        sparedEvents.removeAll()
+    }
+
     func publish(_ m: VaultMessage) {
         let waiters: [OneShot<Bool>] = mem.withLock {
             inbox.append(m)
