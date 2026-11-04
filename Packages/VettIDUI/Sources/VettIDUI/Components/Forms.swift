@@ -119,7 +119,7 @@ public struct PasswordRuleLine: View {
         let color = refused ? colors.error : passes ? colors.success : colors.onSurfaceVariant
         let icon: VettIDSymbol = refused ? .errorOutline : passes ? .checkCircle : .info
         HStack(alignment: .top, spacing: Spacing.s) {
-            icon.image.font(.system(size: 16)).foregroundStyle(color).accessibilityHidden(true)
+            icon.image.scaledIcon(size: 16).foregroundStyle(color).accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 0) {
                 Text(text).vettIDFont(.bodyMedium).foregroundStyle(color)
                 if let hint { Text(hint).vettIDFont(.bodySmall).foregroundStyle(colors.onSurfaceVariant) }
@@ -174,7 +174,7 @@ public struct NoticeCard<Actions: View>: View {
         case .urgent: (colors.error, .reportProblem)
         }
         HStack(alignment: .top, spacing: Spacing.m) {
-            icon.image.font(.system(size: 20)).foregroundStyle(accent).frame(width: 24).accessibilityHidden(true)
+            icon.image.scaledIcon(size: 20).foregroundStyle(accent).scaledIconColumn(24).accessibilityHidden(true)
             VStack(alignment: .leading, spacing: Spacing.s) {
                 VStack(alignment: .leading, spacing: Spacing.xs) {
                     Text(title).vettIDFont(.titleSmall, weight: .semibold)
@@ -234,6 +234,7 @@ public struct InfoBanner: View {
                             .fixedSize()
                             .padding(.horizontal, Spacing.m)
                             .frame(minHeight: Spacing.touchTarget)
+                            .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                 }
@@ -479,5 +480,15 @@ public struct FormScaffold<Header: View, Content: View, TopActions: View>: View 
         // The in-app Back is disabled while a request is in flight; the edge swipe would go around it and free the screen that
         // asked, so it is off too (held per owner, ``View/blocksBackGesture(_:)``).
         .blocksBackGesture(busy)
+    }
+}
+
+public extension View {
+    /// The label of a plain text button, as tall as a target (48 pt) and at least 44 pt wide, and hit over its whole frame:
+    /// put it inside the button's label, since a frame outside a `.plain` button leaves the hit area at the text
+    /// (IOS-PLAN ID5). A text wider than 44 pt keeps its width, so only a short word ("OK") gets a frame wider than itself,
+    /// and its extra hit area is on the trailing side: the text stays where it was in a leading-aligned row.
+    func textButtonTarget() -> some View {
+        frame(minWidth: Spacing.minTarget, minHeight: Spacing.touchTarget, alignment: .leading).contentShape(Rectangle())
     }
 }

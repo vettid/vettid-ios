@@ -78,6 +78,9 @@ public struct ServiceLabel: View {
 
     public init() {}
 
+    /// The label's boundary: the 3:1 outline.
+    static func border(_ colors: VettIDColors) -> ThemeColor { colors.outline }
+
     public var body: some View {
         Text(ServiceTexts.label)
             .vettIDFont(.labelSmall)
@@ -86,14 +89,14 @@ public struct ServiceLabel: View {
             .fixedSize()
             .padding(.horizontal, Spacing.s)
             .padding(.vertical, 2)
-            .overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).stroke(colors.outline, lineWidth: 1))
+            .overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).stroke(Self.border(colors), lineWidth: 1))
             .accessibilityIdentifier("service_label")
     }
 }
 
 /// A page's name (a connection's title, an approval's "From") and, for a service, its ``ServiceLabel``: one element for
 /// VoiceOver. On one line when both fit at their full width; otherwise the label goes under the name, so neither is cut.
-/// List rows use ``ServiceRowLine`` instead, which keeps rows one line high.
+/// List rows use ``ServiceRowLine`` instead, which keeps the label at the line's end (under it from the accessibility sizes).
 public struct ServiceNamed<Name: View>: View {
     let service: Bool
     let alignment: HorizontalAlignment
@@ -120,9 +123,10 @@ public struct ServiceNamed<Name: View>: View {
 }
 
 /// A list row's line that names a service, with its ``ServiceLabel`` at the trailing end (IOS-PLAN §4.13: in the row's
-/// trailing view): one line, the text truncating before the label, which is never cut. One element for VoiceOver
+/// trailing view): one line (the label under it from the accessibility sizes), the text truncating before the label, which is never cut. One element for VoiceOver
 /// ("Example Bank, Service"). Without [service], the line alone.
 public struct ServiceRowLine<Line: View>: View {
+    @Environment(\.dynamicTypeSize) private var typeSize
     let service: Bool
     let line: Line
 
@@ -132,7 +136,14 @@ public struct ServiceRowLine<Line: View>: View {
     }
 
     public var body: some View {
-        if service {
+        if service && typeSize.isAccessibilitySize {
+            // At the accessibility sizes the label goes under the line, which keeps the whole width.
+            VStack(alignment: .leading, spacing: Spacing.xs) {
+                line
+                ServiceLabel()
+            }
+            .accessibilityElement(children: .combine)
+        } else if service {
             HStack(alignment: .firstTextBaseline, spacing: Spacing.s) {
                 line.layoutPriority(0)
                 ServiceLabel().layoutPriority(1)

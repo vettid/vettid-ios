@@ -19,6 +19,7 @@ public enum TileStyle: Sendable {
 /// Mirrors vettid-android `InitialTile.kt`.
 public struct InitialTile: View {
     @Environment(\.vettIDColors) private var theme
+    @Environment(\.legibilityWeight) private var legibility
     let name: String
     let size: CGFloat
     let style: TileStyle
@@ -57,7 +58,7 @@ public struct InitialTile: View {
             } else {
                 // The letter scales with the tile, not with Dynamic Type: the tile does not grow.
                 Text(verbatim: initialOf(name))
-                    .font(VettIDTextStyle.titleMedium.font(weight: .semibold, size: size * 0.45))
+                    .font(VettIDTextStyle.titleMedium.font(weight: .semibold, size: size * 0.45, legibility: legibility))
                     .dynamicTypeSize(.large)
                     .foregroundStyle(fg)
             }

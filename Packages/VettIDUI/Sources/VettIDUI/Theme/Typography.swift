@@ -29,6 +29,17 @@ public enum VettIDFonts {
         return names[weight] ?? names[.regular] ?? ""
     }
 
+    /// [weight] one named instance heavier, for Bold Text (the light weights go to medium; the heaviest stay).
+    static func bolder(_ weight: Font.Weight) -> Font.Weight {
+        switch weight {
+        case .ultraLight, .thin, .light, .regular: .medium
+        case .medium: .semibold
+        case .semibold: .bold
+        case .black: .black
+        default: .heavy
+        }
+    }
+
     private static let headingFaces: [Font.Weight: String] = [
         .regular: "PlusJakartaSans-Regular",
         .medium: "PlusJakartaSans-Regular_Medium",
@@ -82,11 +93,14 @@ public enum VettIDTextStyle: CaseIterable, Sendable {
 
     /// The style's font, with its own weight or [weight]; [size] overrides the
     /// point size (still scaled with Dynamic Type).
-    public func font(weight: Font.Weight? = nil, size: CGFloat? = nil) -> Font {
+    /// [legibility] `.bold` (the Bold Text setting) steps the weight up one instance, which a custom font does not do
+    /// by itself.
+    public func font(weight: Font.Weight? = nil, size: CGFloat? = nil, legibility: LegibilityWeight? = nil) -> Font {
         VettIDFonts.register()
         let s = spec
+        let base = weight ?? s.weight
         return Font.custom(
-            VettIDFonts.postScriptName(s.family, weight ?? s.weight),
+            VettIDFonts.postScriptName(s.family, legibility == .bold ? VettIDFonts.bolder(base) : base),
             size: size ?? s.size,
             relativeTo: s.relativeTo
         )
@@ -99,7 +113,11 @@ public extension VettIDTextStyle {
     func uiFont(weight: Font.Weight? = nil, compatibleWith traits: UITraitCollection? = nil) -> UIFont {
         VettIDFonts.register()
         let s = spec
-        let base = UIFont(name: VettIDFonts.postScriptName(s.family, weight ?? s.weight), size: s.size)
+        // An explicit regular in the traits wins over the system setting (a test, or a view that asks for it).
+        let w = (traits ?? .current).legibilityWeight
+        let bold = w == .bold || (w != .regular && UIAccessibility.isBoldTextEnabled)
+        let wanted = weight ?? s.weight
+        let base = UIFont(name: VettIDFonts.postScriptName(s.family, bold ? VettIDFonts.bolder(wanted) : wanted), size: s.size)
             ?? .systemFont(ofSize: s.size)
         return UIFontMetrics(forTextStyle: s.relativeTo.uiTextStyle).scaledFont(for: base, compatibleWith: traits)
     }
@@ -128,6 +146,7 @@ private extension Font.TextStyle {
 struct VettIDTextStyleModifier: ViewModifier {
     let style: VettIDTextStyle
     let weight: Font.Weight?
+    @Environment(\.legibilityWeight) private var legibilityWeight
     @ScaledMetric private var extraLeading: CGFloat
 
     init(style: VettIDTextStyle, weight: Font.Weight?) {
@@ -140,7 +159,7 @@ struct VettIDTextStyleModifier: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .font(style.font(weight: weight))
+            .font(style.font(weight: weight, legibility: legibilityWeight))
             .lineSpacing(extraLeading)
     }
 }

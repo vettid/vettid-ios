@@ -22,6 +22,7 @@ public struct RowAction {
 /// names a service connection, read with it (IOS-PLAN §4.13). Mirrors vettid-android `VettIdListRow`.
 public struct VettIDListRow<Below: View>: View {
     @Environment(\.vettIDColors) private var colors
+    @Environment(\.dynamicTypeSize) private var typeSize
     let title: String
     let supporting: String?
     let meta: String?
@@ -72,6 +73,8 @@ public struct VettIDListRow<Below: View>: View {
     public var body: some View {
         let lineColor = emphasized ? colors.onSurface : colors.onSurfaceVariant
         let weight: Font.Weight = emphasized ? .semibold : .regular
+        // One line each, but two at the accessibility sizes, where one would cut most of a name or a summary.
+        let lines = typeSize.isAccessibilitySize ? 2 : 1
         HStack(alignment: .center, spacing: 0) {
             InitialTile(tileName, size: 40, style: tileStyle, photo: tilePhoto, icon: tileIcon, colors: tileColors)
             Spacer().frame(width: Spacing.l)
@@ -81,7 +84,7 @@ public struct VettIDListRow<Below: View>: View {
                         Text(title)
                             .vettIDFont(.bodyLarge, weight: weight)
                             .foregroundStyle(lineColor)
-                            .lineLimit(1)
+                            .lineLimit(lines)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     if let meta {
@@ -98,7 +101,7 @@ public struct VettIDListRow<Below: View>: View {
                             Text(supporting)
                                 .vettIDFont(.bodyMedium)
                                 .foregroundStyle(lineColor)
-                                .lineLimit(1)
+                                .lineLimit(lines)
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
                     } else {
@@ -196,7 +199,7 @@ public struct ConnectionRow: View {
     }
 }
 
-/// Outlined content card of a detail screen (Proton message card): the screen's colour, a hairline border, rounded
+/// Outlined content card of a detail screen (Proton message card): the screen's colour, a 3:1 `outline` border, rounded
 /// corners. Mirrors vettid-android `DetailCard`.
 public struct DetailCard<Content: View>: View {
     @Environment(\.vettIDColors) private var colors
@@ -204,12 +207,15 @@ public struct DetailCard<Content: View>: View {
 
     public init(@ViewBuilder content: () -> Content) { self.content = content() }
 
+    /// The card's boundary: the 3:1 outline.
+    static func border(_ colors: VettIDColors) -> ThemeColor { colors.outline }
+
     public var body: some View {
         VStack(alignment: .leading, spacing: 0) { content }
             .padding(Spacing.l)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(colors.background, in: VettIDShape.card)
-            .overlay(VettIDShape.card.stroke(colors.outline, lineWidth: 1))
+            .overlay(VettIDShape.card.stroke(Self.border(colors), lineWidth: 1))
             .padding(.horizontal, Spacing.s)
     }
 }

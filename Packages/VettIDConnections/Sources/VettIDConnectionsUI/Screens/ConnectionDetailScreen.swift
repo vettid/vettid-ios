@@ -179,19 +179,20 @@ struct DetailContent: View {
 
     /// "Votes from <name>": the votes of this service connection.
     private func votesRow(_ open: @escaping @MainActor () -> Void) -> some View {
-        DetailCard {
-            Button(action: open) {
+        // The button is the whole card; its filled background makes exactly the card's shape tappable (the card's outer
+        // padding is outside it), so that the strong border bounds what can be tapped.
+        Button(action: open) {
+            DetailCard {
                 HStack {
                     Text(ConnectStrings.voteRow(sharedName)).vettIDFont(.bodyLarge).foregroundStyle(colors.onSurface)
                     Spacer(minLength: 0)
                     VettIDSymbol.chevronForward.image.foregroundStyle(colors.onSurfaceVariant).accessibilityHidden(true)
                 }
                 .frame(minHeight: Spacing.touchTarget)
-                .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
-            .accessibilityAddTraits(.isButton)
         }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(.isButton)
         .accessibilityIdentifier("detail_votes")
     }
 

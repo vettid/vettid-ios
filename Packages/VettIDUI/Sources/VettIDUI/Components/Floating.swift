@@ -68,7 +68,7 @@ public struct VettIDFab: View {
     public var body: some View {
         Button(action: action) {
             icon.image
-                .font(.system(size: 22))
+                .scaledIcon(size: 22)
                 .foregroundStyle(colors.primary)
                 .frame(width: 56, height: 56)
                 .background(colors.surfaceContainer, in: Circle())

@@ -78,9 +78,9 @@ private struct DrawerRow: View {
         Button(action: action) {
             HStack(spacing: 0) {
                 item.icon.image
-                    .font(.system(size: 20))
+                    .scaledIcon(size: 20)
                     .foregroundStyle(selected ? colors.primary : colors.onSurfaceVariant)
-                    .frame(width: 24)
+                    .scaledIconColumn(24)
                     .accessibilityHidden(true)
                 Spacer().frame(width: Spacing.xl)
                 Text(item.label)

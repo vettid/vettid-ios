@@ -92,6 +92,7 @@ import VettIDDataTesting
         s.mute()
         await s.settle()
         #expect(connections.calls.contains("asksMute:c1:true") && s.state.asksMuted && !s.state.confirmMute)
+        #expect(s.state.mutedHere)
 
         let p = await model("auth:a2")
         fake.withdraw("auth:a2")

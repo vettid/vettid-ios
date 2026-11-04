@@ -212,7 +212,7 @@ struct ChoiceChip: View {
     var body: some View {
         HStack(spacing: Spacing.xs) {
             Text(label).vettIDFont(.labelLarge).lineLimit(1)
-            Image(systemName: "chevron.down").font(.system(size: 11, weight: .semibold)).accessibilityHidden(true)
+            Image(systemName: "chevron.down").scaledIcon(size: 11, weight: .semibold).accessibilityHidden(true)
         }
         .fixedSize()
         .foregroundStyle(selected ? colors.onSecondaryContainer : colors.onSurfaceVariant)
@@ -220,6 +220,7 @@ struct ChoiceChip: View {
         .frame(minHeight: 32)
         .background(selected ? colors.secondaryContainer : ThemeColor(0, alpha: 0), in: RoundedRectangle(cornerRadius: 8))
         .overlay(RoundedRectangle(cornerRadius: 8).stroke(selected ? ThemeColor(0, alpha: 0) : colors.outline, lineWidth: 1))
+        .frame(minHeight: Spacing.minTarget)
         .contentShape(Rectangle())
         .accessibilityAddTraits(selected ? [.isSelected] : [])
     }

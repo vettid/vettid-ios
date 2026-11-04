@@ -45,7 +45,7 @@ struct PhotoButton: View {
             Button { picking = true } label: { Label(MessagesStrings.photoChoose, systemImage: VettIDSymbol.image.rawValue) }
                 .accessibilityIdentifier("photo_choose")
         } label: {
-            VettIDSymbol.image.image.font(.system(size: 20)).foregroundStyle(colors.onSurfaceVariant)
+            VettIDSymbol.image.image.scaledIcon(size: 20).foregroundStyle(colors.onSurfaceVariant)
                 .frame(width: Spacing.touchTarget, height: Spacing.touchTarget)
         }
         .disabled(!enabled)
@@ -210,7 +210,7 @@ struct PhotoBubble: View {
                 if let thumb {
                     Image(uiImage: thumb).resizable().scaledToFill()
                 } else {
-                    VettIDSymbol.image.image.font(.system(size: 28)).foregroundStyle(colors.onSurfaceVariant)
+                    VettIDSymbol.image.image.scaledIcon(size: 28).foregroundStyle(colors.onSurfaceVariant)
                 }
             }
             .frame(width: Self.width, height: Self.width / Self.ratio(a))

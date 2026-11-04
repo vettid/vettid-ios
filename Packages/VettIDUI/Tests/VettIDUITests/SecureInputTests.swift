@@ -149,6 +149,23 @@ import UIKit
         #expect(UIStrings.captureHidden == "Hidden while your screen is being recorded or shared.")
     }
 
+    /// Bold Text steps the weight of the secret fields up, the monospaced code field's too (an explicit regular trait wins).
+    @Test func theSecretFieldsFollowBoldText() {
+        func weight(_ font: UIFont) -> CGFloat {
+            let traits = font.fontDescriptor.object(forKey: .traits) as? [UIFontDescriptor.TraitKey: Any]
+            return traits?[.weight] as? CGFloat ?? 0
+        }
+        let regular = UITraitCollection(legibilityWeight: .regular)
+        let bold = UITraitCollection(legibilityWeight: .bold)
+        for monospaced in [false, true] {
+            let usual = SecretTextInput.font(monospaced: monospaced, compatibleWith: regular)
+            let stepped = SecretTextInput.font(monospaced: monospaced, compatibleWith: bold)
+            #expect(weight(stepped) > weight(usual), "monospaced: \(monospaced)")
+            // The field swaps its font only when the name differs (`updateUIView`).
+            #expect(stepped.fontName != usual.fontName, "monospaced: \(monospaced)")
+        }
+    }
+
     /// The secret fields' text and placeholder (their label) follow the member's text size, in the type scale's body face
     /// (Inter), as the labels around them do; a code keeps its monospaced face, also scaled.
     @Test func theSecretFieldsFollowTheTextSize() throws {

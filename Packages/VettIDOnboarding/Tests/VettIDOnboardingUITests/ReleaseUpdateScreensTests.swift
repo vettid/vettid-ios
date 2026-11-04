@@ -93,6 +93,19 @@ import VettIDUI
         return window
     }
 
+    /// Earlier releases' notes are one line each, and whole from the accessibility sizes.
+    @Test func earlierNotesAreWholeAtTheAccessibilitySizes() {
+        #expect(WhatsNewEntry.earlierLineLimit(accessibility: false) == 1 && WhatsNewEntry.earlierLineLimit(accessibility: true) == nil)
+        func height(_ summary: String, _ type: DynamicTypeSize) -> CGFloat {
+            let view = WhatsNewEntry(host: "vettid.org", entry: entry, earlier: [EarlierRelease(release: 4, summary: summary)])
+            let root = VStack(alignment: .leading) { view }.environment(\.dynamicTypeSize, type).vettIDTheme(.light)
+            return UIHostingController(rootView: root).sizeThatFits(in: CGSize(width: 390, height: 4_000)).height
+        }
+        let long = String(repeating: "A long summary of what changed in this release. ", count: 4)
+        #expect(height(long, .accessibility3) > height("Four", .accessibility3) + 80)
+        #expect(height(long, .large) < height("Four", .large) + 40)
+    }
+
     private func views(in view: UIView) -> [UIView] { [view] + view.subviews.flatMap { views(in: $0) } }
 
     private func textFields(in view: UIView) -> [UITextField] { views(in: view).compactMap { $0 as? UITextField } }

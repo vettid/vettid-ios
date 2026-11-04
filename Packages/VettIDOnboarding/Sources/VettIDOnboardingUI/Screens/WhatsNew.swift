@@ -45,9 +45,9 @@ public struct WhatsNew: View {
                 if ReleaseLog.openable(notesURL), let url = URL(string: notesURL) {
                     Button { openURL(url) } label: {
                         Text(OnboardingStrings.releaseNotesFull).vettIDFont(.labelLarge).foregroundStyle(colors.primary)
+                            .textButtonTarget()
                     }
                     .buttonStyle(.plain)
-                    .frame(minHeight: Spacing.touchTarget)
                     .accessibilityIdentifier("whats_new_full")
                 }
             }
@@ -57,11 +57,15 @@ public struct WhatsNew: View {
 }
 
 /// One release log entry: the summary, the changes, the security line, the earlier releases' summaries and the source.
-private struct WhatsNewEntry: View {
+struct WhatsNewEntry: View {
     @Environment(\.vettIDColors) private var colors
+    @Environment(\.dynamicTypeSize) private var typeSize
     let host: String
     let entry: ReleaseLogEntry
     let earlier: [EarlierRelease]
+
+    /// An earlier release's note is one line, and whole from the accessibility sizes (where one line cuts most of it).
+    static func earlierLineLimit(accessibility: Bool) -> Int? { accessibility ? nil : 1 }
 
     var body: some View {
         Text(verbatim: entry.summary).vettIDFont(.bodyLarge).accessibilityIdentifier("whats_new_summary")
@@ -91,7 +95,7 @@ private struct WhatsNewEntry: View {
                 ForEach(earlier, id: \.release) { r in
                     Text(verbatim: OnboardingStrings.releaseNotesEarlierItem(Int(r.release), r.summary))
                         .vettIDFont(.bodyMedium)
-                        .lineLimit(1)
+                        .lineLimit(Self.earlierLineLimit(accessibility: typeSize.isAccessibilitySize))
                         .truncationMode(.tail)
                 }
             }

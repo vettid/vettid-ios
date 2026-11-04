@@ -108,7 +108,7 @@ public struct RemovableTagChip: View {
         Button(action: onRemove) {
             HStack(spacing: Spacing.s) {
                 Text(label).vettIDFont(.labelLarge).lineLimit(1)
-                VettIDSymbol.close.image.font(.system(size: 13, weight: .semibold))
+                VettIDSymbol.close.image.scaledIcon(size: 13, weight: .semibold)
             }
             .fixedSize()
             .foregroundStyle(c.onContainer)
@@ -116,6 +116,8 @@ public struct RemovableTagChip: View {
             .padding(.trailing, Spacing.s)
             .frame(minHeight: 32)
             .background(c.container, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .frame(minHeight: Spacing.minTarget)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .accessibilityLabel(removeLabel)
@@ -139,7 +141,7 @@ public struct VettIDFilterChip: View {
         Button(action: action) {
             HStack(spacing: Spacing.s) {
                 if selected {
-                    Image(systemName: "checkmark").font(.system(size: 12, weight: .semibold)).accessibilityHidden(true)
+                    Image(systemName: "checkmark").scaledIcon(size: 12, weight: .semibold).accessibilityHidden(true)
                 }
                 Text(label).vettIDFont(.labelLarge).lineLimit(1)
             }
@@ -149,6 +151,7 @@ public struct VettIDFilterChip: View {
             .frame(minHeight: 32)
             .background(selected ? colors.secondaryContainer : ThemeColor(0, alpha: 0), in: RoundedRectangle(cornerRadius: 8))
             .overlay(RoundedRectangle(cornerRadius: 8).stroke(selected ? ThemeColor(0, alpha: 0) : colors.outline, lineWidth: 1))
+            .frame(minHeight: Spacing.minTarget)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -167,7 +170,7 @@ public struct ClearFiltersChip: View {
     public var body: some View {
         Button(action: action) {
             HStack(spacing: Spacing.s) {
-                VettIDSymbol.close.image.font(.system(size: 13, weight: .semibold))
+                VettIDSymbol.close.image.scaledIcon(size: 13, weight: .semibold)
                 Text(UIStrings.clear).vettIDFont(.labelLarge).lineLimit(1)
             }
             .fixedSize()
@@ -175,6 +178,7 @@ public struct ClearFiltersChip: View {
             .padding(.horizontal, Spacing.m)
             .frame(minHeight: 32)
             .overlay(RoundedRectangle(cornerRadius: 8).stroke(colors.outline, lineWidth: 1))
+            .frame(minHeight: Spacing.minTarget)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

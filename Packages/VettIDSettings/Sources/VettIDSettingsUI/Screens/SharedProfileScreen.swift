@@ -217,7 +217,7 @@ struct ProfileTextButton: View {
             Text(label)
                 .vettIDFont(.labelLarge, weight: .semibold)
                 .foregroundStyle(enabled ? colors.primary : colors.onSurfaceVariant)
-                .frame(minHeight: Spacing.touchTarget)
+                .textButtonTarget()
         }
         .buttonStyle(.plain)
         .disabled(!enabled)

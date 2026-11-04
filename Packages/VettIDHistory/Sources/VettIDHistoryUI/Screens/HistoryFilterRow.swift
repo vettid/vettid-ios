@@ -84,7 +84,7 @@ private struct MenuChip: View {
     var body: some View {
         HStack(spacing: Spacing.xs) {
             Text(label).vettIDFont(.labelLarge).lineLimit(1)
-            Image(systemName: "chevron.down").font(.system(size: 11, weight: .semibold)).accessibilityHidden(true)
+            Image(systemName: "chevron.down").scaledIcon(size: 11, weight: .semibold).accessibilityHidden(true)
         }
         .fixedSize()
         .foregroundStyle(selected ? colors.onSecondaryContainer : colors.onSurfaceVariant)
@@ -92,6 +92,7 @@ private struct MenuChip: View {
         .frame(minHeight: 32)
         .background(selected ? colors.secondaryContainer : ThemeColor(0, alpha: 0), in: RoundedRectangle(cornerRadius: 8))
         .overlay(RoundedRectangle(cornerRadius: 8).stroke(selected ? ThemeColor(0, alpha: 0) : colors.outline, lineWidth: 1))
+        .frame(minHeight: Spacing.minTarget)
         .contentShape(Rectangle())
         .accessibilityAddTraits(selected ? [.isSelected] : [])
     }
@@ -110,9 +111,9 @@ private struct CategoryChip: View {
         Button(action: action) {
             HStack(spacing: Spacing.s) {
                 HistoryVisuals.symbol(category).image
-                    .font(.system(size: 11, weight: .semibold))
+                    .scaledIcon(size: 11, weight: .semibold)
                     .foregroundStyle(hue.onContainer)
-                    .frame(width: 22, height: 22)
+                    .scaledIconSquare(22)
                     .background(hue.container, in: Circle())
                     .accessibilityHidden(true)
                 Text(AuditKinds.categoryLabel(category)).vettIDFont(.labelLarge).lineLimit(1)
@@ -124,6 +125,7 @@ private struct CategoryChip: View {
             .frame(minHeight: 32)
             .background(selected ? hue.container : ThemeColor(0, alpha: 0), in: RoundedRectangle(cornerRadius: 8))
             .overlay(RoundedRectangle(cornerRadius: 8).stroke(selected ? ThemeColor(0, alpha: 0) : colors.outline, lineWidth: 1))
+            .frame(minHeight: Spacing.minTarget)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

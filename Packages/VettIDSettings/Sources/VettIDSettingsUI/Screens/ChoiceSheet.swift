@@ -116,9 +116,9 @@ struct NoticeAction: View {
     var body: some View {
         Button(action: action) {
             Text(label).vettIDFont(.labelLarge, weight: .semibold).foregroundStyle(colors.primary)
+                .textButtonTarget()
         }
         .buttonStyle(.plain)
-        .frame(minHeight: Spacing.touchTarget)
         .accessibilityIdentifier(identifier ?? "")
     }
 }

@@ -233,7 +233,7 @@ struct Composer: View {
                 if state.sending {
                     ProgressView().tint(colors.onPrimaryContainer.color)
                 } else {
-                    VettIDSymbol.send.image.font(.system(size: 20))
+                    VettIDSymbol.send.image.scaledIcon(size: 20)
                 }
             }
             .foregroundStyle(colors.onPrimaryContainer)

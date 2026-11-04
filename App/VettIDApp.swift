@@ -117,6 +117,8 @@ struct AppRoot: View {
     @State private var shell: ShellModel
     /// The last phase shown before "Finish the move" began (``RootHold``).
     @State private var held: AppPhase
+    /// The banner areas (the move notices, the shell's banners) share a third of the screen.
+    @State private var banners = BannerBudget()
     @Environment(\.openURL) private var openURL
     @Environment(\.scenePhase) private var scenePhase
     /// "Allow screenshots" (IOS-PLAN §4): it ends when the vault is no longer open, and after its hour.
@@ -153,6 +155,9 @@ struct AppRoot: View {
                     onLock: { Task { try? await vault.lock() } }
                 )
             }
+            // The whole screen, so that the banner budget measures the window and not what the content leaves.
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .bannerBudgetRoot(banners)
         }
             // The vault's time scale for every failure text below (STAGING-TIME-SCALE §5.2).
             .environment(\.vettIDTimeScale, vault.timeScale)

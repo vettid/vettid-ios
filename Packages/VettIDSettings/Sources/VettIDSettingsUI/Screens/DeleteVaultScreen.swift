@@ -125,7 +125,7 @@ public struct DeleteVaultContent: View {
         Button { actions.setAcknowledged(!state.acknowledged) } label: {
             HStack(spacing: Spacing.m) {
                 (state.acknowledged ? VettIDSymbol.checkBox : VettIDSymbol.checkBoxOutline).image
-                    .font(.system(size: 22))
+                    .scaledIcon(size: 22)
                     .foregroundStyle(state.acknowledged ? colors.primary : colors.onSurfaceVariant)
                     .accessibilityHidden(true)
                 Text(SecurityStrings.deleteAck)

@@ -98,10 +98,12 @@ struct DestructiveLink: View {
     let action: @MainActor () -> Void
 
     var body: some View {
-        Button(action: action) { Text(label).vettIDFont(.labelLarge).foregroundStyle(colors.error).multilineTextAlignment(.leading) }
-            .buttonStyle(.plain)
-            .frame(minHeight: Spacing.touchTarget)
-            .accessibilityIdentifier(identifier)
+        Button(action: action) {
+            Text(label).vettIDFont(.labelLarge).foregroundStyle(colors.error).multilineTextAlignment(.leading)
+                .textButtonTarget()
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier(identifier)
     }
 }
 

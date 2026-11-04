@@ -60,9 +60,9 @@ public struct NewMessageScreen: View {
                 EmptyState(icon: .personAdd, title: MessagesStrings.newEmptyTitle, message: MessagesStrings.emptyNoConnections)
                 Button(action: onInvite) {
                     Text(MessagesStrings.invite).vettIDFont(.labelLarge, weight: .semibold).foregroundStyle(colors.primary)
+                        .textButtonTarget()
                 }
                 .buttonStyle(.plain)
-                .frame(minHeight: Spacing.touchTarget)
                 .padding(Spacing.xl)
                 .accessibilityIdentifier("new_message_invite")
             }

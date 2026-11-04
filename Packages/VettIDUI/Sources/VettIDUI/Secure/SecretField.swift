@@ -144,6 +144,7 @@ public struct VisibleSecretField: View {
 
 /// The `UITextField` behind the secret fields.
 public struct SecretTextInput: UIViewRepresentable {
+    @Environment(\.legibilityWeight) private var legibility
     /// What a field keeps of an edit: from the text before and the text typed, the value (its format applied, or the
     /// text before when the edit is refused).
     public typealias Accept = (_ old: String, _ typed: String) -> String
@@ -203,8 +204,16 @@ public struct SecretTextInput: UIViewRepresentable {
     /// scale's body (Inter, ``VettIDTextStyle/bodyLarge``), or for a code a monospaced face at Title 3.
     public static func font(monospaced: Bool, compatibleWith traits: UITraitCollection? = nil) -> UIFont {
         guard monospaced else { return VettIDTextStyle.bodyLarge.uiFont(compatibleWith: traits) }
+        // Bold Text steps the weight up one, as the type scale's fonts do (an explicit regular trait wins over the setting).
+        let legibility = (traits ?? .current).legibilityWeight
+        let bold = legibility == .bold || (legibility != .regular && UIAccessibility.isBoldTextEnabled)
         return UIFontMetrics(forTextStyle: .title3)
-            .scaledFont(for: .monospacedSystemFont(ofSize: 20, weight: .regular), compatibleWith: traits)
+            .scaledFont(for: .monospacedSystemFont(ofSize: 20, weight: bold ? .medium : .regular), compatibleWith: traits)
+    }
+
+    /// The current traits with Bold Text as the environment has it, so that a change of the setting reaches the field.
+    private var traits: UITraitCollection {
+        UITraitCollection(traitsFrom: [.current, UITraitCollection(legibilityWeight: legibility == .bold ? .bold : .regular)])
     }
 
     public func makeUIView(context: Context) -> UITextField {
@@ -216,7 +225,7 @@ public struct SecretTextInput: UIViewRepresentable {
             f.keyboardType = style.keyboard
         }
         // The text and the placeholder (the field's label) follow the member's text size, as the labels around it do.
-        f.font = Self.font(monospaced: style?.monospaced == true)
+        f.font = Self.font(monospaced: style?.monospaced == true, compatibleWith: traits)
         f.adjustsFontForContentSizeCategory = true
         if next { f.returnKeyType = .next }
         f.delegate = context.coordinator
@@ -227,6 +236,8 @@ public struct SecretTextInput: UIViewRepresentable {
 
     public func updateUIView(_ f: UITextField, context: Context) {
         context.coordinator.parent = self
+        let font = Self.font(monospaced: style?.monospaced == true, compatibleWith: traits)
+        if f.font?.fontName != font.fontName { f.font = font }
         SecretFocus.request(focus, f, &context.coordinator.focused)
         if f.isSecureTextEntry == visible {
             // Switching secure entry makes iOS clear the field on the next keystroke; setting the text again keeps it.
