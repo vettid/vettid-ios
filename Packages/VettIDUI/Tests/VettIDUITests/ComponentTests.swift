@@ -166,6 +166,20 @@ struct ProfilePhotoCacheTests {
         #expect(await cache.image(a) === first)
     }
 
+    /// The memo of digests is least recently used: a hit moves to the end, and the 33rd entry evicts the one used longest ago.
+    @Test func theDigestMemoIsLeastRecentlyUsed() {
+        let cache = ProfilePhotoCache()
+        let photos = (0...ProfilePhotoCache.digestLimit).map { "photo-\($0)" }
+        for p in photos.prefix(ProfilePhotoCache.digestLimit) { _ = cache.cached(p) }
+        #expect(cache.memoizedPhotos == Array(photos.prefix(ProfilePhotoCache.digestLimit)))
+        _ = cache.cached(photos[0]) // a hit: photo-0 moves to the end
+        _ = cache.cached(photos[ProfilePhotoCache.digestLimit]) // the 33rd entry
+        let held = cache.memoizedPhotos
+        #expect(held.count == ProfilePhotoCache.digestLimit)
+        #expect(held.contains(photos[0]) && !held.contains(photos[1]), "photo-1 was the least recently used")
+        #expect(held.last == photos[ProfilePhotoCache.digestLimit])
+    }
+
     @Test func aPhotoThatDoesNotDecodeIsNotHeld() async {
         let cache = ProfilePhotoCache()
         #expect(await cache.image("not base64 !!!") == nil)

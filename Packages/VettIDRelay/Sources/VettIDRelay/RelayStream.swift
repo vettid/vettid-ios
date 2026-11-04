@@ -64,7 +64,8 @@ public final class RelayStream: CollectStream, @unchecked Sendable {
     }
 
     /// The ping every ``pingInterval``; a ping still unanswered at the next tick, or one that fails, ends the socket, so that
-    /// `receive()` fails and the collector falls back.
+    /// `receive()` fails and the collector falls back. (After the app resumes from the background an overdue tick can end a
+    /// live socket whose ping was never sent or answered in time; the only cost is a reconnect.)
     private static func keepalive(_ task: URLSessionWebSocketTask) -> Task<Void, Never> {
         let pings = PingState()
         return Task {

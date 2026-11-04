@@ -101,8 +101,8 @@ public final class ProfilePhotoCache {
     }()
     /// Bumped by ``clear()``: a decode that was under way is not stored after it, nor returned.
     private var generation = 0
-    /// TEST ONLY. Awaited after a decode ended, before the generation is looked at.
     #if DEBUG
+    /// TEST ONLY. Awaited after a decode ended, before the generation is looked at.
     var afterDecode: (@Sendable () async -> Void)?
     #endif
 
@@ -111,6 +111,9 @@ public final class ProfilePhotoCache {
     /// The digests made so far, newest last: a photo's digest is made once per change, and a body that evaluates again finds it by
     /// comparing the strings (identical storage compares at once), not by hashing 80 KiB again.
     private var digests: [(photo: String, digest: NSData)] = []
+
+    /// The photos whose digest is remembered, least recently used first (tests).
+    var memoizedPhotos: [String] { digests.map(\.photo) }
 
     private func key(_ base64: String) -> NSData {
         if let i = digests.lastIndex(where: { $0.photo == base64 }) {

@@ -258,8 +258,8 @@ final class AccountRecord {
         onChange?(value)
     }
 
-    /// TEST ONLY. Awaited by ``VaultManager/preparedOffMain()`` after its reads, before it looks whether the record moved.
     #if DEBUG
+    /// TEST ONLY. Awaited by ``VaultManager/preparedOffMain()`` after its reads, before it looks whether the record moved.
     var afterOffMainRead: (@Sendable () async -> Void)?
     #endif
 
