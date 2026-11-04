@@ -4,11 +4,14 @@ import VettIDData
 /// A message under the PIN. Mirrors vettid-android `UnlockMessage`.
 public enum UnlockMessage: Equatable, Sendable {
     case badPin
-    case updateRefused(code: String)
+    /// The update the unlock asked to approve was refused; [release] is that update's own release number.
+    case updateRefused(code: String, release: Int?)
     case failed(FailureKind, code: String?)
     /// (Release R, §11.14.10) "The move didn't finish" failed: this old phone could not open the vault with its own keys
     /// after approving a transfer.
     case moveBackFailed
+    /// "Return to release N" was refused before anything was sent: the cause is local.
+    case returnRefused(ReturnRefusal)
 }
 
 public extension UnlockMessage {

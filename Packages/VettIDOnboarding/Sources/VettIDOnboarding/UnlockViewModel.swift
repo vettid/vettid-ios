@@ -20,6 +20,8 @@ public final class UnlockViewModel: UnlockActions {
     @ObservationIgnored private let releaseNotes: (any ReleaseNotesRepository)?
     @ObservationIgnored private var notesTask: Task<Void, Never>?
     /// One second of a countdown (a virtual clock in the tests).
+    /// The release the last unlock asked to approve: what a refusal of it is about.
+    @ObservationIgnored private var approvedRelease: Int?
     @ObservationIgnored private let tick: @Sendable () async throws -> Void
     @ObservationIgnored private let followers = TaskBag()
     @ObservationIgnored private let countdowns = TaskBag()
@@ -266,9 +268,11 @@ public final class UnlockViewModel: UnlockActions {
         }
         state.returnAsksPin = false
         state.message = nil
-        // Refused before anything was sent (an update running, the owner check or a change first): "Nothing was used or
-        // changed. Try again" (the busy text; chosen, not in the spec; vettid-android shows its general message).
-        if !vault.returnToPreviousRelease(pin: pin) { state.message = .failed(.busy, code: nil) }
+        // Refused before anything was sent (an update running, the owner check or a change first): said with its own cause
+        // (chosen; not in the spec; vettid-android shows its general message).
+        if !vault.returnToPreviousRelease(pin: pin) {
+            state.message = .returnRefused(vault.returnToPreviousReleaseRefusal() ?? .nothingToReturnTo)
+        }
     }
 
     // MARK: - The lock and the move
@@ -315,6 +319,7 @@ public final class UnlockViewModel: UnlockActions {
     private func send(_ kind: Kind, _ s: UnlockState) async -> UnlockAttempt {
         // (§11.14.9; chosen; not in the spec) No approval while a PIN or password change is undecided.
         let offer = s.approveOffer && !vault.releaseUpdateHeld ? s.preflight?.offer : nil
+        approvedRelease = offer.map { Int($0.number) }
         do {
             switch kind {
             case .earlierSecret:
@@ -362,7 +367,7 @@ public final class UnlockViewModel: UnlockActions {
             state.stateRollback = true
         case .updateRefused(let code):
             state.pin = ""
-            state.message = .updateRefused(code: code)
+            state.message = .updateRefused(code: code, release: approvedRelease)
         case .failed(let kind, let code, let wait):
             state.pin = ""
             state.message = UnlockMessage.of(kind, code: code, keptTransfer: keptTransfer)

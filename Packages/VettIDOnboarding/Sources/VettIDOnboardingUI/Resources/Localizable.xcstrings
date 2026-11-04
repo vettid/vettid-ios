@@ -2087,7 +2087,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The update was refused. %@ Your vault stayed on its current release."
+            "value": "The update was refused (%@). Your vault stayed on its current release."
           }
         }
       }
@@ -5251,6 +5251,83 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "ios_unlock_update_refused_why": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The update was refused. %@ Your vault stayed on its current release."
+          }
+        }
+      }
+    },
+    "ios_unlock_return_update_running": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "An update is already running. Try again when it has ended."
+          }
+        }
+      }
+    },
+    "ios_unlock_return_check_first": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your daily check comes first. Do it, then return to the earlier release."
+          }
+        }
+      }
+    },
+    "ios_unlock_return_change_held": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A change of your PIN or password is still being decided. Try again when it has been."
+          }
+        }
+      }
+    },
+    "ios_unlock_return_gone": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "There is no earlier release to return to any more."
+          }
+        }
+      }
+    },
+    "ios_root_starting_slow_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Still opening your vault"
+          }
+        }
+      }
+    },
+    "ios_root_starting_slow_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This is taking longer than usual. VettID keeps trying, or you can try again."
           }
         }
       }

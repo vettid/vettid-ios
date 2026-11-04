@@ -196,7 +196,7 @@ public struct StartingScreen: View {
         Group {
             if let model, model.stuck {
                 FormScaffold(
-                    title: OnboardingStrings.rootUnreachableTitle, message: FailureKind.network.message,
+                    title: OnboardingStrings.rootStartingSlowTitle, message: OnboardingStrings.rootStartingSlowBody,
                     primaryLabel: OnboardingStrings.rootRetry, busy: model.retrying, onPrimary: { model.retry() }
                 ) { EmptyView() }
                     .accessibilityIdentifier("starting_stuck")

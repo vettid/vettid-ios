@@ -412,13 +412,16 @@ struct UnlockMessageNotice: View {
         case .moveBackFailed:
             NoticeCard(.urgent, title: OnboardingStrings.moveDidntFinish, message: OnboardingStrings.moveBackFailed, announce: .assertive)
                 .accessibilityIdentifier("move_back_failed")
-        case .updateRefused(let code):
+        case .updateRefused(let code, let release):
             NoticeCard(
-                .warning, title: OnboardingStrings.unlockTitle, message: OnboardingStrings.unlockUpdateRefused(
-                    state.preflight?.offer.map { refusalText(code, Int($0.number)) } ?? OnboardingStrings.releaseUpdateRefusedOther(code)
-                ),
-                announce: .assertive
+                .warning, title: OnboardingStrings.unlockTitle,
+                message: OnboardingStrings.unlockUpdateRefusedText(code: code, release: release), announce: .assertive
             )
+        case .returnRefused(let why):
+            NoticeCard(
+                .warning, title: OnboardingStrings.unlockTitle, message: OnboardingStrings.returnRefused(why), announce: .assertive
+            )
+                .accessibilityIdentifier("return_refused")
         // An unreadable result is the "not recognised" notice, with its erase action.
         case .failed(let kind, let code) where code != UnlockState.codeUnreadable || !state.notRecognised:
             let text = switch code {

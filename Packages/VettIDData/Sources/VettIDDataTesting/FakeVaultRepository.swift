@@ -327,6 +327,11 @@ extension FakeVaultRepository: AccountRepository {
         vaultDeletedNotice = false
     }
 
+    /// TEST ONLY: why the way back is refused when ``returnStarts`` is false.
+    public var returnRefusal: ReturnRefusal?
+
+    public func returnToPreviousReleaseRefusal() -> ReturnRefusal? { returnRefusal }
+
     public func returnToPreviousRelease(pin: String) -> Bool {
         calls.append("returnToPreviousRelease")
         returnPins.append(pin)

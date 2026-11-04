@@ -157,4 +157,19 @@ import VettIDDataTesting
         vm.confirmReturn()
         #expect(vm.state.returnAsksPin && vault.returnPins.isEmpty && vm.state.pin.isEmpty)
     }
+
+    /// A way back refused before anything was sent says its own local cause, not a service that is busy.
+    @Test func aRefusedWayBackSaysWhy() async {
+        vault.unconfirmedMove = Self.move(failed: true)
+        vault.returnStarts = false
+        for why in [ReturnRefusal.updateRunning, .ownerCheckFirst, .changeHeld, .nothingToReturnTo] {
+            vault.returnRefusal = why
+            let vm = UnlockViewModel(vault: vault, account: vault, tick: { try await Task.sleep(for: .seconds(3600)) })
+            await vm.settle()
+            vm.askReturn()
+            vm.setPin("402817")
+            vm.confirmReturn()
+            #expect(vm.state.message == .returnRefused(why), "\(why)")
+        }
+    }
 }
