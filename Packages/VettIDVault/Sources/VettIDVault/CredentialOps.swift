@@ -49,11 +49,12 @@ struct CredentialOps: Sendable {
             throw VaultStateError(message: "credential without version")
         }
         try await device.keepCredential(blob: blob, version: v, awaitingAck: true)
-        // The blob is stored: that is the outcome of the operation. A confirmation that is lost does not undo it (chosen; not
-        // in the spec, and unlike vettid-android, which throws): the ack stays pending and goes out at the next outbox flush
-        // (``VaultDevice/sendPendingAck()``), outside the credential lock. Only `credential.ack` confirms a version, as in
-        // vettid-vault (which sets `Acked` through the ack alone); VAULT-MESSAGING §3.5.3 and §3.5.9 also count presenting the
-        // blob (an erratum is pending), so an operation that presents it does not settle the ack.
+        // The blob is stored: that is the outcome of the operation. A confirmation that is lost does not undo it
+        // (chosen; not in the spec, and unlike vettid-android, which throws): the ack stays pending and goes out at the
+        // next outbox flush (an unlock, a return to the foreground or the background;
+        // ``VaultDevice/sendPendingAck()``), outside the credential lock. Only `credential.ack` confirms a version, as
+        // in vettid-vault (which sets `Acked` through the ack alone); VAULT-MESSAGING §3.5.3 and §3.5.9 also count
+        // presenting the blob (an erratum is pending), so an operation that presents it does not settle the ack.
         try await confirm(v)
         return utks
     }

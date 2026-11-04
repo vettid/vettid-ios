@@ -361,9 +361,10 @@ extension VaultDevice {
     }
 
     /// The `credential.ack` of the stored blob that an earlier one did not get through, best effort and outside the
-    /// credential lock (an outbox flush: after an unlock, a return to the foreground). An operation refused after the blob
-    /// check (a wrong password) leaves the version unconfirmed; one that presented the blob and succeeded cleared it. Not
-    /// more often than every ``ackRetryEvery`` seconds.
+    /// credential lock (an outbox flush: after an unlock, a return to the foreground or going to the background). An
+    /// operation refused after the blob check (a wrong password) leaves the version unconfirmed, and so does one that
+    /// presented the blob and succeeded: only `credential.ack` confirms a version. Not more often than every
+    /// ``ackRetryEvery`` seconds.
     func sendPendingAck() async {
         guard let pending = ackPendingVersion else { return }
         guard credentialVersion == pending else {
