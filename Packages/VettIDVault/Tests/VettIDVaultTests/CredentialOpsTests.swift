@@ -87,6 +87,28 @@ import VettIDCrypto
         #expect(await base.relay.noDeposit(within: 0.3), "no credential.ack was sent again")
     }
 
+    /// An operation refused after the blob check (a wrong password) leaves the version unconfirmed: the pending ack stays, and
+    /// an outbox flush sends it, outside the credential lock.
+    @Test func anOperationRefusedAfterTheBlobCheckLeavesTheAckPendingAndAFlushSendsIt() async throws {
+        let (d, v) = try await base.pairedDevice(cfg: base.config(InMemoryDeviceStateStore(), timeout: 0.3))
+        let api = VaultApi(device: d) { true }
+        let (utks, _) = try pool(3)
+        let create = Task { try await api.credentialCreate(password: "a long password", pin: "123456") }
+        try await answer(v, d, "credential.utk.get", utks)
+        try await answer(v, d, "credential.create", #"{"credential":"AQID","version":1,"key":"x"}"#)
+        _ = try await base.relay.nextDeposit() // the ack goes unanswered
+        try await create.value
+        let approve = Task { try await api.criticalUseApprove("r7", password: "wrong", payloadSha256: Bytes.sha256(Array("x".utf8))) }
+        try await answer(v, d, "critical-secret-use.approve", code: "bad_password", errorBody: "{}")
+        await #expect(throws: (any Error).self) { _ = try await approve.value }
+        #expect(d.ackPendingVersion == 1, "refused after the blob check: still unconfirmed")
+        let flush = Task { await d.flushOutbox() }
+        let ack = try await answer(v, d, "credential.ack")
+        #expect(VaultJSON.int(VaultJSON.object(ack.body), "version") == 1)
+        await flush.value
+        #expect(d.ackPendingVersion == nil)
+    }
+
     /// Before release R the password goes as typed and without a PIN.
     @Test func beforeReleaseRThePasswordIsSentAsTyped() async throws {
         let (d, v) = try await base.pairedDevice()

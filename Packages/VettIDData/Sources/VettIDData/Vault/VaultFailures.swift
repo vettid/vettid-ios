@@ -64,9 +64,9 @@ enum VaultFailures {
             return VaultFailure(.rateLimited, code: r.code, retryAfterSeconds: Int64(r.retryAfterSeconds), cause: r)
         case RelayError.quotaExceeded: return VaultFailure(.relayQuota, code: r.code, cause: r)
         case RelayError.payloadTooLarge: return VaultFailure(.payloadTooLarge, code: r.code, cause: r)
-        // §8.6: an expired or unreadable token is refreshed or the connection is made again by the app itself; to the member it
-        // is a passing failure, not a refusal.
-        case RelayError.tokenExpired, RelayError.tokenInvalid: return VaultFailure(.network, code: r.code, cause: r)
+        // §8.6: an expired token is refreshed, or the connection made again, by the app itself; to the member it is a passing
+        // failure (chosen; not in the spec). `token_invalid` is not cured by trying again: a refusal.
+        case RelayError.tokenExpired: return VaultFailure(.network, code: r.code, cause: r)
         default:
             // 4xx the relay meant (a revoked or expired token, an unknown mailbox, a bad signature): not a passing state of
             // the network, and trying again unchanged will not help.

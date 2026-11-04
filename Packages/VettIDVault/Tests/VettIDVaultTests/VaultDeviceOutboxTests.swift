@@ -108,6 +108,38 @@ extension VaultDeviceTests {
         try await renewing.value
     }
 
+    /// A renewal that is cancelled while its deposit is held is not kept for a later flush.
+    @Test func aCancelledRenewalIsNotDepositedLater() async throws {
+        let store = InMemoryDeviceStateStore()
+        let (d, _) = try await pairedDevice(store: store)
+        let gate = FakeHTTPServer.Gate()
+        relay.holdDeposits = gate
+        let renewing = Task { try await d.renewStandingToken() }
+        _ = try await relay.nextDeposit() // it reached the relay, whose answer is held
+        renewing.cancel()
+        await #expect(throws: (any Error).self) { try await renewing.value }
+        gate.open()
+        await d.flushOutbox()
+        #expect(await relay.noDeposit(within: 0.3), "the flush deposited nothing more")
+        #expect(try savedState(store).outbox.isEmpty)
+    }
+
+    /// A transport failure counts as an attempt of a handshake's fin, so that one that never gets through is bounded.
+    @Test func aTransportFailureCountsAsAnAttemptOfAFin() async throws {
+        let store = InMemoryDeviceStateStore()
+        let d = try await VaultDevice.create(config(store), secrets: try DeviceSecrets.generate())
+        let v = try FakeVault(relayURL: relay.baseURL)
+        try await d.handle(try v.enrolled(d))
+        try await d.awaitEnrolled(timeout: 1)
+        let waiting = Task { try await d.completeEnrollment(timeout: 10) }
+        let (_, initMsg) = try await relay.nextDeposit()
+        relay.failDeposits = .notConnectedToInternet
+        try await d.handle(try v.respond(initMsg, d))
+        waiting.cancel()
+        let kept = try #require(try savedState(store).outbox.first)
+        #expect(kept.type == "hs.fin" && kept.attempts >= 1)
+    }
+
     /// A kill between the save and the deposit of a handshake's fin: the next process finds it in the store and sends it.
     @Test func aFinSavedBeforeAKillIsSentByTheNextProcess() async throws {
         let store = InMemoryDeviceStateStore()

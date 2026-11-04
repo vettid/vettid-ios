@@ -71,6 +71,7 @@ import VettIDRelay
         #expect(kind(relay(401, RelayError.timestampStale)) == .clockOff)
         #expect(kind(relay(403, RelayError.tokenRevoked)) == .relayRefused)
         #expect(kind(relay(401, RelayError.tokenExpired)) == .network)
+        #expect(kind(relay(401, RelayError.tokenInvalid)) == .relayRefused)
         #expect(kind(relay(500, RelayError.internalError)) == .network)
         #expect(kind(relay(502, "http_502")) == .network)
         #expect(kind(URLError(.notConnectedToInternet)) == .offline)

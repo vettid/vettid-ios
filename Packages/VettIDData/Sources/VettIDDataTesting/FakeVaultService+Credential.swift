@@ -103,15 +103,14 @@ extension FakeVaultService {
         return a
     }
 
-    /// vettid-vault's `checkBlob` for the holder (this phone): the current blob passes (and confirms its version); the
+    /// vettid-vault's `checkBlob` for the holder (this phone): the current blob passes (its version stays as it is); the
     /// previous version while the current one is not confirmed is the holder's own retry (`stale_credential`); anything
     /// else is a clone (`clone`): the freeze code while an alarm is open, otherwise a new alarm and `credential_frozen`.
     /// False when refused (the refusal is answered). Callers hold ``cond``.
     func checkBlob(_ m: Inner, _ blob: String?) throws -> Bool {
-        if blob == currentBlob {
-            credentialAcked = true
-            return true
-        }
+        // Presenting the current blob does not confirm its version: only `credential.ack` does (and a rotation, which makes a
+        // new version to confirm).
+        if blob == currentBlob { return true }
         let presented = blob.flatMap(Self.blobVersion)
         if let p = presented, p.generation == credentialGeneration, p.version + 1 == credentialVersion, !credentialAcked {
             try reply(m.type, "{}", re: m.id, error: "stale_credential")

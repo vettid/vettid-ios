@@ -212,6 +212,8 @@ extension VaultDevice {
         let depositToken: String
         /// When the token the deposit uses expires, if it can be read (VAULT-MESSAGING §8.6, 0.83.0).
         let tokenExp: Date?
+        /// Whether it is an open token (a pairing or transfer link's): only then is a `token_used` after a retry waited on.
+        let tokenIsOpen: Bool
     }
 
     /// How long past the token's `exp` a retried `hs.init` answered `token_used` or `token_revoked` waits for the `hs.resp`
@@ -237,13 +239,16 @@ extension VaultDevice {
             policy: .vaultToDevice, id: id, now: at ?? now()
         ))
         try refuseSending()
-        let exp = (try? Base64s.decodeStd(v.relayPk)).flatMap { try? DepositTokens.verify(depositToken, issuer: $0).exp }
+        let claims = (try? Base64s.decodeStd(v.relayPk)).flatMap { try? DepositTokens.verify(depositToken, issuer: $0) }
         mem.withLock {
             ini?.abort()
             ini = i
+            answeredInit = nil
             st.outbox.removeAll { $0.type == Self.typeHsFin }
         }
-        return PreparedInit(initiator: i, vault: v, depositToken: depositToken, tokenExp: exp)
+        return PreparedInit(
+            initiator: i, vault: v, depositToken: depositToken, tokenExp: claims?.exp, tokenIsOpen: claims?.isOpen == true
+        )
     }
 
     /// Whether the vault's `hs.resp` was handled for [p]'s handshake.
@@ -255,18 +260,22 @@ extension VaultDevice {
     ///
     /// - A deposit that fails after the vault's `hs.resp` was handled for this handshake did reach the vault: it is a
     ///   success, and nothing is undone.
-    /// - `token_used` or `token_revoked` to a deposit the relay client had already tried before (``RelayError/afterRetry``) mean
-    ///   the first attempt may have been delivered: it waits for `hs.resp` until the token's `exp` plus 60 s (VAULT-MESSAGING §8.6, 0.83.0), and fails
-    ///   only then.
+    /// - `token_used` or `token_revoked` to a deposit of an open token (a pairing or transfer link's) that the relay client had
+    ///   already tried before (``RelayError/afterRetry``) mean the first attempt may have been delivered: it waits for
+    ///   `hs.resp` until the token's `exp` plus 60 s, at most 11 minutes (VAULT-MESSAGING §8.6, 0.83.0), and fails only then.
+    ///   A standing token (enrollment, recovery) is not waited on: the rule is for the open token alone.
     /// - Any other failure drops the handshake, unless a newer one replaced it, and throws.
     func sendInit(_ p: PreparedInit) async throws {
         do {
             try refuseSending()
             let relay = relayFor(p.vault.relayURL)
-            _ = try await relay.deposit(mailboxID: p.vault.mailbox, token: p.depositToken, payload: p.initiator.envelope)
+            let payload = p.initiator.envelope
+            let (box, token) = (p.vault.mailbox, p.depositToken)
+            _ = try await relay.deposit(mailboxID: box, token: token, payload: payload)
         } catch {
             if answered(p) { return }
-            if let x = error as? RelayError, x.afterRetry, x.code == RelayError.tokenUsed || x.code == RelayError.tokenRevoked,
+            if p.tokenIsOpen, let x = error as? RelayError, x.afterRetry,
+               x.code == RelayError.tokenUsed || x.code == RelayError.tokenRevoked,
                (try? await waitForAnswer(p)) == true {
                 return
             }
@@ -283,8 +292,11 @@ extension VaultDevice {
     /// Waits until the handshake of [p] is answered (true), or the token's `exp` plus ``initGrace`` has passed by the device's
     /// clock (false). Throws when cancelled.
     private func waitForAnswer(_ p: PreparedInit) async throws -> Bool {
-        let deadline = (p.tokenExp ?? now().addingTimeInterval(Self.initWaitFallback)).addingTimeInterval(Self.initGrace)
+        let cap = now().addingTimeInterval(Self.initWaitFallback + Self.initGrace)
+        let deadline = min((p.tokenExp ?? cap).addingTimeInterval(Self.initGrace), cap)
         while !answered(p) {
+            // The handshake is gone (dropped, rejected, replaced): nothing to wait for.
+            if mem.withLock({ ini !== p.initiator }) { return false }
             if now() >= deadline { return false }
             try await Task.sleep(nanoseconds: 20_000_000)
         }
@@ -322,6 +334,40 @@ extension VaultDevice {
             try save()
         }
     }
+
+    /// How long a `credential.ack` is waited for, and how often one is tried again.
+    static let ackWait: TimeInterval = 15
+    static let ackRetryEvery: TimeInterval = 30
+
+    /// Sends `credential.ack` for [version] once and, taken, settles it. Throws what the vault answers or the cancel.
+    func sendAck(_ version: Int64) async throws {
+        let body = JsonBuilder().uint("version", UInt64(version)).bytes()
+        _ = try await opOnce("credential.ack", body: body, timeout: min(Self.ackWait, cfg.requestTimeout(for: "credential.ack")))
+        try? await ackSettled(version)
+    }
+
+    /// The `credential.ack` of the stored blob that an earlier one did not get through, best effort and outside the
+    /// credential lock (an outbox flush: after an unlock, a return to the foreground). An operation refused after the blob
+    /// check (a wrong password) leaves the version unconfirmed; one that presented the blob and succeeded cleared it. Not
+    /// more often than every ``ackRetryEvery`` seconds.
+    func sendPendingAck() async {
+        guard let pending = ackPendingVersion else { return }
+        guard credentialVersion == pending else {
+            try? await ackSettled(pending)
+            return
+        }
+        let go: Bool = mem.withLock {
+            let t = cfg.uptime()
+            if let last = lastAckTry, t - last < Self.ackRetryEvery { return false }
+            lastAckTry = t
+            return true
+        }
+        guard go, !mem.withLock({ halted }) else { return }
+        try? await sendAck(pending)
+    }
+
+    /// Whether the stored blob's `credential.ack` is still to be sent.
+    public var credentialAckPending: Bool { ackPendingVersion != nil }
 
     /// The version of the stored blob whose `credential.ack` is still to be sent, or nil.
     var ackPendingVersion: Int64? { mem.withLock { st.ackPending } }

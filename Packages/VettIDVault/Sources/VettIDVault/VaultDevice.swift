@@ -133,6 +133,8 @@ public final class VaultDevice: @unchecked Sendable {
     var afterWork: [@Sendable () async -> Void] = []
     /// A flush of the outbox runs (``flushOutbox()``). Read and written under ``mem``.
     var flushing = false
+    /// When a pending `credential.ack` was last tried (the device's uptime). Under ``mem``.
+    var lastAckTry: TimeInterval?
     /// The ids of outbox entries being deposited now (``deliver(_:keepOnFailure:)``). Under ``mem``.
     var outboxInFlight: Set<String> = []
     /// Orders the writes of the state to the store (``save()``).

@@ -28,6 +28,9 @@ final class FakeRelay: @unchecked Sendable {
     /// own, not on the relay's lock or the cooperative pool.
     var holdDeposits: FakeHTTPServer.Gate? { get { lock.withLock { heldGate } } set { lock.withLock { heldGate = newValue } } }
     private var heldGate: FakeHTTPServer.Gate?
+    /// Every deposit fails in transport with this code (no answer at all).
+    var failDeposits: URLError.Code? { get { lock.withLock { transportFailure } } set { lock.withLock { transportFailure = newValue } } }
+    private var transportFailure: URLError.Code?
     private var refuse: String?
     /// The next [n] deposits are refused with [refuseDeposits]'s code, then the relay accepts again (0: all of them).
     var refuseOnly: Int { get { lock.withLock { refuseCount } } set { lock.withLock { refuseCount = newValue } } }
@@ -71,6 +74,7 @@ final class FakeRelay: @unchecked Sendable {
                 return .json(201, #"{"mailbox_id":"x","limits":{"max_payload_bytes":262144,"message_ttl_seconds":1,"visibility_timeout_seconds":60,"max_token_lifetime_seconds":1,"open_token_max_lifetime_seconds":1,"max_claim_bytes":1,"claim_ttl_seconds":1}}"#)
             }
             if path.hasPrefix("/v1/mailbox/"), r.method == "POST" {
+                if let code = transportFailure { return .failure(code) }
                 let refusal = depositRefusal()
                 // A refusal the relay gave after it had stored the message (its answer to the first attempt was lost, and the
                 // retry was refused): the message is there, the depositor is told otherwise.

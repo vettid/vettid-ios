@@ -56,16 +56,12 @@ struct CredentialOps: Sendable {
         return utks
     }
 
-    static let ackWait: TimeInterval = 15
-
-    /// Sends `credential.ack` for [version] once; a failure leaves it pending. Only a `forbidden` (this
-    /// device is not the holder, §3.5.9) and a cancellation are thrown: they say something the caller must act on.
+    /// Sends `credential.ack` for [version] once; a failure leaves it pending (an outbox flush sends it again, outside the
+    /// credential lock). Only a `forbidden` (this device is not the holder, §3.5.9) and a cancellation are thrown: they say
+    /// something the caller must act on.
     private func confirm(_ version: Int64) async throws {
-        // Once, and not for long: it is no reason to hold an operation up when the vault cannot be reached.
-        let body = JsonBuilder().uint("version", UInt64(version)).bytes()
         do {
-            let wait = min(Self.ackWait, device.cfg.requestTimeout(for: "credential.ack"))
-            _ = try await device.opOnce("credential.ack", body: body, timeout: wait)
+            try await device.sendAck(version)
         } catch let e as VaultOpError where e.code == Self.codeForbidden {
             throw e
         } catch is CancellationError {
@@ -73,7 +69,6 @@ struct CredentialOps: Sendable {
         } catch {
             return
         }
-        try? await device.ackSettled(version)
     }
 
     /// An unexpired UTK, fetching a pool (`credential.utk.get`) when the device holds none. A UTK is spent once the

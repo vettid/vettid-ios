@@ -50,6 +50,12 @@ public struct RelayError: Error, Equatable, Sendable, CustomStringConvertible {
     /// request signed afresh is accepted.
     public var staleSignature: Bool { status == 401 && (code == Self.timestampStale || code == Self.replayDetected) }
 
+    /// Equal by what the relay said; ``afterRetry`` is the client's note about the attempt, not part of the answer.
+    public static func == (a: RelayError, b: RelayError) -> Bool {
+        a.status == b.status && a.code == b.code && a.message == b.message && a.retryAfterSeconds == b.retryAfterSeconds
+            && a.quota == b.quota
+    }
+
     public var description: String { "relay: \(status) \(code)" + (message.isEmpty ? "" : ": \(message)") }
 }
 

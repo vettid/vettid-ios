@@ -82,7 +82,7 @@ extension VaultDevice {
                 try save()
                 return (p, attest)
             } catch {
-                discardFailedTransfer(attest, attester)
+                discardFailedTransfer(attest, attester, handshake: nil)
                 throw error
             }
         }
@@ -92,7 +92,7 @@ extension VaultDevice {
         } catch {
             // Saved under the lock, as ``abandonTransfer()`` does: a kill after a refused deposit finds no pinned vault
             // without a device id and no attest key id that no vault binds.
-            try? await lock.withLock { discardFailedTransfer(attest, attester) }
+            try? await lock.withLock { discardFailedTransfer(attest, attester, handshake: prepared.initiator) }
             throw error
         }
     }
@@ -102,8 +102,12 @@ extension VaultDevice {
     /// The `hs.init` could not be sent: the key it attested is bound by no vault (IOS-PLAN §6.2), and the handshake and the
     /// pinned vault go with it.
     /// Callers hold ``lock``. A newer transfer that replaced this one, or one that paired meanwhile, is left alone.
-    private func discardFailedTransfer(_ attest: DeviceAttest, _ attester: any Attester) {
-        let ours: Bool = mem.withLock { st.deviceID == nil && alt().transferAttestKeyID == attest.iosKeyID }
+    private func discardFailedTransfer(_ attest: DeviceAttest, _ attester: any Attester, handshake: Initiator?) {
+        // Ours when the handshake in flight is this one's, or none is (it was dropped), whatever the key ids say (they may both
+        // be absent).
+        let ours: Bool = mem.withLock {
+            st.deviceID == nil && alt().transferAttestKeyID == attest.iosKeyID && (ini == nil || ini === handshake)
+        }
         guard ours else { return }
         if let key = attest.iosKeyID { try? attester.discard(keyID: key) }
         dropPairing()

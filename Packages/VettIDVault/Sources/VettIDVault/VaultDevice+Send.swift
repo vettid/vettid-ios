@@ -93,7 +93,16 @@ extension VaultDevice {
             outboxInFlight.insert(e.id)
             return e
         }
-        try save()
+        do {
+            try save()
+        } catch {
+            // Nothing will deliver it: neither kept in flight nor left in the outbox.
+            mem.withLock {
+                outboxInFlight.remove(entry.id)
+                st.outbox.removeAll { $0.id == entry.id }
+            }
+            throw error
+        }
         return entry
     }
 
@@ -130,6 +139,13 @@ extension VaultDevice {
                 try? save()
             }
             throw u
+        } catch {
+            // Refused to send, cancelled, or an unreadable entry: a request reported as failed is not kept either.
+            if !keepOnFailure {
+                mem.withLock { st.outbox.removeAll { $0.id == e.id } }
+                try? save()
+            }
+            throw error
         }
     }
 
@@ -205,6 +221,7 @@ extension VaultDevice {
             }
             try? await deliver(e)
         }
+        await sendPendingAck()
     }
 
     /// Sends a request and waits for its response (§8.1). Without an answer within the request timeout, the same

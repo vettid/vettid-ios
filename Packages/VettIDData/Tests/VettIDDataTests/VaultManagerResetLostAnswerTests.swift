@@ -196,8 +196,8 @@ import VettIDVault
     }
 
     /// The reset's own `ok`, then its `credential.ack` refused (a follow-up, not the reset's refusal): the stored blob is
-    /// the outcome, so the reset succeeds at once and nothing is left undecided; the ack that was refused is pending, and
-    /// goes out again before the next operation that carries the blob.
+    /// the outcome, so the reset succeeds at once and nothing is left undecided; the refused ack stays pending until an
+    /// outbox flush sends it again or an operation that presents the blob (the owner check) succeeds.
     @Test func anAckRefusedAfterTheResetsOkIsNotItsRefusal() async throws {
         defer { phone.close() }
         try await setUp()
@@ -207,8 +207,10 @@ import VettIDVault
         #expect(try m.phoneSecrets.unresolvedChange() == nil)
         #expect(m.session?.device.credentialVersion == service.vaultCredentialVersion)
         #expect(service.resets.count == 1 && service.currentPassword == newPassword)
+        #expect(m.session?.device.credentialAckPending == true, "pending after the refused ack")
         #expect(try await m.ownerChecks.check(pin: pin, password: newPassword, holdOff: nil) == .passed)
-        #expect(count("credential.ack") >= 1)
+        #expect(count("credential.ack") >= 1, "the refused one, and whatever the flows and flushes sent")
+        #expect(m.session?.device.credentialAckPending == false, "settled: by that ack, or by the operation that presented the blob")
         #expect(service.alarmState == nil && m.alarm == nil && service.ownerCheckFailures == 0)
     }
 

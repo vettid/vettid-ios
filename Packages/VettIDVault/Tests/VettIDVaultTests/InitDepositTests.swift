@@ -64,41 +64,74 @@ import VettIDRelay
         #expect(d.hasVault)
     }
 
-    /// `token_used` to the (retried) deposit: it may have been delivered, so the `hs.resp` is waited for.
-    @Test func tokenUsedOnTheDepositWaitsForTheResp() async throws {
-        let (d, v) = try await enrolled()
-        // The first attempt is answered 503 and retried; the retry is answered `token_used`.
+    func newPhone(now: @escaping @Sendable () -> Date = { Date() }) async throws -> (VaultDevice, FakeVault) {
+        let secrets = DeviceSecrets(identity: Ed25519PrivateKey.generate(), kem: try KemPrivateKey.generate(), relay: Ed25519PrivateKey.generate(), apiKey: [UInt8](repeating: 0x30, count: 91))
+        let d = try await VaultDevice.create(base.config(InMemoryDeviceStateStore(), now: now), secrets: secrets)
+        return (d, try FakeVault(relayURL: base.relay.baseURL))
+    }
+
+    func transfer(_ d: VaultDevice, _ qr: InviteQr) -> Outcome {
+        let o = Outcome()
+        Task {
+            do {
+                try await d.startTransfer(link: try qr.link(), attester: TestIOSAttester()) { _, _ in nil }
+                o.end(nil)
+            } catch {
+                o.end(error)
+            }
+        }
+        return o
+    }
+
+    /// The first attempt is answered 503 and retried; the retry is answered with [code], the message stored all the same.
+    func retryRefused(_ code: String) {
         base.relay.refuseStatus = 503
         base.relay.refuseDeposits = "unavailable"
         base.relay.refuseOnly = 1
-        base.relay.thenRefuse = (403, RelayError.tokenUsed)
+        base.relay.thenRefuse = (403, code)
         base.relay.recordRefused = true
-        let outcome = enroll(d)
+    }
+
+    /// `token_used` to the retried deposit of an open token (a transfer link's): it may have been delivered, so the `hs.resp`
+    /// is waited for.
+    @Test func tokenUsedOnTheOpenTokenWaitsForTheResp() async throws {
+        let (d, v) = try await newPhone()
+        let (qr, inviteID) = try codeFor(v, d)
+        retryRefused(RelayError.tokenUsed)
+        let outcome = transfer(d, qr)
         let (_, initMsg) = try await base.relay.nextDeposit()
         try await settle(0.5)
         #expect(!outcome.finished, "waiting for the resp, not failed")
-        try await d.handle(try v.respond(initMsg, d))
-        try await settle(0.5)
-        #expect(!outcome.finished, "the resp came: on to device.paired")
+        try await d.handle(try v.respondOpening(initMsg, d, ctx: inviteID).message)
+        for _ in 0..<100 where !outcome.finished { try await settle(0.05) }
+        #expect(outcome.finished && outcome.error == nil, "the resp came: the transfer goes on")
         #expect(d.hasVault)
     }
 
-    /// No `hs.resp` by the token's `exp` plus 60 s (virtual time): it fails with the relay's answer, the handshake dropped.
-    @Test func tokenUsedWithoutARespFailsAfterTheBound() async throws {
+    /// No `hs.resp` by the open token's `exp` plus 60 s (virtual time): it fails with the relay's answer, the handshake and the
+    /// pinned vault dropped.
+    @Test func tokenRevokedOnTheOpenTokenWithoutARespFailsAfterTheBound() async throws {
         let offset = Box<TimeInterval>(0)
-        let (d, _) = try await enrolled(now: { Date().addingTimeInterval(offset.value) })
-        base.relay.refuseStatus = 503
-        base.relay.refuseDeposits = "unavailable"
-        base.relay.refuseOnly = 1
-        base.relay.thenRefuse = (403, RelayError.tokenRevoked)
-        base.relay.recordRefused = true
-        let outcome = enroll(d)
+        let (d, v) = try await newPhone(now: { Date().addingTimeInterval(offset.value) })
+        let (qr, _) = try codeFor(v, d)
+        retryRefused(RelayError.tokenRevoked)
+        let outcome = transfer(d, qr)
         _ = try await base.relay.nextDeposit()
         try await settle(0.3)
         #expect(!outcome.finished, "inside the bound")
-        offset.value = 40 * 86_400 // past the standing token's exp plus 60 s
+        offset.value = 400 // past the open token's exp (5 minutes) plus 60 s
         for _ in 0..<200 where !outcome.finished { try await settle(0.05) }
         #expect((outcome.error as? RelayError)?.code == RelayError.tokenRevoked)
+        #expect(!d.hasVault)
+    }
+
+    /// A standing token (enrollment, recovery) is not waited on: the rule is for the open token alone.
+    @Test func tokenUsedOnAStandingTokenFailsAtOnce() async throws {
+        let (d, _) = try await enrolled()
+        retryRefused(RelayError.tokenUsed)
+        let outcome = enroll(d)
+        for _ in 0..<100 where !outcome.finished { try await settle(0.05) }
+        #expect((outcome.error as? RelayError)?.code == RelayError.tokenUsed)
     }
 
     /// `token_used` to a first attempt (no retry before it) is not a lost answer: the handshake fails at once.
@@ -132,7 +165,8 @@ import VettIDRelay
         // The transfer suite shares this suite's fake relay for the claim.
         let exp = Date(timeIntervalSince1970: (Date().timeIntervalSince1970 + 600).rounded(.down))
         let inviteID = Ulid.new()
-        let bundle = InviteBundle(kind: .app, inviteID: inviteID, remote: false, vault: v.principal, token: try v.token(for: d), exp: exp, capabilities: [Capabilities.recoveryR])
+        let open = try DepositTokens.mintOpen(v.relayKey, audience: base.relay.baseURL, now: Date())
+        let bundle = InviteBundle(kind: .app, inviteID: inviteID, remote: false, vault: v.principal, token: open, exp: exp, capabilities: [Capabilities.recoveryR])
         let sealed = try InviteBundle.seal(try bundle.marshal())
         base.relay.putClaim("abcdefghijklmnopqrstuvwxyz", sealed.blob)
         return (InviteQr(kind: .app, relay: base.relay.baseURL, claimID: "abcdefghijklmnopqrstuvwxyz", hash: sealed.hash, key: sealed.key, exp: UInt64(exp.timeIntervalSince1970)), inviteID)
