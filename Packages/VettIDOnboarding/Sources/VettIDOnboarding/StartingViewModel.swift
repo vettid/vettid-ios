@@ -16,7 +16,7 @@ public final class StartingViewModel {
     @ObservationIgnored private let reread: @MainActor () async -> Void
     @ObservationIgnored private var task: Task<Void, Never>?
 
-    /// [reread] reads the phase again and returns when it is done (and does nothing while a read is running).
+    /// [reread] reads the phase again and returns when it is done; while a read is already running it waits for that one.
     public init(
         stuckAfter: Duration = .seconds(20),
         sleep: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) },
