@@ -524,6 +524,8 @@ enum SourceStep { case messages([RelayMessage]), error(Error) }
         #expect(c.socketPause(RelayError(status: 429, code: "http_429"), 0) == 5)
         #expect(c.socketPause(RelayError(status: 429, code: "http_429"), 3) == 40)
         #expect(c.socketPause(RelayError(status: 503, code: "http_503"), 20) == 300)
+        // A retry_after longer than the fallback period is kept (§7.2: no sooner than it).
+        #expect(c.socketPause(RelayError(status: 429, code: "http_429", retryAfterSeconds: 900), 0) == 900)
     }
 
     /// A session that the relay closes normally at once is collected by long-poll for the pause, not reconnected in a loop.

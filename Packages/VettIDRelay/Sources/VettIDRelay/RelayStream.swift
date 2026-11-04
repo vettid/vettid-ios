@@ -58,7 +58,10 @@ public final class RelayStream: CollectStream, @unchecked Sendable {
                 while !Task.isCancelled {
                     try? await Task.sleep(nanoseconds: UInt64(Self.pingInterval * 1e9))
                     if Task.isCancelled { return }
-                    task.sendPing { _ in }
+                    // A ping that fails ends the socket (the reader's receive fails, and the collector falls back).
+                    task.sendPing { error in
+                        if error != nil { task.cancel(with: .goingAway, reason: nil) }
+                    }
                 }
             }
             continuation.onTermination = { _ in
@@ -215,7 +218,7 @@ public struct MailboxCollector: Sendable {
                     // RELAY-PROTOCOL §7.2: a client whose upgrade is answered 429 collects by long-poll and tries the
                     // WebSocket again no sooner than retry_after, with backoff (chosen; not in the spec: 5 s, the
                     // relay's own retry_after, doubled per refusal up to the fallback period, when the answer names none).
-                    pollUntil = now().addingTimeInterval(e.retryable || refused ? socketPause(e, socketRefusals) : fallback)
+                    pollUntil = now().addingTimeInterval(socketPause(e, socketRefusals))
                     socketRefusals += 1
                     // The long-poll that follows at once is the wait; it backs off itself if it fails too.
                     continue
@@ -234,7 +237,8 @@ public struct MailboxCollector: Sendable {
     /// How long the long-poll stands in for a WebSocket that a retryable relay answer ended.
     func socketPause(_ e: RelayError, _ refusals: Int) -> TimeInterval {
         let base = TimeInterval(e.retryAfterSeconds > 0 ? min(e.retryAfterSeconds, RelayError.maxRetryAfterSeconds) : 5)
-        return min(base * Double(1 << min(refusals, Self.maxShift)), fallback)
+        // Never shorter than the relay's own retry_after (RELAY-PROTOCOL §7.2), whatever the fallback period.
+        return max(base, min(base * Double(1 << min(refusals, Self.maxShift)), fallback))
     }
 
     private func round(useSocket: Bool, _ handle: @Sendable (RelayMessage) async throws -> Void) async throws {
