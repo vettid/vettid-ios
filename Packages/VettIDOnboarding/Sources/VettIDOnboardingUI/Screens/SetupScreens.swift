@@ -86,6 +86,11 @@ public struct SetupScanScreen: View {
     }
 
     public var body: some View {
+        // Built again each second while a wait runs, so that its notice goes when it ends.
+        WaitingContent(until: state.codeWait) { _ in scan }
+    }
+
+    private var scan: some View {
         FormScaffold(
             title: OnboardingStrings.setupScanTitle,
             message: OnboardingStrings.setupScanBody,

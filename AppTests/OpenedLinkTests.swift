@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+import VettIDOnboarding
 import VettIDSettings
 @testable import VettID
 import VettIDData
@@ -25,17 +26,32 @@ struct OpenedLinkTests {
         #expect(!AppRoot.dropSetupLink(phase: .signedOut, inbox: inbox) && inbox.link == nil)
     }
 
-    /// A wait the vault asked for survives a lock and ends with a wipe or another vault.
+    /// A wait the vault asked for survives a lock and a setup stage of the same vault, and ends with a wipe.
     @Test func aWaitSurvivesALockAndEndsWithAWipe() {
         let waits = WaitRegistry()
         _ = waits.record(.rotate, error: VaultFailure(.backoff, code: "backoff", retryAfterSeconds: 600))
-        for phase in [AppPhase.locked, .unlocked, .starting, .unreachable(.network), .deleting] {
+        let phases: [AppPhase] = [
+            .locked, .unlocked, .starting, .unreachable(.network), .deleting, .setup(.finishing), .setup(.recovering),
+            .setup(.needsCredential),
+        ]
+        for phase in phases {
             if AppRoot.waitsEnd(with: phase) { waits.clearAll() }
             #expect(waits.current(.rotate) != nil, "\(phase)")
         }
-        for phase in [AppPhase.signedOut, .setup(.newVault)] { #expect(AppRoot.waitsEnd(with: phase), "\(phase)") }
+        #expect(AppRoot.waitsEnd(with: .signedOut))
         if AppRoot.waitsEnd(with: .signedOut) { waits.clearAll() }
         #expect(waits.current(.rotate) == nil)
+    }
+
+    /// The start screen's "Try again" is the member's: the closure it is given is forced, so it reads a known phase too.
+    @Test func theStartScreensTryAgainIsForced() async {
+        final class Reads { var count = 0 }
+        let reads = Reads()
+        let reader = PhaseReader(phase: { .locked }, refresh: { reads.count += 1 })
+        await AppRoot.tryAgain(reader)()
+        #expect(reads.count == 1)
+        await reader.ask()
+        #expect(reads.count == 1, "the foreground does not read a known phase")
     }
 
     /// A setup link on a phone that already has a vault is said to be unused, not queued for a later setup.

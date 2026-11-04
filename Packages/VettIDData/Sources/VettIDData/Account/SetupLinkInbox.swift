@@ -10,6 +10,10 @@ import Observation
 @Observable
 public final class SetupLinkInbox: CustomStringConvertible, CustomDebugStringConvertible, CustomReflectable {
     public private(set) var link: String?
+    /// The wait a `429` on the setup code told (VAULT-MESSAGING §10.1: the code is not redeemed again before it ends), on the
+    /// monotonic clock. It is about this phone and its account, not about a vault, so the app keeps it here, where a rebuilt
+    /// onboarding flow finds it; it is not cleared when nothing is set up (chosen; not in the spec).
+    public var codeWait: WaitDeadline?
 
     public init() {}
 

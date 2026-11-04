@@ -98,22 +98,9 @@ import VettIDDataTesting
         #expect(vault.phase == .unlocked)
     }
 
-    /// A `429` on the end of setup holds "Done" for its wait: a second tap during it sends nothing (VAULT-MESSAGING §10.1).
-    @Test func aRateLimitedFinishHoldsDone() async {
-        let vault = FakeVaultRepository(.setup(.finishing))
-        let vm = OnboardingViewModel(account: vault, vault: vault, inbox: SetupLinkInbox())
-        vault.fail["finishSetup"] = FakeVaultRepository.failure(.rateLimited, retry: 120)
-        vm.finish()
-        await vm.settle()
-        #expect(vm.state.error == .rateLimited && vm.state.finishWaiting && !vm.state.waiting)
-        vm.finish()
-        await vm.settle()
-        #expect(vault.calls.filter { $0 == "finishSetup" }.count == 1, "the double tap sends nothing during the wait")
-        #expect(vault.phase == .setup(.finishing))
-    }
-
-    /// A refresh that is rate-limited is shown with its wait, but holds neither the setup code nor "Done".
-    @Test func aRateLimitedRefreshHoldsNothing() async {
+    /// What the fake does when a refresh is rate-limited (the real one turns every failure into `.unreachable`, so it never
+    /// happens in the app): the failure is shown with its wait, but the setup code is not held by another operation's wait.
+    @Test func aRateLimitedRefreshHoldsNoRedeem() async {
         let vault = FakeVaultRepository()
         let vm = OnboardingViewModel(account: vault, vault: vault, inbox: SetupLinkInbox())
         vm.startTransfer()
@@ -121,7 +108,7 @@ import VettIDDataTesting
         vm.leaveMove()
         await vm.settle()
         #expect(vm.state.error == .rateLimited && vm.state.errorWait != nil)
-        #expect(!vm.state.waiting && !vm.state.finishWaiting)
+        #expect(!vm.state.waiting)
         vm.start()
         vm.typeCode()
         vm.setEmail("sam@example.org")
@@ -152,6 +139,39 @@ import VettIDDataTesting
         vm.useAnotherCode()
         await vm.settle()
         #expect(vm.state.step == .welcome && vm.state.waiting)
+    }
+
+    /// The setup code's wait is the app's: a flow built again (the move left through an unreachable phase unmounted it) finds it,
+    /// and the redeem is still held (VAULT-MESSAGING §10.1).
+    @Test func theWaitSurvivesTheFlowBeingBuiltAgain() async {
+        let vault = FakeVaultRepository()
+        let inbox = SetupLinkInbox()
+        let first = OnboardingViewModel(account: vault, vault: vault, inbox: inbox)
+        await first.settle()
+        first.start()
+        first.typeCode()
+        first.setEmail("sam@example.org")
+        first.setCode("K7QM-4XRP")
+        vault.fail["redeemSetupCode"] = FakeVaultRepository.failure(.rateLimited, retry: 120)
+        first.submitCode()
+        await first.settle()
+        #expect(first.state.waiting && inbox.codeWait != nil)
+        // The first flow goes; a new one is built over the same inbox.
+        let second = OnboardingViewModel(account: vault, vault: vault, inbox: inbox)
+        await second.settle()
+        #expect(second.state.waiting)
+        second.start()
+        second.typeCode()
+        second.setEmail("sam@example.org")
+        second.setCode("K7QM-4XRP")
+        second.submitCode()
+        await second.settle()
+        #expect(vault.calls.filter { $0 == "redeemSetupCode" }.count == 1, "not redeemed before the wait ends")
+        // A wait that ended holds nothing.
+        inbox.codeWait = WaitDeadline(seconds: 0)
+        let third = OnboardingViewModel(account: vault, vault: vault, inbox: inbox)
+        await third.settle()
+        #expect(!third.state.waiting)
     }
 
     /// The refresh after leaving a move shows its failure, without holding the next screen busy.

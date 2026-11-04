@@ -248,13 +248,12 @@ struct AppRoot: View {
         return true
     }
 
-    /// A wipe, or no vault yet (a new setup): the waits kept for the vault that was here end. A lock does not end them.
-    static func waitsEnd(with phase: AppPhase) -> Bool {
-        switch phase {
-        case .signedOut, .setup: true
-        default: false
-        }
-    }
+    /// A wipe: the waits kept for the vault that was here end. A lock does not end them, nor does a setup stage that follows an
+    /// unlock of the same vault (`.recovering`, `.needsCredential`, `.finishing`).
+    static func waitsEnd(with phase: AppPhase) -> Bool { phase == .signedOut }
+
+    /// The start screen's and the unreachable screen's "Try again" are the member's: always answered.
+    static func tryAgain(_ reader: PhaseReader) -> @MainActor () async -> Void { { await reader.tryAgain() } }
 
     /// A vault is set up on this phone (the setup flow has nothing to do).
     static func hasVault(_ phase: AppPhase) -> Bool {
@@ -336,9 +335,9 @@ struct AppRoot: View {
         case .signedOut, .setup:
             OnboardingFlow(account: vault, vault: vault, inbox: inbox, routes: onboardingRoutes) { openPortal() }
         case .starting:
-            StartingScreen(reread: { await reader.tryAgain() })
+            StartingScreen(reread: Self.tryAgain(reader))
         case .unreachable:
-            UnreachableFlow(account: vault, timeScale: vault.timeScale, reread: { await reader.tryAgain() }) { openPortal() }
+            UnreachableFlow(account: vault, timeScale: vault.timeScale, reread: Self.tryAgain(reader)) { openPortal() }
         case .locked:
             UnlockFlow(vault: vault, account: vault, ownerCheck: vault.ownerChecks, releaseNotes: releaseNotes) { openPortal() }
         case .deleting:

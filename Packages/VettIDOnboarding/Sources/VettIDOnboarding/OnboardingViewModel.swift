@@ -38,6 +38,8 @@ public final class OnboardingViewModel: OnboardingActions {
         self.vault = vault
         self.inbox = inbox
         state = OnboardingState(devHint: account.devHint)
+        // A wait the setup code was told outlives a flow built again (it is kept by the app).
+        state.codeWait = inbox.codeWait
         followers.add(follow(self, read: { $0.account.phase }, apply: { $0.route($1) }))
         followers.add(follow(self, read: { $0.inbox.link }, apply: { vm, raw in if let raw { vm.receiveLink(raw) } }))
         followers.add(follow(self, read: { $0.vault.finishMovePending }, apply: { $0.state.finishMovePending = $1 }))
@@ -160,7 +162,7 @@ public final class OnboardingViewModel: OnboardingActions {
     }
 
     /// The operations a `429`'s wait holds back (VAULT-MESSAGING §10.1).
-    enum WaitHold { case setupCode, finish }
+    enum WaitHold { case setupCode }
 
     /// Marks the flow busy at once (a second tap or scan is ignored), then runs [block]; a failure is shown, and
     /// [onFailure] runs after it. [marksBusy] false: a background refresh that blocks nothing.
@@ -187,8 +189,9 @@ public final class OnboardingViewModel: OnboardingActions {
                 let wait = e.kind == .rateLimited && e.retryAfterSeconds > 0 ? WaitDeadline(seconds: e.retryAfterSeconds) : nil
                 state.errorWait = wait
                 switch holds {
-                case .setupCode: state.codeWait = wait
-                case .finish: state.finishWait = wait
+                case .setupCode:
+                    state.codeWait = wait
+                    inbox.codeWait = wait
                 case nil: break
                 }
                 onFailure()
@@ -519,14 +522,13 @@ public final class OnboardingViewModel: OnboardingActions {
         var s = OnboardingState(devHint: account.devHint)
         s.deletedNotice = account.vaultDeletedNotice
         // A wait the vault asked for outlives the welcome screen afresh (VAULT-MESSAGING §10.1).
-        s.codeWait = state.codeWait
-        s.finishWait = state.finishWait
+        s.codeWait = inbox.codeWait
         return s
     }
 
     public func finish() {
-        guard !finishing, !state.busy, !state.finishWaiting else { return }
+        guard !finishing, !state.busy else { return }
         finishing = true
-        attempt(holds: .finish, onFailure: { [weak self] in self?.finishing = false }) { [vault] in try await vault.finishSetup() }
+        attempt(onFailure: { [weak self] in self?.finishing = false }) { [vault] in try await vault.finishSetup() }
     }
 }

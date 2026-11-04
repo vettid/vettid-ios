@@ -104,14 +104,10 @@ public struct OnboardingState: Equatable, Sendable, CustomStringConvertible, Cus
     /// The wait of the failure shown, when it is a `429` (`retry_after`), on the monotonic clock: the notice counts it down.
     public var errorWait: WaitDeadline?
     /// The wait the setup code was told: the code is not redeemed again before it ends (VAULT-MESSAGING §10.1). Only the
-    /// redeem is held; it outlives the failure shown and the step.
+    /// redeem is held; it outlives the failure shown and the step, and the flow (``SetupLinkInbox/codeWait``).
     public var codeWait: WaitDeadline?
-    /// The wait `finishSetup` was told: "Done" is not pressed again before it ends.
-    public var finishWait: WaitDeadline?
     /// The setup code's wait runs.
     public var waiting: Bool { codeWait?.isRunning() == true }
-    /// The end of setup's wait runs.
-    public var finishWaiting: Bool { finishWait?.isRunning() == true }
 
     /// Clears the failure shown (on navigation, or before an action); the waits that hold a send are kept.
     public mutating func clearError() {
