@@ -30,6 +30,19 @@ final class FakeMessageOps: MessageOps, @unchecked Sendable {
     var peakListing: Int { lock.withLock { listingPeak } }
     /// Set: each `message.list` waits this long (a read under way is seen by the others).
     var listDelay: Duration?
+    /// The connections whose `message.list` always fails, and (when set) the only ones that wait ``listDelay``.
+    var failingLists: Set<String> {
+        get { lock.withLock { failing } }
+        set { lock.withLock { failing = newValue } }
+    }
+    var slowLists: Set<String> {
+        get { lock.withLock { slow } }
+        set { lock.withLock { slow = newValue } }
+    }
+    private var failing: Set<String> = []
+    private var slow: Set<String> = []
+    /// A wait cut short by a cancellation fails as the transport does, with `URLError(.cancelled)`.
+    var cancelAsURLError = false
     /// The conversations, oldest first.
     var stored: [String: [Message]] = [:]
     /// A page of more messages than this is `response_too_large`.
@@ -68,7 +81,14 @@ final class FakeMessageOps: MessageOps, @unchecked Sendable {
             listingPeak = max(listingPeak, listing)
         }
         defer { lock.withLock { listing -= 1 } }
-        if let d = listDelay { try await Task.sleep(for: d) }
+        if failingLists.contains(connectionID) { throw Self.error("message.list", "bad_request") }
+        if let d = listDelay, slowLists.isEmpty || slowLists.contains(connectionID) {
+            do {
+                try await Task.sleep(for: d)
+            } catch where cancelAsURLError {
+                throw URLError(.cancelled)
+            }
+        }
         if let g = listGate { try await g.value() }
         let limit = limit ?? 100
         if limit > sealable { throw Self.error("message.list", "response_too_large") }
@@ -323,11 +343,29 @@ final class FakeMessageOps: MessageOps, @unchecked Sendable {
         let known = ids.map { ConnectionInfo(id: $0, name: "", state: .active) }
         let ops = ops, quiet = quiet
         quiet.stored = ops.stored
-        quiet.errors["list"] = FakeMessageOps.error("message.list", "bad_request")
+        // Four reads fail (those started first), so that the window of four is all failures: the reads after them are
+        // started all the same.
+        quiet.failingLists = ["c1", "c2", "c3", "c4"]
         let m = MessagesManager(ops: { ops }, quietOps: { quiet }, connections: { known }, refreshConnections: {})
         await m.refreshConversationsQuietly()
-        #expect(quiet.calls.count == 10, "the failure of one read did not stop the others")
-        #expect(ids.filter { !m.messages($0).isEmpty }.count == 9)
+        #expect(quiet.calls.count == 10, "the failures did not stop the others")
+        #expect(ids.filter { !m.messages($0).isEmpty }.count == 6)
+    }
+
+    /// A read cancelled with its group (the transport says `URLError(.cancelled)`) does not hide the failure that cancelled it,
+    /// even when it comes earlier in the list.
+    @Test func aReadCancelledWithItsGroupDoesNotHideTheRealFailure() async throws {
+        let ids = (1...6).map { "c\($0)" }
+        for id in ids { ops.stored[id] = [FakeMessageOps.message(id, "\(id)-m1")] }
+        let known = ids.map { ConnectionInfo(id: $0, name: "", state: .active) }
+        ops.listDelay = .seconds(5)
+        ops.slowLists = ["c1", "c2", "c4"]
+        ops.failingLists = ["c3"]
+        ops.cancelAsURLError = true
+        let ops = ops, quiet = quiet
+        let m = MessagesManager(ops: { ops }, quietOps: { quiet }, connections: { known }, refreshConnections: {})
+        let thrown = await kind { try await m.refreshConversations() }
+        #expect(thrown != nil && thrown != .network, "the failure of c3, not the cancelled reads before it")
     }
 
     /// The vault call's failure is a ``VaultFailure``; a connection the vault does not know is `not_found`.
