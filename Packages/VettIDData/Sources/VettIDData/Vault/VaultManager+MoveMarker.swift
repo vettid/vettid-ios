@@ -145,6 +145,8 @@ extension VaultManager {
     /// (§4.3 point 3) "Return to release N" on the unlock screen, confirmed, with the unlock screen's PIN: the way back
     /// as on the update screen, shown over every phase (``ReleaseUpdateManager/returnToPrevious(pin:generation:)``).
     /// False when it cannot start (no marker with `failed`, a step running, a change held).
+    public func returnToPreviousReleaseRefusal() -> ReturnRefusal? { releaseUpdate.returnRefusal() }
+
     @discardableResult
     public func returnToPreviousRelease(pin: String) -> Bool {
         releaseUpdate.returnToPrevious(pin: pin, generation: nil)

@@ -36,6 +36,8 @@ public final class RecoverViewModel: RecoverActions {
     @ObservationIgnored private let move: any MoveRepository
     @ObservationIgnored private let vault: any VaultRepository
     @ObservationIgnored private let account: any AccountRepository
+    /// ``finish()`` is running: a second press does not start another.
+    @ObservationIgnored private var finishing = false
     /// One second of the rate limit's countdown (a virtual clock in the tests).
     @ObservationIgnored private let tick: @Sendable () async throws -> Void
     @ObservationIgnored private let work = Work()
@@ -316,6 +318,7 @@ public final class RecoverViewModel: RecoverActions {
         retryTicker?.cancel()
         state.retrySeconds = seconds
         let tick = tick
+        let deadline = WaitDeadline(seconds: seconds)
         retryTicker = Task { @MainActor [weak self] in
             while (self?.state.retrySeconds ?? 0) > 0 {
                 do {
@@ -324,7 +327,7 @@ public final class RecoverViewModel: RecoverActions {
                     return
                 }
                 guard let self else { return }
-                state.retrySeconds = max(state.retrySeconds - 1, 0)
+                state.retrySeconds = deadline.left(after: state.retrySeconds)
             }
         }
     }
@@ -430,7 +433,27 @@ public final class RecoverViewModel: RecoverActions {
     }
 
     public func finish() {
-        work.launch { [vault] in try? await vault.finishSetup() }
+        // A failure is said where the member looks next: the open step's notice (``RecoverState/error``), and "Continue" tries
+        // again. One attempt at a time.
+        guard !finishing else { return }
+        finishing = true
+        state.busy = true
+        state.error = nil
+        state.errorCode = nil
+        work.launch { [weak self, vault] in
+            do {
+                try await vault.finishSetup()
+                self?.finishing = false
+                self?.state.busy = false
+            } catch {
+                guard let self else { return }
+                finishing = false
+                state.busy = false
+                let e = Self.failure(of: error)
+                state.error = e.kind
+                state.errorCode = e.code
+            }
+        }
     }
 
     // MARK: - Helpers

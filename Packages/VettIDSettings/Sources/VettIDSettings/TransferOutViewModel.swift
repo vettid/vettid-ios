@@ -192,12 +192,7 @@ public final class TransferOutViewModel: TransferOutActions {
                 pending = try await move.awaitTransferPending(transferID: offer.transferID, until: offer.expiresAt)
             } catch {
                 guard !Task.isCancelled else { return }
-                if let vm = self {
-                    let f = Self.failure(of: error)
-                    vm.state.error = f.kind
-                    vm.state.errorCode = f.code
-                    vm.expire()
-                }
+                self?.waitFailed(error, transferID: offer.transferID)
                 return
             }
             guard !Task.isCancelled, let vm = self else { return }
@@ -251,6 +246,17 @@ public final class TransferOutViewModel: TransferOutActions {
             return false
         }
         return true
+    }
+
+    /// The wait for the new phone failed (not the code's end): back to the start with the failure said, not an "expired"
+    /// screen (chosen; not in the spec, where Android shows the expiry); the code is cancelled so it cannot be used.
+    private func waitFailed(_ error: any Error, transferID: String) {
+        ticker?.cancel()
+        fail(error, step: .intro)
+        state.offer = nil
+        state.pending = nil
+        state.deadline = nil
+        Task { @MainActor [move] in try? await move.transferReject(transferID: transferID) }
     }
 
     private func expire() {
@@ -378,6 +384,7 @@ public final class TransferOutViewModel: TransferOutActions {
     private func startBackoff(_ seconds: Int64) {
         backoff?.cancel()
         state.waitSeconds = seconds
+        let deadline = WaitDeadline(seconds: seconds)
         backoff = Task { @MainActor [weak self, sleep] in
             while !Task.isCancelled, (self?.state.waitSeconds ?? 0) > 0 {
                 do {
@@ -386,7 +393,7 @@ public final class TransferOutViewModel: TransferOutActions {
                     return
                 }
                 guard let vm = self else { return }
-                vm.state.waitSeconds = max(vm.state.waitSeconds - 1, 0)
+                vm.state.waitSeconds = deadline.left(after: vm.state.waitSeconds)
             }
         }
     }

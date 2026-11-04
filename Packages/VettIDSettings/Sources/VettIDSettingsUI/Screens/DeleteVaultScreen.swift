@@ -52,7 +52,7 @@ public struct DeleteVaultContent: View {
     }
 
     public var body: some View {
-        form.holdsInput(state.holdsInput)
+        WaitingContent(until: state.errorRetryAt) { _ in form }.holdsInput(state.holdsInput)
     }
 
     @ViewBuilder private var form: some View {
@@ -77,7 +77,7 @@ public struct DeleteVaultContent: View {
                         .accessibilityIdentifier("delete_not_deleted")
                 }
                 if let error = state.error {
-                    NoticeCard(.urgent, title: error.title(or: SecurityStrings.deleteTitle), message: error.message(timeScale: timeScale))
+                    WaitNotice(error, title: error.title(or: SecurityStrings.deleteTitle), retryAt: state.errorRetryAt)
                         .accessibilityIdentifier("error")
                 }
             }

@@ -881,6 +881,17 @@
         }
       }
     },
+    "ios_root_setup_link_ignored": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This phone already has a vault, so the setup link was not used."
+          }
+        }
+      }
+    },
     "root_finish_move_action": {
       "extractionState": "manual",
       "localizations": {

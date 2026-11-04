@@ -48,6 +48,19 @@ extension FakeVaultService {
         }
     }
 
+    /// The vault's block list holds the identity of the member of the connection or request [id] (a block made before the app
+    /// stopped offering one): their invitations are refused with `blocked`.
+    public func blockPeer(of id: String) throws {
+        try locked {
+            guard let peer = social.connections[id]?.peer ?? social.requests[id]?.peer else { throw CryptoError.format("unknown peer") }
+            social.blocks[Ulid.new()] = peer.ik
+            // As `block.add`: the connection is removed, the request declined.
+            if social.requests[id] != nil { social.declinedSent.append(id) }
+            social.connections[id] = nil
+            social.requests[id] = nil
+        }
+    }
+
     /// Accepts hold the inviter's `hs.resp` until ``runHandshake(_:)`` (the outgoing request stays `waiting`).
     public var holdsHandshakes: Bool {
         get { locked { social.holdHandshakes } }

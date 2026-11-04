@@ -13,15 +13,23 @@ public struct NewPhoneSecretState: Equatable, Sendable, CustomStringConvertible,
     public var password = ""
     public var busy = false
     public var error: FailureKind?
+    /// The end of the wait the failure asked for (`retry_after`), or nil (``WaitText``).
+    public var errorRetryAt: WaitDeadline?
+    /// The wait runs: the send is held back until it ends (VAULT-MESSAGING §10.1: the app does not resend before it ends).
+    public var waiting: Bool { errorRetryAt?.isRunning() == true }
+
+    /// Clears the failure, except while its wait runs (the notice says why the send is held back).
+    public mutating func clearError() { if !waiting { error = nil } }
     public var done = false
 
-    public init(error: FailureKind? = nil, done: Bool = false) {
+    public init(error: FailureKind? = nil, retryAt: WaitDeadline? = nil, done: Bool = false) {
         self.error = error
+        errorRetryAt = retryAt
         self.done = done
     }
 
     /// Whether the submit can go, with [pinTyped] digits on the keypad (the PIN is handed over only with the submit).
-    public func canSubmit(pinTyped: Int) -> Bool { !busy && pinTyped >= Self.minPin && !password.isEmpty }
+    public func canSubmit(pinTyped: Int) -> Bool { !busy && !waiting && pinTyped >= Self.minPin && !password.isEmpty }
 
     public var description: String { "NewPhoneSecretState(busy: \(busy), error: \(error.map { "\($0)" } ?? "nil"), done: \(done))" }
     public var debugDescription: String { description }
@@ -40,9 +48,13 @@ public final class NewPhoneSecretViewModel {
 
     @ObservationIgnored private let vault: any VaultRepository
     @ObservationIgnored private let work = Work()
+    @ObservationIgnored private let waits: WaitRegistry
 
-    public init(vault: any VaultRepository) {
+    /// [waits]: where a wait the vault asked for is kept, so that it outlives this screen.
+    public init(vault: any VaultRepository, waits: WaitRegistry = WaitRegistry()) {
         self.vault = vault
+        self.waits = waits
+        if let w = waits.current(.newPhoneSecret) { state = NewPhoneSecretState(error: w.kind, retryAt: w.deadline) }
     }
 
     deinit { work.cancelAll() }
@@ -50,19 +62,19 @@ public final class NewPhoneSecretViewModel {
     /// The PIN from the keypad, handed over once with the submit.
     public func setPin(_ v: String) {
         state.pin = String(v.filter { $0.isASCII && $0.isNumber }.prefix(PinPolicy.maxLength))
-        state.error = nil
+        state.clearError()
     }
 
     public func setPassword(_ v: String) {
         state.password = v
-        state.error = nil
+        state.clearError()
     }
 
     public func submit() {
         let s = state
         guard s.canSubmit(pinTyped: s.pin.count) else { return }
         state.busy = true
-        state.error = nil
+        state.clearError()
         let vault = vault
         work.launch { [weak self] in
             do {
@@ -70,7 +82,7 @@ public final class NewPhoneSecretViewModel {
                 self?.state = NewPhoneSecretState(done: true)
             } catch {
                 // Neither entry is kept after an answer.
-                self?.state = NewPhoneSecretState(error: failureKind(error))
+                self?.state = NewPhoneSecretState(error: failureKind(error), retryAt: self?.waits.record(.newPhoneSecret, error: error))
             }
         }
     }

@@ -200,6 +200,9 @@ public extension FailureKind {
         }
     }
 
+    /// A vault code as the app shows it (IOS-PLAN §4.4 (2)): [code] when it matches `[a-z0-9_]{1,40}`, else `unknown`.
+    static func shownCode(_ code: String) -> String { VaultFailures.shownCode(code) }
+
     /// ``enrollmentStarted``'s text with the time from which the start-over is possible (iPhone only, no Android text).
     static func enrollmentStartedText(after: Date) -> String {
         DataStrings.failureEnrollmentStartedAfter(after.formatted(date: .abbreviated, time: .shortened))

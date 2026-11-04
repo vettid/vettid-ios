@@ -166,13 +166,13 @@ private struct OfferNotices: View {
         switch offer.kind {
         case .ending:
             NoticeCard(
-                .urgent, title: OnboardingStrings.unlockStatusTitle(current, offer.current.status),
+                .urgent, title: OnboardingStrings.releaseStatusTitle(current, offer.current.status),
                 message: offer.endsAt.map { OnboardingStrings.unlockStatusBodyEnds(releaseDate($0)) } ?? OnboardingStrings.unlockStatusBody
             )
             .accessibilityIdentifier("release_update_ending")
         case .ended:
             NoticeCard(
-                .urgent, title: OnboardingStrings.unlockStatusTitle(current, offer.current.status),
+                .urgent, title: OnboardingStrings.releaseStatusTitle(current, offer.current.status),
                 message: OnboardingStrings.releaseUpdateEndedBody
             )
             .accessibilityIdentifier("release_update_ending")

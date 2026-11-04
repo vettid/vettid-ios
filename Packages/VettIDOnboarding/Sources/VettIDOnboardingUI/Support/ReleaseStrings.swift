@@ -1,5 +1,6 @@
 #if os(iOS)
 import Foundation
+import VettIDData
 
 // The release update's and What's new's texts: vettid-android's `release_update_*` and `release_notes_*`, word for word.
 extension OnboardingStrings {
@@ -211,7 +212,11 @@ extension OnboardingStrings {
         )
     }
     static func releaseUpdateRefusedOther(_ code: String) -> String {
-        String(localized: "release_update_refused_other", defaultValue: "Your vault did not move (\(code)).", bundle: .module)
+        String(
+            localized: "release_update_refused_other",
+            defaultValue: "Your vault did not move (\(FailureKind.shownCode(code))).",
+            bundle: .module
+        )
     }
     static var releaseUpdateFailedTitle: String {
         String(localized: "release_update_failed_title", defaultValue: "The update did not go through", bundle: .module)

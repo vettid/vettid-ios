@@ -361,11 +361,13 @@ enum DataStrings {
             bundle: .module
         )
     }
+    /// The owner's approved text (2026-11-03), word for word the same as vettid-android's (#271); it gives no advice to unblock,
+    /// since the app has no block list.
     static var failureBlocked: String {
         String(
             localized: "data_failure_blocked",
             defaultValue: """
-                You blocked the vault that sent this invitation. Unblock it first to connect.
+                You blocked this vault earlier, so this invitation can't be used to connect.
                 """,
             bundle: .module
         )

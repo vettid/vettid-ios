@@ -201,7 +201,7 @@ public struct AttestationRoute: View {
     public var body: some View {
         AttestationContent(
             state: model?.state ?? LoadState(), onBack: onBack, canary: model?.canary, onRemoveCanary: { model?.removeCanary() },
-            onLoadCanary: canaryInbox == nil ? nil : { importing = true }
+            onLoadCanary: canaryInbox == nil ? nil : { importing = true }, onRetry: { model?.retry() }
         )
         .onAppear { if model == nil { model = AttestationViewModel(vault: vault, canary: canary) } }
         .closesWhenCovered { importing = false }
@@ -279,7 +279,7 @@ public struct ChangePinRoute: View {
         ChangePinContent(
             state: model?.state ?? ChangePinState(withPassword: vault.usesPhoneSecret, fromAttempts: fromAttempts), actions: actions
         )
-        .onAppear { if model == nil { model = ChangePinViewModel(vault: vault, fromAttempts: fromAttempts) } }
+        .onAppear { if model == nil { model = ChangePinViewModel(vault: vault, fromAttempts: fromAttempts, waits: .shared) } }
     }
 
     private var actions: ChangePinActions {
@@ -330,7 +330,7 @@ public struct CredentialRoute: View {
             .onAppear {
                 // Read again on the way back from a screen pushed over it (the rotation and a new credential change the
                 // version and the key; chosen, not in the spec).
-                if let model { model.refresh() } else { model = CredentialViewModel(repo: repo) }
+                if let model { model.refresh() } else { model = CredentialViewModel(repo: repo, waits: .shared) }
             }
             .onChange(of: model?.state.notice) { _, notice in if notice == .backupOn { onOwnerCheck() } }
     }
@@ -370,7 +370,7 @@ public struct ChangePasswordRoute: View {
 
     public var body: some View {
         ChangePasswordContent(state: model?.state ?? ChangePasswordState(askPin: vault.usesPhoneSecret), actions: actions)
-            .onAppear { if model == nil { model = ChangePasswordViewModel(repo: repo, vault: vault) } }
+            .onAppear { if model == nil { model = ChangePasswordViewModel(repo: repo, vault: vault, waits: .shared) } }
     }
 
     private var actions: ChangePasswordActions {
@@ -405,7 +405,7 @@ public struct NewPhoneSecretRoute: View {
 
     public var body: some View {
         NewPhoneSecretContent(state: model?.state ?? NewPhoneSecretState(), actions: actions)
-            .onAppear { if model == nil { model = NewPhoneSecretViewModel(vault: vault) } }
+            .onAppear { if model == nil { model = NewPhoneSecretViewModel(vault: vault, waits: .shared) } }
     }
 
     private var actions: NewPhoneSecretActions {
@@ -436,7 +436,7 @@ public struct DeleteVaultRoute: View {
 
     public var body: some View {
         DeleteVaultContent(state: model?.state ?? DeleteVaultState(), actions: actions)
-            .onAppear { if model == nil { model = DeleteVaultViewModel(vault: vault) } }
+            .onAppear { if model == nil { model = DeleteVaultViewModel(vault: vault, waits: .shared) } }
     }
 
     private var actions: DeleteVaultActions {

@@ -124,7 +124,7 @@ enum UnlockCatalog {
             s.signerRefused = true
             s.signerHelp = true
         }
-        add("update_refused", "The update was refused") { $0.message = .updateRefused(code: "target") }
+        add("update_refused", "The update was refused") { $0.message = .updateRefused(code: "target", release: 5) }
         add("previous_pin", "A PIN change got no answer: the previous PIN") { $0.pinStep = .previous }
         add("new_pin", "A PIN change got no answer: the new PIN") { $0.pinStep = .new }
         add("not_recognised", "Not recognised: erase offered") { s in

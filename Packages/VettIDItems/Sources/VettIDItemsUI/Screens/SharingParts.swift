@@ -42,7 +42,7 @@ struct LoadFailedNotice: View {
         let retry = Self.offersRetry(failure, retriesByItself: retriesByItself)
         NoticeCard(
             retry ? .warning : .info, title: failure.kind.title(or: ItemsStrings.errorList),
-            message: ItemsText.failure(failure.kind, shownCode: failure.code), announce: .polite
+            message: ItemsText.failure(failure.kind, shownCode: failure.code, reading: true), announce: .polite
         ) {
             if retry { Button(ItemsStrings.retry) { onRetry() }.accessibilityIdentifier("\(identifier)_retry") }
         }

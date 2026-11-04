@@ -17,19 +17,22 @@ public struct AttestationContent: View {
     let canary: CanaryManifestView?
     let onRemoveCanary: @MainActor () -> Void
     let onLoadCanary: (@MainActor () -> Void)?
+    let onRetry: (@MainActor () -> Void)?
 
     public init(
         state: LoadState<AttestationInfo>,
         onBack: @escaping @MainActor () -> Void = {},
         canary: CanaryManifestView? = nil,
         onRemoveCanary: @escaping @MainActor () -> Void = {},
-        onLoadCanary: (@MainActor () -> Void)? = nil
+        onLoadCanary: (@MainActor () -> Void)? = nil,
+        onRetry: (@MainActor () -> Void)? = nil
     ) {
         self.state = state
         self.onBack = onBack
         self.canary = canary
         self.onRemoveCanary = onRemoveCanary
         self.onLoadCanary = onLoadCanary
+        self.onRetry = onRetry
     }
 
     public var body: some View {
@@ -47,7 +50,7 @@ public struct AttestationContent: View {
                     } else if let a = state.value {
                         loaded(a)
                     } else {
-                        LoadFailure(error: state.error ?? .other)
+                        LoadFailure(error: state.error ?? .other, retry: onRetry)
                     }
                 }
             }

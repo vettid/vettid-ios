@@ -17,7 +17,7 @@ import VettIDData
             .appendingPathComponent("Sources/VettIDItems/Resources/Localizable.xcstrings")
         let doc = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
         let strings = try #require(doc["strings"] as? [String: Any])
-        let expected = 278 + 158 + 24 + 5
+        let expected = 278 + 158 + 24 + 6
         #expect(strings.count == expected)
         let missing = "\u{0}missing"
         for key in strings.keys {
@@ -95,6 +95,10 @@ import VettIDData
         #expect(ItemsText.failure(.other, shownCode: "bad_request") == "Your vault refused this item. Check its fields and try again.")
         #expect(ItemsText.failure(.other, shownCode: "zebra") == FailureKind.vaultCode("zebra").message)
         #expect(ItemsText.failure(.network) == FailureKind.network.message)
+        // A load that failed is not a refusal of the member's fields.
+        #expect(ItemsText.failure(.other, reading: true) == FailureKind.other.message)
+        #expect(ItemsText.failure(.other, shownCode: "bad_request", reading: true) == FailureKind.other.message)
+        #expect(ItemsText.failure(.other, shownCode: "zebra", reading: true) == FailureKind.vaultCode("zebra").message)
     }
 }
 

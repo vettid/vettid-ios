@@ -195,10 +195,20 @@ public struct UnlockScreen: View {
         }
     }
 
+    /// "Try again" on the recover-only notice: the release check again, where a new check can change the answer.
+    private func checkAgain() -> (@MainActor () -> Void)? {
+        guard state.recheckOffered else { return nil }
+        let actions = actions
+        return { actions.retryPreflight() }
+    }
+
     /// An ended release or a rollback wins: no erase there, whatever else the last answers said.
     @ViewBuilder private var wayForward: some View {
         if state.recoverOnly {
-            RecoverOnlyNotice(onRecover: onOpenAccountSite, contactSupport: contactSupport)
+            RecoverOnlyNotice(
+                onRecover: onOpenAccountSite, contactSupport: contactSupport,
+                onCheckAgain: checkAgain(), checkAgainEnabled: state.retryAllowed
+            )
         } else if state.notRecognised {
             NotRecognisedNotice(erasing: state.erasing, onErase: { actions.askErase() })
         } else if state.keysGone {
@@ -402,11 +412,16 @@ struct UnlockMessageNotice: View {
         case .moveBackFailed:
             NoticeCard(.urgent, title: OnboardingStrings.moveDidntFinish, message: OnboardingStrings.moveBackFailed, announce: .assertive)
                 .accessibilityIdentifier("move_back_failed")
-        case .updateRefused(let code):
+        case .updateRefused(let code, let release):
             NoticeCard(
-                .warning, title: OnboardingStrings.unlockTitle, message: OnboardingStrings.unlockUpdateRefused(code),
-                announce: .assertive
+                .warning, title: OnboardingStrings.unlockTitle,
+                message: OnboardingStrings.unlockUpdateRefusedText(code: code, release: release), announce: .assertive
             )
+        case .returnRefused(let why):
+            NoticeCard(
+                .warning, title: OnboardingStrings.unlockTitle, message: OnboardingStrings.returnRefused(why), announce: .assertive
+            )
+                .accessibilityIdentifier("return_refused")
         // An unreadable result is the "not recognised" notice, with its erase action.
         case .failed(let kind, let code) where code != UnlockState.codeUnreadable || !state.notRecognised:
             let text = switch code {

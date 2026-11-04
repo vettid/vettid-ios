@@ -215,8 +215,7 @@ public struct AppShell: View {
                     // Up to eight banners: a third of the screen at most, scrolling beyond that.
                     BannerArea {
                         alarmBanner
-                        OwnerCheckBanners(gate: gate, now: now, onCheckNow: { model.ownerCheck(holdOff: false) },
-                            onHoldOn: { Task { await model.turnHoldOn() } }, onDismissNotices: { Task { await model.dismissNotices() } })
+                        OwnerCheckBanners(gate: gate, now: now, model: model)
                         if let releaseUpdates, model.path.last != .releaseUpdate {
                             ReleaseUpdateBanner(updates: releaseUpdates) { model.push(.releaseUpdate) }
                         }

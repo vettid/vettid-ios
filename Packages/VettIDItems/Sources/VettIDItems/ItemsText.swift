@@ -19,10 +19,11 @@ public enum ItemsText {
     /// 0.21.0 §10.1); from an older vault, which names none, the likeliest of §10.7 and §10.8 ([creating]: an add, where
     /// `limit` is the vault's item count; [critical]: the credential's; [profile]: the shared profile's). A change made on
     /// another device (`conflict`), else the app's general message; [shownCode] the code an unmapped refusal names (an
-    /// item's `bad_request` keeps its text).
+    /// item's `bad_request` keeps its text). [reading]: a load, whose unclassified failure is the app's general message, not
+    /// a refusal of the member's fields (chosen; not in the spec).
     public static func failure(
         _ kind: FailureKind, creating: Bool = false, critical: Bool = false, profile: Bool = false, limit: VaultLimit? = nil,
-        shownCode: String? = nil
+        shownCode: String? = nil, reading: Bool = false
     ) -> String {
         switch kind {
         case .limit:
@@ -34,7 +35,7 @@ public enum ItemsText {
         case .notFound: return ItemsStrings.errorNotFound
         case .other:
             if let shownCode, shownCode != "bad_request" { return FailureKind.vaultCode(shown(shownCode)).message }
-            return ItemsStrings.errorRefused
+            return reading ? kind.message : ItemsStrings.errorRefused
         default: return kind.message
         }
     }

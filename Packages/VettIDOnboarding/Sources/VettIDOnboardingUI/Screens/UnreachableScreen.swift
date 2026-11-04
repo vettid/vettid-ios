@@ -142,12 +142,18 @@ public struct UnreachableFlow: View {
     private let account: any AccountRepository
     private let timeScale: UInt64
     private let onRecover: @MainActor () -> Void
+    private let reread: (@MainActor () async -> Void)?
     @State private var model: UnreachableViewModel?
 
-    /// [timeScale]: the vault's time scale (STAGING-TIME-SCALE §5.2).
-    public init(account: any AccountRepository, timeScale: UInt64, onRecover: @escaping @MainActor () -> Void) {
+    /// [timeScale]: the vault's time scale (STAGING-TIME-SCALE §5.2). [reread]: "Try again" reads the phase through the app's
+    /// one read at a time (a foreground read may be under way); without it the account's own refresh.
+    public init(
+        account: any AccountRepository, timeScale: UInt64, reread: (@MainActor () async -> Void)? = nil,
+        onRecover: @escaping @MainActor () -> Void
+    ) {
         self.account = account
         self.timeScale = timeScale
+        self.reread = reread
         self.onRecover = onRecover
     }
 
@@ -158,15 +164,52 @@ public struct UnreachableFlow: View {
             timeScale: timeScale, onRetry: { model?.retry() }, onStartOver: { model?.startOver($0) }, onRecover: onRecover
         )
         .onAppear {
-            if model == nil { model = UnreachableViewModel(account: account) }
+            if model == nil { model = UnreachableViewModel(account: account, reread: reread) }
         }
     }
 }
 
-/// The start, while the phase is read ("Opening VettID").
+/// The start, while the phase is read ("Opening VettID"). A read that takes longer than the model's bound (a network that
+/// answers nothing) shows why it may be taking long, with "Try again" as the unreachable screen has; the read goes on and the
+/// screen leaves by itself when it ends. The wait counts only while the app is in the foreground.
 public struct StartingScreen: View {
-    public init() {}
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var model: StartingViewModel?
+    private let make: (@MainActor () -> StartingViewModel)?
 
-    public var body: some View { FullScreenProgress(OnboardingStrings.rootStarting) }
+    /// Without [reread] ("Try again") the screen is the spinner alone.
+    public init(reread: (@MainActor () async -> Void)? = nil, stuckAfter: Duration = .seconds(20)) {
+        if let reread {
+            make = { @MainActor in StartingViewModel(stuckAfter: stuckAfter, reread: reread) }
+        } else {
+            make = nil
+        }
+    }
+
+    /// For tests and previews: a model made by the caller (a short bound, a clock of its own).
+    init(model: StartingViewModel) {
+        make = nil
+        _model = State(initialValue: model)
+    }
+
+    public var body: some View {
+        Group {
+            if let model, model.stuck {
+                FormScaffold(
+                    title: OnboardingStrings.rootStartingSlowTitle, message: OnboardingStrings.rootStartingSlowBody,
+                    primaryLabel: OnboardingStrings.rootRetry, busy: model.retrying, onPrimary: { model.retry() }
+                ) { EmptyView() }
+                    .accessibilityIdentifier("starting_stuck")
+            } else {
+                FullScreenProgress(OnboardingStrings.rootStarting)
+            }
+        }
+        .onAppear { if model == nil { model = make?() } }
+        // Restarted each time the app comes back to the foreground; cancelled when it leaves.
+        .task(id: scenePhase) {
+            guard scenePhase == .active else { return }
+            await model?.watch()
+        }
+    }
 }
 #endif

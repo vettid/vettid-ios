@@ -230,6 +230,18 @@ import VettIDDataTesting
         #expect(f.items.calls.count { $0 == "shareEffect" } == 1)
     }
 
+    /// A dry run that failed is not "nothing new": the screen says it could not be checked, and the next change asks again.
+    @Test func aFailedDryRunIsSaidNotShownAsNothing() async {
+        f.items.fail["shareEffect"] = VaultFailure(.network)
+        let vm = f.vm(template: "allergies")
+        #expect(await eventually { vm.state.shareImpactUnavailable })
+        #expect(vm.state.shareImpact.isEmpty)
+        f.items.effect = ShareEffect(shares: [])
+        vm.setTagInput("travel")
+        vm.addTag()
+        #expect(await eventually { !vm.state.shareImpactUnavailable && f.items.calls.count { $0 == "shareEffect" } == 2 })
+    }
+
     // MARK: - Dialogs
 
     @Test func addingAFieldAsksForItsLabelAndTypeFirst() {

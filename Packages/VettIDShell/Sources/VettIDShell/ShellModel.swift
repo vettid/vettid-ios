@@ -206,6 +206,10 @@ public final class ShellModel {
     public func reset() {
         shown()
         checkCovers = false
+        // A banner action's failure is not kept across a lock and unlock.
+        bannerGeneration += 1
+        bannerError = nil
+        bannerBusy = false
         path = []
         destination = .start
     }
@@ -221,8 +225,34 @@ public final class ShellModel {
         }
     }
 
-    /// The hold-off indicator's "Turn on": a failure leaves the indicator; Settings shows it when the member tries there.
-    public func turnHoldOn() async { try? await ownerChecks.turnHoldOn() }
+    /// A banner's action ("Turn on" the hold, "OK" on a notice) is on its way.
+    public private(set) var bannerBusy = false
+    /// Why the last banner action failed (chosen; not in the spec): said under the banners until the member reads it.
+    public private(set) var bannerError: FailureKind?
 
-    public func dismissNotices() async { try? await ownerChecks.dismissNotices() }
+    /// The hold-off indicator's "Turn on": a failure is said under the banners, and the indicator stays.
+    public func turnHoldOn() async { await bannerAction { try await self.ownerChecks.turnHoldOn() } }
+
+    public func dismissNotices() async { await bannerAction { try await self.ownerChecks.dismissNotices() } }
+
+    public func clearBannerError() { bannerError = nil }
+
+    /// Bumped by ``reset()``: an action that ends after it writes nothing (its failure is not shown after a lock and unlock).
+    @ObservationIgnored private var bannerGeneration = 0
+
+    private func bannerAction(_ body: () async throws -> Void) async {
+        guard !bannerBusy else { return }
+        bannerBusy = true
+        bannerError = nil
+        let generation = bannerGeneration
+        var failure: FailureKind?
+        do {
+            try await body()
+        } catch {
+            failure = (error as? VaultFailure)?.kind ?? .other
+        }
+        guard generation == bannerGeneration else { return }
+        bannerError = failure
+        bannerBusy = false
+    }
 }

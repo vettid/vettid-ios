@@ -65,6 +65,7 @@ public struct TransferInContent: View {
                 MovedScreen(
                     body: state.canUnlockLater
                         ? MoveStrings.onboardingMovedTransferredBody : MoveStrings.onboardingMovedTransferredNoGuidBody,
+                    busy: state.busy, error: state.error,
                     onGo: actions.finish
                 )
             }
@@ -107,9 +108,13 @@ public struct TransferInContent: View {
     }
 
     private var scan: some View {
-        FormScaffold(
-            title: MoveStrings.transferInScanTitle, message: MoveStrings.transferInScanBody, primaryLabel: nil,
-            secondaryLabel: MoveStrings.transferInPaste, onPrimary: {}, onSecondary: actions.paste, onBack: back
+        // After a refusal or a failure the camera reads the same QR again and it is not sent again: "Try again" scans anew
+        // (the model forgets the refused text), as the recovery's scan does.
+        let retry = state.inputProblem != nil || state.error != nil
+        return FormScaffold(
+            title: MoveStrings.transferInScanTitle, message: MoveStrings.transferInScanBody,
+            primaryLabel: retry ? RecoveryScreenStrings.onboardingOpenTryAgain : nil,
+            secondaryLabel: MoveStrings.transferInPaste, onPrimary: actions.scan, onSecondary: actions.paste, onBack: back
         ) {
             VStack(alignment: .leading, spacing: Spacing.l) {
                 ScannerBox(onText: actions.scanned, onTypeInstead: actions.paste, camera: camera, typeLabel: MoveStrings.transferInPaste)
@@ -228,22 +233,36 @@ private struct Outcome: View {
 public struct MovedScreen: View {
     let message: String
     let onGo: @MainActor () -> Void
+    /// "Go" is on its way, or failed with [error] (said under the text; the button tries again).
+    let busy: Bool
+    let error: FailureKind?
+    @Environment(\.vettIDTimeScale) private var timeScale
 
-    public init(body: String, onGo: @escaping @MainActor () -> Void) {
+    public init(body: String, busy: Bool = false, error: FailureKind? = nil, onGo: @escaping @MainActor () -> Void) {
         self.message = body
+        self.busy = busy
+        self.error = error
         self.onGo = onGo
     }
 
     public var body: some View {
         FormScaffold(
-            title: MoveStrings.onboardingMovedTitle, message: message, primaryLabel: MoveStrings.onboardingMovedGo, onPrimary: onGo,
+            title: MoveStrings.onboardingMovedTitle, message: message, primaryLabel: MoveStrings.onboardingMovedGo, busy: busy,
+            onPrimary: onGo,
             header: {
                 VStack(spacing: Spacing.l) {
                     Spacer().frame(height: Spacing.xl)
                     RookLogo(height: 72)
                 }
             }
-        ) { EmptyView() }
+        ) {
+            if let error {
+                NoticeCard(
+                    .urgent, title: OnboardingStrings.progressFailed, message: error.message(timeScale: timeScale), announce: .assertive
+                )
+                    .accessibilityIdentifier("error")
+            }
+        }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("moved")
     }

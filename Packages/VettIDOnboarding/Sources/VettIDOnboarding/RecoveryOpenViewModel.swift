@@ -210,9 +210,17 @@ public final class RecoveryOpenViewModel {
     /// phone locked and is said as the unlock screen says it.
     public func openApp() {
         guard state.step == .done, !openingApp else { return }
+        if state.opened {
+            state.finishRequests += 1
+            return
+        }
         openingApp = true
+        state.openingApp = true
         work.launch { [weak self, move] in
-            defer { self?.openingApp = false }
+            defer {
+                self?.openingApp = false
+                self?.state.openingApp = false
+            }
             var failure: VaultFailure?
             do {
                 try await move.finishRecoveryOpen()

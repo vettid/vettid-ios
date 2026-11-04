@@ -86,6 +86,11 @@ public struct SetupScanScreen: View {
     }
 
     public var body: some View {
+        // Built again each second while a wait runs, so that its notice goes when it ends.
+        WaitingContent(until: state.codeWait) { _ in scan }
+    }
+
+    private var scan: some View {
         FormScaffold(
             title: OnboardingStrings.setupScanTitle,
             message: OnboardingStrings.setupScanBody,
@@ -102,7 +107,7 @@ public struct SetupScanScreen: View {
                 ScannerBox(onText: actions.scanned, onTypeInstead: actions.typeCode, camera: camera)
             }
             ScanRefusalNotice(state: state)
-            ErrorNotice(state: state, override: .setupCodeInvalid, overrideText: OnboardingStrings.setupInvalid)
+            ErrorNotice(state: state, override: .setupCodeInvalid, overrideText: OnboardingStrings.setupInvalid, hold: state.codeWait)
             TextLink(OnboardingStrings.setupOpenSite, action: onOpenAccountSite).padding(.top, Spacing.l)
             DevHintNotice(state: state)
         }
@@ -127,12 +132,17 @@ public struct SetupTypeScreen: View {
     }
 
     public var body: some View {
+        // Built again each second while a `429`'s wait runs: the send is held back for all of it (VAULT-MESSAGING §10.1).
+        WaitingContent(until: state.codeWait) { waiting in form(waiting: waiting) }
+    }
+
+    @ViewBuilder private func form(waiting: Bool) -> some View {
         let actions = actions
         FormScaffold(
             title: OnboardingStrings.setupTypeTitle,
             message: OnboardingStrings.setupTypeBody,
             primaryLabel: OnboardingStrings.continueLabel,
-            primaryEnabled: !state.email.trimmingCharacters(in: .whitespaces).isEmpty
+            primaryEnabled: !waiting && !state.email.trimmingCharacters(in: .whitespaces).isEmpty
                 && !state.codeInput.trimmingCharacters(in: .whitespaces).isEmpty,
             busy: state.busy,
             onPrimary: actions.submitCode,
@@ -175,7 +185,7 @@ public struct SetupTypeScreen: View {
                 .accessibilityIdentifier("setup_code")
             }
             .padding(.top, Spacing.m)
-            ErrorNotice(state: state, override: .setupCodeInvalid, overrideText: OnboardingStrings.setupInvalid)
+            ErrorNotice(state: state, override: .setupCodeInvalid, overrideText: OnboardingStrings.setupInvalid, hold: state.codeWait)
             DevHintNotice(state: state)
         }
     }

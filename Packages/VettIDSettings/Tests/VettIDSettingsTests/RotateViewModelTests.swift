@@ -37,6 +37,73 @@ import VettIDDataTesting
         #expect(m.state.password.isEmpty)
     }
 
+    /// A rate-limited or backed-off refusal keeps the wait it asked for, for the text.
+    @Test func aRateLimitedRefusalKeepsTheWait() async {
+        repo.fail["rotate"] = FakeVaultRepository.failure(.rateLimited, retry: 120)
+        let m = RotateViewModel(repo: repo)
+        m.setPassword("pw")
+        m.submit()
+        await m.settle()
+        #expect(m.state.error == .rateLimited && m.state.waiting)
+        let remaining = m.state.errorRetryAt?.remaining() ?? 0
+        #expect((90...120).contains(remaining))
+        // Held back for the whole wait: a submit during it sends nothing (VAULT-MESSAGING §10.1).
+        m.setPassword("pw")
+        #expect(m.state.error == .rateLimited, "typing does not clear a wait that runs")
+        m.submit()
+        await m.settle()
+        #expect(repo.calls.filter { $0 == "rotate" }.count == 1)
+        // A refusal without a wait has none, and holds nothing back.
+        repo.fail["rotate"] = FakeVaultRepository.failure(.badPassword, code: "bad_password")
+        let other = RotateViewModel(repo: repo)
+        other.setPassword("pw")
+        other.submit()
+        await other.settle()
+        #expect(other.state.error == .badPassword && other.state.errorRetryAt == nil && !other.state.waiting)
+    }
+
+    /// The send is held back while a wait runs, on every screen that shows one, and released after (VAULT-MESSAGING §10.1).
+    @Test func everyWaitHoldsTheSendBackAndReleasesIt() {
+        let running = WaitDeadline(seconds: 600)
+        let over = WaitDeadline(seconds: 0)
+        var rotate = RotateState(error: .rateLimited, retryAt: running)
+        #expect(rotate.waiting)
+        rotate.errorRetryAt = over
+        #expect(!rotate.waiting)
+        var phone = NewPhoneSecretState(error: .backoff, retryAt: running)
+        phone.pin = "123456"
+        phone.password = "pw"
+        #expect(!phone.canSubmit(pinTyped: 6))
+        phone.errorRetryAt = over
+        #expect(phone.canSubmit(pinTyped: 6))
+        var delete = DeleteVaultState()
+        delete.phrase = "delete my vault"
+        delete.password = "pw"
+        delete.acknowledged = true
+        delete.errorRetryAt = running
+        #expect(delete.waiting && !delete.ready(pinTyped: 6))
+        delete.errorRetryAt = over
+        #expect(delete.ready(pinTyped: 6))
+        var pin = ChangePinState()
+        pin.errorRetryAt = running
+        #expect(pin.waiting)
+        var credential = NewCredentialState()
+        credential.errorRetryAt = running
+        #expect(credential.waiting)
+        var window = CredentialState()
+        window.windowRetryAt = running
+        #expect(window.windowWaiting)
+        window.windowRetryAt = over
+        #expect(!window.windowWaiting)
+        // Typing does not clear a failure whose wait runs; it clears one whose wait is over.
+        rotate.errorRetryAt = running
+        rotate.clearError()
+        #expect(rotate.error == .rateLimited)
+        rotate.errorRetryAt = over
+        rotate.clearError()
+        #expect(rotate.error == nil)
+    }
+
     // MARK: - The clone alarm
 
     func frozen() -> CredentialAlarm { CredentialAlarm(alarmID: "a1", state: CredentialAlarm.stateFrozen, at: "2026-10-04T12:00:00Z") }

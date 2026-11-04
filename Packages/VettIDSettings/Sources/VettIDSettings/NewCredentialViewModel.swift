@@ -24,6 +24,13 @@ public struct NewCredentialState: Equatable, Sendable, CustomStringConvertible, 
     public var confirming = false
     public var busy = false
     public var error: FailureKind?
+    /// The end of the wait the failure asked for (`retry_after`), or nil (``WaitText``).
+    public var errorRetryAt: WaitDeadline?
+    /// The wait runs: the send is held back until it ends (VAULT-MESSAGING §10.1: the app does not resend before it ends).
+    public var waiting: Bool { errorRetryAt?.isRunning() == true }
+
+    /// Clears the failure, except while its wait runs (the notice says why the send is held back).
+    public mutating func clearError() { if !waiting { error = nil } }
     public var done = false
     /// (VAULT-MESSAGING 0.48.0 §11.14.9 "A lost answer to `credential.reset`") The reset got no answer and is being
     /// decided (``ChangeCheck/Status/checking``, ``ChangeCheck/Status/unreachable``), was decided as not applied
@@ -61,9 +68,17 @@ public final class NewCredentialViewModel {
     @ObservationIgnored private let work = Work()
     @ObservationIgnored private let followers = TaskBag()
 
-    public init(repo: any CredentialRepository, vault: any VaultRepository) {
+    @ObservationIgnored private let waits: WaitRegistry
+
+    /// [waits]: where a wait the vault asked for is kept, so that it outlives this screen.
+    public init(repo: any CredentialRepository, vault: any VaultRepository, waits: WaitRegistry = WaitRegistry()) {
         self.repo = repo
         self.vault = vault
+        self.waits = waits
+        if let w = waits.current(.newCredential) {
+            state.error = w.kind
+            state.errorRetryAt = w.deadline
+        }
         followers.add(follow(self, read: { $0.vault.changeCheck }, apply: { $0.decided($1) }))
     }
 
@@ -101,12 +116,12 @@ public final class NewCredentialViewModel {
     public func setPin(_ v: String) {
         state.pin = String(v.filter { $0.isASCII && $0.isNumber }.prefix(PinPolicy.maxLength))
         if !state.refused && !state.password.isEmpty { state.rule = PasswordRule.check(state.password, pin: state.pin) }
-        state.error = nil
+        state.clearError()
     }
 
     public func setCurrent(_ v: String) {
         state.current = v
-        state.error = nil
+        state.clearError()
     }
 
     public func setPassword(_ v: String) {
@@ -126,7 +141,7 @@ public final class NewCredentialViewModel {
     /// First press: checks the form, then asks for the final confirmation.
     public func submit() {
         let s = state
-        guard s.filled(pinTyped: 0), !s.busy else {
+        guard s.filled(pinTyped: 0), !s.busy, !s.waiting else {
             state.pin = ""
             return
         }
@@ -151,7 +166,7 @@ public final class NewCredentialViewModel {
         guard s.confirming, s.filled(pinTyped: 0), !s.busy else { return }
         state.confirming = false
         state.busy = true
-        state.error = nil
+        state.clearError()
         state.check = nil
         let repo = repo
         work.launch { [weak self] in
@@ -199,6 +214,7 @@ public final class NewCredentialViewModel {
             state.error = nil
         } else {
             state.error = kind
+            state.errorRetryAt = waits.record(.newCredential, error: error)
         }
     }
 

@@ -208,6 +208,10 @@ struct TagsSection: View {
                 NoticeCard(.info, title: ItemsStrings.impactTitle, message: state.shareImpact.map(ItemsText.impact).joined(separator: "\n"))
                     .accessibilityIdentifier("item_edit_share_impact")
             }
+            if state.shareImpactUnavailable {
+                NoticeCard(.info, title: ItemsStrings.impactTitle, message: ItemsStrings.impactUnavailable)
+                    .accessibilityIdentifier("item_edit_share_impact_unavailable")
+            }
             ProfileChoice(state: state, onInProfile: actions.onInProfile)
         }
     }

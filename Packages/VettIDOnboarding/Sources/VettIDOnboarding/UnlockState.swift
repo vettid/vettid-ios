@@ -4,11 +4,14 @@ import VettIDData
 /// A message under the PIN. Mirrors vettid-android `UnlockMessage`.
 public enum UnlockMessage: Equatable, Sendable {
     case badPin
-    case updateRefused(code: String)
+    /// The update the unlock asked to approve was refused; [release] is that update's own release number.
+    case updateRefused(code: String, release: Int?)
     case failed(FailureKind, code: String?)
     /// (Release R, §11.14.10) "The move didn't finish" failed: this old phone could not open the vault with its own keys
     /// after approving a transfer.
     case moveBackFailed
+    /// "Return to release N" was refused before anything was sent: the cause is local.
+    case returnRefused(ReturnRefusal)
 }
 
 public extension UnlockMessage {
@@ -111,6 +114,10 @@ public struct UnlockState: Equatable, Sendable, CustomStringConvertible, CustomD
     /// The vault cannot be opened from here and erasing this phone would not help: an ended release, or a rollback of
     /// the release or of the vault's state. "Recover your vault" and support only.
     public var recoverOnly: Bool { preflightError == .releaseEnded || preflight?.rollback == true || stateRollback }
+
+    /// "Try again" is offered on a ``recoverOnly`` screen: the release check can be run again (an ended release, or a rollback
+    /// the check found), not for a rollback of the vault's state, which a new check of the release does not clear.
+    public var recheckOffered: Bool { recoverOnly && !stateRollback }
 
     /// "Erase VettID from this phone" is offered: never on a ``recoverOnly`` screen, which wins.
     public var eraseOffered: Bool { !recoverOnly && (notRecognised || keysGone) }

@@ -2,6 +2,7 @@
 import SwiftUI
 import UIKit
 import VettIDData
+import VettIDOnboardingUI
 import VettIDSettings
 import VettIDUI
 
@@ -262,22 +263,35 @@ struct WindowPasswordSheet: View {
     let state: CredentialState
     let actions: CredentialActions
 
+    private func windowField(at now: ContinuousClock.Instant) -> some View {
+        SecretField(
+            CredentialStrings.passwordLabel, text: Binding(get: { state.windowPassword }, set: { actions.setWindowPassword($0) }),
+            error: state.windowError.map { WaitText.message($0, retryAt: state.windowRetryAt, timeScale: timeScale, now: now) },
+            spokenError: state.windowError.flatMap {
+                WaitText.steadySpoken($0, retryAt: state.windowRetryAt, timeScale: timeScale, now: now)
+            },
+            errorPriority: .assertive, onSubmit: actions.openWindow
+        )
+        .disabled(state.busy)
+        .accessibilityIdentifier("dialog_password")
+    }
+
     var body: some View {
+        // Built again each second while the wait runs: the text counts down and "Open" is held back until it ends.
+        WaitingContent(until: state.windowRetryAt) { _ in sheet }
+    }
+
+    private var sheet: some View {
         VStack(alignment: .leading, spacing: Spacing.m) {
             Text(CredentialStrings.windowDialogTitle).vettIDFont(.titleMedium).accessibilityAddTraits(.isHeader)
             Text(CredentialStrings.windowDialogBody).vettIDFont(.bodyMedium).foregroundStyle(colors.onSurfaceVariant)
-            SecretField(
-                CredentialStrings.passwordLabel, text: Binding(get: { state.windowPassword }, set: { actions.setWindowPassword($0) }),
-                error: state.windowError?.message(timeScale: timeScale), errorPriority: .assertive, onSubmit: actions.openWindow
-            )
-            .disabled(state.busy)
-            .accessibilityIdentifier("dialog_password")
+            windowField(at: .now)
             HStack(spacing: Spacing.l) {
                 Spacer()
                 SheetButton(CredentialStrings.cancel, tint: colors.onSurface) { actions.showWindowDialog(false) }
                     .disabled(state.busy)
                 SheetButton(CredentialStrings.open, tint: colors.primary, action: actions.openWindow)
-                    .disabled(state.busy || state.windowPassword.isEmpty)
+                    .disabled(state.busy || state.windowPassword.isEmpty || state.windowWaiting)
                     .accessibilityIdentifier("dialog_open")
             }
             Spacer()

@@ -40,7 +40,7 @@ public struct NewCredentialContent: View {
         self.actions = actions
     }
 
-    private var ready: Bool { !state.busy && state.filled(pinTyped: pin.count) }
+    private var ready: Bool { !state.busy && !state.waiting && state.filled(pinTyped: pin.count) }
 
     private func submit() {
         guard ready else { return }
@@ -48,7 +48,7 @@ public struct NewCredentialContent: View {
     }
 
     public var body: some View {
-        screenBody.holdsInput(state.holdsInput)
+        WaitingContent(until: state.errorRetryAt) { _ in screenBody }.holdsInput(state.holdsInput)
     }
 
     @ViewBuilder private var screenBody: some View {
@@ -95,7 +95,7 @@ public struct NewCredentialContent: View {
                     NoticeCard(.info, title: CredentialStrings.newTitle, message: text).accessibilityIdentifier("change_check")
                 }
                 if let error = state.error {
-                    NoticeCard(.urgent, title: error.title(or: CredentialStrings.newTitle), message: error.message(timeScale: timeScale))
+                    WaitNotice(error, title: error.title(or: CredentialStrings.newTitle), retryAt: state.errorRetryAt)
                         .accessibilityIdentifier("error")
                 }
             }

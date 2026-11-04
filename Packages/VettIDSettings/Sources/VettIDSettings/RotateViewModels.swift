@@ -7,10 +7,18 @@ public struct RotateState: Equatable, Sendable, CustomStringConvertible, CustomD
     public var password = ""
     public var busy = false
     public var error: FailureKind?
+    /// The end of the wait the failure asked for (`retry_after`), or nil (``WaitText``).
+    public var errorRetryAt: WaitDeadline?
+    /// The wait runs: the send is held back until it ends (VAULT-MESSAGING §10.1: the app does not resend before it ends).
+    public var waiting: Bool { errorRetryAt?.isRunning() == true }
+
+    /// Clears the failure, except while its wait runs (the notice says why the send is held back).
+    public mutating func clearError() { if !waiting { error = nil } }
     public var done = false
 
-    public init(error: FailureKind? = nil, done: Bool = false) {
+    public init(error: FailureKind? = nil, retryAt: WaitDeadline? = nil, done: Bool = false) {
         self.error = error
+        errorRetryAt = retryAt
         self.done = done
     }
 
@@ -28,30 +36,34 @@ public final class RotateViewModel {
 
     @ObservationIgnored private let repo: any CredentialRepository
     @ObservationIgnored private let work = Work()
+    @ObservationIgnored private let waits: WaitRegistry
 
-    public init(repo: any CredentialRepository) {
+    /// [waits]: where a wait the vault asked for is kept, so that it outlives this screen.
+    public init(repo: any CredentialRepository, waits: WaitRegistry = WaitRegistry()) {
         self.repo = repo
+        self.waits = waits
+        if let w = waits.current(.rotate) { state = RotateState(error: w.kind, retryAt: w.deadline) }
     }
 
     deinit { work.cancelAll() }
 
     public func setPassword(_ v: String) {
         state.password = v
-        state.error = nil
+        state.clearError()
     }
 
     public func submit() {
         let pw = state.password
-        guard !pw.isEmpty, !state.busy else { return }
+        guard !pw.isEmpty, !state.busy, !state.waiting else { return }
         state.busy = true
-        state.error = nil
+        state.clearError()
         let repo = repo
         work.launch { [weak self] in
             do {
                 try await repo.rotate(password: pw)
                 self?.state = RotateState(done: true)
             } catch {
-                self?.state = RotateState(error: failureKind(error))
+                self?.state = RotateState(error: failureKind(error), retryAt: self?.waits.record(.rotate, error: error))
             }
         }
     }

@@ -101,6 +101,19 @@ public struct OnboardingState: Equatable, Sendable, CustomStringConvertible, Cus
     public var errorCode: String?
     /// When the failed action becomes possible, when the failure says (``FailureKind/enrollmentStarted``).
     public var errorRetryAt: Date?
+    /// The wait of the failure shown, when it is a `429` (`retry_after`), on the monotonic clock: the notice counts it down.
+    public var errorWait: WaitDeadline?
+    /// The wait the setup code was told: the code is not redeemed again before it ends (VAULT-MESSAGING §10.1). Only the
+    /// redeem is held; it outlives the failure shown and the step, and the flow (``SetupLinkInbox/codeWait``).
+    public var codeWait: WaitDeadline?
+    /// The setup code's wait runs.
+    public var waiting: Bool { codeWait?.isRunning() == true }
+
+    /// Clears the failure shown (on navigation, or before an action); the waits that hold a send are kept.
+    public mutating func clearError() {
+        error = nil
+        errorWait = nil
+    }
     public var devHint: String?
 
     public init(step: OnboardingStep = .welcome, devHint: String? = nil) {

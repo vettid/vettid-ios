@@ -40,6 +40,8 @@ public final class FakeVaultRepository: CustomStringConvertible {
     public var unconfirmedMove: UnconfirmedMove?
     public var returnPins: [String] = []
     public var returnStarts = true
+    /// TEST ONLY: why the way back is refused when ``returnStarts`` is false.
+    public var returnRefusal: ReturnRefusal?
 
     // VaultRepository.
     /// Set by a test: the open app was sent to the unlock screen after repeated relay refusals.
@@ -233,6 +235,8 @@ public final class FakeVaultRepository: CustomStringConvertible {
     public var lastTransferCode: String?
     /// Completes (or fails) the new phone's wait for the old phone's approval.
     public var transferApproval = TestDeferred<Void>()
+    /// TEST ONLY: when set, ``turnHoldOn()`` waits for it (and fails or goes on as it is completed).
+    public var turnHoldOnGate: TestDeferred<Void>?
     public var offer = TransferOfferView(
         transferID: "01JTRANSFER000000000000000",
         qrPayload: #"{"v":2,"t":"p"}"#,
@@ -325,6 +329,8 @@ extension FakeVaultRepository: AccountRepository {
         vaultDeletedNotice = false
     }
 
+    public func returnToPreviousReleaseRefusal() -> ReturnRefusal? { returnRefusal }
+
     public func returnToPreviousRelease(pin: String) -> Bool {
         calls.append("returnToPreviousRelease")
         returnPins.append(pin)
@@ -377,6 +383,7 @@ extension FakeVaultRepository: OwnerCheckRepository {
     }
 
     public func turnHoldOn() async throws {
+        if let turnHoldOnGate { try await turnHoldOnGate.value() }
         try call("turnHoldOn")
         ownerCheck?.hold = true
         ownerCheck?.holdOffUntil = nil

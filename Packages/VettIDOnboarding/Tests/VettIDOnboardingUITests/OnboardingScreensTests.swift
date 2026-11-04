@@ -13,6 +13,84 @@ import VettIDUI
 /// rule; here ``OnboardingState/canContinueBackup``, which the screen uses as is, is checked in the model's tests.)
 @MainActor
 @Suite struct OnboardingScreensTests {
+    private func height(_ view: some View) -> CGFloat {
+        UIHostingController(rootView: view.vettIDTheme()).sizeThatFits(in: CGSize(width: 390, height: 844)).height
+    }
+
+    /// "Opening VettID" renders with and without the way out it offers after a long read.
+    @Test func theStartingScreenRenders() async {
+        // The stuck state, reached through the model with a bound of zero (the clock is the model's).
+        let stuck = StartingViewModel(stuckAfter: .zero, sleep: { _ in }, reread: {})
+        await stuck.watch()
+        #expect(stuck.stuck && height(StartingScreen(model: stuck)) > 0)
+        // A read that is still running says so; it does not claim a connection failed.
+        #expect(OnboardingStrings.rootStartingSlowTitle == "Still opening VettID")
+        #expect(OnboardingStrings.rootStartingSlowBody.contains("still waiting"))
+        #expect(height(StartingScreen()) > 0)
+        #expect(height(StartingScreen(reread: {}, stuckAfter: .zero)) > 0)
+    }
+
+    /// Every screen that sends a PIN, a password or a code says a wait the same way (a `429` or a backoff).
+    @Test func aWaitIsSaidTheSameEverywhere() {
+        let t0 = ContinuousClock.now
+        let wait = WaitDeadline(seconds: 90, now: t0)
+        for kind in [FailureKind.rateLimited, .backoff] {
+            #expect(WaitText.message(kind, retryAt: wait, timeScale: 1, now: t0).hasPrefix("Too many attempts. Try again in "))
+            #expect(WaitText.spoken(kind, retryAt: wait, now: t0)?.hasPrefix("Too many attempts. Try again in ") == true)
+        }
+        // A field's spoken error is the same at every tick: only the visible text counts down.
+        let later = t0.advanced(by: .seconds(1))
+        func shown(_ now: ContinuousClock.Instant) -> String { WaitText.message(.backoff, retryAt: wait, timeScale: 1, now: now) }
+        func spoken(_ now: ContinuousClock.Instant) -> String? {
+            WaitText.steadySpoken(.backoff, retryAt: wait, timeScale: 1, now: now)
+        }
+        #expect(shown(t0) != shown(later))
+        #expect(spoken(t0) == spoken(later) && spoken(t0) != nil)
+        #expect(WaitText.steadySpoken(.badPin, retryAt: wait, timeScale: 1, now: t0) == nil)
+        // A long wait is h:mm:ss, not "120:00".
+        #expect(WaitText.clock(90) == "1:30" && WaitText.clock(3_599) == "59:59" && WaitText.clock(7_200) == "2:00:00")
+        #expect(WaitText.message(.badPin, retryAt: wait, timeScale: 1, now: t0) == FailureKind.badPin.message)
+        #expect(WaitText.spoken(.badPin, retryAt: wait, now: t0) == nil && WaitText.spoken(.rateLimited, retryAt: nil) == nil)
+        // Over: the failure's own text, and nothing held back.
+        let over = t0.advanced(by: .seconds(91))
+        #expect(WaitText.message(.backoff, retryAt: wait, timeScale: 1, now: over) == FailureKind.backoff.message)
+        #expect(wait.isRunning(now: t0) && !wait.isRunning(now: over))
+    }
+
+    /// A rate-limited redeem's wait is a notice of its own that counts down (``WaitNotice``, ``WaitText``); the plain failure text
+    /// is the general one, and a `429` with no wait left reads it too.
+    @Test func aRateLimitedRedeemSaysTheWait() {
+        let t0 = ContinuousClock.now
+        let wait = WaitDeadline(seconds: 90, now: t0)
+        #expect(WaitText.message(.rateLimited, retryAt: wait, timeScale: 1, now: t0).hasPrefix("Too many attempts. Try again in "))
+        #expect(ErrorNotice.message(.rateLimited, nil, timeScale: 1) == FailureKind.rateLimited.message)
+        #expect(WaitText.message(.rateLimited, retryAt: nil, timeScale: 1) == FailureKind.rateLimited.message)
+    }
+
+    /// A `429`'s notice counts its wait down: the wait of the failure shown, else the wait of the operation the screen sends. It is
+    /// not read from the start-over time, and not dropped.
+    @Test func theNoticeCountsTheWaitDown() {
+        var state = OnboardingState(step: .setupType)
+        let wait = WaitDeadline(seconds: 90)
+        // A failure shown with its wait.
+        state.error = .rateLimited
+        state.errorWait = wait
+        #expect(ErrorNotice.shownWait(state, hold: nil)?.wait == wait)
+        // `errorRetryAt` (the start-over time of another failure) is not a wait.
+        state.errorWait = nil
+        state.errorRetryAt = Date().addingTimeInterval(90)
+        #expect(ErrorNotice.shownWait(state, hold: nil) == nil)
+        // No failure shown (the step was left): the held operation's wait is still counted down.
+        state.error = nil
+        #expect(ErrorNotice.shownWait(state, hold: wait)?.wait == wait)
+        #expect(ErrorNotice.shownWait(state, hold: nil) == nil)
+        // Another failure shown: its own text, not a countdown.
+        state.error = .network
+        #expect(ErrorNotice.shownWait(state, hold: wait) == nil)
+        // A wait that ended counts down nothing.
+        #expect(ErrorNotice.shownWait(OnboardingState(), hold: WaitDeadline(seconds: 0)) == nil)
+    }
+
     /// iPhone only: a refused start-over says from when it is possible; without a time, the general text.
     @Test func aRefusedStartOverSaysWhen() {
         let at = Date(timeIntervalSince1970: 1_800_000_000)
@@ -29,7 +107,7 @@ import VettIDUI
             .appendingPathComponent("Sources/VettIDOnboardingUI/Resources/Localizable.xcstrings")
         let doc = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
         let keys = try #require((doc["strings"] as? [String: Any])?.keys)
-        #expect(keys.count == 470)
+        #expect(keys.count == 477)
         let missing = "\u{0}missing"
         // vettid-android's names: the onboarding feature's, its unlock, owner-check and app-lock screens', the app's root
         // screens', core/ui's erase text, the release update's and What's new's, a vault being deleted (`vault_delet`,

@@ -11,10 +11,24 @@ struct ErrorNotice: View {
     let state: OnboardingState
     var override: FailureKind?
     var overrideText: String?
+    /// The wait of the operation this screen sends (the setup code's): counted down beside no failure too,
+    /// since the send stays held after the failure was cleared by leaving a step.
+    var hold: WaitDeadline?
     @Environment(\.vettIDTimeScale) private var timeScale
 
+    /// The wait to count down: the shown `429`'s own, else [hold] when no failure is shown.
+    static func shownWait(_ state: OnboardingState, hold: WaitDeadline?) -> (kind: FailureKind, wait: WaitDeadline)? {
+        if state.error == .rateLimited, let wait = state.errorWait, WaitText.seconds(until: wait) != nil { return (.rateLimited, wait) }
+        if state.error == nil, let hold, WaitText.seconds(until: hold) != nil { return (.rateLimited, hold) }
+        return nil
+    }
+
     var body: some View {
-        if let kind = state.error {
+        if let shown = Self.shownWait(state, hold: hold) {
+            WaitNotice(shown.kind, title: OnboardingStrings.progressFailed, retryAt: shown.wait)
+                .padding(.top, Spacing.l)
+                .accessibilityIdentifier("error")
+        } else if let kind = state.error {
             let text = override != nil && kind == override
                 ? overrideText ?? kind.message(timeScale: timeScale) : Self.message(kind, state.errorRetryAt, timeScale: timeScale)
             NoticeCard(.urgent, title: OnboardingStrings.progressFailed, message: text, announce: .assertive)

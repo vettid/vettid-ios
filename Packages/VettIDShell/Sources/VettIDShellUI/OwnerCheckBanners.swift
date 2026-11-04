@@ -15,19 +15,39 @@ public struct OwnerCheckBanners: View {
     let onCheckNow: @MainActor () -> Void
     let onHoldOn: @MainActor () -> Void
     let onDismissNotices: @MainActor () -> Void
+    /// A banner's action is on its way, or failed with [error] (said under the banners; [onClearError] is its "OK").
+    let busy: Bool
+    let error: FailureKind?
+    let onClearError: @MainActor () -> Void
+    @Environment(\.vettIDTimeScale) private var timeScale
 
     public init(
         gate: OwnerCheckGate,
         now: Date = Date(),
         onCheckNow: @escaping @MainActor () -> Void,
         onHoldOn: @escaping @MainActor () -> Void,
-        onDismissNotices: @escaping @MainActor () -> Void
+        onDismissNotices: @escaping @MainActor () -> Void,
+        busy: Bool = false,
+        error: FailureKind? = nil,
+        onClearError: @escaping @MainActor () -> Void = {}
     ) {
         self.gate = gate
         self.now = now
         self.onCheckNow = onCheckNow
         self.onHoldOn = onHoldOn
         self.onDismissNotices = onDismissNotices
+        self.busy = busy
+        self.error = error
+        self.onClearError = onClearError
+    }
+
+    /// The banners over [model]: its actions, and its busy state and failure.
+    public init(gate: OwnerCheckGate, now: Date = Date(), model: ShellModel) {
+        self.init(
+            gate: gate, now: now, onCheckNow: { model.ownerCheck(holdOff: false) },
+            onHoldOn: { Task { await model.turnHoldOn() } }, onDismissNotices: { Task { await model.dismissNotices() } },
+            busy: model.bannerBusy, error: model.bannerError, onClearError: { model.clearBannerError() }
+        )
     }
 
     public var body: some View {
@@ -54,6 +74,10 @@ public struct OwnerCheckBanners: View {
                 InfoBanner(Self.holdOffText(gate.holdOffUntil), actionLabel: ShellStrings.ownerCheckHoldOn, onAction: onHoldOn)
                     .accessibilityIdentifier("owner_check_hold_off")
             }
+            if let error {
+                UrgentBanner(error.message(timeScale: timeScale), actionLabel: ShellStrings.ownerCheckNoticeOk, action: onClearError)
+                    .accessibilityIdentifier("owner_check_banner_error")
+            }
             // Release R (VAULT-MESSAGING §11.14.5): until a later answer or vault.status says the presence was recorded; the member cannot
             // act on it, so it has no action.
             if gate.presenceUnrecorded {
@@ -62,6 +86,8 @@ public struct OwnerCheckBanners: View {
                     .accessibilityIdentifier("owner_check_presence_banner")
             }
         }
+        // A banner's action on its way is not pressed twice.
+        .disabled(busy)
     }
 
     /// The early warning: the deadline's time; without one, "within the hour", or on a scaled vault [scaledAhead]

@@ -12,8 +12,6 @@ public struct InviteActions {
     public var onTick: @MainActor () -> Void = {}
     public var onApprove: @MainActor () -> Void = {}
     public var onDecline: @MainActor () -> Void = {}
-    public var onAskBlock: @MainActor (Bool) -> Void = { _ in }
-    public var onBlock: @MainActor () -> Void = {}
     public var onCancelInvite: @MainActor () -> Void = {}
     public var onAgain: @MainActor () -> Void = {}
     /// The conversation with the new connection; nil until the messages are in the iPhone app (IOS-PLAN §8 I2.2).
@@ -35,14 +33,6 @@ public struct InviteScreen: View {
 
     public var body: some View {
         content
-            .confirmDialog(
-                isPresented: Binding(get: { state.confirmBlock }, set: { if !$0 { actions.onAskBlock(false) } }),
-                title: ConnectStrings.blockRequestTitle,
-                message: ConnectStrings.blockRequestBody,
-                confirmLabel: ConnectStrings.block,
-                destructive: true,
-                onConfirm: actions.onBlock
-            )
     }
 
     @ViewBuilder private var content: some View {
@@ -84,7 +74,7 @@ public struct InviteScreen: View {
 
     private var requestActions: RequestActions {
         RequestActions(
-            onApprove: actions.onApprove, onDecline: actions.onDecline, onBlock: { actions.onAskBlock(true) }, onBack: actions.onBack
+            onApprove: actions.onApprove, onDecline: actions.onDecline, onBack: actions.onBack
         )
     }
 }

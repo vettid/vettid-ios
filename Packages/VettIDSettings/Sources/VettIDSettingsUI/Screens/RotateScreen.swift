@@ -1,6 +1,7 @@
 #if os(iOS)
 import SwiftUI
 import VettIDData
+import VettIDOnboardingUI
 import VettIDSettings
 import VettIDUI
 
@@ -28,7 +29,7 @@ public struct RotateContent: View {
     }
 
     public var body: some View {
-        screenBody.holdsInput(state.holdsInput)
+        WaitingContent(until: state.errorRetryAt) { _ in screenBody }.holdsInput(state.holdsInput)
     }
 
     @ViewBuilder private var screenBody: some View {
@@ -45,7 +46,7 @@ public struct RotateContent: View {
     private var form: some View {
         FormScaffold(
             title: CredentialStrings.rotateTitle, message: CredentialStrings.rotateBody, primaryLabel: CredentialStrings.rotateSubmit,
-            primaryEnabled: !state.password.isEmpty && !state.busy, busy: state.busy, onPrimary: actions.onSubmit,
+            primaryEnabled: !state.password.isEmpty && !state.busy && !state.waiting, busy: state.busy, onPrimary: actions.onSubmit,
             onBack: actions.onBack
         ) {
             VStack(alignment: .leading, spacing: Spacing.l) {
@@ -55,10 +56,7 @@ public struct RotateContent: View {
                 )
                 .accessibilityIdentifier("rotate_password")
                 if let error = state.error {
-                    NoticeCard(
-                        .urgent, title: error.title(or: CredentialStrings.title), message: error.message(timeScale: timeScale),
-                        announce: .assertive
-                    )
+                    WaitNotice(error, title: error.title(or: CredentialStrings.title), retryAt: state.errorRetryAt)
                         .accessibilityIdentifier("error")
                 }
             }

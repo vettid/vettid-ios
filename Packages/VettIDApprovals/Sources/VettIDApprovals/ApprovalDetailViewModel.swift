@@ -29,7 +29,6 @@ public struct ApprovalDetailState: Equatable, Sendable, CustomStringConvertible,
     public var approval: PendingApproval?
     public var password = ""
     public var busy = false
-    public var confirmBlock = false
     /// Decided here: the screen closes.
     public var done = false
     /// It left the list without a decision here (decided on another device, or expired).
@@ -161,7 +160,7 @@ public struct ApprovalDetailState: Equatable, Sendable, CustomStringConvertible,
 
 /// One approval (ANDROID-PLAN §4 Approvals): what is asked, by whom, and approve or deny. Member authentication and
 /// critical-item uses take the credential password (VAULT-MESSAGING §10.4, §10.13); a connection request shows its
-/// safety code and can be blocked; a grant request is decided entry by entry (§10.12); a desktop's or agent's request
+/// safety code and is approved or declined; a grant request is decided entry by entry (§10.12); a desktop's or agent's request
 /// can only be declined. Mirrors vettid-android `ApprovalDetailViewModel`.
 @MainActor
 @Observable
@@ -333,8 +332,6 @@ public final class ApprovalDetailViewModel {
     /// The screen left or the app went to the background: the password goes.
     public func forgetSecrets() { local.password = "" }
 
-    public func askBlock(_ show: Bool) { local.confirmBlock = show }
-
     /// "Mute requests from …" on a withdrawn request (ANDROID-PLAN 0.1.101), only while it is offered
     /// (``ApprovalDetailState/offersMute(_:)``): a service connection's is confirmed first (superseded sign-ins are routine
     /// for a service), a person's is muted at once.
@@ -489,14 +486,6 @@ public final class ApprovalDetailViewModel {
                 local.endFailure = failureKind(error)
             }
         }
-    }
-
-    /// Declines an incoming connection request and blocks the requester (confirmed first).
-    public func block() {
-        guard case .connection(.incoming(let r))? = state.approval else { return }
-        local.confirmBlock = false
-        let repo = repo
-        decide { try await repo.blockConnectionRequest(r.pendingID) }
     }
 
     /// The member read the critical-use result.

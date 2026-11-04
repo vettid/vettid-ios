@@ -76,6 +76,11 @@ extension OnboardingStrings {
             bundle: .module
         )
     }
+    /// "Release N is deprecated / retired" for the two statuses the vault has; any other word is not shown as it came, and the
+    /// title is the general "Update your vault" (chosen; not in the spec).
+    static func releaseStatusTitle(_ release: Int, _ status: String) -> String {
+        ["deprecated", "retired"].contains(status) ? unlockStatusTitle(release, status) : releaseUpdateTitle
+    }
     static func unlockStatusTitle(_ release: Int, _ status: String) -> String {
         String(localized: "unlock_status_title", defaultValue: "Release \(release) is \(status)", bundle: .module)
     }
@@ -142,15 +147,6 @@ extension OnboardingStrings {
             defaultValue: """
                 The vault's stored state is older than state this phone has already seen. Someone may have restored an \
                 old copy. Contact VettID support before you continue.
-                """,
-            bundle: .module
-        )
-    }
-    static func unlockUpdateRefused(_ code: String) -> String {
-        String(
-            localized: "unlock_update_refused",
-            defaultValue: """
-                The update was refused (\(code)). Your vault stayed on its current release.
                 """,
             bundle: .module
         )

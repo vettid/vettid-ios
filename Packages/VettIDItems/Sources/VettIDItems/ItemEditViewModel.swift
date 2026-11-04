@@ -98,25 +98,32 @@ public final class ItemEditViewModel {
         guard key != impactKey else { return }
         impactKey = key
         impactTask?.cancel()
-        if !s.isNew && tags == savedTags { return state.shareImpact = [] }
+        if !s.isNew && tags == savedTags {
+            state.shareImpactUnavailable = false
+            return state.shareImpact = []
+        }
         impactTask = Task { [weak self, impactDelay] in
             try? await Task.sleep(for: impactDelay)
             guard !Task.isCancelled, let self else { return }
             let impact = await impactOf(s, tags, key.sensitivity)
             guard !Task.isCancelled else { return }
-            state.shareImpact = impact
+            state.shareImpact = impact ?? []
+            state.shareImpactUnavailable = impact == nil
+            // A check that failed is made again at the next change.
+            if impact == nil { impactKey = nil }
         }
     }
 
-    private func impactOf(_ s: ItemEditState, _ tags: [String], _ sensitivity: Sensitivity) async -> [ShareImpact] {
+    /// Nil when the sharing could not be read at all.
+    private func impactOf(_ s: ItemEditState, _ tags: [String], _ sensitivity: Sensitivity) async -> [ShareImpact]? {
         do {
             return noDryRun ? try await localImpact(tags, sensitivity) : try await dryRun(s, tags, sensitivity)
         } catch {
             // A vault before 0.21.0 refuses the dry run (no content: nothing is saved); its rules are read instead.
             let f = error as? VaultFailure
-            guard f?.kind == .notSupported || (f?.kind == .other && f?.code == Self.codeBadRequest) else { return [] }
+            guard f?.kind == .notSupported || (f?.kind == .other && f?.code == Self.codeBadRequest) else { return nil }
             noDryRun = true
-            return (try? await localImpact(tags, sensitivity)) ?? []
+            return try? await localImpact(tags, sensitivity)
         }
     }
 

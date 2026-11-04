@@ -2,6 +2,7 @@ import Combine
 import SwiftUI
 import UIKit
 import VettIDAltChan
+import VettIDConnections
 import VettIDData
 import VettIDOnboarding
 import VettIDOnboardingUI
@@ -119,6 +120,10 @@ struct AppRoot: View {
     @State private var held: AppPhase
     /// The banner areas (the move notices, the shell's banners) share a third of the screen.
     @State private var banners = BannerBudget()
+    /// A setup link was opened on a phone that already has a vault: said once.
+    @State private var setupLinkIgnored = false
+    /// The one read of the phase at a time, whoever asks.
+    @State private var reader: PhaseReader
     @Environment(\.openURL) private var openURL
     @Environment(\.scenePhase) private var scenePhase
     /// "Allow screenshots" (IOS-PLAN §4): it ends when the vault is no longer open, and after its hour.
@@ -139,17 +144,18 @@ struct AppRoot: View {
         self.inviteInbox = inviteInbox
         self.notifications = notifications
         _held = State(initialValue: vault.phase)
+        _reader = State(initialValue: PhaseReader(phase: { vault.phase }, refresh: { try? await vault.refresh() }))
         _shell = State(initialValue: ShellModel(account: vault, vault: vault, ownerChecks: vault.ownerChecks))
     }
 
     var body: some View {
         // A canary manifest handed to the app is asked about over whatever is shown (VAULT-RELEASES §10.1 step 9).
-        CanaryManifestHost(inbox: canaryInbox, repo: vault.canary) {
+        CanaryManifestHost(inbox: canaryInbox, repo: vault.canary, ready: shownPhase == .unlocked) {
             // IOS-PLAN §4.4 (1): the vault does not count this phone as its credential's holder; over whatever sent the
             // request, which stays. Nothing is erased.
             // The notices of a move are the root's, above every phase (vettid-android `VettIdApp`).
             VStack(spacing: 0) {
-                MoveNotices(vault: vault, phase: vault.phase)
+                MoveNotices(vault: vault, phase: vault.phase, setupLinkIgnored: $setupLinkIgnored)
                 content.credentialRequiredCover(
                     vault.credentialRequired, onRetry: { vault.credentialRequiredTryAgain() },
                     onLock: { Task { try? await vault.lock() } }
@@ -162,8 +168,11 @@ struct AppRoot: View {
             // The vault's time scale for every failure text below (STAGING-TIME-SCALE §5.2).
             .environment(\.vettIDTimeScale, vault.timeScale)
             // The daily check covering the shell closes the root's own presentations too (the move's sheet, the canary alert).
-            .environment(\.vettIDCovered, shownPhase == .unlocked && shell.checkCovers)
-            .task { try? await vault.refresh() }
+            // The same for the credential-required cover: the root's presentations (the move's sheet, the canary alert) are
+            // outside the subtree it covers, so they close for it here.
+            .environment(\.vettIDCovered, (shownPhase == .unlocked && shell.checkCovers) || vault.credentialRequired)
+            // The launch read goes through the same guard as "Try again" and the foreground: one read at a time.
+            .task { await reader.ask() }
             // A start before the first unlock (or while the iPhone was locked) read nothing: read again once the app is
             // active and protected data is available (IOS-PLAN §6.1, §6.3).
             .onChange(of: scenePhase) { _, now in
@@ -189,6 +198,7 @@ struct AppRoot: View {
                 // "Finish the move" locks and unlocks the vault under the screen that asked: the root stays as it was until
                 // the outcome (vettid-android `holdsRoot`).
                 if !vault.finishingMove { held = now }
+                if Self.dropSetupLink(phase: now, inbox: inbox) { setupLinkIgnored = true }
                 closeIfNotOpen()
             }
             .onChange(of: vault.finishingMove) { _, finishing in
@@ -201,7 +211,10 @@ struct AppRoot: View {
                 // An invitation is kept until the vault is open (``OpenedLink``).
                 switch OpenedLink.route(url) {
                 case .invite(let link): inviteInbox.offer(link)
-                case .setup(let link): inbox.offer(link)
+                case .setup(let link):
+                    // A phone with a vault has no use for a setup link: said, not kept for a later setup.
+                    inbox.offer(link)
+                    if Self.dropSetupLink(phase: vault.phase, inbox: inbox) { setupLinkIgnored = true }
                 case .other: openFile(url)
                 }
             }
@@ -219,14 +232,45 @@ struct AppRoot: View {
         if vault.phase != .unlocked { SecurePasteboard.clearIfOwn() }
         guard vault.phase != .unlocked, !RootHold.holds(phase: vault.phase, finishingMove: vault.finishingMove) else { return }
         shell.reset()
+        AcceptedScans.reset()
+        // A wait the vault asked for outlives a screen and a lock; it ends at a wipe, `.signedOut` (chosen; not in the spec).
+        if Self.waitsEnd(with: vault.phase) { WaitRegistry.shared.clearAll() }
         // The vault is no longer open (locked, signed out, unreachable): the allowance ends.
         screenshots.vaultClosed()
+    }
+
+    /// A setup link waiting in [inbox] while [phase] has a vault is dropped, so that no later setup (after a Delete vault in the
+    /// same run) redeems it; true when one was dropped. A link that came while the phase was still being read is judged here
+    /// when the phase is known.
+    static func dropSetupLink(phase: AppPhase, inbox: SetupLinkInbox) -> Bool {
+        guard hasVault(phase), inbox.link != nil else { return false }
+        inbox.consume()
+        return true
+    }
+
+    /// A wipe: the waits kept for the vault that was here end. A lock does not end them, nor does a setup stage that follows an
+    /// unlock of the same vault (`.recovering`, `.needsCredential`, `.finishing`).
+    static func waitsEnd(with phase: AppPhase) -> Bool { phase == .signedOut }
+
+    /// The start screen's and the unreachable screen's "Try again" are the member's: always answered.
+    static func tryAgain(_ reader: PhaseReader) -> @MainActor () async -> Void { { await reader.tryAgain() } }
+
+    /// A vault is set up on this phone (the setup flow has nothing to do).
+    static func hasVault(_ phase: AppPhase) -> Bool {
+        switch phase {
+        case .locked, .unlocked: true
+        // A vault being deleted is gone in a moment: a setup link that comes now is kept for the setup after it.
+        default: false
+        }
     }
 
     private func openFile(_ url: URL) {
         if let doc = CanaryManifestFiles.receive(url) {
             // A file opened with VettID: only verified and shown; nothing is installed before the member confirms.
             canaryInbox.offer(doc)
+        } else if url.isFileURL {
+            // A file that cannot be read is said so, as Settings' "Load a manifest" does ("It could not be checked").
+            canaryInbox.offerUnreadable()
         }
     }
 
@@ -234,17 +278,8 @@ struct AppRoot: View {
         NotificationCenter.default.publisher(for: UIApplication.protectedDataDidBecomeAvailableNotification)
     }
 
-    /// Whether [phase] is a start that could not read this phone's state yet.
-    static func readsAgain(_ phase: AppPhase) -> Bool {
-        switch phase {
-        case .starting, .unreachable(.phoneLocked, _): true
-        default: false
-        }
-    }
-
     private func retryRefresh() {
-        guard Self.readsAgain(vault.phase) else { return }
-        Task { try? await vault.refresh() }
+        Task { await reader.ask() }
     }
 
     /// IOS-PLAN §6.6: what is in flight (a lock's first attempt, the outbox, a vote window's lock) is finished in a
@@ -300,9 +335,9 @@ struct AppRoot: View {
         case .signedOut, .setup:
             OnboardingFlow(account: vault, vault: vault, inbox: inbox, routes: onboardingRoutes) { openPortal() }
         case .starting:
-            StartingScreen()
+            StartingScreen(reread: Self.tryAgain(reader))
         case .unreachable:
-            UnreachableFlow(account: vault, timeScale: vault.timeScale) { openPortal() }
+            UnreachableFlow(account: vault, timeScale: vault.timeScale, reread: Self.tryAgain(reader)) { openPortal() }
         case .locked:
             UnlockFlow(vault: vault, account: vault, ownerCheck: vault.ownerChecks, releaseNotes: releaseNotes) { openPortal() }
         case .deleting:

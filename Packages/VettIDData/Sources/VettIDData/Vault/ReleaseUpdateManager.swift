@@ -127,10 +127,17 @@ public final class ReleaseUpdateManager: ReleaseUpdateRepository {
         launch { [self] in await wayBack(pin) }
     }
 
+    /// Why ``returnToPrevious(pin:generation:)`` would not start now, or nil when it would (no PIN is looked at).
+    public func returnRefusal() -> ReturnRefusal? {
+        if running { return .updateRunning }
+        guard let m = ops.unconfirmedMove(), m.failed else { return .nothingToReturnTo }
+        if ops.ownerCheckDue() { return .ownerCheckFirst }
+        if ops.changeHold() != nil { return .changeHeld }
+        return nil
+    }
+
     public func returnToPrevious(pin: String, generation: Int?) -> Bool {
-        guard !running, !pin.isEmpty, let m = ops.unconfirmedMove(), m.failed, !ops.ownerCheckDue(), ops.changeHold() == nil else {
-            return false
-        }
+        guard !pin.isEmpty, returnRefusal() == nil, let m = ops.unconfirmedMove() else { return false }
         progress = UpdateProgress(step: .abandoning, from: m.from, to: m.to, canAbandon: true)
         let pin = taken(pin, generation)
         launch { [self] in await wayBack(pin) }

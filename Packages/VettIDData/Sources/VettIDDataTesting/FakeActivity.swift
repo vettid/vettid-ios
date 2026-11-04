@@ -272,7 +272,6 @@ public final class FakeApprovals: ApprovalsRepository {
     public func refreshRequests() async throws { try await connections.refreshRequests() }
     public func approveConnection(_ pendingID: String) async throws { try await connections.approveConnection(pendingID) }
     public func declineConnection(_ pendingID: String) async throws { try await connections.declineConnection(pendingID) }
-    public func blockConnectionRequest(_ pendingID: String) async throws { try await connections.blockConnectionRequest(pendingID) }
     public func approveOutgoing(_ connectionID: String) async throws { try await connections.approveOutgoing(connectionID) }
     public func declineOutgoing(_ connectionID: String) async throws { try await connections.declineOutgoing(connectionID) }
 }

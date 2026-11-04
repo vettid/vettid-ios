@@ -154,7 +154,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "You blocked the vault that sent this invitation. Unblock it first to connect."
+            "value": "You blocked this vault earlier, so this invitation can't be used to connect."
           }
         }
       }

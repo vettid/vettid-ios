@@ -106,7 +106,7 @@ import VettIDVault
         #expect(got.displayName == "Morgan Lee" && got.state == .active)
     }
 
-    /// §6.4 "Already connected", a spent link, and a blocked inviter.
+    /// §6.4 "Already connected", a spent link, and an inviter on the block list (a block made before the app stopped offering one).
     @Test func anInviterAlreadyConnectedSpentLinksAndBlocks() async throws {
         defer { phone.close() }
         try await setUp()
@@ -116,8 +116,7 @@ import VettIDVault
         #expect(c.requests.isEmpty)
         #expect(await kind { try await c.acceptInvite(again) } == .inviteUnavailable, "the claim was fetched once")
         let later = try service.peerInvite(sameAs: id)
-        try await c.block(id)
-        #expect(c.connections.isEmpty && service.connectionIDs.isEmpty && service.blockedKeys.count == 1)
+        try service.blockPeer(of: id)
         #expect(await kind { try await c.acceptInvite(later) } == .blocked)
     }
 
@@ -148,6 +147,12 @@ import VettIDVault
         try await c.declineOutgoing(waiting.connectionID)
         #expect(c.requests.isEmpty && !service.declinedSent.contains(waiting.connectionID))
         #expect(await kind { try await c.declineOutgoing(waiting.connectionID) } == .notFound)
+
+        // A block made on the vault's side declines a request there too.
+        _ = try await c.createInvite(.oneHour)
+        let blockedID = try service.peerAccepts(first: "Sam", last: "Roe")
+        try service.blockPeer(of: blockedID)
+        #expect(service.declinedSent.contains(blockedID))
     }
 
     /// The owner's own metadata, the asks (§10.4.1), the peer's profile changing, and a removal.

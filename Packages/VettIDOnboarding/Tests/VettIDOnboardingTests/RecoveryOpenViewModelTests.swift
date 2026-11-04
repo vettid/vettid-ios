@@ -53,8 +53,14 @@ import VettIDDataTesting
         // The app opens only when the member continues.
         #expect(!vault.calls.contains("finishRecoveryOpen"))
         vm.openApp()
+        #expect(vm.state.openingApp, "\"Continue\" is busy while the app opens")
         await vm.settle()
-        #expect(vault.calls.contains("finishRecoveryOpen") && vault.phase == .unlocked && vm.state.opened)
+        #expect(vault.calls.contains("finishRecoveryOpen") && vault.phase == .unlocked && vm.state.opened && !vm.state.openingApp)
+        // Continue again once opened opens nothing twice; the screen is asked to finish setup again.
+        #expect(vm.state.finishRequests == 0)
+        vm.openApp()
+        await vm.settle()
+        #expect(vm.state.finishRequests == 1 && vault.calls.filter { $0 == "finishRecoveryOpen" }.count == 1)
     }
 
     /// The release R recovery end to end over one vault, as the screens run it: the recovery flow at its open, the open

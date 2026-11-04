@@ -1,6 +1,7 @@
 import CryptoKit
 import Foundation
 import Testing
+import VettIDOnboarding
 import VettIDAltChan
 import VettIDData
 import VettIDKeys
@@ -22,11 +23,11 @@ import VettIDTesting
     /// A start that could not read this phone's state (the iPhone locked) is read again when the app becomes active or
     /// protected data becomes available; no other phase is.
     @Test func onlyAStartThatReadNothingIsReadAgain() {
-        #expect(AppRoot.readsAgain(.starting))
-        #expect(AppRoot.readsAgain(.unreachable(.phoneLocked)))
-        #expect(AppRoot.readsAgain(.unreachable(.phoneLocked, longUnreachable: true)))
+        #expect(PhaseReader.readsAgain(.starting))
+        #expect(PhaseReader.readsAgain(.unreachable(.phoneLocked)))
+        #expect(PhaseReader.readsAgain(.unreachable(.phoneLocked, longUnreachable: true)))
         for p: AppPhase in [.signedOut, .setup(.newVault), .locked, .unlocked, .unreachable(.network)] {
-            #expect(!AppRoot.readsAgain(p), "\(p)")
+            #expect(!PhaseReader.readsAgain(p), "\(p)")
         }
     }
 

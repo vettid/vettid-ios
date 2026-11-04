@@ -54,16 +54,24 @@ public final class UnreachableViewModel {
     public private(set) var clearDataFailed = false
 
     @ObservationIgnored private let account: any AccountRepository
+    /// Reads the phase again, one read at a time with the app's other asks (the foreground, protected data); without it the
+    /// account's own refresh.
+    @ObservationIgnored private let reread: (@MainActor () async -> Void)?
 
-    public init(account: any AccountRepository) {
+    public init(account: any AccountRepository, reread: (@MainActor () async -> Void)? = nil) {
         self.account = account
+        self.reread = reread
     }
 
     public func retry() {
         guard !retrying else { return }
         retrying = true
         Task { [weak self] in
-            try? await self?.account.refresh()
+            if let reread = self?.reread {
+                await reread()
+            } else {
+                try? await self?.account.refresh()
+            }
             self?.retrying = false
         }
     }

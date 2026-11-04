@@ -210,6 +210,19 @@ import VettIDDataTesting
         #expect(finishNewCodeAction(finish, {}) != nil)
     }
 
+    /// The last screen of a recovery shows why the end of setup failed (the flow's notice), beside "Continue".
+    @Test func theDoneStepShowsAFailedEndOfSetup() {
+        var told: [String] = []
+        let state = RecoveryOpenState(step: .done)
+        let window = host(RecoveryOpenContent(state: state, problem: .failure(.network), noticeProbe: { told.append($0) }))
+        #expect(told.contains("error"))
+        window.isHidden = true
+        told = []
+        let quiet = host(RecoveryOpenContent(state: state, problem: nil, noticeProbe: { told.append($0) }))
+        #expect(told.isEmpty)
+        quiet.isHidden = true
+    }
+
     // MARK: - The PIN and the code
 
     /// The PIN is the keypad's: no text field takes it. The open step has the password's secret field and nothing else; the

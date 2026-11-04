@@ -43,6 +43,24 @@ import VettIDDataTesting
         #expect(vault.phase == .unlocked)
     }
 
+    /// "Go" on the last screen says why it failed, and tries again on the next tap.
+    @Test func aFailedGoIsSaidAndTriedAgain() async throws {
+        let vm = model()
+        vm.scan()
+        vm.scanned(try qr())
+        await clock.runCurrent()
+        vault.transferApproval.complete()
+        await clock.advance(seconds: 2)
+        vault.fail["finishSetup"] = FakeVaultRepository.failure(.network)
+        vm.finish()
+        #expect(vm.state.busy)
+        await vm.settle()
+        #expect(vm.state.error == .network && !vm.state.busy && vault.phase == .setup(.finishing))
+        vm.finish()
+        await vm.settle()
+        #expect(vm.state.error == nil && vault.phase == .unlocked)
+    }
+
     /// The countdown to the end of the approval window runs on the clock.
     @Test func theApprovalCountdownRunsOnTheClock() async throws {
         let vm = model()
@@ -115,6 +133,25 @@ import VettIDDataTesting
         // Typing again takes the problem away.
         vm.setInput("x")
         #expect(vm.state.inputProblem == nil)
+    }
+
+    /// A refused code left in front of the camera is not sent again; the scan screen opened anew takes it.
+    @Test func aRefusedCodeLeftInFrontOfTheCameraIsNotSentAgain() async throws {
+        vault.fail["transferIn"] = FakeVaultRepository.failure(.other)
+        let vm = model()
+        vm.scan()
+        let code = try qr()
+        vm.scanned(code)
+        await clock.runCurrent()
+        #expect(vm.state.step == .scan && vm.state.error == .other)
+        vm.scanned(code)
+        await clock.runCurrent()
+        #expect(vm.state.step == .scan && vm.state.error == .other)
+        #expect(vault.calls.filter { $0 == "transferIn" }.count == 1)
+        vm.scan()
+        vm.scanned(code)
+        await clock.runCurrent()
+        #expect(vault.calls.filter { $0 == "transferIn" }.count == 2)
     }
 
     @Test func aPastedCodeIsCheckedTheSameWay() async throws {

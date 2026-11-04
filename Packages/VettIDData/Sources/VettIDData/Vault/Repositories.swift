@@ -308,9 +308,10 @@ public protocol VaultRepository: AnyObject, Observable, Sendable {
     /// "Return to release N". Default: nil.
     var unconfirmedMove: UnconfirmedMove? { get }
 
-    /// (IOS-PLAN §4.3 point 3) "Return to release N", confirmed on the unlock screen, with its PIN: the release update's
-    /// way back, shown over every phase. False when it did not start. Default: false.
+    /// (IOS-PLAN §4.3 point 3) "Return to release N", confirmed on the unlock screen, with its PIN: the release update's way
+    /// back, shown over every phase. False when it did not start (why: ``returnToPreviousReleaseRefusal()``). Default: false.
     func returnToPreviousRelease(pin: String) -> Bool
+    func returnToPreviousReleaseRefusal() -> ReturnRefusal?
 
     /// (iPhone, IOS-PLAN §6.3 item 5) The earlier-secret step, only on the member's tap: an unlock with [pin] and each
     /// replaced record of the phone secret, newest first, each once. Default: ``FailureKind/notSupported``.
@@ -344,7 +345,6 @@ public extension VaultRepository {
     var earlierSecretOffered: Bool { false }
     var releaseUpdateHeld: Bool { false }
     var unconfirmedMove: UnconfirmedMove? { nil }
-    func returnToPreviousRelease(pin: String) -> Bool { false }
     var renewSecretSuggested: Bool { false }
     func dismissRenewSuggestion() {}
     func checkVaultDeleted() async throws -> DeletionCheck { .undecided }

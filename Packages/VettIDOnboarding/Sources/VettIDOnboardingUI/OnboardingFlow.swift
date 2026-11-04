@@ -75,6 +75,7 @@ struct MovedInScreen: View {
         } else {
             MovedScreen(
                 body: state.phoneSecret ? MoveStrings.onboardingFinishMoveDone : MoveStrings.onboardingMovedTransferredBody,
+                busy: state.busy, error: state.error,
                 onGo: finish
             )
         }

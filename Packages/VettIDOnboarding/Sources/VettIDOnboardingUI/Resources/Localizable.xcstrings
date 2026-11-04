@@ -5254,6 +5254,83 @@
           }
         }
       }
+    },
+    "ios_unlock_update_refused_why": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The update was refused. %@ Your vault stayed on its current release."
+          }
+        }
+      }
+    },
+    "ios_unlock_return_update_running": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "An update is already running. Try again when it has ended."
+          }
+        }
+      }
+    },
+    "ios_unlock_return_check_first": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The daily PIN and password check comes first. Finish it, then return to the earlier release."
+          }
+        }
+      }
+    },
+    "ios_unlock_return_change_held": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A change of your PIN or password is still being decided. Try again once it is decided."
+          }
+        }
+      }
+    },
+    "ios_unlock_return_gone": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Going back to the earlier release isn't possible right now."
+          }
+        }
+      }
+    },
+    "ios_root_starting_slow_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Still opening VettID"
+          }
+        }
+      }
+    },
+    "ios_root_starting_slow_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This is taking longer than usual. VettID is still waiting for an answer."
+          }
+        }
+      }
     }
   },
   "version": "1.0"

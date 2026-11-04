@@ -27,7 +27,7 @@ public struct RotateRoute: View {
 
     public var body: some View {
         RotateContent(state: model?.state ?? RotateState(), actions: actions)
-            .onAppear { if model == nil { model = RotateViewModel(repo: repo) } }
+            .onAppear { if model == nil { model = RotateViewModel(repo: repo, waits: .shared) } }
     }
 
     private var actions: RotateActions {
@@ -87,7 +87,7 @@ public struct NewCredentialRoute: View {
 
     public var body: some View {
         NewCredentialContent(state: model?.state ?? NewCredentialState(), actions: actions)
-            .onAppear { if model == nil { model = NewCredentialViewModel(repo: repo, vault: vault) } }
+            .onAppear { if model == nil { model = NewCredentialViewModel(repo: repo, vault: vault, waits: .shared) } }
     }
 
     private var actions: NewCredentialActions {

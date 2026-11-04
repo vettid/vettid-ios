@@ -45,6 +45,24 @@ import VettIDUI
         #expect(Set(codes.map { refusalText($0, 5) }).count == codes.count)
         #expect(refusalText("approval", 5) == "Your vault could not verify this phone's approval.")
         #expect(refusalText("not_moved", 5) == "Your vault did not move (not_moved).")
+        // A release status the vault does not have is not shown as it came.
+        #expect(OnboardingStrings.releaseStatusTitle(3, "retired") == "Release 3 is retired")
+        #expect(OnboardingStrings.releaseStatusTitle(3, "Odd!") == OnboardingStrings.releaseUpdateTitle)
+        // A word that is not a code is not shown as it came.
+        #expect(refusalText("Not Moved!", 5) == "Your vault did not move (unknown).")
+        // The unlock screen: a known code in words with the refused release's own number; an unknown one in Android's one
+        // sentence with the filtered code.
+        #expect(OnboardingStrings.unlockUpdateRefusedText(code: "downgrade", release: 5)
+            == "The update was refused. Release 5 is not newer than your vault's release. Your vault stayed on its current release.")
+        #expect(OnboardingStrings.unlockUpdateRefusedText(code: "approval", release: nil)
+            == "The update was refused. Your vault could not verify this phone's approval. Your vault stayed on its current release.")
+        #expect(OnboardingStrings.unlockUpdateRefusedText(code: "target", release: nil)
+            == "The update was refused (target). Your vault stayed on its current release.")
+        #expect(OnboardingStrings.unlockUpdateRefusedText(code: "not_moved", release: 5)
+            == "The update was refused (not_moved). Your vault stayed on its current release.")
+        #expect(OnboardingStrings.unlockUpdateRefusedText(code: "Odd Word!", release: 5)
+            == "The update was refused (unknown). Your vault stayed on its current release.")
+        #expect(Set([ReturnRefusal.updateRunning, .ownerCheckFirst, .changeHeld, .nothingToReturnTo].map(OnboardingStrings.returnRefused)).count == 4)
         var p = UpdateProgress(step: .failed, from: rel(4), to: rel(5), failure: .vaultUnavailable)
         p.failureCode = ReleaseUpdateManager.codeReleaseStarting
         #expect(updateFailureText(p, timeScale: 1) == "The new release did not start. Try again later.")

@@ -135,6 +135,21 @@ import VettIDVault
         #expect(m.state.entries.map(\.seq) == [58, 57] + Array((7...56).reversed()) && !m.state.chainBroken)
     }
 
+    /// "Try again" on the "does not match" banner reads the list afresh (it does not just load more), and the banner
+    /// stays only if the chain still does not check out.
+    @Test func theBannersTryAgainReadsAfresh() async {
+        var entries = FakeAuditLog.chain(10, newest: Self.t0)
+        entries[4].kind = "vault.locked"
+        let log = FakeAuditLog(entries)
+        let m = await model(log, connectionID: nil)
+        #expect(m.state.chainBroken)
+        let reads = log.calls.count
+        m.retry()
+        #expect(!m.state.chainBroken && m.state.entries.isEmpty && m.state.loading)
+        await m.settle()
+        #expect(log.calls.count == reads + 1 && m.state.chainBroken && !m.state.entries.isEmpty)
+    }
+
     /// Two quick refreshes chain; the first one ending does not let a page load run beside the second on the same pager.
     @Test func aPageIsNotLoadedWhileASecondRefreshRuns() async {
         let log = FakeAuditLog(FakeAuditLog.chain(120, newest: Self.t0))

@@ -290,14 +290,14 @@ import VettIDDataTesting
         #expect(vm.state.step == .intro && vm.state.errorCode == "exists" && !vm.state.busy)
     }
 
-    /// The pending's failure ends the code's wait: expired, with the failure said.
+    /// The pending's failure ends the code's wait: back at the start with the failure said, not as an expired code.
     @Test func aFailureWhileWaitingForTheScanEndsTheCode() async {
         let vm = model()
         vm.create()
         await clock.runCurrent()
         vault.pendingTransfer.fail(FakeVaultRepository.failure(.network))
         await clock.runCurrent()
-        #expect(vm.state.step == .expired && vm.state.error == .network)
+        #expect(vm.state.step == .intro && vm.state.error == .network && vm.state.offer == nil && !vm.state.busy)
     }
 
     /// Leaving while `device.transfer.create` is on its way: the late offer does not bring the code back.
