@@ -155,6 +155,8 @@ struct AppRoot: View {
                     onLock: { Task { try? await vault.lock() } }
                 )
             }
+            // The whole screen, so that the banner budget measures the window and not what the content leaves.
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
             .bannerBudgetRoot(banners)
         }
             // The vault's time scale for every failure text below (STAGING-TIME-SCALE §5.2).

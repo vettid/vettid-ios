@@ -69,8 +69,8 @@ struct LargeSizeTests {
     @Test func aBannerAreaScrollsOnlyBeyondItsLimit() async {
         let budget = BannerBudget()
         let fitting = VStack(spacing: 0) { BannerArea { banners(2) }; Color.clear }.bannerBudgetRoot(budget)
-        let fits = await scrollViews(in: fitting) { _ in budget.counted == 1 }
-        #expect(budget.counted == 1 && fits.isEmpty)
+        let fits = await scrollViews(in: fitting) { _ in budget.counted == 1 && budget.screenHeight > 0 }
+        #expect(budget.counted == 1 && budget.screenHeight > 0 && fits.isEmpty)
         let overflowing = await scrollViews(in: BannerArea(limit: 200) { banners(8) }) { $0.contains { !$0.scrollsToTop } }
         #expect(!overflowing.isEmpty && overflowing.allSatisfy { !$0.scrollsToTop })
         #expect(BannerArea<EmptyView>.scrolls(content: 640, limit: 281) && !BannerArea<EmptyView>.scrolls(content: 90, limit: 281))
@@ -92,9 +92,12 @@ struct LargeSizeTests {
         let box = Box()
         let first = Color.gray.frame(height: 80)
             .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).minY } action: { box.minY = $0 }
-        let area = BannerArea(limit: 150) { first; banners(7) }
+        // At the top of the window, as the shell has it, with a top inset forced (a scene-less window may have none).
+        let root = VStack(spacing: 0) { BannerArea(limit: 150) { first; banners(7) }; Color.clear }
+        let host = UIHostingController(rootView: root.vettIDTheme(.light))
+        host.additionalSafeAreaInsets = UIEdgeInsets(top: 59, left: 0, bottom: 0, right: 0)
         let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
-        window.rootViewController = UIHostingController(rootView: area.vettIDTheme(.light))
+        window.rootViewController = host
         window.isHidden = false
         defer { window.isHidden = true }
         let end = ContinuousClock.now.advanced(by: .seconds(2))
@@ -102,7 +105,17 @@ struct LargeSizeTests {
             window.layoutIfNeeded()
             try? await Task.sleep(for: .milliseconds(50))
         }
-        #expect(box.minY >= window.safeAreaInsets.top - 0.5, "\(box.minY) vs \(window.safeAreaInsets.top)")
+        window.layoutIfNeeded()
+        #expect(host.view.safeAreaInsets.top > 0, "the window has a top inset")
+        #expect(box.minY >= host.view.safeAreaInsets.top - 0.5, "\(box.minY) vs \(host.view.safeAreaInsets.top)")
+        // The area's scroll view keeps the system's inset: its content starts below the inset, not under it.
+        let scrolls = Self.views(in: window).compactMap { $0 as? UIScrollView }.filter { !$0.scrollsToTop }
+        #expect(scrolls.count == 1)
+        for scroll in scrolls {
+            #expect(scroll.contentInsetAdjustmentBehavior != .never)
+            let adjusted = scroll.adjustedContentInset.top
+            #expect(adjusted >= scroll.safeAreaInsets.top - 0.5, "\(adjusted) vs \(scroll.safeAreaInsets.top)")
+        }
     }
 
     /// The production path: two areas with no limit of their own share one budget made at the root, each overflowing, and each
@@ -143,7 +156,7 @@ struct LargeSizeTests {
         var binding: Binding<[Int]>?
         let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
         window.rootViewController = UIHostingController(rootView: Host(budget: budget) { binding = $0 })
-        window.makeKeyAndVisible()
+        window.isHidden = false
         func wait(_ counted: Int) async -> Bool {
             let end = ContinuousClock.now.advanced(by: .seconds(2))
             while budget.counted != counted, ContinuousClock.now < end {
