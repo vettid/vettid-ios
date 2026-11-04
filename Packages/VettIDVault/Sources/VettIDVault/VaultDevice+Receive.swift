@@ -68,6 +68,9 @@ extension VaultDevice {
             // handshake's fin). The message itself was handled; it is acked and never handled again. Letting it out
             // would end the collector, and without the ack the same message would fail again at every start.
         }
+        #if DEBUG
+        beforeFinalSave?()
+        #endif
         try save()
     }
 

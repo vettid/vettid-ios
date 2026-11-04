@@ -48,7 +48,7 @@ extension VaultDevice {
             if a.enrollNonce != nil { setAlt(a.applyingEnrolled(stateSeq: stateSeq, attempt: attempt)) }
             return true
         }
-        if ok { publish(VaultMessage(inner: inner)) }
+        if ok { publishOnce(VaultMessage(inner: inner)) }
     }
 
     /// §11.3: nonce = the app's, user_data over the vault bundle, the PCRs the request was sealed to, fresh. Checked

@@ -129,6 +129,10 @@ public final class VaultDevice: @unchecked Sendable {
     let secrets: DeviceSecrets
     let st: DeviceState
     let lock = AsyncLock()
+    #if DEBUG
+    /// TEST ONLY. Called by the handling of a message right before the write that ends it.
+    var beforeFinalSave: (@Sendable () -> Void)?
+    #endif
     /// A flush of the outbox runs (``flushOutbox()``). Read and written under ``mem``.
     var flushing = false
     /// Completed when the running flush ends: the flushes that wait for it wake up. Under ``mem``.
@@ -194,8 +198,6 @@ public final class VaultDevice: @unchecked Sendable {
     var inbox: [VaultMessage] = []
     /// The types of event a call is about to wait for, with how many calls (``keepingEvents(_:_:)``): ``clearInbox()`` keeps them.
     var keptTypes: [String: Int] = [:]
-    /// How many times ``clearInbox()`` ran.
-    var inboxClears = 0
     /// The outbox entries the handling of the message in hand stored with a write of its own (an `hs.fin`): kept when the
     /// handling ends in an error, with the work after the lock that belongs to them.
     var keptOnError: Set<String> = []

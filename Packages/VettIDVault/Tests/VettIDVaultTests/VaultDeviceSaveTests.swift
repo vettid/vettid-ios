@@ -126,20 +126,28 @@ extension VaultDeviceTests {
         #expect(answer.type == "relay.token.refresh" && answer.re != nil, "the redelivery was answered, not acked unanswered")
     }
 
+    #if DEBUG
     /// A reply queued by a handling that failed is taken out whatever wrote it, and the redelivery's is the only answer: one
-    /// standing token for one refresh, not two.
+    /// standing token for one refresh, not two. Another write (a flush's, an earlier message's) stores the queued answer
+    /// before the final write fails; the answer is taken out all the same.
     @Test func aRefreshAnsweredAfterAFailedSaveGetsOneAnswer() async throws {
         let store = FlakyStore()
         let (d, v) = try await pairedDevice(store: store)
         let refresh = try v.seal("relay.token.refresh", "{}")
-        store.arm()
+        d.beforeFinalSave = { [d] in
+            try? d.save() // another write stores the queued answer
+            store.arm()
+        }
         await #expect(throws: (any Error).self) { try await d.handle(refresh) }
-        #expect(d.outboxIDs.isEmpty, "the queued answer is gone, so the redelivery's is the only one")
+        #expect(store.state?.outbox.count == 1, "the answer is on disk, stored by the other write")
+        #expect(d.outboxIDs.isEmpty, "and gone from memory all the same, so the redelivery's is the only one")
+        d.beforeFinalSave = nil
         store.disarm()
         try await d.handle(refresh)
         _ = try await relay.nextDeposit()
         #expect(await relay.noDeposit(within: 0.3), "one answer, not two")
     }
+    #endif
 
     /// An event is published once, though its message is handled again after a failed save.
     @Test func anEventIsPublishedOnceAfterAFailedSave() async throws {
@@ -167,6 +175,7 @@ extension VaultDeviceTests {
     /// The fin that the handling stored goes out all the same, with the code (the work after the lock that belongs to it is
     /// kept): a pairing code is spent by its handshake.
     @Test func theFinStoredByTheHandlingIsDepositedAfterAFailedFinalSave() async throws {
+        // (The code of a transfer, ``theCodeIsShownAfterAFailedFinalSave``, goes with it; an app pairing shows none.)
         let (d, _) = try await respondingWithAFailingFinalSave(relayTakesTheFin: true)
         _ = try await relay.nextDeposit()
         #expect(d.outboxIDs.isEmpty, "the relay took it")

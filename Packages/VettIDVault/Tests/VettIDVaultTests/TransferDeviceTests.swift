@@ -50,6 +50,23 @@ final class RecordingAttester: Attester, @unchecked Sendable {
         return NewPhone(device: d, vault: try FakeVault(relayURL: base.relay.baseURL), attester: TestIOSAttester(), secrets: secrets)
     }
 
+    /// The code of a transfer is shown, and the fin goes out, though the final write of the handling of the vault's answer
+    /// failed: the fin was stored by the handling's own write.
+    @Test func theCodeIsShownAfterAFailedFinalSave() async throws {
+        let store = VaultDeviceTests.FlakyStore()
+        let secrets = DeviceSecrets(identity: Ed25519PrivateKey.generate(), kem: try KemPrivateKey.generate(), relay: Ed25519PrivateKey.generate(), apiKey: [UInt8](repeating: 0x30, count: 91))
+        let d = try await VaultDevice.create(base.config(store), secrets: secrets)
+        let v = try FakeVault(relayURL: base.relay.baseURL)
+        let (qr, inviteID) = try code(v, d)
+        try await d.startTransfer(link: try qr.link(), attester: TestIOSAttester()) { _, _ in [UInt8](repeating: 7, count: 32) }
+        let (_, initMsg) = try await base.relay.nextDeposit()
+        let (resp, _) = try v.respondOpening(initMsg, d, ctx: inviteID)
+        store.failAfter(1) // the fin's own write, then the final write fails
+        await #expect(throws: (any Error).self) { try await d.handle(resp) }
+        #expect(d.pairingSas != nil, "the code is shown")
+        _ = try await base.relay.nextDeposit() // and the fin went out
+    }
+
     @Test func theAttestedHsInitCarriesTheAppKeyAndTheUnlockSecretAndThePairedEventCompletesIt() async throws {
         let p = try await newDevice()
         let (d, v, attester, secrets) = (p.device, p.vault, p.attester, p.secrets)
