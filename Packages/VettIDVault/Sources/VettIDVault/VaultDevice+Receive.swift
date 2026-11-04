@@ -120,13 +120,13 @@ extension VaultDevice {
         // hs.resp before maintain() looks at it.
         case "device.paired":
             storeVaultToken(body)
+            // The first handshake's `device.paired` (pairing, enrollment, transfer): a fin still owed for it is of no use, and
+            // its age must not later tell a paired device that the pairing failed.
+            mem.withLock { if st.deviceID == nil { st.outbox.removeAll { $0.type == Self.typeHsFin } } }
             // A transfer's `device.paired` is applied before the message is acked (VAULT-MESSAGING §11.14.10 rule 5: a paired
             // transfer completes at any later start): the event in memory is lost with the process, the state is not.
             if mem.withLock({ st.deviceID == nil && (VaultJSON.bool(body, "transfer") == true || alt().transferAttestKeyID != nil) }) {
                 applyPaired(body)
-                // Paired: a fin still owed for this handshake is of no use, and its age must not later tell a paired device
-                // that the pairing failed.
-                mem.withLock { st.outbox.removeAll { $0.type == Self.typeHsFin } }
             }
         // §6.7 (0.10.5): only a device still waiting for device.paired acts on it; a paired one drops it.
         case Self.typePairRejected:

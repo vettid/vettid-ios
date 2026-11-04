@@ -156,7 +156,7 @@ public final class VaultDevice: @unchecked Sendable {
     #endif
     /// The handshake whose `hs.resp` was handled last (``VaultDevice/sendInit(_:)`` reads it). Under ``mem``.
     var answeredInit: ObjectIdentifier?
-    /// The `hs.fin` of the handshake was refused for good or dropped (``notifyFinFailed()``). Under ``mem``.
+    /// The `hs.fin` of the handshake was refused for good (``notifyFinFailed()``). Under ``mem``.
     var finFailed = false
 
     /// A vault rekey this device answered (`hs.resp` sent), awaiting its `hs.fin` (§6.5).

@@ -227,11 +227,11 @@ extension VaultDevice {
             // Not one that is being deposited just now (a renewal reported as failed must not go out later).
             guard mem.withLock({ st.outbox.contains(e) && outboxInFlight.insert(e.id).inserted }) else { continue }
             defer { mem.withLock { _ = outboxInFlight.remove(e.id) } }
-            // A handshake's fin past its time will not arrive in time: the handshake's code is lost either way, and the flow
-            // that waits for the pairing is told (chosen; not in the spec).
+            // A handshake's fin past its time is not sent again (chosen; not in the spec). That is no failure of the pairing: the
+            // fin may have reached the vault, whose answer was lost, and the transfer's `device.paired` may wait in the mailbox
+            // for the deadline's collect (VAULT-MESSAGING §11.14.10 rule 5). Only a terminal refusal tells the flow.
             if e.type == Self.typeHsFin, let dropAfter = e.dropAfterMs, nowMs >= dropAfter {
                 try? await withLockSaving { st.outbox.removeAll { $0.id == e.id } }
-                notifyFinFailed()
                 continue
             }
             do {
@@ -360,6 +360,7 @@ extension VaultDevice {
     /// lock across the network. The work belongs to the ``handle(_:)`` call that queued it (a task-local box), so that a
     /// concurrent handling never deposits another's entry before that one has saved. Callers hold ``lock``.
     func afterLock(_ work: @escaping @Sendable () async -> Void) {
+        assert(AfterLockWork.current != nil, "afterLock outside handle(_:): the work would be lost")
         AfterLockWork.current?.add(work)
     }
 }

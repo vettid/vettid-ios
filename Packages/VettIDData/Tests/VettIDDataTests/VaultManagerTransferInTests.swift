@@ -229,6 +229,39 @@ import VettIDDataTesting
         #expect(phone.attester.discarded == phone.attester.attested)
     }
 
+    /// A fin the relay refuses for good while the phone waits for the approval (the code shown, the fin owed after a lost
+    /// answer) still drops the transfer, before the deadline.
+    @Test func aFinRefusedForGoodWhileWaitingDropsTheTransfer() async throws {
+        defer { phone.close() }
+        service.transferLosesFinAnswers = true
+        _ = try await scanned()
+        let waiting = Task { try await m.awaitTransferIn() }
+        try await Task.sleep(for: .milliseconds(100))
+        service.transferLosesFinAnswers = false
+        service.transferRevokesFin = true
+        await m.session?.device.flushOutbox() // the fin is refused for good now
+        let failure = await vaultFailure { _ = try await waiting.value }
+        #expect(failure?.kind == .inviteUnavailable && failure?.code == "pairing_not_completed")
+        #expect(!deviceHoldsVault && !pendingRecord)
+        #expect(phone.attester.discarded == phone.attester.attested)
+    }
+
+    /// A fin dropped by age is no failure: the approval that came meanwhile is collected at the deadline and the transfer
+    /// completes (§11.14.10 rule 5).
+    @Test func aFinDroppedByAgeLetsTheDeadlineCollectThePaired() async throws {
+        defer { phone.close() }
+        service.transferLosesFinAnswers = true
+        service.transferRequestTokenTTL = 600 // a pairing's request token
+        _ = try await scanned()
+        m.session?.device.stop() // the collector is not running while the app is suspended
+        service.approveTransferIn()
+        phone.clockAhead = 700 // past the transfer's 11 minutes and the token's exp and the minute
+        await m.session?.device.flushOutbox() // the aged fin is dropped, silently
+        service.transferLosesFinAnswers = false // the take-over's requests get their answers
+        #expect(try await m.awaitTransferIn())
+        #expect(m.finishMovePending && deviceHoldsVault)
+    }
+
     @Test func abandoningBeforeTheApprovalDropsEverything() async throws {
         defer { phone.close() }
         _ = try await scanned()

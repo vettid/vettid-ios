@@ -141,8 +141,7 @@ extension VaultDevice {
         }
     }
 
-    /// Stores the `hs.fin` in the outbox, marked in flight until its deposit, and saves; on a failed save it is neither kept
-    /// nor marked. Dropped when the token it is sent under expires (a minute past it, as the wait for an hs.resp is: a phone
+    /// Stores the `hs.fin` in the outbox, marked in flight until its deposit, and saves. Dropped when the token it is sent under expires (a minute past it, as the wait for an hs.resp is: a phone
     /// clock that runs ahead must not drop a fin the relay would still take), at the latest after a handshake's lifetime
     /// (chosen; not in the spec). Callers hold ``lock``.
     private func storeFin(_ fin: [UInt8], vault v: VaultRecord, at t: Date) throws -> OutboxEntry {
@@ -158,15 +157,9 @@ extension VaultDevice {
             outboxInFlight.insert(e.id) // until the deposit: a flush in between leaves it alone
             return e
         }
-        do {
-            try save()
-        } catch {
-            mem.withLock {
-                outboxInFlight.remove(entry.id)
-                st.outbox.removeAll { $0.id == entry.id }
-            }
-            throw error
-        }
+        // A failed save loses nothing: the entry stays in memory, is deposited now, and is saved with the next write. It is
+        // unmarked so that a flush may take it up if the deposit below does not run.
+        if (try? save()) == nil { mem.withLock { _ = outboxInFlight.remove(entry.id) } }
         return entry
     }
 
@@ -408,7 +401,6 @@ extension VaultDevice {
             // nothing more is sent for it (chosen; not in the spec). `forbidden` (a phone still recovering) and
             // `credential_required` (no holder yet) are passing states: the ack stays owed and is tried again at the usual rate.
             // `forbidden` still reaches the caller, who acts on it.
-            _ = e
             try? await ackSettled(version)
             return
         }

@@ -35,6 +35,11 @@ struct FakeTransferStore {
     var revokesDeposits = false
     /// The vault's relay refuses the deposit that follows its `hs.resp` (the new phone's `hs.fin`) as revoked.
     var revokesFin = false
+    /// The vault takes the new phone's `hs.fin` but its answer is lost in transport (and again for every later deposit).
+    var losesFinAnswers = false
+    var finSeen = false
+    /// The lifetime of the request token the vault's `hs.resp` carries (a pairing's is 10 minutes, §6.7); nil: a standing one.
+    var requestTokenTTL: TimeInterval?
     var revokedDeposits = 0
     var collectRefused = false
     var collectFailures = 0
@@ -106,6 +111,18 @@ extension FakeVaultService {
         set { locked { transfer.holdApproval = newValue } }
     }
 
+    /// The lifetime of the request token that the vault's `hs.resp` carries to the new phone.
+    public var transferRequestTokenTTL: TimeInterval? {
+        get { locked { transfer.requestTokenTTL } }
+        set { locked { transfer.requestTokenTTL = newValue } }
+    }
+
+    /// The vault takes the new phone's `hs.fin` and the relay's answer is lost: the fin stays owed on the phone.
+    public var transferLosesFinAnswers: Bool {
+        get { locked { transfer.losesFinAnswers } }
+        set { locked { transfer.losesFinAnswers = newValue } }
+    }
+
     /// The vault's relay refuses the new phone's `hs.fin` for good (`token_revoked`) while the `hs.init` was taken.
     public var transferRevokesFin: Bool {
         get { locked { transfer.revokesFin } }
@@ -150,7 +167,7 @@ extension FakeVaultService {
         transfer.unlockSecret = p.body.unlockSecret
         deviceIk = p.body.from.ik
         device = (kem: p.body.from.kem, relay: p.body.from.relay)
-        let (resp, env) = try p.respond(ResponderConfig(identity: ik, token: try token(p.body.from.relay), policy: .vaultToDevice, collectSender: p.body.from.relay.pk))
+        let (resp, env) = try p.respond(ResponderConfig(identity: ik, token: try token(p.body.from.relay, ttl: transfer.requestTokenTTL ?? DepositTokens.standingTTL), policy: .vaultToDevice, collectSender: p.body.from.relay.pk))
         responder = resp
         queue(env)
     }
@@ -244,7 +261,7 @@ extension FakeVaultService {
 
     /// Called with the vault relay's deposit: true when it is refused as revoked. Callers hold ``cond``.
     func refusesDeposit() -> Bool {
-        if transfer.revokesFin, responder != nil {
+        if transfer.revokesFin, responder != nil || transfer.finSeen {
             transfer.revokedDeposits += 1
             return true
         }

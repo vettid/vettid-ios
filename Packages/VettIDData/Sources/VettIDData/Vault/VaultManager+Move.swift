@@ -93,7 +93,7 @@ extension VaultManager: MoveRepository {
             do {
                 sas = try await sasWithinLimit(d)
             } catch let notCompleted as PairingNotCompleted {
-                // The fin did not reach the vault: the code is spent, nothing is kept (as for a rejection).
+                // The relay refused the fin for good: the code is spent, nothing is kept (as for a rejection).
                 await dropTransfer(d)
                 throw notCompleted
             }
@@ -136,7 +136,8 @@ extension VaultManager: MoveRepository {
     /// at the deadline, **11 minutes after the `hs.init` was started** (§11.14.10 rule 5, owner decision 2026-10-23: one
     /// deadline, stored with the transfer, which no user action extends). At the deadline, and not before, the mailbox is
     /// collected once: a `device.paired{transfer}` it brings is applied and the move completes instead; otherwise the
-    /// transfer is dropped. Any other failure before the deadline is rethrown and the transfer kept. True when the vault gave
+    /// transfer is dropped. A fin the relay refused for good (``PairingNotCompleted``) before the deadline drops the transfer too; after
+    /// it the collect runs all the same. Any other failure before the deadline is rethrown and the transfer kept. True when the vault gave
     /// this phone the member's `user_guid` (§6.7.1, 0.17.0), which its unlocks need.
     public func awaitTransferIn() async throws -> Bool {
         try await guarded {
@@ -176,7 +177,8 @@ extension VaultManager: MoveRepository {
 
     /// Waits for the transfer's `device.paired` (applied by the device as it is handled) or the deadline, whichever comes
     /// first; the deadline's wait is ``VaultManagerConfig/transferDeadlineSleep``. A failure of the wait before the deadline
-    /// is thrown (nothing is collected or dropped before it, rule 5); at or after it, it is the deadline.
+    /// is thrown (nothing is collected or dropped before it, rule 5); at or after it, it is the deadline, also when the fin
+    /// was refused for good, so that a `device.paired` the vault already sent is collected and not lost.
     private func awaitPairedOrDeadline(_ d: VaultDevice) async throws -> PairedOrDeadline {
         let sleep = config.transferDeadlineSleep
         while true {
@@ -196,7 +198,9 @@ extension VaultManager: MoveRepository {
                     return try await group.next() ?? .deadline
                 }
             } catch {
-                if error is CancellationError || error is PairingRejected || error is PairingNotCompleted { throw error }
+                if error is CancellationError || error is PairingRejected { throw error }
+                // Before the deadline a failure is thrown (a refused fin, ``PairingNotCompleted``, drops the transfer); at or
+                // after it the wait is over and the collect of rule 5 runs, whatever the failure was.
                 if config.now() < deadline { throw error }
                 return .deadline
             }

@@ -281,7 +281,7 @@ import VettIDRelay
 
     /// A fin the relay could not take in time is dropped by age (the token's exp, at most a handshake's lifetime), not by the
     /// number of flushes, and the flow is told.
-    @Test func aFinPastItsTimeIsDroppedAndTheFlowIsTold() async throws {
+    @Test func aFinPastItsTimeIsDroppedWithoutFailingTheFlow() async throws {
         let offset = Box<TimeInterval>(0)
         let (d, v) = try await newPhone(now: { Date().addingTimeInterval(offset.value) })
         let (qr, inviteID) = try codeFor(v, d)
@@ -297,7 +297,9 @@ import VettIDRelay
         offset.value = 17 * 86_400 // past a handshake's lifetime
         await d.flushOutbox()
         #expect(d.mem.withLock { d.st.outbox.isEmpty }, "dropped by age")
-        await #expect(throws: PairingNotCompleted.self) { _ = try await d.awaitPairingSas() }
+        // No failure: the fin may have reached the vault, and its `device.paired` may wait for the deadline's collect.
+        #expect(!d.mem.withLock { d.finFailed })
+        #expect(try await d.awaitPairingSas() == d.pairingSas)
     }
 
     /// A fin is not left marked in flight once its deposit ended, passing refusal or not.
@@ -348,7 +350,8 @@ import VettIDRelay
         await #expect(throws: PairingNotCompleted.self) { _ = try await d.awaitPairingSas() }
     }
 
-    /// The fin is dropped a minute past its token's exp (the 10-minute request token of a pairing), by the device's clock.
+    /// The fin is dropped a minute past its token's exp (the 10-minute request token of a pairing), by the device's clock, and
+    /// that is not reported as a failure.
     @Test func aFinIsDroppedPastItsTokensExp() async throws {
         let offset = Box<TimeInterval>(0)
         let (d, v) = try await newPhone(now: { Date().addingTimeInterval(offset.value) })
@@ -359,13 +362,20 @@ import VettIDRelay
         base.relay.refuseStatus = 503
         base.relay.refuseDeposits = "unavailable"
         try await d.handle(try v.respondOpening(initMsg, d, ctx: inviteID).message)
-        offset.value = 500 // inside the token's time
+        let entry = try #require(d.mem.withLock { d.st.outbox.first })
+        let exp = try DepositTokens.verify(entry.token, issuer: v.relayKey.publicKey).exp
+        #expect(entry.dropAfterMs == VaultDevice.ms(exp.addingTimeInterval(60)), "a minute past the exp")
+        let untilExp = exp.timeIntervalSinceNow
+        offset.value = untilExp - 30 // inside the token's time
         await d.flushOutbox()
         #expect(d.mem.withLock { d.st.outbox.count } == 1)
-        offset.value = 700 // past the exp and the minute
+        offset.value = untilExp + 30 // past the exp, within the minute: still owed
+        await d.flushOutbox()
+        #expect(d.mem.withLock { d.st.outbox.count } == 1, "the grace is kept")
+        offset.value = untilExp + 90 // past the minute
         await d.flushOutbox()
         #expect(d.mem.withLock { d.st.outbox.isEmpty })
-        await #expect(throws: PairingNotCompleted.self) { _ = try await d.awaitPairingSas() }
+        #expect(!d.mem.withLock { d.finFailed }, "an age drop is no failure")
     }
 
     /// `device.paired` removes a fin still owed, so that its age cannot later fail a pairing that finished.
@@ -382,6 +392,45 @@ import VettIDRelay
         #expect(d.mem.withLock { d.st.outbox.count } == 1)
         try await d.handle(try v.seal("device.paired", #"{"device_id":"dev-2","role":"app","vault_id":"\#(v.vaultID)","transfer":true,"user_guid":"guid-1234"}"#))
         #expect(d.mem.withLock { d.st.outbox.isEmpty })
+    }
+
+    /// The first handshake's `device.paired` of an enrollment clears a fin still owed too.
+    @Test func anEnrolledDevicesPairedClearsTheFin() async throws {
+        let (d, v) = try await enrolled()
+        base.relay.refuseStatus = 503
+        base.relay.refuseDeposits = "unavailable"
+        base.relay.recordRefused = true
+        base.relay.refuseOnly = 6 // the hs.init and the fin: three attempts each
+        let outcome = enroll(d)
+        let (_, initMsg) = try await base.relay.nextDeposit()
+        try await d.handle(try v.respond(initMsg, d))
+        try await settle(1.5)
+        #expect(d.mem.withLock { d.st.outbox.map(\.type) } == ["hs.fin"], "owed")
+        var fin: [UInt8]?
+        while fin == nil {
+            let (_, payload) = try await base.relay.nextDeposit()
+            if (try? v.fin(payload, d)) != nil { fin = payload }
+        }
+        try await d.handle(try v.seal("device.paired", #"{"device_id":"dev-1","role":"app","vault_id":"\#(v.vaultID)","release":"\#(String(repeating: "a3", count: 48))","release_number":3}"#))
+        #expect(d.mem.withLock { d.st.outbox.isEmpty })
+        for _ in 0..<100 where !outcome.finished { try await settle(0.05) }
+        #expect(outcome.finished && outcome.error == nil)
+    }
+
+    /// A fin whose first save failed is not lost: it is deposited all the same.
+    @Test func aFinWhoseSaveFailedIsDeposited() async throws {
+        let store = FlakyStore()
+        let secrets = DeviceSecrets(identity: Ed25519PrivateKey.generate(), kem: try KemPrivateKey.generate(), relay: Ed25519PrivateKey.generate(), apiKey: [UInt8](repeating: 0x30, count: 91))
+        let d = try await VaultDevice.create(base.config(store), secrets: secrets)
+        let v = try FakeVault(relayURL: base.relay.baseURL)
+        let (qr, inviteID) = try codeFor(v, d)
+        try await d.startTransfer(link: try qr.link(), attester: TestIOSAttester()) { _, _ in nil }
+        let (_, initMsg) = try await base.relay.nextDeposit()
+        store.fail()
+        try? await d.handle(try v.respondOpening(initMsg, d, ctx: inviteID).message) // its own saves fail too
+        let (_, payload) = try await base.relay.nextDeposit()
+        try v.fin(payload, d) // the vault takes the fin
+        #expect(d.mem.withLock { d.outboxInFlight.isEmpty })
     }
 
     /// `token_used` to a first attempt (no retry before it) is not a lost answer: the handshake fails at once.

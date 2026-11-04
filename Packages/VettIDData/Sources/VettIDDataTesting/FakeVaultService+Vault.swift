@@ -36,8 +36,8 @@ extension FakeVaultService {
         queue(try Envelope.sealSealed(deviceKem, senderKid: Kid.anonymous, padded: try Inner.encode(inner, .sealed)).0)
     }
 
-    func token(_ addr: RelayAddr) throws -> String {
-        try DepositTokens.mintStanding(relayKey, sender: RelayAuth.encodeKey(addr.pk), audience: addr.url, now: Date())
+    func token(_ addr: RelayAddr, ttl: TimeInterval = DepositTokens.standingTTL) throws -> String {
+        try DepositTokens.mintStanding(relayKey, sender: RelayAuth.encodeKey(addr.pk), audience: addr.url, now: Date(), ttl: ttl)
     }
 
     // MARK: - The device's relay
@@ -101,13 +101,16 @@ extension FakeVaultService {
         // §12.5 step 2: a deleted vault's mailbox is gone, and every deposit is refused.
         if locked({ vaultDeletedValue }) { return .json(404, #"{"code":"mailbox_unknown","message":""}"#) }
         guard let payload = try? StrictJson.parseObject(r.body).base64("payload") else { return .json(400, #"{"code":"bad_request","message":""}"#) }
+        let losesAnswer: Bool = locked { transfer.losesFinAnswers && (responder != nil || transfer.finSeen) }
         locked {
             do {
                 try deposited(payload)
             } catch {
                 // A message the vault cannot use is dropped, as the vault does.
             }
+            if losesAnswer { transfer.finSeen = true }
         }
+        if losesAnswer { return .failure(.networkConnectionLost) }
         return .json(201, #"{"msg_id":"\#(Ulid.new())"}"#)
     }
 
