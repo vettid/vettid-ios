@@ -80,7 +80,7 @@ public struct ServiceLabel: View {
             .fixedSize()
             .padding(.horizontal, Spacing.s)
             .padding(.vertical, 2)
-            .overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).stroke(colors.outlineVariant, lineWidth: 1))
+            .overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).stroke(colors.outline, lineWidth: 1))
             .accessibilityIdentifier("service_label")
     }
 }

@@ -20,6 +20,16 @@ struct TouchTargetTests {
         #expect(Spacing.minTarget == 44)
     }
 
+    /// A short word gets a 44 x 48 target; a text wider than 44 pt keeps exactly its own width, so its look does not change.
+    @Test func aTextButtonIsAtLeast44WideAndOnlyAShortOneGrows() {
+        let short = Button {} label: { Text("OK").textButtonTarget() }.buttonStyle(.plain)
+        #expect(size(short).width >= Spacing.minTarget && size(short).height >= Spacing.touchTarget)
+        let long = "Type the code instead"
+        let plain = size(Button {} label: { Text(long) }.buttonStyle(.plain))
+        let target = size(Button {} label: { Text(long).textButtonTarget() }.buttonStyle(.plain))
+        #expect(target.width == plain.width && target.height >= Spacing.touchTarget)
+    }
+
     @Test func aTextButtonIsATargetHighAtEverySize() {
         for type in [DynamicTypeSize.large, .accessibility5] {
             let button = Button {} label: { Text("Try again").textButtonTarget() }.buttonStyle(.plain)

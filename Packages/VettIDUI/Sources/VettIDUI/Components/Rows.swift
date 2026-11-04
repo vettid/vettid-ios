@@ -203,22 +203,16 @@ public struct ConnectionRow: View {
 /// corners. Mirrors vettid-android `DetailCard`.
 public struct DetailCard<Content: View>: View {
     @Environment(\.vettIDColors) private var colors
-    let interactive: Bool
     let content: Content
 
-    /// [interactive]: the card as a whole is a control (a row that opens a page), so its boundary is the 3:1 outline; any other
-    /// card has the faint one.
-    public init(interactive: Bool = false, @ViewBuilder content: () -> Content) {
-        self.interactive = interactive
-        self.content = content()
-    }
+    public init(@ViewBuilder content: () -> Content) { self.content = content() }
 
     public var body: some View {
         VStack(alignment: .leading, spacing: 0) { content }
             .padding(Spacing.l)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(colors.background, in: VettIDShape.card)
-            .overlay(VettIDShape.card.stroke(interactive ? colors.outline : colors.outlineVariant, lineWidth: 1))
+            .overlay(VettIDShape.card.stroke(colors.outline, lineWidth: 1))
             .padding(.horizontal, Spacing.s)
     }
 }

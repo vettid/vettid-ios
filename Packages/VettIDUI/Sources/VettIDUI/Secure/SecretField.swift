@@ -204,8 +204,11 @@ public struct SecretTextInput: UIViewRepresentable {
     /// scale's body (Inter, ``VettIDTextStyle/bodyLarge``), or for a code a monospaced face at Title 3.
     public static func font(monospaced: Bool, compatibleWith traits: UITraitCollection? = nil) -> UIFont {
         guard monospaced else { return VettIDTextStyle.bodyLarge.uiFont(compatibleWith: traits) }
+        // Bold Text steps the weight up one, as the type scale's fonts do (an explicit regular trait wins over the setting).
+        let legibility = (traits ?? .current).legibilityWeight
+        let bold = legibility == .bold || (legibility != .regular && UIAccessibility.isBoldTextEnabled)
         return UIFontMetrics(forTextStyle: .title3)
-            .scaledFont(for: .monospacedSystemFont(ofSize: 20, weight: .regular), compatibleWith: traits)
+            .scaledFont(for: .monospacedSystemFont(ofSize: 20, weight: bold ? .medium : .regular), compatibleWith: traits)
     }
 
     /// The current traits with Bold Text as the environment has it, so that a change of the setting reaches the field.

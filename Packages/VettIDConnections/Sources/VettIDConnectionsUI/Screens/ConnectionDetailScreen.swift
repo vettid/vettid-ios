@@ -182,7 +182,7 @@ struct DetailContent: View {
         // The button is the whole card; its filled background makes exactly the card's shape tappable (the card's outer
         // padding is outside it), so that the strong border bounds what can be tapped.
         Button(action: open) {
-            DetailCard(interactive: true) {
+            DetailCard {
                 HStack {
                     Text(ConnectStrings.voteRow(sharedName)).vettIDFont(.bodyLarge).foregroundStyle(colors.onSurface)
                     Spacer(minLength: 0)
