@@ -57,12 +57,14 @@ import VettIDUI
         #expect(wait.isRunning(now: t0) && !wait.isRunning(now: over))
     }
 
-    /// A rate-limited redeem says how long to wait (Android's text of the recovery); no wait left, the general text.
+    /// A rate-limited redeem's wait is a notice of its own that counts down (``WaitNotice``, ``WaitText``); the plain failure text
+    /// is the general one, and a `429` with no wait left reads it too.
     @Test func aRateLimitedRedeemSaysTheWait() {
-        let soon = Date().addingTimeInterval(90)
-        #expect(ErrorNotice.message(.rateLimited, soon, timeScale: 1).hasPrefix("Too many attempts. Try again in "))
+        let t0 = ContinuousClock.now
+        let wait = WaitDeadline(seconds: 90, now: t0)
+        #expect(WaitText.message(.rateLimited, retryAt: wait, timeScale: 1, now: t0).hasPrefix("Too many attempts. Try again in "))
         #expect(ErrorNotice.message(.rateLimited, nil, timeScale: 1) == FailureKind.rateLimited.message)
-        #expect(ErrorNotice.message(.rateLimited, Date().addingTimeInterval(-5), timeScale: 1) == FailureKind.rateLimited.message)
+        #expect(WaitText.message(.rateLimited, retryAt: nil, timeScale: 1) == FailureKind.rateLimited.message)
     }
 
     /// iPhone only: a refused start-over says from when it is possible; without a time, the general text.
