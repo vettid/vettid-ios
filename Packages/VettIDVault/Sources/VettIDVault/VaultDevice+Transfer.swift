@@ -64,17 +64,20 @@ extension VaultDevice {
             let id = Ulid.new(at)
             // A second code scanned while a transfer is open: the key the first one attested can no longer be bound.
             if let old = mem.withLock({ alt().transferAttestKeyID }) { try? attester.discard(keyID: old) }
-            let attest = try attester.attest(try AltChannel.devattChallenge(requestID: id, vaultID: "", ts: Timestamps.formatMillis(at)))
-            // A new attestation is a new key (§11.7.1).
-            let profile = JsonBuilder().string("name", mem.withLock { st.name }).bytes()
-            mem.withLock {
-                st.signerSeen = false
-                var a = alt()
-                a.transferAttestKeyID = attest.iosKeyID
-                setAlt(a)
-            }
-            // §6.2, §6.7.1 (0.15.0): a transfer's hs.init carries the new app's app key.
+            var attestedKey: [UInt8]?
             do {
+                let challenge = try AltChannel.devattChallenge(requestID: id, vaultID: "", ts: Timestamps.formatMillis(at))
+                let attest = try attester.attest(challenge)
+                attestedKey = attest.iosKeyID
+                // A new attestation is a new key (§11.7.1).
+                let profile = JsonBuilder().string("name", mem.withLock { st.name }).bytes()
+                mem.withLock {
+                    st.signerSeen = false
+                    var a = alt()
+                    a.transferAttestKeyID = attest.iosKeyID
+                    setAlt(a)
+                }
+                // §6.2, §6.7.1 (0.15.0): a transfer's hs.init carries the new app's app key.
                 let p = try prepareInit(
                     purpose: .app, ctx: b.inviteID, depositToken: b.token, profile: profile, at: at, deviceAttest: attest, id: id,
                     apiKey: secrets.apiKey, unlockSecret: unlockSecret
@@ -82,8 +85,9 @@ extension VaultDevice {
                 try save()
                 return (p, attest)
             } catch {
-                // Nothing was sent, and what this call pinned and attested is its own whatever handshake is in flight.
-                discardFailedTransfer(attest, attester, handshake: nil, alwaysOurs: true)
+                // Nothing was sent, and what this call pinned and attested is its own whatever handshake is in flight; it is
+                // dropped on every path, also when the attestation itself failed.
+                discardFailedTransfer(attestedKey, attester, handshake: nil, alwaysOurs: true)
                 throw error
             }
         }
@@ -93,7 +97,7 @@ extension VaultDevice {
         } catch {
             // Saved under the lock, as ``abandonTransfer()`` does: a kill after a refused deposit finds no pinned vault
             // without a device id and no attest key id that no vault binds.
-            try? await lock.withLock { discardFailedTransfer(attest, attester, handshake: prepared.initiator) }
+            try? await lock.withLock { discardFailedTransfer(attest.iosKeyID, attester, handshake: prepared.initiator) }
             throw error
         }
     }
@@ -104,16 +108,16 @@ extension VaultDevice {
     /// pinned vault go with it.
     /// Callers hold ``lock``. A newer transfer that replaced this one, or one that paired meanwhile, is left alone.
     private func discardFailedTransfer(
-        _ attest: DeviceAttest, _ attester: any Attester, handshake: Initiator?, alwaysOurs: Bool = false
+        _ keyID: [UInt8]?, _ attester: any Attester, handshake: Initiator?, alwaysOurs: Bool = false
     ) {
         // Ours when the handshake in flight is this one's, or none is and none was answered (it was dropped), whatever the key
         // ids say (they may both be absent). [alwaysOurs]: the caller is inside the call that pinned and attested, under the lock.
         let ours: Bool = mem.withLock {
-            alwaysOurs || (st.deviceID == nil && alt().transferAttestKeyID == attest.iosKeyID
+            alwaysOurs || (st.deviceID == nil && alt().transferAttestKeyID == keyID
                 && (ini === handshake || (ini == nil && answeredInit == nil)))
         }
         guard ours else { return }
-        if let key = attest.iosKeyID { try? attester.discard(keyID: key) }
+        if let key = keyID { try? attester.discard(keyID: key) }
         dropPairing()
         mem.withLock {
             st.vault = nil

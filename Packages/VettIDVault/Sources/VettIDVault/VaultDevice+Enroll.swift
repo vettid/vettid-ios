@@ -279,7 +279,9 @@ extension VaultDevice {
                (try? await waitForAnswer(p)) == true {
                 return
             }
+            #if DEBUG
             initRaceHook?(p.initiator)
+            #endif
             // Answered or dropped is decided in one look: an `hs.resp` that lands now has set the answer and cleared the
             // handshake together, and a pairing that succeeded must not be undone.
             let reached: Bool = mem.withLock {
@@ -352,7 +354,7 @@ extension VaultDevice {
         let body = JsonBuilder().uint("version", UInt64(version)).bytes()
         do {
             _ = try await opOnce("credential.ack", body: body, timeout: min(Self.ackWait, cfg.requestTimeout(for: "credential.ack")))
-        } catch let e as VaultOpError where e.code == "stale_credential" {
+        } catch let e as VaultOpError where e.code == CredentialOps.codeStaleCredential {
             // The vault has moved past this version: nothing is owed for it any more (chosen; not in the spec).
         }
         try? await ackSettled(version)
@@ -379,7 +381,9 @@ extension VaultDevice {
     }
 
     /// TEST ONLY: makes an outbox flush leave a pending `credential.ack` alone (it counts as just tried), or lets it go out.
+    #if DEBUG
     public func holdBackAckRetries(_ hold: Bool) { mem.withLock { lastAckTry = hold ? cfg.uptime() : nil } }
+    #endif
 
     /// Whether the stored blob's `credential.ack` is still to be sent.
     public var credentialAckPending: Bool { ackPendingVersion != nil }

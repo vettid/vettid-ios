@@ -151,12 +151,17 @@ import VettIDRelay
     /// An `hs.resp` that lands between the failure of the deposit and the drop of the handshake leaves the pairing alone.
     @Test func anAnswerLandingBeforeTheCleanupKeepsTheHandshake() async throws {
         let (d, _) = try await enrolled()
-        d.initRaceHook = { [d] i in d.mem.withLock { d.answeredInit = ObjectIdentifier(i); d.ini = nil } }
+        let hookRan = Box<Bool>(false)
+        d.initRaceHook = { [d] i in
+            hookRan.value = true
+            d.mem.withLock { d.answeredInit = ObjectIdentifier(i); d.ini = nil }
+        }
         base.relay.refuseStatus = 503
         base.relay.refuseDeposits = "unavailable"
         base.relay.refuseOnly = 3
         let outcome = enroll(d)
         try await settle(2.5)
+        #expect(hookRan.value, "the answer landed between the failure and the cleanup")
         #expect(!outcome.finished, "on to device.paired, not failed")
     }
 
@@ -182,13 +187,14 @@ import VettIDRelay
         try await d.handle(try v.respond(initMsg, d))
         completing.cancel()
         store.fail()
+        let marksBefore = d.mem.withLock { d.outboxInFlight }
         await #expect(throws: (any Error).self) {
             _ = try await d.lock.withLock {
                 try d.enqueueLocked(id: nil, type: "relay.token.refresh", body: VaultJSON.empty, re: nil, status: nil, exp: nil)
             }
         }
-        let (kept, marks) = d.mem.withLock { (d.st.outbox.filter { $0.type == "relay.token.refresh" }.count, d.outboxInFlight.count) }
-        #expect(kept == 0 && marks == 0)
+        let (kept, marks) = d.mem.withLock { (d.st.outbox.filter { $0.type == "relay.token.refresh" }.count, d.outboxInFlight) }
+        #expect(kept == 0 && marks == marksBefore, "no entry of that kind, and no mark left behind")
     }
 
     /// The wait for the resp ends when the handshake is gone (dropped, rejected, replaced).
@@ -216,6 +222,20 @@ import VettIDRelay
         store.fail()
         await #expect(throws: (any Error).self) { try await d.startTransfer(link: try qr.link(), attester: attester) { _, _ in nil } }
         #expect(!d.hasVault && d.altState.transferAttestKeyID == nil && attester.discarded.count == 1)
+    }
+
+    /// An attester that fails after the vault is pinned leaves neither the vault nor an attest key id behind.
+    @Test func aFailingAttesterLeavesNothingPinned() async throws {
+        struct Broken: Error {}
+        final class Failing: Attester, @unchecked Sendable {
+            func attest(_ challenge: [UInt8]) throws -> DeviceAttest { throw Broken() }
+            func assert(_ signed: AttestSigned) throws -> DeviceAssertion { throw Broken() }
+            func discard(keyID: [UInt8]) throws {}
+        }
+        let (d, v) = try await newPhone()
+        let (qr, _) = try codeFor(v, d)
+        await #expect(throws: Broken.self) { try await d.startTransfer(link: try qr.link(), attester: Failing()) { _, _ in nil } }
+        #expect(!d.hasVault && d.altState.transferAttestKeyID == nil)
     }
 
     /// A second transfer that fails before its handshake is built, while the first one's is in flight, cleans up too.

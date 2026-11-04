@@ -153,7 +153,9 @@ public final class VaultDevice: @unchecked Sendable {
     var keyring: Keyring
     var ini: Initiator?
     /// TEST ONLY: runs in ``sendInit(_:)`` after a failed deposit, before the handshake is dropped.
+    #if DEBUG
     var initRaceHook: (@Sendable (Initiator) -> Void)?
+    #endif
     /// The handshake whose `hs.resp` was handled last (``VaultDevice/sendInit(_:)`` reads it). Under ``mem``.
     var answeredInit: ObjectIdentifier?
 
