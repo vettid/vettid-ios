@@ -117,7 +117,9 @@ public final class ProfilePhotoCache {
     var memoizedPhotos: [String] { digests.map(\.photo) }
     #endif
 
-    private func key(_ base64: String) -> NSData {
+    /// The digest of a photo. [remember]: it is added to the memo (a decode does; a lookup does not, so that a row drawn again after
+    /// ``clear()`` leaves nothing of the photo behind).
+    private func key(_ base64: String, remember: Bool = true) -> NSData {
         if let i = digests.lastIndex(where: { $0.photo == base64 }) {
             // A hit moves to the end, so that the memo drops the least recently used.
             let known = digests.remove(at: i)
@@ -125,6 +127,7 @@ public final class ProfilePhotoCache {
             return known.digest
         }
         let digest = Data(SHA256.hash(data: Data(base64.utf8))) as NSData
+        guard remember else { return digest }
         digests.append((base64, digest))
         if digests.count > Self.digestLimit { digests.removeFirst(digests.count - Self.digestLimit) }
         return digest
@@ -133,7 +136,7 @@ public final class ProfilePhotoCache {
     /// The photo [base64] decoded earlier, if it is still held.
     public func cached(_ base64: String?) -> UIImage? {
         guard let base64, !base64.isEmpty else { return nil }
-        return store.object(forKey: key(base64))
+        return store.object(forKey: key(base64, remember: false))
     }
 
     /// The photo [base64], decoded off the main actor unless it is held; nil when it does not decode (the initial tile shows),

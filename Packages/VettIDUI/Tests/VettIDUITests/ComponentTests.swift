@@ -182,6 +182,19 @@ struct ProfilePhotoCacheTests {
     }
     #endif
 
+    #if DEBUG
+    /// A lookup leaves nothing of the photo in the memo: a row drawn again after the lock does not hold it.
+    @Test func aLookupAfterTheClearRemembersNothing() async {
+        let cache = ProfilePhotoCache()
+        let a = photo(32, .red)
+        _ = await cache.image(a)
+        #expect(cache.memoizedPhotos == [a])
+        cache.clear()
+        #expect(cache.cached(a) == nil)
+        #expect(cache.memoizedPhotos.isEmpty, "the lookup did not add the photo again")
+    }
+    #endif
+
     @Test func aPhotoThatDoesNotDecodeIsNotHeld() async {
         let cache = ProfilePhotoCache()
         #expect(await cache.image("not base64 !!!") == nil)
