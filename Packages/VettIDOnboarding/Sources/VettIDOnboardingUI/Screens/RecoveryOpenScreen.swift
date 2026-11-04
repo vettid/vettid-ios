@@ -501,7 +501,7 @@ private struct OpenDone: View {
         let o = state.outcome ?? RecoveryOpenOutcome("ok", used: state.used)
         FormScaffold(
             title: RecoveryScreenStrings.recoverTitle, primaryLabel: RecoveryScreenStrings.onboardingOpenContinue,
-            onPrimary: actions.openApp
+            busy: side.busy || state.openingApp, onPrimary: actions.openApp
         ) {
             VStack(alignment: .leading, spacing: Spacing.m) {
                 NoticeCard(

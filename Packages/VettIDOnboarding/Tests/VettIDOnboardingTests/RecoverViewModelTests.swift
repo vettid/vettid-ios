@@ -62,12 +62,12 @@ import VettIDDataTesting
         vault.fail["finishSetup"] = FakeVaultRepository.failure(.network)
         vm.finish()
         await vm.settle()
-        #expect(vm.state.error == .network && vault.phase == .setup(.finishing))
+        #expect(vm.state.error == .network && !vm.state.busy && vault.phase == .setup(.finishing))
         // Tried again, the failure goes and setup ends.
         vm.finish()
-        #expect(vm.state.error == nil)
+        #expect(vm.state.error == nil && vm.state.busy, "\"Continue\" is busy while setup ends")
         await vm.settle()
-        #expect(vm.state.error == nil && vault.phase == .unlocked)
+        #expect(vm.state.error == nil && !vm.state.busy && vault.phase == .unlocked)
     }
 
     @Test func aRegisteredPhoneResumesAtTheOpen() async throws {

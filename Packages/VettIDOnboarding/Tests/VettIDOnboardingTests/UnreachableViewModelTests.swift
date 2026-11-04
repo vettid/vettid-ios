@@ -47,31 +47,58 @@ import VettIDDataTesting
         gate.complete(())
         await foreground.value
         await settle()
-        #expect(!reads.running && !vm.retrying)
+        // The ask made during the read is answered by one more read after it.
+        #expect(started.count == 2 && !reads.running && !vm.retrying)
         vm.retry()
         await settle()
-        #expect(started.count == 2)
+        #expect(started.count == 3)
     }
 
     @Test func aSingleFlightRunsOneJobAtATime() async {
         let flight = SingleFlight()
         let gate = TestDeferred<Void>()
         let ran = Counter()
-        let first = Task { await flight.run { try? await gate.value() } }
-        await settle()
         let done = Counter()
+        let first = Task { await flight.run { ran.count += 1; try? await gate.value() } }
+        await settle()
         let second = Task {
-            let result = await flight.run { ran.count += 1 }
+            let result = await flight.run { Issue.record("an ask does not run beside the run under way") }
             done.count += 1
             return result
         }
         await settle()
-        #expect(done.count == 0, "the second ask waits for the run under way")
+        #expect(done.count == 0 && ran.count == 1, "the second ask waits for the run under way")
         gate.complete(())
         #expect(await first.value)
-        #expect(await second.value == false && done.count == 1 && ran.count == 0)
+        #expect(await second.value == false && done.count == 1)
+        #expect(ran.count == 2, "and the job ran once more for it")
         #expect(!flight.running)
-        #expect(await flight.run { ran.count += 1 } && ran.count == 1)
+    }
+
+    /// Many asks during one run give one more run, not many; no ask gives none; the waiters return after the extra run.
+    @Test func manyAsksDuringARunGiveOneExtraRun() async {
+        let flight = SingleFlight()
+        let gate = TestDeferred<Void>()
+        let ran = Counter()
+        let returned = Counter()
+        let first = Task { await flight.run { ran.count += 1; try? await gate.value() } }
+        await settle()
+        let asks = (0..<5).map { _ in
+            Task {
+                await flight.run { Issue.record("ran beside") }
+                returned.count += 1
+            }
+        }
+        await settle()
+        #expect(ran.count == 1 && returned.count == 0)
+        gate.complete(())
+        _ = await first.value
+        for ask in asks { await ask.value }
+        #expect(ran.count == 2 && returned.count == 5)
+        // Nothing asked during a run: one run only.
+        let quiet = Counter()
+        await flight.run { quiet.count += 1 }
+        #expect(quiet.count == 1 && !flight.running)
     }
 
     /// A cancelled caller leaves nothing set.

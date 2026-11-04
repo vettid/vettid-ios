@@ -215,8 +215,12 @@ public final class RecoveryOpenViewModel {
             return
         }
         openingApp = true
+        state.openingApp = true
         work.launch { [weak self, move] in
-            defer { self?.openingApp = false }
+            defer {
+                self?.openingApp = false
+                self?.state.openingApp = false
+            }
             var failure: VaultFailure?
             do {
                 try await move.finishRecoveryOpen()

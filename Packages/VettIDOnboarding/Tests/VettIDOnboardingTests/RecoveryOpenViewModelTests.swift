@@ -53,8 +53,9 @@ import VettIDDataTesting
         // The app opens only when the member continues.
         #expect(!vault.calls.contains("finishRecoveryOpen"))
         vm.openApp()
+        #expect(vm.state.openingApp, "\"Continue\" is busy while the app opens")
         await vm.settle()
-        #expect(vault.calls.contains("finishRecoveryOpen") && vault.phase == .unlocked && vm.state.opened)
+        #expect(vault.calls.contains("finishRecoveryOpen") && vault.phase == .unlocked && vm.state.opened && !vm.state.openingApp)
         // Continue again once opened opens nothing twice; the screen is asked to finish setup again.
         #expect(vm.state.finishRequests == 0)
         vm.openApp()

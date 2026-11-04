@@ -248,7 +248,8 @@ struct AppRoot: View {
     /// A vault is set up on this phone (the setup flow has nothing to do).
     static func hasVault(_ phase: AppPhase) -> Bool {
         switch phase {
-        case .locked, .unlocked, .deleting: true
+        case .locked, .unlocked: true
+        // A vault being deleted is gone in a moment: a setup link that comes now is kept for the setup after it.
         default: false
         }
     }

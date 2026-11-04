@@ -16,6 +16,8 @@ struct OpenedLinkTests {
         inbox.offer("link")
         #expect(!AppRoot.dropSetupLink(phase: .starting, inbox: inbox) && inbox.link == "link")
         #expect(!AppRoot.dropSetupLink(phase: .signedOut, inbox: inbox) && inbox.link == "link")
+        // A vault being deleted keeps the link for the setup after it.
+        #expect(!AppRoot.dropSetupLink(phase: .deleting, inbox: inbox) && inbox.link == "link")
         #expect(AppRoot.dropSetupLink(phase: .locked, inbox: inbox) && inbox.link == nil)
         #expect(!AppRoot.dropSetupLink(phase: .unlocked, inbox: inbox))
         // The vault deleted in the same run: nothing is left for the onboarding to redeem.
@@ -24,8 +26,8 @@ struct OpenedLinkTests {
 
     /// A setup link on a phone that already has a vault is said to be unused, not queued for a later setup.
     @Test func aSetupLinkIsUnusedOnAPhoneWithAVault() {
-        for phase in [AppPhase.locked, .unlocked, .deleting] { #expect(AppRoot.hasVault(phase)) }
-        for phase in [AppPhase.starting, .signedOut, .setup(.newVault)] { #expect(!AppRoot.hasVault(phase)) }
+        for phase in [AppPhase.locked, .unlocked] { #expect(AppRoot.hasVault(phase)) }
+        for phase in [AppPhase.starting, .signedOut, .setup(.newVault), .deleting] { #expect(!AppRoot.hasVault(phase)) }
     }
 
     @Test func invitationsGoToTheInviteInbox() throws {

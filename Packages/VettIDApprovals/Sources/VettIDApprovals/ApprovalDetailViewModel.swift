@@ -160,7 +160,7 @@ public struct ApprovalDetailState: Equatable, Sendable, CustomStringConvertible,
 
 /// One approval (ANDROID-PLAN §4 Approvals): what is asked, by whom, and approve or deny. Member authentication and
 /// critical-item uses take the credential password (VAULT-MESSAGING §10.4, §10.13); a connection request shows its
-/// safety code and can be blocked; a grant request is decided entry by entry (§10.12); a desktop's or agent's request
+/// safety code and is approved or declined; a grant request is decided entry by entry (§10.12); a desktop's or agent's request
 /// can only be declined. Mirrors vettid-android `ApprovalDetailViewModel`.
 @MainActor
 @Observable

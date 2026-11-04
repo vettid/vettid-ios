@@ -437,15 +437,18 @@ public final class RecoverViewModel: RecoverActions {
         // again. One attempt at a time.
         guard !finishing else { return }
         finishing = true
+        state.busy = true
         state.error = nil
         state.errorCode = nil
         work.launch { [weak self, vault] in
             do {
                 try await vault.finishSetup()
                 self?.finishing = false
+                self?.state.busy = false
             } catch {
                 guard let self else { return }
                 finishing = false
+                state.busy = false
                 let e = Self.failure(of: error)
                 state.error = e.kind
                 state.errorCode = e.code
