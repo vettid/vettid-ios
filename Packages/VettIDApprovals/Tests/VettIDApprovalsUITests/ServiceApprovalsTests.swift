@@ -47,6 +47,21 @@ import VettIDUI
         #expect(lines > 30 && withLines >= without + lines)
     }
 
+    /// A service's request with `ik` shows the fingerprint line (0.83.7 §6.4); without `ik`, a person's request and an
+    /// incoming one show none.
+    @Test func aServicesRequestShowsTheFingerprintOfItsIk() {
+        let ik = [UInt8](0..<32)
+        var withIk = Self.outgoing(service: true)
+        withIk.ik = ik
+        var person = Self.outgoing(service: false)
+        person.ik = ik
+        let line = height(ServiceFingerprintLine(fingerprint: withIk.keyFingerprint ?? ""))
+        func facts(_ r: OutgoingRequest) -> CGFloat { height(Facts(approval: .connection(.outgoing(r)), name: nil)) }
+        #expect(withIk.keyFingerprint?.split(separator: " ").count == 8 && ServiceTexts.fingerprintLabel == "Vault key fingerprint")
+        #expect(line > 30 && facts(withIk) >= facts(Self.outgoing(service: true)) + line)
+        #expect(facts(person) == facts(Self.outgoing(service: false)))
+    }
+
     /// Which rows carry the label: a request whose connection is a service, an outgoing request whose invitation said so;
     /// never one of a person or of a connection not in the list.
     @Test func theRowsOfAServiceAreLabelled() {

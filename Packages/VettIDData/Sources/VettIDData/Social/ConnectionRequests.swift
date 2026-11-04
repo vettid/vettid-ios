@@ -1,4 +1,5 @@
 import Foundation
+import VettIDCrypto
 
 /// An incoming connection request (§6.4, §10.4): `connection.request.pending`, or an entry of `connection.request.list`'s
 /// `incoming`. The inviter approves or declines it after comparing [sas] with the code on the other member's screen.
@@ -49,6 +50,14 @@ public struct OutgoingRequest: Equatable, Sendable {
     /// The invitation declared a service (`peer_kind: "service"`, VAULT-MESSAGING 0.69.0 §6.4); absent or any other value
     /// is a person. An incoming request never carries it (an accepter declares nothing).
     public var isService = false
+    /// The peer's identity key from the invitation bundle (`ik` of `connection.request.outgoing` and of the outgoing
+    /// entries of `connection.request.list`, VAULT-MESSAGING 0.83.7 §10.4): the 32 raw bytes the handshake's signature
+    /// was checked against. It comes with [sas], so never while `waiting`; nil from a vault before 0.83.7 and for a
+    /// malformed value (the request is then shown as without one; chosen; not in the spec).
+    public var ik: [UInt8]?
+
+    /// The fingerprint of [ik] as the connection's page shows it (§10.8: 8 groups of 4 hex digits); nil without `ik`.
+    public var keyFingerprint: String? { ik.flatMap { try? IkFingerprint.format($0) } }
 
     public init(connectionID: String, sas: String?, remote: Bool, name: String?, state: RequestState, receivedAt: Date, exp: Date?) {
         self.connectionID = connectionID
@@ -151,6 +160,7 @@ public enum PendingConnection: Equatable, Sendable {
         if case .outgoing(var n) = next, case .outgoing(let old) = self {
             n.name = n.name ?? old.name
             n.sas = n.sas ?? old.sas
+            n.ik = n.ik ?? old.ik
             n.isService = n.isService || old.isService
             return .outgoing(n)
         }

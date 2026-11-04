@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+import VettIDCrypto
 import VettIDData
 import VettIDDataTesting
 @testable import VettIDConnections
@@ -45,6 +46,23 @@ import VettIDDataTesting
         r.isService = true
         fake.requests = [.outgoing(r)]
         #expect(await until { m.state.step == .compare && m.state.service })
+    }
+
+    /// The fingerprint of the outgoing request's `ik` reaches the compare screen's state (0.83.7 §10.4); none without one.
+    @Test func theFingerprintOfIkReachesTheState() async throws {
+        let m = AcceptViewModel(connections: fake, requests: fake, input: Samples.link())
+        await m.settle()
+        var r = OutgoingRequest(
+            connectionID: "conn-new", sas: "042817", remote: false, name: "Example", state: .pending, receivedAt: Date(), exp: nil
+        )
+        r.isService = true
+        fake.requests = [.outgoing(r)]
+        #expect(await until { m.state.step == .compare })
+        #expect(m.state.keyFingerprint == nil)
+        r.ik = [UInt8](0..<32)
+        fake.requests = [.outgoing(r)]
+        #expect(await until { m.state.keyFingerprint != nil })
+        #expect(m.state.keyFingerprint == (try IkFingerprint.format([UInt8](0..<32))))
     }
 
     @Test func aPersonsInvitationIsAPerson() async {

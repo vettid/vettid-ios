@@ -467,6 +467,17 @@
         }
       }
     },
+    "core_ui_vault_key_fingerprint": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vault key fingerprint"
+          }
+        }
+      }
+    },
     "service_name_label": {
       "extractionState": "manual",
       "localizations": {
