@@ -59,6 +59,31 @@ import VettIDRelay
         #expect(VaultFailures.enrollFailure("release_key") == .manifest && VaultFailures.enrollFailure(nil) == .other)
     }
 
+    /// The relay's refusals by their codes (RELAY-PROTOCOL §7.1): not all the network.
+    @Test func theRelaysRefusalsHaveTheirOwnKinds() {
+        func relay(_ status: Int, _ code: String, retry: Int = 0) -> RelayError {
+            RelayError(status: status, code: code, retryAfterSeconds: retry)
+        }
+        #expect(kind(relay(429, RelayError.rateLimited, retry: 5)) == .rateLimited)
+        #expect((VaultFailures.map(relay(429, RelayError.rateLimited, retry: 5)) as? VaultFailure)?.retryAfterSeconds == 5)
+        #expect(kind(relay(429, RelayError.quotaExceeded)) == .relayQuota)
+        #expect(kind(relay(413, RelayError.payloadTooLarge)) == .payloadTooLarge)
+        #expect(kind(relay(401, RelayError.timestampStale)) == .clockOff)
+        #expect(kind(relay(403, RelayError.tokenRevoked)) == .relayRefused)
+        #expect(kind(relay(401, RelayError.tokenExpired)) == .network)
+        #expect(kind(relay(401, RelayError.tokenInvalid)) == .relayRefused)
+        // An over-cap response is no 413 of the relay's; an open token's refusal is the link's.
+        #expect(kind(relay(200, RelayError.responseTooLarge)) == .network)
+        #expect(kind(OpenTokenRefused(relay: relay(409, RelayError.tokenUsed))) == .inviteUnavailable)
+        #expect(kind(OpenTokenRefused(relay: relay(403, RelayError.tokenRevoked))) == .inviteUnavailable)
+        #expect(kind(OpenTokenRefused(relay: relay(401, RelayError.tokenExpired))) == .inviteExpired)
+        #expect(kind(PairingNotCompleted()) == .inviteUnavailable)
+        #expect(kind(relay(500, RelayError.internalError)) == .network)
+        #expect(kind(relay(502, "http_502")) == .network)
+        #expect(kind(URLError(.notConnectedToInternet)) == .offline)
+        #expect(kind(URLError(.timedOut)) == .network)
+    }
+
     /// The keys (IOS-PLAN §6.3): a locked iPhone is never a loss; no secure hardware refuses; the rest is this phone's
     /// stored state.
     @Test func theKeysFailures() {

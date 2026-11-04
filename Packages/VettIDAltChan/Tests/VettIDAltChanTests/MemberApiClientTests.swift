@@ -31,12 +31,15 @@ final class Box<T: Sendable>: @unchecked Sendable {
     let appKey = SoftAppKey()
     let sleeps = Box<[TimeInterval]>([])
 
-    func api(_ auth: MemberAuth, now: @escaping @Sendable () -> Date = { Date() }) -> MemberApiClient {
+    func api(
+        _ auth: MemberAuth, now: @escaping @Sendable () -> Date = { Date() },
+        uptime: @escaping @Sendable () -> TimeInterval = MemberApiClient.monotonicNow
+    ) -> MemberApiClient {
         let sleeps = sleeps
         return MemberApiClient(
             apiBase: server.baseURL, manifestURL: server.baseURL + MemberApiClient.manifestPath,
             transport: HTTPTransport(session: server.session, sleep: { _ in }), auth: auth,
-            sleep: { sleeps.value.append($0) }, now: now
+            sleep: { sleeps.value.append($0) }, now: now, uptime: uptime
         )
     }
 
@@ -217,6 +220,18 @@ final class Box<T: Sendable>: @unchecked Sendable {
         #expect(q.status == Slot.queued && sleeps.value.count == 3)
         server.enqueue(.json(200, #"{"status":"done","envelope":"!!"}"#))
         await #expect(throws: MemberApiMalformed.self) { _ = try await a.slot("x") }
+    }
+
+    /// The poll of an enrollment, an unlock or a recovery open ends at its deadline instead of at the slot's own 15 minutes.
+    @Test func aPollWithADeadlineEndsAtIt() async throws {
+        let clock = Box<TimeInterval>(0)
+        let a = api(appAuth(Box(Self.vid)), uptime: { clock.value })
+        server.handle { _ in
+            clock.value += 70
+            return .json(200, #"{"status":"queued"}"#)
+        }
+        await #expect(throws: AltChannelFailure.self) { _ = try await a.poll("01JB2Z6V9K3M4N5P6Q7R8S9T30", deadline: 180) }
+        #expect(server.requests.count == 3, "polled at 0, 70 and 140 s, and stopped at 210 s")
     }
 
     /// `release_starting` is waited for (at most 2 s a time, 10 minutes in all); `vault_unavailable` (also paused) is

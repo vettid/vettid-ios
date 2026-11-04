@@ -27,6 +27,13 @@ public final class UnlockViewModel: UnlockActions {
     @ObservationIgnored private var serviceTicker: Task<Void, Never>?
     @ObservationIgnored private var work: [Int: Task<Void, Never>] = [:]
     @ObservationIgnored private var nextWork = 0
+    /// The unlock being sent, the timer that says the wait is long, and whether the member cancelled the wait.
+    @ObservationIgnored private var attemptTask: Task<Void, Never>?
+    @ObservationIgnored private var slowTimer: Task<Void, Never>?
+    /// Counts the attempts: a task of an earlier one (cancelled, or slow to notice it) changes nothing.
+    @ObservationIgnored private var attemptGeneration = 0
+    /// How long an unlock waits before the screen says the vault may be starting.
+    @ObservationIgnored private let slowAfter: @Sendable () async throws -> Void
 
     public init(
         vault: any VaultRepository,
@@ -35,8 +42,10 @@ public final class UnlockViewModel: UnlockActions {
         releaseNotes: (any ReleaseNotesRepository)? = nil,
         now: @escaping @Sendable () -> Date = { Date() },
         tick: @escaping @Sendable () async throws -> Void = { try await Task.sleep(for: .seconds(1)) },
-        recheck: @escaping @Sendable () async throws -> Void = { try await Task.sleep(for: .seconds(15)) }
+        recheck: @escaping @Sendable () async throws -> Void = { try await Task.sleep(for: .seconds(15)) },
+        slowAfter: @escaping @Sendable () async throws -> Void = { try await Task.sleep(for: .seconds(10)) }
     ) {
+        self.slowAfter = slowAfter
         self.vault = vault
         self.account = account
         self.releaseNotes = releaseNotes
@@ -97,13 +106,16 @@ public final class UnlockViewModel: UnlockActions {
 
     // MARK: - Tasks
 
-    private func launch(_ body: @escaping @MainActor () async -> Void) {
+    @discardableResult
+    private func launch(_ body: @escaping @MainActor () async -> Void) -> Task<Void, Never> {
         let id = nextWork
         nextWork += 1
-        work[id] = Task { [weak self] in
+        let task = Task { [weak self] in
             await body()
             self?.work[id] = nil
         }
+        work[id] = task
+        return task
     }
 
     /// TEST ONLY: returns once the model's tasks and the reactions to the repositories' changes have run.
@@ -297,9 +309,22 @@ public final class UnlockViewModel: UnlockActions {
             return
         }
         state.busy = true
+        state.slowUnlock = false
         state.message = nil
-        launch { [self] in
+        attemptGeneration += 1
+        let generation = attemptGeneration
+        slowTimer?.cancel()
+        let timer = Task { [weak self, slowAfter] in
+            guard (try? await slowAfter()) != nil else { return }
+            if let self, generation == attemptGeneration, state.busy { state.slowUnlock = true }
+        }
+        slowTimer = timer
+        attemptTask = launch { [self] in
             let r = await send(kind, s)
+            timer.cancel()
+            // The member stopped waiting (``cancelUnlock()``) or went on to another attempt: nothing is said of this one's
+            // outcome (the request may still apply; the next start reads the phase, VAULT-MESSAGING §11.5).
+            guard generation == attemptGeneration else { return }
             // §3.6.5: the password is not kept beyond the unlock and the check that follows it.
             state.password = ""
             state.notRecognised = Self.notRecognised(after: r, before: state.notRecognised)
@@ -333,8 +358,22 @@ public final class UnlockViewModel: UnlockActions {
         }
     }
 
+    /// "Cancel" on the long wait: stops waiting for the vault's answer.
+    public func cancelUnlock() {
+        guard state.busy else { return }
+        attemptGeneration += 1
+        attemptTask?.cancel()
+        slowTimer?.cancel()
+        // The keypad is free and the typed secrets go at once, not when the task notices the cancel.
+        state.busy = false
+        state.slowUnlock = false
+        state.pin = ""
+        state.password = ""
+    }
+
     private func apply(_ r: UnlockAttempt, keptTransfer: Bool) {
         state.busy = false
+        state.slowUnlock = false
         switch r {
         // §11.7.1: not a PIN failure: no "wrong PIN" text, no count, no backoff. The notice says what to do.
         case .signerRefused:

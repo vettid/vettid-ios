@@ -29,11 +29,22 @@ public final class OnboardingViewModel: OnboardingActions {
     @ObservationIgnored private var failedScan: String?
     /// ``finish()`` is running: a second tap does not ask again.
     @ObservationIgnored private var finishing = false
+    /// The enrollment running, the timer that says its wait is long, and whether the member stopped waiting.
+    @ObservationIgnored private var runTask: Task<Void, Never>?
+    @ObservationIgnored private var slowTimer: Task<Void, Never>?
+    /// Counts the attempts: a task of an earlier one (cancelled, or slow to notice it) changes nothing.
+    @ObservationIgnored private var runGeneration = 0
+    /// How long the enrollment waits before the screen says the vault may be starting.
+    @ObservationIgnored private let slowAfter: @Sendable () async throws -> Void
 
     static let maxEmail = 254
     static let maxCodeInput = 16
 
-    public init(account: any AccountRepository, vault: any VaultRepository, inbox: SetupLinkInbox) {
+    public init(
+        account: any AccountRepository, vault: any VaultRepository, inbox: SetupLinkInbox,
+        slowAfter: @escaping @Sendable () async throws -> Void = { try await Task.sleep(for: .seconds(10)) }
+    ) {
+        self.slowAfter = slowAfter
         self.account = account
         self.vault = vault
         self.inbox = inbox
@@ -150,13 +161,16 @@ public final class OnboardingViewModel: OnboardingActions {
     // MARK: - Tasks
 
     /// Starts [body] as one of this model's tasks.
-    func launch(_ body: @escaping @MainActor () async -> Void) {
+    @discardableResult
+    func launch(_ body: @escaping @MainActor () async -> Void) -> Task<Void, Never> {
         let id = nextWork
         nextWork += 1
-        work[id] = Task { [weak self] in
+        let task = Task { [weak self] in
             await body()
             self?.work[id] = nil
         }
+        work[id] = task
+        return task
     }
 
     /// Marks the flow busy at once (a second tap or scan is ignored), then runs [block]; a failure is shown, and
@@ -428,7 +442,7 @@ public final class OnboardingViewModel: OnboardingActions {
     }
 
     /// Runs (or resumes) enrollment and the credential steps.
-    public func run() {
+    public func run() { // swiftlint:disable:this cyclomatic_complexity
         guard !state.busy else { return }
         let s = state
         let credentialOnly = s.credentialOnly || enrolled
@@ -437,16 +451,29 @@ public final class OnboardingViewModel: OnboardingActions {
         state.error = nil
         state.errorCode = nil
         state.progress = steps(credentialOnly: credentialOnly).map { ProgressEntry($0, .pending) }
-        launch { [self] in
+        state.slowWait = false
+        runGeneration += 1
+        let generation = runGeneration
+        slowTimer?.cancel()
+        let timer = Task { [weak self, slowAfter] in
+            guard (try? await slowAfter()) != nil else { return }
+            if let self, generation == runGeneration, state.busy { state.slowWait = true }
+        }
+        slowTimer = timer
+        runTask = launch { [self] in
+            defer { timer.cancel() }
             do {
                 if !enrolled {
-                    try await vault.enroll(pin: s.pin) { self.mark($0) }
+                    try await vault.enroll(pin: s.pin) { if generation == self.runGeneration { self.mark($0) } }
                     enrolled = true
                 }
+                // Stopped waiting meanwhile: the typed secrets are gone and are not sent.
+                guard generation == runGeneration else { return }
                 // Release R (§11.14.9): the PIN goes with credential.create (sent only to a vault with a phone secret).
                 try await vault.createCredential(password: s.password, backup: s.backup, pin: s.pin.isEmpty ? nil : s.pin) {
-                    self.mark($0)
+                    if generation == self.runGeneration { self.mark($0) }
                 }
+                guard generation == runGeneration else { return }
                 state.busy = false
                 state.pin = ""
                 state.pinConfirm = ""
@@ -455,15 +482,34 @@ public final class OnboardingViewModel: OnboardingActions {
                 for i in state.progress.indices { state.progress[i].state = .done }
                 if case .setup = account.phase { go(.done) }
             } catch let e as VaultFailure {
+                guard generation == runGeneration else { return }
                 failed(e)
             } catch {
+                guard generation == runGeneration else { return }
                 state.busy = false
             }
         }
     }
 
+    /// "Cancel" on the long wait: stops waiting for the vault. Whatever was typed goes; an enrollment that was posted is
+    /// resumed by the next try, and the next start reads the phase (VAULT-MESSAGING §11.3).
+    public func cancelRun() {
+        guard state.busy, state.step == .progress else { return }
+        runGeneration += 1
+        runTask?.cancel()
+        slowTimer?.cancel()
+        state.busy = false
+        state.slowWait = false
+        state.pin = ""
+        state.pinConfirm = ""
+        state.password = ""
+        state.passwordConfirm = ""
+        editAfterFailure()
+    }
+
     private func failed(_ e: VaultFailure) {
         state.busy = false
+        state.slowWait = false
         state.error = e.kind
         state.errorCode = e.code
         for i in state.progress.indices where state.progress[i].state == .active { state.progress[i].state = .failed }

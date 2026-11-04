@@ -25,7 +25,10 @@ import VettIDTesting
         #expect(AppRoot.readsAgain(.starting))
         #expect(AppRoot.readsAgain(.unreachable(.phoneLocked)))
         #expect(AppRoot.readsAgain(.unreachable(.phoneLocked, longUnreachable: true)))
-        for p: AppPhase in [.signedOut, .setup(.newVault), .locked, .unlocked, .unreachable(.network)] {
+        // A start that found no network is read again too, on return to the foreground and when a network comes back.
+        #expect(AppRoot.readsAgain(.unreachable(.network)))
+        #expect(AppRoot.readsAgain(.unreachable(.offline)))
+        for p: AppPhase in [.signedOut, .setup(.newVault), .locked, .unlocked, .unreachable(.clock)] {
             #expect(!AppRoot.readsAgain(p), "\(p)")
         }
     }

@@ -16,6 +16,8 @@ public struct RelayError: Error, Equatable, Sendable, CustomStringConvertible {
     public static let claimUnknown = "claim_unknown"
     public static let notFound = "not_found"
     public static let payloadTooLarge = "payload_too_large"
+    /// Made by the client: a response over the size it reads (a proxy's page, a blob over the cap); the relay did not say it.
+    public static let responseTooLarge = "relay_response_too_large"
     public static let quotaExceeded = "quota_exceeded"
     public static let rateLimited = "rate_limited"
     public static let internalError = "internal"
@@ -28,6 +30,9 @@ public struct RelayError: Error, Equatable, Sendable, CustomStringConvertible {
     public let retryAfterSeconds: Int
     /// `quota_exceeded`'s `quota` (0.9.2): `token`, `mailbox`, `mailbox_blobs` or `sender_blobs`; nil otherwise.
     public let quota: String?
+    /// Set by the client: the answer came to a request it had already sent before (a transport failure or a retryable answer
+    /// came first), so an earlier attempt may have been delivered (VAULT-MESSAGING §8.6, 0.83.0).
+    public var afterRetry = false
 
     public init(status: Int, code: String, message: String = "", retryAfterSeconds: Int = 0, quota: String? = nil) {
         self.status = status
@@ -46,6 +51,12 @@ public struct RelayError: Error, Equatable, Sendable, CustomStringConvertible {
     /// phone frozen in the background with the request in hand) or was sent twice. Nothing was applied; the same
     /// request signed afresh is accepted.
     public var staleSignature: Bool { status == 401 && (code == Self.timestampStale || code == Self.replayDetected) }
+
+    /// Equal by what the relay said; ``afterRetry`` is the client's note about the attempt, not part of the answer.
+    public static func == (a: RelayError, b: RelayError) -> Bool {
+        a.status == b.status && a.code == b.code && a.message == b.message && a.retryAfterSeconds == b.retryAfterSeconds
+            && a.quota == b.quota
+    }
 
     public var description: String { "relay: \(status) \(code)" + (message.isEmpty ? "" : ": \(message)") }
 }
@@ -131,6 +142,9 @@ public final class RelayClient: Sendable {
     static let maxWait = 25
     public static let maxCollect = 100
     static let pollTimeout: TimeInterval = 60
+    /// How long a request that is no long poll waits for the relay to answer (or to send more of its answer) before it
+    /// fails (chosen; not in the spec: the system's 60 s would hold a deposit for three minutes with the retries).
+    public static let requestTimeout: TimeInterval = 20
     static let backoffBase: TimeInterval = 0.25
     static let backoffMaxShift = 6
     static let jitter: TimeInterval = 0.25
@@ -204,8 +218,11 @@ public final class RelayClient: Sendable {
             }
             do {
                 return try await once(c)
-            } catch let e as RelayError {
-                guard e.retryable else { throw e }
+            } catch var e as RelayError {
+                guard e.retryable else {
+                    e.afterRetry = i > 0
+                    throw e
+                }
                 last = e
             } catch let e as URLError {
                 // A certificate or pin that does not match, or a cancelled call, is not a passing state of the network.
@@ -220,11 +237,12 @@ public final class RelayClient: Sendable {
     func once(_ c: Call) async throws -> HTTPAnswer {
         let a: HTTPAnswer
         do {
-            a = try await transport.send(policy: c.policy, maxBody: c.maxBody, timeout: c.longPoll ? Self.pollTimeout : nil) {
+            let timeout = c.longPoll ? Self.pollTimeout : Self.requestTimeout
+            a = try await transport.send(policy: c.policy, maxBody: c.maxBody, timeout: timeout) {
                 try request(c)
             }
         } catch let e as BodyTooLarge {
-            throw RelayError(status: e.status, code: RelayError.payloadTooLarge, message: "response")
+            throw RelayError(status: e.status, code: RelayError.responseTooLarge, message: "response")
         }
         if a.status >= 400 { throw Self.error(a) }
         return a

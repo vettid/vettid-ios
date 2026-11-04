@@ -13,7 +13,7 @@ public enum StuckScreens {
     public static let contactWriteEveryMs: Int64 = 60 * 60 * 1000
 
     /// Failures that already have their own way out, or none to offer (the phone's clock is the member's to fix).
-    private static let ownWay: Set<FailureKind> = [.clock, .noVault, .localState, .eraseFailed, .unauthorized]
+    private static let ownWay: Set<FailureKind> = [.clock, .clockOff, .offline, .noVault, .localState, .eraseFailed, .unauthorized]
 
     /// Whether the root screen for [kind] also offers erase-or-recover because nothing has reached the vault service for
     /// ``longUnreachableMs`` at the vault's [timeScale]: [lastContactMs] is the last contact this phone knows of (nil: none

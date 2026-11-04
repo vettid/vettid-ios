@@ -23,6 +23,15 @@ final class Recorder<T: Sendable>: @unchecked Sendable {
     let key = Ed25519PrivateKey.generate()
     let sleeps = Recorder<TimeInterval>()
 
+    /// ``RelayError/afterRetry`` is the client's note on the attempt, not part of what the relay said.
+    @Test func equalityIgnoresTheClientsNoteOnTheAttempt() {
+        var a = RelayError(status: 403, code: RelayError.tokenUsed)
+        let b = RelayError(status: 403, code: RelayError.tokenUsed)
+        a.afterRetry = true
+        #expect(a == b)
+        #expect(a != RelayError(status: 403, code: RelayError.tokenRevoked))
+    }
+
     func client(maxAttempts: Int = RelayClient.defaultAttempts, transport: HTTPTransport? = nil) -> RelayClient {
         let sleeps = sleeps
         return RelayClient(
@@ -187,7 +196,7 @@ final class Recorder<T: Sendable>: @unchecked Sendable {
 
     @Test func aBlobLargerThanTheBoundIsRefused() async throws {
         server.enqueue(.bytes(200, [UInt8](repeating: 1, count: 100)))
-        await #expect(throws: RelayError(status: 200, code: RelayError.payloadTooLarge, message: "response")) {
+        await #expect(throws: RelayError(status: 200, code: RelayError.responseTooLarge, message: "response")) {
             _ = try await client().getBlob("b1", maxBytes: 50)
         }
         server.enqueue(.bytes(200, [UInt8](repeating: 1, count: 50)))

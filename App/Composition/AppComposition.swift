@@ -38,6 +38,8 @@ final class AppComposition {
     let releaseInbox = ReleaseUpdateInbox()
     /// The feed's notifications (IOS-PLAN §6.7): the notifier, the taps, "Show in notifications".
     let notifications = AppNotifications()
+    /// What the phone's network path says (IOS-PLAN §6.6); nil where a build wires its own transport.
+    let network: NetworkMonitor?
 
     /// The app's own wiring: the Secure Enclave and App Attest (or ``NoSecureHardware``), and the build's pinned trust.
     convenience init(environment: AppEnvironment) {
@@ -47,15 +49,18 @@ final class AppComposition {
         } catch {
             preconditionFailure("the build's manifest keys do not parse")
         }
+        let network = NetworkMonitor()
         self.init(environment: environment, wiring: AppWiring(
             hardware: HardwareKeys.current(protectedData:startOver:),
-            transport: HTTPTransport(session: URLSession(configuration: .ephemeral)),
-            trust: trust
+            transport: HTTPTransport(session: URLSession(configuration: .ephemeral), gate: network.gate),
+            trust: trust,
+            network: network
         ))
     }
 
     init(environment: AppEnvironment, wiring: AppWiring) {
         self.environment = environment
+        network = wiring.network
         let directory = Self.dataDirectory()
         // Whether a damaged App Attest key record may start over: the vault manager keeps it current.
         let startOver = AttestStartOver()
@@ -167,6 +172,8 @@ struct AppWiring {
     let hardware: @MainActor (any ProtectedData, AttestStartOver) -> HardwareKeys
     let transport: HTTPTransport
     let trust: AltTrust
+    /// The monitor behind the transport's gate, if the build has one.
+    var network: NetworkMonitor?
 }
 
 /// ``BackgroundTasks`` over the system's background tasks (as `leaveForeground` asks for them).

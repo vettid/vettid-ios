@@ -66,6 +66,100 @@ import VettIDCrypto
         #expect(d.credentialVersion == 1 && d.utkCount == 2)
     }
 
+    /// A `credential.ack` that gets no answer does not undo the operation: the blob is stored, which is its outcome. Only
+    /// `credential.ack` confirms a version (as in vettid-vault), so a later operation that presents the blob and succeeds
+    /// leaves the ack pending, and the next flush sends it.
+    @Test func aLostAckStaysPendingThroughAPresentingOperationAndAFlushSendsIt() async throws {
+        let (d, v) = try await base.pairedDevice(cfg: base.config(InMemoryDeviceStateStore(), timeout: 0.3))
+        let api = VaultApi(device: d) { true }
+        let (utks, _) = try pool(3)
+        let create = Task { try await api.credentialCreate(password: "a long password", pin: "123456") }
+        try await answer(v, d, "credential.utk.get", utks)
+        try await answer(v, d, "credential.create", #"{"credential":"AQID","version":1,"key":"x"}"#)
+        _ = try await base.relay.nextDeposit() // the ack goes unanswered
+        try await create.value
+        #expect(d.credentialVersion == 1 && d.ackPendingVersion == 1)
+        let approve = Task { try await api.criticalUseApprove("r7", password: "pw", payloadSha256: Bytes.sha256(Array("x".utf8))) }
+        let req = try await answer(v, d, "critical-secret-use.approve", #"{"request_id":"r7","status":"ok"}"#)
+        #expect(try StrictJson.parseObject(req.body).string("credential") == "AQID", "the blob is presented")
+        #expect(try await approve.value == "ok")
+        #expect(d.ackPendingVersion == 1, "presenting does not confirm: the ack is still owed")
+        let flush = Task { await d.flushOutbox() }
+        let ack = try await answer(v, d, "credential.ack")
+        #expect(VaultJSON.int(VaultJSON.object(ack.body), "version") == 1)
+        await flush.value
+        #expect(d.ackPendingVersion == nil)
+    }
+
+    /// An operation refused after the blob check (a wrong password) leaves the version unconfirmed: the pending ack stays, and
+    /// an outbox flush sends it, outside the credential lock.
+    @Test func anOperationRefusedAfterTheBlobCheckLeavesTheAckPendingAndAFlushSendsIt() async throws {
+        let (d, v) = try await base.pairedDevice(cfg: base.config(InMemoryDeviceStateStore(), timeout: 0.3))
+        let api = VaultApi(device: d) { true }
+        let (utks, _) = try pool(3)
+        let create = Task { try await api.credentialCreate(password: "a long password", pin: "123456") }
+        try await answer(v, d, "credential.utk.get", utks)
+        try await answer(v, d, "credential.create", #"{"credential":"AQID","version":1,"key":"x"}"#)
+        _ = try await base.relay.nextDeposit() // the ack goes unanswered
+        try await create.value
+        let approve = Task { try await api.criticalUseApprove("r7", password: "wrong", payloadSha256: Bytes.sha256(Array("x".utf8))) }
+        try await answer(v, d, "critical-secret-use.approve", code: "bad_password", errorBody: "{}")
+        await #expect(throws: (any Error).self) { _ = try await approve.value }
+        #expect(d.ackPendingVersion == 1, "refused after the blob check: still unconfirmed")
+        let flush = Task { await d.flushOutbox() }
+        let ack = try await answer(v, d, "credential.ack")
+        #expect(VaultJSON.int(VaultJSON.object(ack.body), "version") == 1)
+        await flush.value
+        #expect(d.ackPendingVersion == nil)
+    }
+
+    /// `stale_credential` to a `credential.ack`: the vault has moved past that version, so nothing is owed for it.
+    @Test func aStaleAckIsSettled() async throws {
+        let (d, v) = try await base.pairedDevice()
+        let api = VaultApi(device: d) { true }
+        let (utks, _) = try pool(2)
+        let create = Task { try await api.credentialCreate(password: "a long password", pin: "123456") }
+        try await answer(v, d, "credential.utk.get", utks)
+        try await answer(v, d, "credential.create", #"{"credential":"AQID","version":1,"key":"x"}"#)
+        try await answer(v, d, "credential.ack", code: "stale_credential", errorBody: "{}")
+        try await create.value
+        #expect(d.ackPendingVersion == nil)
+    }
+
+    /// A pending ack the vault answers for good is not sent again.
+    @Test func aTerminalAnswerToAnAckSettlesIt() async throws {
+        let (d, v) = try await base.pairedDevice(cfg: base.config(InMemoryDeviceStateStore(), timeout: 0.3))
+        let api = VaultApi(device: d) { true }
+        let (utks, _) = try pool(2)
+        let create = Task { try await api.credentialCreate(password: "a long password", pin: "123456") }
+        try await answer(v, d, "credential.utk.get", utks)
+        try await answer(v, d, "credential.create", #"{"credential":"AQID","version":1,"key":"x"}"#)
+        _ = try await base.relay.nextDeposit() // the ack goes unanswered
+        try await create.value
+        #expect(d.ackPendingVersion == 1)
+        let flush = Task { await d.flushOutbox() }
+        try await answer(v, d, "credential.ack", code: "credential_frozen", errorBody: "{}")
+        await flush.value
+        #expect(d.ackPendingVersion == nil, "parked: not retried for ever")
+    }
+
+    /// `forbidden` (a phone still recovering) and `credential_required` (no holder yet) are passing states: the ack stays owed.
+    @Test(arguments: ["credential_required", "forbidden"])
+    func aPassingAnswerToAnAckLeavesItOwed(code: String) async throws {
+        let (d, v) = try await base.pairedDevice(cfg: base.config(InMemoryDeviceStateStore(), timeout: 0.3))
+        let api = VaultApi(device: d) { true }
+        let (utks, _) = try pool(2)
+        let create = Task { try await api.credentialCreate(password: "a long password", pin: "123456") }
+        try await answer(v, d, "credential.utk.get", utks)
+        try await answer(v, d, "credential.create", #"{"credential":"AQID","version":1,"key":"x"}"#)
+        _ = try await base.relay.nextDeposit() // the ack goes unanswered
+        try await create.value
+        let flush = Task { await d.flushOutbox() }
+        try await answer(v, d, "credential.ack", code: code, errorBody: "{}")
+        await flush.value
+        #expect(d.ackPendingVersion == 1, "still owed")
+    }
+
     /// Before release R the password goes as typed and without a PIN.
     @Test func beforeReleaseRThePasswordIsSentAsTyped() async throws {
         let (d, v) = try await base.pairedDevice()

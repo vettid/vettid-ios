@@ -21,10 +21,23 @@ final class FakeRelay: @unchecked Sendable {
     /// Runs at each accepted deposit, before the relay answers it (so before the depositing device goes on).
     var onDeposit: (@Sendable () -> Void)? { get { lock.withLock { depositHook } } set { lock.withLock { depositHook = newValue } } }
     private var depositHook: (@Sendable () -> Void)?
+    /// Refused deposits are stored all the same (``refuseDeposits``).
+    var recordRefused: Bool { get { lock.withLock { recordsRefused } } set { lock.withLock { recordsRefused = newValue } } }
+    private var recordsRefused = false
+    /// Accepted deposits are answered only when the gate opens (a relay that stalls). The wait is on a dispatch thread of its
+    /// own, not on the relay's lock or the cooperative pool.
+    var holdDeposits: FakeHTTPServer.Gate? { get { lock.withLock { heldGate } } set { lock.withLock { heldGate = newValue } } }
+    private var heldGate: FakeHTTPServer.Gate?
+    /// Every deposit fails in transport with this code (no answer at all).
+    var failDeposits: URLError.Code? { get { lock.withLock { transportFailure } } set { lock.withLock { transportFailure = newValue } } }
+    private var transportFailure: URLError.Code?
     private var refuse: String?
     /// The next [n] deposits are refused with [refuseDeposits]'s code, then the relay accepts again (0: all of them).
     var refuseOnly: Int { get { lock.withLock { refuseCount } } set { lock.withLock { refuseCount = newValue } } }
     private var refuseCount = 0
+    /// The refusal that follows the counted ones (``refuseOnly``), instead of the relay accepting again.
+    var thenRefuse: (status: Int, code: String)? { get { lock.withLock { followUp } } set { lock.withLock { followUp = newValue } } }
+    private var followUp: (status: Int, code: String)?
     private var status = 403
     private var collectRefusal: String?
     private var serve = false
@@ -54,21 +67,28 @@ final class FakeRelay: @unchecked Sendable {
 
     func queue(_ m: RelayMessage) { lock.withLock { queued.append(m) } }
 
-    private func answer(_ r: FakeHTTPServer.Request) -> FakeHTTPServer.Answer {
+    private func answer(_ r: FakeHTTPServer.Request) -> FakeHTTPServer.Answer { // swiftlint:disable:this cyclomatic_complexity
         lock.withLock {
             let path = r.path
             if path == "/v1/register" {
                 return .json(201, #"{"mailbox_id":"x","limits":{"max_payload_bytes":262144,"message_ttl_seconds":1,"visibility_timeout_seconds":60,"max_token_lifetime_seconds":1,"open_token_max_lifetime_seconds":1,"max_claim_bytes":1,"claim_ttl_seconds":1}}"#)
             }
             if path.hasPrefix("/v1/mailbox/"), r.method == "POST" {
-                if let refusal = depositRefusal() { return refusal }
+                if let code = transportFailure { return .failure(code) }
+                let refusal = depositRefusal()
+                // A refusal the relay gave after it had stored the message (its answer to the first attempt was lost, and the
+                // retry was refused): the message is there, the depositor is told otherwise.
+                if let refusal, !recordsRefused { return refusal }
                 let payload = (try? StrictJson.parseObject(r.body).base64("payload")) ?? []
                 deposits.append((String(path.dropFirst("/v1/mailbox/".count)), payload))
                 depositHook?()
                 let ws = depositWaiters
                 depositWaiters.removeAll()
                 for w in ws { w.resume() }
-                return .json(201, #"{"msg_id":"\#(Ulid.new())"}"#)
+                if let refusal { return refusal }
+                let ok = FakeHTTPServer.Answer.json(201, #"{"msg_id":"\#(Ulid.new())"}"#)
+                if let gate = heldGate { return .held(gate, ok) } // (the lock is held: the stored properties)
+                return ok
             }
             if path == "/v1/mailbox", r.method == "GET" {
                 if let code = collectRefusal { return .json(403, #"{"code":"\#(code)","message":""}"#) }
@@ -90,12 +110,16 @@ final class FakeRelay: @unchecked Sendable {
     /// The refusal of a deposit, when one is set (the next ``refuseOnly`` of them, or all). Callers hold ``lock``.
     private func depositRefusal() -> FakeHTTPServer.Answer? {
         guard let code = refuse else { return nil }
+        let answerStatus = status
         refused += 1
         if refuseCount > 0 {
             refuseCount -= 1
-            if refuseCount == 0 { refuse = nil }
+            if refuseCount == 0 {
+                refuse = nil
+                if let f = followUp { (refuse, status) = (f.code, f.status) }
+            }
         }
-        return .json(status, #"{"code":"\#(code)","message":""}"#)
+        return .json(answerStatus, #"{"code":"\#(code)","message":""}"#)
     }
 
     /// `GET /v1/claim/{id}` (fetched once, then `claim_unknown`); nil for any other path. Callers hold ``lock``.
@@ -193,8 +217,14 @@ final class FakeVault: @unchecked Sendable {
 
     var principal: Principal { Principal(ik: ik.publicKey, kem: kem.publicKey, relay: RelayAddr(url: relayURL, mailbox: mailbox, pk: relayKey.publicKey)) }
 
+    /// The lifetime of the request token that `hs.resp` carries, when a test needs the short one of a pairing (§6.7).
+    var requestTokenTTL: TimeInterval?
+
     func token(for d: VaultDevice) throws -> String {
-        try DepositTokens.mintStanding(relayKey, sender: RelayAuth.encodeKey(d.relayAddr.pk), audience: d.relayAddr.url, now: Date())
+        try DepositTokens.mintStanding(
+            relayKey, sender: RelayAuth.encodeKey(d.relayAddr.pk), audience: d.relayAddr.url, now: Date(),
+            ttl: requestTokenTTL ?? DepositTokens.standingTTL
+        )
     }
 
     func msg(_ payload: [UInt8], from: String? = nil) -> RelayMessage {

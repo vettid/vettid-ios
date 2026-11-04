@@ -57,6 +57,9 @@ public final class MemberApiClient: Sendable {
     private let pollInterval: TimeInterval
     private let sleep: @Sendable (TimeInterval) async throws -> Void
     private let now: @Sendable () -> Date
+    /// The phone's monotonic clock in seconds, counting the time it sleeps: the slot deadline runs on it, not on the wall clock
+    /// (which the member or the network may set).
+    private let uptime: @Sendable () -> TimeInterval
 
     public init(
         apiBase: String,
@@ -65,8 +68,10 @@ public final class MemberApiClient: Sendable {
         auth: MemberAuth,
         pollInterval: TimeInterval = defaultPollInterval,
         sleep: @escaping @Sendable (TimeInterval) async throws -> Void = { try await Task.sleep(nanoseconds: UInt64($0 * 1e9)) },
-        now: @escaping @Sendable () -> Date = { Date() }
+        now: @escaping @Sendable () -> Date = { Date() },
+        uptime: @escaping @Sendable () -> TimeInterval = MemberApiClient.monotonicNow
     ) {
+        self.uptime = uptime
         base = apiBase.hasSuffix("/") ? String(apiBase.dropLast()) : apiBase
         self.manifestURL = manifestURL
         self.transport = transport
@@ -323,14 +328,27 @@ public final class MemberApiClient: Sendable {
         return Slot(status: try o.string("status"), envelope: envelope, code: try o.optString("code"))
     }
 
+    /// How long the app waits for the answer of an enrollment, an unlock or a recovery open before it stops asking: a cold
+    /// vault starts in a minute or two (chosen; not in the spec, which gives only the slot's own 15-minute lifetime,
+    /// VAULT-MESSAGING §11.5). The request may still be applied: the next start reads the phase.
+    /// `CLOCK_MONOTONIC`, which on Apple's systems keeps counting while the phone sleeps.
+    @Sendable public static func monotonicNow() -> TimeInterval { Double(clock_gettime_nsec_np(CLOCK_MONOTONIC)) / 1e9 }
+
+    public static let slotDeadline: TimeInterval = 180
+
     /// Polls a slot until it is no longer queued (the API allows 2 polls per second), or, with [atMost], until that much
-    /// time was spent waiting between polls: the slot is then returned still queued.
-    public func poll(_ requestID: String, atMost: TimeInterval? = nil) async throws -> Slot {
+    /// time was spent waiting between polls: the slot is then returned still queued. With [deadline] the wait ends after
+    /// that much time (on the monotonic clock, the requests included) with an ``AltChannelFailure``.
+    public func poll(_ requestID: String, atMost: TimeInterval? = nil, deadline: TimeInterval? = nil) async throws -> Slot {
         var waited: TimeInterval = 0
+        let began = uptime()
         while true {
             let s = try await slot(requestID)
             if s.status != Slot.queued { return s }
             if let atMost, waited >= atMost { return s }
+            if let deadline, uptime() - began >= deadline {
+                throw AltChannelFailure(message: "no answer within \(Int(deadline)) s")
+            }
             try await sleep(pollInterval)
             waited += pollInterval
         }

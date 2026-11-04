@@ -16,6 +16,7 @@ public extension UnlockMessage {
     /// they keep the keys-gone offer as it was.
     static let transientFailures: Set<FailureKind> = [
         .network, .servicePaused, .vaultUnavailable, .noResponse, .rateLimited, .busy, .retry, .clock, .manifestUnavailable,
+        .offline, .clockOff, .relayQuota, .relayRefused,
         // iPhone (IOS-PLAN §6.3): a locked iPhone says nothing about the keys either, nor does Apple unreachable (§6.2).
         .phoneLocked, .appleUnreachable,
     ]
@@ -52,6 +53,8 @@ public struct UnlockState: Equatable, Sendable, CustomStringConvertible, CustomD
     public var notes: ReleaseNotes?
     public var pin = ""
     public var busy = false
+    /// The unlock has waited long for the vault (it may be starting): the screen says so and offers to stop waiting.
+    public var slowUnlock = false
     public var message: UnlockMessage?
     /// Seconds until the enclave's backoff allows another try (§11.8).
     public var waitSeconds: Int64 = 0

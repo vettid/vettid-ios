@@ -66,6 +66,8 @@ public struct ReleaseUpdateFlowContent: View {
             }
         }
         .announcesStepChanges(of: state.progress.map { Self.screenOf($0.step) })
+        // The release starts in minutes (§11.10.5): the screen stays on while the update waits for it.
+        .keepsScreenOn(state.progress?.starting == true)
         .confirmDialog(
             isPresented: Binding(get: { state.abandonConfirm }, set: { if !$0 { actions.dismissAbandon() } }),
             title: OnboardingStrings.releaseUpdateReturnConfirmTitle(from),

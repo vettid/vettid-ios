@@ -129,6 +129,16 @@ public final class VaultDevice: @unchecked Sendable {
     let secrets: DeviceSecrets
     let st: DeviceState
     let lock = AsyncLock()
+    /// A flush of the outbox runs (``flushOutbox()``). Read and written under ``mem``.
+    var flushing = false
+    /// Completed when the running flush ends: the flushes that wait for it wake up. Under ``mem``.
+    var flushEnded: OneShot<Bool>?
+    /// When a pending `credential.ack` was last tried (the device's uptime). Under ``mem``.
+    var lastAckTry: TimeInterval?
+    /// The ids of outbox entries being deposited now (``deliver(_:keepOnFailure:)``). Under ``mem``.
+    var outboxInFlight: Set<String> = []
+    /// Orders the writes of the state to the store (``save()``).
+    let saveOrder = NSLock()
     /// Serializes the credential operations (§3.5.3): one UTK taken, sealed and answered at a time.
     let credentialLock = AsyncLock()
     /// The changes and renews this device sent (``CredentialOps``), counted under ``credentialLock`` as each goes out:
@@ -142,6 +152,25 @@ public final class VaultDevice: @unchecked Sendable {
     var relays: [String: RelayClient] = [:]
     var keyring: Keyring
     var ini: Initiator?
+    /// TEST ONLY: runs in ``sendInit(_:)`` after a failed deposit, before the handshake is dropped.
+    #if DEBUG
+    var initRaceHook: (@Sendable (Initiator) -> Void)?
+    /// TEST ONLY: runs in ``storeFin`` once the fin is stored, with its id.
+    var finStoredHook: (@Sendable (String) -> Void)?
+    /// TEST ONLY: runs in ``prepareInit`` before the new handshake replaces the old one.
+    var beforePrepareInitHook: (@Sendable () -> Void)?
+    /// TEST ONLY: runs after a fin deposit was counted, just before it is sent.
+    var finSendHook: (@Sendable () -> Void)?
+    /// TEST ONLY: runs before a fin deposit is counted, after the flush chose the entry.
+    var finCountHook: (@Sendable () -> Void)?
+    #endif
+    /// The handshake whose `hs.resp` was handled last (``VaultDevice/sendInit(_:)`` reads it). Under ``mem``.
+    var answeredInit: ObjectIdentifier?
+    /// Counts the handshakes started (``prepareInit``): what an after-lock closure compares to know that its handshake is still
+    /// the current one (an object identity could be reused). Under ``mem``.
+    var handshakeGeneration: UInt64 = 0
+    /// The `hs.fin` of the handshake was refused for good (``notifyFinFailed(ifOwed:)``). Under ``mem``.
+    var finFailed = false
 
     /// A vault rekey this device answered (`hs.resp` sent), awaiting its `hs.fin` (§6.5).
     struct Awaiting {
@@ -347,21 +376,25 @@ public final class VaultDevice: @unchecked Sendable {
 
     // MARK: - Persistence
 
-    /// Writes the state (with the keyring and the awaiting rekeys) to the store. Callers hold ``lock``.
+    /// Writes the state (with the keyring and the awaiting rekeys) to the store. Callers hold ``lock``: what follows a deposit
+    /// that ended outside it is saved through ``withLockSaving(_:)``.
     func save() throws {
-        let data: Data? = try mem.withLock {
-            if forgotten { return nil }
-            if halted { throw Self.haltedError }
-            if st.vault != nil {
-                st.vault?.sessions = Base64s.encodeStd(try keyring.export())
-                st.vault?.awaiting = awaiting.compactMap { a in
-                    // A responder that is done (aborted) has nothing left to keep.
-                    (try? a.resp.export()).map { AwaitingRekey(createdMs: a.createdMs, state: Base64s.encodeStd($0)) }
+        // One write at a time, in the order of the snapshots: an older snapshot must not be stored after a newer one.
+        try saveOrder.withLock {
+            let data: Data? = try mem.withLock {
+                if forgotten { return nil }
+                if halted { throw Self.haltedError }
+                if st.vault != nil {
+                    st.vault?.sessions = Base64s.encodeStd(try keyring.export())
+                    st.vault?.awaiting = awaiting.compactMap { a in
+                        // A responder that is done (aborted) has nothing left to keep.
+                        (try? a.resp.export()).map { AwaitingRekey(createdMs: a.createdMs, state: Base64s.encodeStd($0)) }
+                    }
                 }
+                return try JSONEncoder().encode(st)
             }
-            return try JSONEncoder().encode(st)
+            if let data { try cfg.store.save(Array(data)) }
         }
-        if let data { try cfg.store.save(Array(data)) }
     }
 
     /// The persisted rekeys awaiting `hs.fin`; one that does not restore or is past ``handshakeTTL`` is dropped.
@@ -479,6 +512,7 @@ public final class VaultDevice: @unchecked Sendable {
             stop()
             mem.withLock {
                 forgotten = true
+                handshakeGeneration &+= 1
                 keyring.destroy()
                 ini?.abort()
                 ini = nil
@@ -504,6 +538,7 @@ public final class VaultDevice: @unchecked Sendable {
             stop()
             let (shots, waiters): ([OneShot<Inner>], [OneShot<Bool>]) = mem.withLock {
                 halted = true
+                handshakeGeneration &+= 1
                 ini?.abort()
                 ini = nil
                 for a in awaiting { a.resp.abort() }

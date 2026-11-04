@@ -40,8 +40,13 @@ enum VaultFailures {
         case let n as NotATransferCode:
             VaultFailure(n.expired ? .inviteExpired : .inviteInvalid, code: VaultManager.codeNotTransfer, cause: n)
         case let p as PairingRejected: VaultFailure(.rejected, code: "rejected", cause: p)
-        case let r as RelayError: VaultFailure(.network, cause: r)
-        case let u as URLError: VaultFailure(.network, cause: u)
+        // The pairing's fin did not reach the vault: the code is spent, the member scans a new one.
+        case let p as PairingNotCompleted: VaultFailure(.inviteUnavailable, code: "pairing_not_completed", cause: p)
+        // The link's open token (a pairing or transfer code) is spent, revoked or expired (VAULT-MESSAGING §8.6).
+        case let o as OpenTokenRefused:
+            VaultFailure(o.relay.code == RelayError.tokenExpired ? .inviteExpired : .inviteUnavailable, code: o.relay.code, cause: o)
+        case let r as RelayError: relay(r)
+        case let u as URLError: VaultFailure(u.code == .notConnectedToInternet ? .offline : .network, cause: u)
         case let k as KeysError: keys(k)
         case let a as AppAttestError: appAttest(a)
         case let m as MemberApiMalformed: VaultFailure(.other, code: "malformed", cause: m)
@@ -50,6 +55,32 @@ enum VaultFailures {
         }
     }
     // swiftlint:enable cyclomatic_complexity
+
+    /// The code of a failure that the phone's clock explains (a relay `timestamp_stale`, answers dropped for their time).
+    static let codeClockSkew = "clock_skew"
+
+    /// A relay's refusal (RELAY-PROTOCOL §7.1) by what it says: a stale signature that three fresh ones did not cure is the
+    /// phone's clock (§4.1), `rate_limited` is the rate limit's text, and the quota and the size have their own. A server
+    /// fault (5xx) and a code the app does not know are the network's.
+    static func relay(_ r: RelayError) -> VaultFailure {
+        switch r.code {
+        case RelayError.timestampStale: return VaultFailure(.clockOff, code: codeClockSkew, cause: r)
+        case RelayError.rateLimited:
+            return VaultFailure(.rateLimited, code: r.code, retryAfterSeconds: Int64(r.retryAfterSeconds), cause: r)
+        case RelayError.quotaExceeded: return VaultFailure(.relayQuota, code: r.code, cause: r)
+        case RelayError.payloadTooLarge: return VaultFailure(.payloadTooLarge, code: r.code, cause: r)
+        // A response over the size read (not the relay's 413): a network or server failure.
+        case RelayError.responseTooLarge: return VaultFailure(.network, code: r.code, cause: r)
+        // §8.6: a standing token that expired is refreshed, or the connection made again, by the app itself; to the member it is
+        // a passing failure (chosen; not in the spec). An open token's is the link's (``OpenTokenRefused``). `token_invalid` is not cured by trying again: a refusal.
+        case RelayError.tokenExpired: return VaultFailure(.network, code: r.code, cause: r)
+        default:
+            // 4xx the relay meant (a revoked or expired token, an unknown mailbox, a bad signature): not a passing state of
+            // the network, and trying again unchanged will not help.
+            guard r.status >= 400, r.status < 500, !r.code.hasPrefix("http_") else { return VaultFailure(.network, cause: r) }
+            return VaultFailure(.relayRefused, code: r.code, cause: r)
+        }
+    }
 
     /// A refusal of the app's own rules before anything was sent (§11.10.6, §13.2).
     private static func refused(_ r: AltRefused) -> VaultFailure {

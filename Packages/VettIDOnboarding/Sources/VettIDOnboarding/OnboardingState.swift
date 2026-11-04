@@ -97,6 +97,8 @@ public struct OnboardingState: Equatable, Sendable, CustomStringConvertible, Cus
     public var phoneSecret = false
     public var progress: [ProgressEntry] = []
     public var busy = false
+    /// The enrollment has waited long for the vault (it may be starting): the screen says so and offers to stop waiting.
+    public var slowWait = false
     public var error: FailureKind?
     public var errorCode: String?
     /// When the failed action becomes possible, when the failure says (``FailureKind/enrollmentStarted``).

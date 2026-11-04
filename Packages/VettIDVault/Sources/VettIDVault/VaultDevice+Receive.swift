@@ -8,6 +8,20 @@ extension VaultDevice {
     /// rekey's new epoch that arrived before the rekey's `hs.fin` is neither recorded as seen nor acked
     /// (``LeaveUnacked``): the relay delivers it again, and it is opened once `hs.fin` has arrived (§6.3, §8.4).
     public func handle(_ m: RelayMessage) async throws {
+        var failure: (any Error)?
+        let after = AfterLockWork()
+        do {
+            try await AfterLockWork.$current.withValue(after) { try await handleLocked(m) }
+        } catch {
+            failure = error
+        }
+        // The replies to the vault go out after the lock: a relay that stalls holds up this message's ack, not the
+        // answers to every other request. They are this call's own.
+        await after.run()
+        if let failure { throw failure }
+    }
+
+    private func handleLocked(_ m: RelayMessage) async throws {
         try await lock.withLock {
             let t = now()
             let fresh: Bool = mem.withLock {
@@ -64,6 +78,12 @@ extension VaultDevice {
                 }
                 // CryptoError.early: a message of the new epoch ahead of its hs.fin (handle leaves it for redelivery).
                 let fr = try awaiting[i].resp.handleFin(raw, collectSender: sender, now: t)
+                // A fin still owed follows its handshake's epoch into the rekey's.
+                if let old = keyring.current()?.ctx {
+                    for j in st.outbox.indices where st.outbox[j].epochIDs?.contains(old) == true {
+                        if st.outbox[j].epochIDs?.contains(fr.epoch.ctx) != true { st.outbox[j].epochIDs?.append(fr.epoch.ctx) }
+                    }
+                }
                 keyring.activate(fr.epoch, now: t)
                 awaiting.remove(at: i)
             }
@@ -77,8 +97,12 @@ extension VaultDevice {
         do {
             try inner.checkTime(now: t, durable: inner.exp == nil)
         } catch let e as CryptoError where e.kind == .time {
-            // Dropped, as any message that fails a check; but said, so that a phone whose clock is wrong can be told.
-            timeDropBroadcast.emit(inner.type)
+            // Dropped, as any message that fails a check. Said, so that a phone whose clock is wrong can be told, only when
+            // the evidence points at the clock: a `ts` beyond the allowed skew in the future, or a durable message older
+            // than any delivery delay explains. A plain expiry (a call signal or a ping collected late) is no evidence.
+            let future = inner.ts.timeIntervalSince(t) > Inner.maxClockSkewFuture
+            let tooOld = inner.exp == nil && t.timeIntervalSince(inner.ts) > Inner.maxDurableAge
+            if future || tooOld { timeDropBroadcast.emit(inner.type) }
             throw e
         }
         noteVaultTime(inner.ts)
@@ -102,6 +126,12 @@ extension VaultDevice {
         // hs.resp before maintain() looks at it.
         case "device.paired":
             storeVaultToken(body)
+            // The first handshake's `device.paired` (pairing, enrollment, transfer): a fin still owed for it is of no use, and
+            // its age must not later tell a paired device that the pairing failed.
+            // Only the fins of the epoch it opened under: a retired epoch's message must not clear a newer handshake's fin.
+            mem.withLock {
+                if st.deviceID == nil { st.outbox.removeAll { $0.type == Self.typeHsFin && $0.epochIDs?.contains(ep.ctx) == true } }
+            }
             // A transfer's `device.paired` is applied before the message is acked (VAULT-MESSAGING §11.14.10 rule 5: a paired
             // transfer completes at any later start): the event in memory is lost with the process, the state is not.
             if mem.withLock({ st.deviceID == nil && (VaultJSON.bool(body, "transfer") == true || alt().transferAttestKeyID != nil) }) {
@@ -115,9 +145,10 @@ extension VaultDevice {
         case "relay.token.refresh":
             if inner.re == nil {
                 let tok = try mintForVault()
-                _ = try await sendLocked(
+                let entry = try enqueueLocked(
                     id: nil, type: inner.type, body: Self.standing(tok), re: inner.id, status: Inner.statusOK, exp: nil
                 )
+                afterLock { [self] in try? await deliver(entry) }
             } else {
                 storeVaultToken(body)
             }
@@ -137,6 +168,7 @@ extension VaultDevice {
     /// `hs.resp`. Nothing is sent back; a redelivery finds no epoch to open it and is dropped.
     func dropPairing() {
         mem.withLock {
+            handshakeGeneration &+= 1 // an after-lock closure of the dropped handshake shows nothing
             sas = nil
             ini?.abort()
             ini = nil
@@ -146,6 +178,8 @@ extension VaultDevice {
             keyring = Keyring()
             st.vault?.token = ""
             st.vault?.tokenExpMs = 0
+            // The fin of the handshake that is dropped is of no use to anyone.
+            st.outbox.removeAll { $0.type == Self.typeHsFin }
         }
     }
 
@@ -167,18 +201,19 @@ extension VaultDevice {
         }
         guard let (a, env, v) = prepared else { return }
         try save()
-        do {
-            try await depositToVault(v, env)
-        } catch let e as RelayError {
-            // Refused: the vault never sees this hs.resp. Otherwise it may have arrived: the responder stays for its
-            // hs.fin, and expires if none comes.
-            if !e.retryable {
-                mem.withLock {
-                    awaiting.removeAll { $0.resp === a.resp }
-                    a.resp.abort()
+        afterLock { [self] in
+            do {
+                try await depositToVault(v, env)
+            } catch let e as RelayError {
+                // Refused: the vault never sees this hs.resp. Otherwise it may have arrived: the responder stays for its
+                // hs.fin, and expires if none comes.
+                if !e.retryable {
+                    try? await withLockSaving {
+                        awaiting.removeAll { $0.resp === a.resp }
+                        a.resp.abort()
+                    }
                 }
-            }
-            throw e
+            } catch {}
         }
     }
 
@@ -233,11 +268,13 @@ extension VaultDevice {
         do {
             if issuedExp != 0, Double(issuedExp) / 1000 - t.timeIntervalSince1970 < Self.issueBefore {
                 let tok = try mintForVault()
-                _ = try await sendLocked(id: nil, type: "relay.token.issued", body: Self.standing(tok), re: nil, status: nil, exp: nil)
+                let e = try enqueueLocked(id: nil, type: "relay.token.issued", body: Self.standing(tok), re: nil, status: nil, exp: nil)
+                afterLock { [self] in try? await deliver(e) }
             }
             let exp = Double(v.tokenExpMs) / 1000
             if exp - t.timeIntervalSince1970 < Self.refreshBefore, t.timeIntervalSince1970 < exp {
-                _ = try await sendLocked(id: nil, type: "relay.token.refresh", body: VaultJSON.empty, re: nil, status: nil, exp: nil)
+                let e = try enqueueLocked(id: nil, type: "relay.token.refresh", body: VaultJSON.empty, re: nil, status: nil, exp: nil)
+                afterLock { [self] in try? await deliver(e) }
             }
         } catch {
             // retried at the next message

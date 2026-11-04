@@ -89,7 +89,15 @@ extension VaultManager: MoveRepository {
             learnTimeScale(scale, since: rec)
             recoveryOffered = ReleasePath.recoveryOffered(capabilities)
             // §6.7.1 step 2 (0.10.6): a dropped hs.init is never answered; stop after 60 s and say why it may be.
-            guard let sas = try await sasWithinLimit(d) else {
+            let sas: String?
+            do {
+                sas = try await sasWithinLimit(d)
+            } catch let notCompleted as PairingNotCompleted {
+                // The relay refused the fin for good: the code is spent, nothing is kept (as for a rejection).
+                await dropTransfer(d)
+                throw notCompleted
+            }
+            guard let sas else {
                 await dropTransfer(d)
                 throw VaultFailure(.noResponse, code: MoveCodes.hsUnanswered)
             }
@@ -128,7 +136,8 @@ extension VaultManager: MoveRepository {
     /// at the deadline, **11 minutes after the `hs.init` was started** (§11.14.10 rule 5, owner decision 2026-10-23: one
     /// deadline, stored with the transfer, which no user action extends). At the deadline, and not before, the mailbox is
     /// collected once: a `device.paired{transfer}` it brings is applied and the move completes instead; otherwise the
-    /// transfer is dropped. Any other failure before the deadline is rethrown and the transfer kept. True when the vault gave
+    /// transfer is dropped. A fin the relay refused for good at its first deposit (``PairingNotCompleted``) before the deadline drops the transfer too; after
+    /// it the collect runs all the same. Any other failure before the deadline is rethrown and the transfer kept. True when the vault gave
     /// this phone the member's `user_guid` (§6.7.1, 0.17.0), which its unlocks need.
     public func awaitTransferIn() async throws -> Bool {
         try await guarded {
@@ -148,6 +157,10 @@ extension VaultManager: MoveRepository {
                 // Rejected: nothing was approved, so nothing changes; the handshake state is dropped.
                 await dropTransfer(s.device)
                 throw rejected
+            } catch let notCompleted as PairingNotCompleted {
+                // The fin was refused for good at its first deposit: the pairing cannot finish; the same.
+                await dropTransfer(s.device)
+                throw notCompleted
             }
             switch settled {
             case .completed(let guid): return guid != nil
@@ -164,7 +177,8 @@ extension VaultManager: MoveRepository {
 
     /// Waits for the transfer's `device.paired` (applied by the device as it is handled) or the deadline, whichever comes
     /// first; the deadline's wait is ``VaultManagerConfig/transferDeadlineSleep``. A failure of the wait before the deadline
-    /// is thrown (nothing is collected or dropped before it, rule 5); at or after it, it is the deadline.
+    /// is thrown (nothing is collected or dropped before it, rule 5); at or after it, it is the deadline, also when the fin
+    /// was refused for good, so that a `device.paired` the vault already sent is collected and not lost.
     private func awaitPairedOrDeadline(_ d: VaultDevice) async throws -> PairedOrDeadline {
         let sleep = config.transferDeadlineSleep
         while true {
@@ -184,7 +198,10 @@ extension VaultManager: MoveRepository {
                     return try await group.next() ?? .deadline
                 }
             } catch {
-                if error is CancellationError || error is PairingRejected || config.now() < deadline { throw error }
+                if error is CancellationError || error is PairingRejected { throw error }
+                // Before the deadline a failure is thrown (a refused fin, ``PairingNotCompleted``, drops the transfer); at or
+                // after it the wait is over and the collect of rule 5 runs, whatever the failure was.
+                if config.now() < deadline { throw error }
                 return .deadline
             }
             if case .paired = first { return first }

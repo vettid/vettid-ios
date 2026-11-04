@@ -18,7 +18,9 @@ extension VaultManager {
         let required = s.device.ownerCheckRequired()
         let reconnects = s.device.relayReconnects()
         let counted = s.device.countedEnds()
+        let dropped = s.device.droppedForTime()
         observers = [
+            followTimeDrops(dropped),
             // (VAULT-MESSAGING 0.73.0 §3.6.5) A reconnect reads the vault's state again while it is probably locked, and the
             // operations that count as failed checks (§3.6.4) spend the owner check's estimate of tries left.
             Task { @MainActor [weak self] in
@@ -53,6 +55,16 @@ extension VaultManager {
                 }
             },
         ]
+    }
+
+    /// Notes when the device drops a message for its time (``timeDropAt``).
+    private func followTimeDrops(_ dropped: AsyncStream<String>) -> Task<Void, Never> {
+        Task { @MainActor [weak self] in
+            for await _ in dropped {
+                guard let self else { return }
+                timeDropAt = Date()
+            }
+        }
     }
 
     /// Back in the foreground: the mailbox collection runs again (a session is opened when this phone holds a device),

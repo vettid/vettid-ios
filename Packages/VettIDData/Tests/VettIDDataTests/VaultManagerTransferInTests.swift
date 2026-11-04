@@ -217,6 +217,75 @@ import VettIDDataTesting
         #expect(phone.attester.discarded == phone.attester.attested && !pendingRecord)
     }
 
+    /// The relay refuses the new phone's `hs.fin` for good: no code is shown, the transfer and the key are dropped, and the
+    /// member is told the invitation is no longer available.
+    @Test func aFinRefusedForGoodDropsTheTransferAndTheKey() async throws {
+        defer { phone.close() }
+        service.holdsTransferApproval = true
+        service.transferRevokesFin = true
+        let failure = await vaultFailure { _ = try await m.transferIn(code: try code()) }
+        #expect(failure?.kind == .inviteUnavailable && failure?.code == "pairing_not_completed")
+        #expect(!deviceHoldsVault && !pendingRecord && !m.movedIn)
+        #expect(phone.attester.discarded == phone.attester.attested)
+    }
+
+    /// A fin sent again and refused for good (the vault took the first, whose answer was lost, and the owner approved while the
+    /// app was suspended) is no failure: the deadline's collect finds the `device.paired` and the transfer completes. A refusal
+    /// that told the flow would have dropped a transfer the vault already paired.
+    @Test func aResentFinRefusedForGoodLeavesTheDeadlineToCollectThePaired() async throws {
+        defer { phone.close() }
+        service.transferLosesFinAnswers = true
+        service.transferRequestTokenTTL = 600
+        _ = try await scanned()
+        m.session?.device.stop() // the collector is not running while the app is suspended
+        service.approveTransferIn()
+        service.transferLosesFinAnswers = false
+        phone.clockAhead = 600
+        let ended = EndedFlag()
+        let waiting = Task {
+            defer { ended.set() }
+            return try await m.awaitTransferIn()
+        }
+        let pauses = phone.deadlinePauses
+        for _ in 0..<500 where pauses.lengths.isEmpty { try await Task.sleep(for: .milliseconds(10)) }
+        service.transferRevokesFin = true
+        await m.session?.device.flushOutbox() // the fin sent again is refused for good, silently
+        try await Task.sleep(for: .milliseconds(200))
+        #expect(!ended.isSet, "the transfer still waits for its deadline")
+        service.transferRevokesFin = false
+        phone.clockAhead = 700
+        pauses.release()
+        #expect(try await waiting.value)
+        #expect(m.finishMovePending && deviceHoldsVault)
+    }
+
+    /// A fin refused for good at its first deposit is a failure at once: the vault never took it, and the transfer is dropped.
+    @Test func aFirstFinRefusedForGoodDropsTheTransfer() async throws {
+        defer { phone.close() }
+        service.holdsTransferApproval = true
+        service.transferRevokesFin = true
+        let failure = await vaultFailure { _ = try await m.transferIn(code: try code()) }
+        #expect(failure?.kind == .inviteUnavailable && failure?.code == "pairing_not_completed")
+        #expect(!deviceHoldsVault && !pendingRecord)
+        #expect(phone.attester.discarded == phone.attester.attested)
+    }
+
+    /// A fin dropped by age is no failure: the approval that came meanwhile is collected at the deadline and the transfer
+    /// completes (§11.14.10 rule 5).
+    @Test func aFinDroppedByAgeLetsTheDeadlineCollectThePaired() async throws {
+        defer { phone.close() }
+        service.transferLosesFinAnswers = true
+        service.transferRequestTokenTTL = 600 // a pairing's request token
+        _ = try await scanned()
+        m.session?.device.stop() // the collector is not running while the app is suspended
+        service.approveTransferIn()
+        phone.clockAhead = 700 // past the transfer's 11 minutes and the token's exp and the minute
+        await m.session?.device.flushOutbox() // the aged fin is dropped, silently
+        service.transferLosesFinAnswers = false // the take-over's requests get their answers
+        #expect(try await m.awaitTransferIn())
+        #expect(m.finishMovePending && deviceHoldsVault)
+    }
+
     @Test func abandoningBeforeTheApprovalDropsEverything() async throws {
         defer { phone.close() }
         _ = try await scanned()
@@ -411,3 +480,11 @@ import VettIDDataTesting
 }
 
 // swiftlint:enable line_length
+
+/// Set when a task ends.
+private final class EndedFlag: @unchecked Sendable {
+    private let lock = NSLock()
+    private var ended = false
+    func set() { lock.withLock { ended = true } }
+    var isSet: Bool { lock.withLock { ended } }
+}

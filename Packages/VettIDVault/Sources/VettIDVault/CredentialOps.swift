@@ -48,9 +48,30 @@ struct CredentialOps: Sendable {
         guard let v = VaultJSON.int(o, "credential_version") ?? VaultJSON.int(o, "version"), v >= 0 else {
             throw VaultStateError(message: "credential without version")
         }
-        try await device.keepCredential(blob: blob, version: v)
-        _ = try await device.op("credential.ack", body: JsonBuilder().uint("version", UInt64(v)).bytes())
+        try await device.keepCredential(blob: blob, version: v, awaitingAck: true)
+        // The blob is stored: that is the outcome of the operation. A confirmation that is lost does not undo it
+        // (chosen; not in the spec, and unlike vettid-android, which throws): the ack stays pending and goes out at the
+        // next outbox flush (an unlock, a return to the foreground or the background;
+        // ``VaultDevice/sendPendingAck()``), outside the credential lock. Only `credential.ack` confirms a version, as
+        // in vettid-vault (which sets `Acked` through the ack alone); VAULT-MESSAGING §3.5.3 and §3.5.9 also count
+        // presenting the blob (an erratum is pending), so an operation that presents it does not settle the ack.
+        try await confirm(v)
         return utks
+    }
+
+    /// Sends `credential.ack` for [version] once; a failure leaves it pending (an outbox flush sends it again, outside the
+    /// credential lock). Only a `forbidden` (this device is not the holder, §3.5.9) and a cancellation are thrown: they say
+    /// something the caller must act on.
+    private func confirm(_ version: Int64) async throws {
+        do {
+            try await device.sendAck(version)
+        } catch let e as VaultOpError where e.code == Self.codeForbidden {
+            throw e
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            return
+        }
     }
 
     /// An unexpired UTK, fetching a pool (`credential.utk.get`) when the device holds none. A UTK is spent once the

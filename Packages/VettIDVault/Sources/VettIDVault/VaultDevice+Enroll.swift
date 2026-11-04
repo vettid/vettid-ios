@@ -96,6 +96,7 @@ extension VaultDevice {
 
     /// The first handshake's hs.resp: activates the epoch, keeps the token and sends hs.fin.
     func handleResp(_ raw: [UInt8], sender: [UInt8], _ t: Date) async throws {
+        var generation: UInt64 = 0 // this handshake, as ``handshakeGeneration`` counts it while it is the current one
         let (res, v): (InitiatorResult, VaultRecord) = try mem.withLock {
             guard let i = ini else { throw VaultStateError(message: "no handshake") }
             let res: InitiatorResult
@@ -105,6 +106,8 @@ extension VaultDevice {
                 ini = nil
                 throw e
             }
+            answeredInit = ObjectIdentifier(i)
+            generation = handshakeGeneration
             ini = nil
             // (IOS-PLAN 0.1.39 §4.9) The recovered phone's handshake the vault answered: its `ctx` names the registration whose
             // attested key the vault binds. Saved with the epoch.
@@ -117,12 +120,56 @@ extension VaultDevice {
             keyring.activate(res.epoch, now: t)
             return (res, try requireVault())
         }
-        try save()
-        try await depositToVault(v, res.fin)
-        if let s = res.sas {
-            mem.withLock { sas = s }
-            sasBroadcast.emit(s)
+        // The fin is kept in the outbox until the relay accepts it: a pairing or transfer code is spent by its handshake, and
+        // an hs.fin that never arrives leaves the code burnt. It goes out after the lock (``afterLock(_:)``) and again at
+        // each flush.
+        let fin = try storeFin(res.fin, vault: v, epoch: res.epoch.ctx, at: t)
+        // The code is shown once the fin has gone out, or, when the relay would not take it, is kept for the next flush.
+        let shown = res.sas
+        let mine = generation
+        afterLock { [self] in
+            do {
+                try await deliver(fin)
+            } catch let x as RelayError where Self.isTerminal(x) {
+                // Refused for good: when the flow was told (``deliver``: the fin's first attempt), it gets no code.
+                if mem.withLock({ finFailed }) { return }
+            } catch {
+                // A passing failure: the fin stays owed, and the code is shown.
+            }
+            // Only while this handshake is the current one: a new one bumps ``handshakeGeneration``, and its flow must not be
+            // handed the old code.
+            if let s = shown, mem.withLock({ guard handshakeGeneration == mine else { return false }; sas = s; return true }) {
+                sasBroadcast.emit(s)
+            }
         }
+    }
+
+    /// Stores the `hs.fin` in the outbox, marked in flight until its deposit, and saves. Dropped when the token it is sent
+    /// under expires (a minute past it, as the wait for an hs.resp is: a phone clock that runs ahead must not drop a fin the
+    /// relay would still take), at the latest after a handshake's lifetime (chosen; not in the spec). Callers hold ``lock``.
+    private func storeFin(_ fin: [UInt8], vault v: VaultRecord, epoch: String, at t: Date) throws -> OutboxEntry {
+        let entry = mem.withLock {
+            let limit = Self.ms(t.addingTimeInterval(Self.handshakeTTL))
+            let expiry = heldFromVault(v.token).map { Self.ms($0.addingTimeInterval(Self.initGrace)) } ?? limit
+            var e = OutboxEntry(
+                id: Ulid.new(t), type: Self.typeHsFin, relayURL: v.relayURL, mailbox: v.mailbox, token: v.token,
+                envelope: Base64s.encodeStd(fin)
+            )
+            e.dropAfterMs = min(expiry, limit)
+            e.epochIDs = [epoch]
+            st.outbox.append(e)
+            outboxInFlight.insert(e.id) // until the deposit: a flush in between leaves it alone
+            return e
+        }
+        // A failed save loses nothing: the entry stays in memory and is saved with the next write; its deposit waits for a save
+        // that works (``deliver``). It stays marked: the deposit that follows always runs (``handle`` runs the after-lock work)
+        // and its `deliver` unmarks it, so that no flush deposits the fin next to it. Save failures are treated as transient
+        // (chosen; not in the spec).
+        _ = try? save()
+        #if DEBUG
+        finStoredHook?(entry.id)
+        #endif
+        return entry
     }
 
     /// Waits for vault.enrolled (§11.3), which pins the vault and gives this device its first token.
@@ -133,16 +180,18 @@ extension VaultDevice {
     /// Runs the first app's handshake (purpose app, ctx = vault id; it carries the SAS commitment, but the vault answers
     /// it without approval, so no code is shown) and waits for device.paired.
     public func completeEnrollment(timeout: TimeInterval = awaitDefault) async throws {
-        try await lock.withLock {
+        let prepared: PreparedInit = try await lock.withLock {
             let (v, ctx): (VaultRecord, String) = try mem.withLock {
                 let v = try requireVault()
                 guard let ctx = st.recovery?.recoveryID ?? st.vaultID else { throw VaultStateError(message: "no vault id") }
                 guard !v.token.isEmpty else { throw VaultStateError(message: "no token for the vault") }
                 return (v, ctx)
             }
-            try await startInit(purpose: .app, ctx: ctx, depositToken: v.token)
+            let p = try prepareInit(purpose: .app, ctx: ctx, depositToken: v.token)
             try save()
+            return p
         }
+        try await sendInit(prepared)
         _ = try await awaitPaired(timeout: timeout)
     }
 
@@ -187,10 +236,30 @@ extension VaultDevice {
         return guid
     }
 
-    func startInit(
+    /// An `hs.init` built and kept as the handshake in flight, not yet deposited (``sendInit(_:)``).
+    struct PreparedInit {
+        let initiator: Initiator
+        let vault: VaultRecord
+        let depositToken: String
+        /// When the token the deposit uses expires, if it can be read (VAULT-MESSAGING §8.6, 0.83.0).
+        let tokenExp: Date?
+        /// Whether it is an open token (a pairing or transfer link's): only then is a `token_used` after a retry waited on.
+        let tokenIsOpen: Bool
+    }
+
+    /// How long past the token's `exp` a retried `hs.init` answered `token_used` or `token_revoked` waits for the `hs.resp`
+    /// that its first attempt may have brought (VAULT-MESSAGING §8.6, 0.83.0).
+    static let initGrace: TimeInterval = 60
+    /// Without a readable `exp` the wait is the pairing link's 10 minutes (§8.6).
+    static let initWaitFallback: TimeInterval = 600
+
+    /// Builds the `hs.init` and makes it the handshake in flight, so that an `hs.resp` that arrives before the deposit call
+    /// returns finds it. Callers hold ``lock``, save, leave it, and then deposit with ``sendInit(_:)``: a slow relay must not
+    /// hold the lock. The `hs.fin` of a handshake this one replaces is dropped.
+    func prepareInit(
         purpose: Purpose, ctx: String, depositToken: String, profile: [UInt8]? = nil, at: Date? = nil,
         deviceAttest: DeviceAttest? = nil, id: String? = nil, apiKey: [UInt8]? = nil, unlockSecret: [UInt8]? = nil
-    ) async throws {
+    ) throws -> PreparedInit {
         let v = try mem.withLock { try requireVault() }
         let tok = try mintForVault()
         let i = try Initiator.create(InitiatorConfig(
@@ -201,10 +270,105 @@ extension VaultDevice {
             policy: .vaultToDevice, id: id, now: at ?? now()
         ))
         try refuseSending()
-        _ = try await relayFor(v.relayURL).deposit(mailboxID: v.mailbox, token: depositToken, payload: i.envelope)
+        let claims = (try? Base64s.decodeStd(v.relayPk)).flatMap { try? DepositTokens.verify(depositToken, issuer: $0) }
+        #if DEBUG
+        beforePrepareInitHook?()
+        #endif
         mem.withLock {
             ini?.abort()
             ini = i
+            answeredInit = nil
+            handshakeGeneration &+= 1
+            sas = nil // a code the old handshake's closure showed meanwhile is not the new flow's
+            finFailed = false
+            st.outbox.removeAll { $0.type == Self.typeHsFin }
+        }
+        return PreparedInit(
+            initiator: i, vault: v, depositToken: depositToken, tokenExp: claims?.exp, tokenIsOpen: claims?.isOpen == true
+        )
+    }
+
+    /// The `hs.fin` will not reach the vault: the waiting flows are told (``PairingNotCompleted``), and no code is shown.
+    ///
+    /// Only when the fin entry [owed] is still in the outbox: a new handshake removes the fins and resets the failure
+    /// under ``mem`` in one step, and the check here is in the same step as the signal, so a fin of the old handshake cannot
+    /// fail the new one.
+    func notifyFinFailed(ifOwed owed: String) {
+        let waiters: [OneShot<Bool>]? = mem.withLock {
+            guard st.outbox.contains(where: { $0.id == owed }) else { return nil }
+            finFailed = true
+            sas = nil
+            defer { inboxWaiters.removeAll() }
+            return inboxWaiters
+        }
+        guard let waiters else { return }
+        for w in waiters { w.complete(true) }
+        sasBroadcast.emit("")
+    }
+
+    /// Whether the vault's `hs.resp` was handled for [p]'s handshake.
+    private func answered(_ p: PreparedInit) -> Bool {
+        mem.withLock { answeredInit == ObjectIdentifier(p.initiator) }
+    }
+
+    /// Deposits a prepared `hs.init`, outside the lock.
+    ///
+    /// - A deposit that fails after the vault's `hs.resp` was handled for this handshake did reach the vault: it is a
+    ///   success, and nothing is undone.
+    /// - `token_used` or `token_revoked` to a deposit of an open token (a pairing or transfer link's) that the relay client had
+    ///   already tried before (``RelayError/afterRetry``) mean the first attempt may have been delivered: it waits for
+    ///   `hs.resp` until the token's `exp` plus 60 s, at most 11 minutes (VAULT-MESSAGING §8.6, 0.83.0), and fails only then.
+    ///   A standing token (enrollment, recovery) is not waited on: the rule is for the open token alone.
+    /// - Any other failure drops the handshake, unless a newer one replaced it, and throws.
+    func sendInit(_ p: PreparedInit) async throws {
+        do {
+            try refuseSending()
+            let relay = relayFor(p.vault.relayURL)
+            let payload = p.initiator.envelope
+            let (box, token) = (p.vault.mailbox, p.depositToken)
+            _ = try await relay.deposit(mailboxID: box, token: token, payload: payload)
+        } catch {
+            if answered(p) { return }
+            if p.tokenIsOpen, let x = error as? RelayError, x.afterRetry,
+               x.code == RelayError.tokenUsed || x.code == RelayError.tokenRevoked,
+               (try? await waitForAnswer(p)) == true {
+                return
+            }
+            #if DEBUG
+            initRaceHook?(p.initiator)
+            #endif
+            // Answered or dropped is decided in one look: an `hs.resp` that lands now has set the answer and cleared the
+            // handshake together, and a pairing that succeeded must not be undone.
+            let reached: Bool = mem.withLock {
+                if answeredInit == ObjectIdentifier(p.initiator) { return true }
+                if ini === p.initiator {
+                    p.initiator.abort()
+                    ini = nil
+                }
+                return false
+            }
+            if reached { return }
+            if p.tokenIsOpen, let x = error as? RelayError,
+               [RelayError.tokenUsed, RelayError.tokenRevoked, RelayError.tokenExpired].contains(x.code) {
+                throw OpenTokenRefused(relay: x)
+            }
+            throw error
+        }
+    }
+
+    /// Waits until the handshake of [p] is answered (true), or it is gone, or the token's `exp` plus ``initGrace`` has passed
+    /// by the device's clock, or 11 minutes have passed on the monotonic clock (false). Throws when cancelled.
+    private func waitForAnswer(_ p: PreparedInit) async throws -> Bool {
+        let cap = cfg.uptime() + Self.initWaitFallback + Self.initGrace
+        let deadline = (p.tokenExp ?? now().addingTimeInterval(Self.initWaitFallback)).addingTimeInterval(Self.initGrace)
+        while true {
+            // Answered, or gone (dropped, rejected, replaced), read together: the answer clears the handshake.
+            let (isAnswered, isGone): (Bool, Bool) = mem.withLock {
+                (answeredInit == ObjectIdentifier(p.initiator), ini !== p.initiator)
+            }
+            if isAnswered { return true }
+            if isGone || now() >= deadline || cfg.uptime() >= cap { return false }
+            try await Task.sleep(nanoseconds: 250_000_000)
         }
     }
 
@@ -229,10 +393,81 @@ extension VaultDevice {
         }
     }
 
-    func keepCredential(blob: String, version: Int64) async throws {
+    /// Stores the blob; with [awaitingAck] its `credential.ack` is pending until the vault takes it (``ackSettled(_:)``).
+    func keepCredential(blob: String, version: Int64, awaitingAck: Bool = false) async throws {
         try await lock.withLock {
-            mem.withLock { st.credential = CredentialCopy(blob: blob, version: version) }
+            mem.withLock {
+                st.credential = CredentialCopy(blob: blob, version: version)
+                if awaitingAck { st.ackPending = version }
+            }
             try save()
+        }
+    }
+
+    /// How long a `credential.ack` is waited for, and how often one is tried again.
+    static let ackWait: TimeInterval = 15
+    static let ackRetryEvery: TimeInterval = 30
+    static let ackTerminal: Set<String> = [
+        CredentialOps.codeStaleCredential, "credential_frozen",
+    ]
+
+    /// Sends `credential.ack` for [version] once and, taken, settles it. Throws what the vault answers or the cancel.
+    func sendAck(_ version: Int64) async throws {
+        let body = JsonBuilder().uint("version", UInt64(version)).bytes()
+        do {
+            _ = try await opOnce("credential.ack", body: body, timeout: min(Self.ackWait, cfg.requestTimeout(for: "credential.ack")))
+        } catch let e as VaultOpError where Self.ackTerminal.contains(e.code) {
+            // The vault has moved past this version (`stale_credential`), or has frozen the credential (`credential_frozen`):
+            // nothing more is sent for it (chosen; not in the spec). `forbidden` (a phone still recovering) and
+            // `credential_required` (no holder yet) are passing states: the ack stays owed and is tried again at the usual rate.
+            // `forbidden` still reaches the caller, who acts on it.
+            try? await ackSettled(version)
+            return
+        }
+        try? await ackSettled(version)
+    }
+
+    /// The `credential.ack` of the stored blob that an earlier one did not get through, best effort and outside the
+    /// credential lock (an outbox flush: after an unlock, a return to the foreground or going to the background). An
+    /// operation refused after the blob check (a wrong password) leaves the version unconfirmed, and so does one that
+    /// presented the blob and succeeded: only `credential.ack` confirms a version. Not more often than every
+    /// ``ackRetryEvery`` seconds.
+    func sendPendingAck() async {
+        guard let pending = ackPendingVersion else { return }
+        guard credentialVersion == pending else {
+            try? await ackSettled(pending)
+            return
+        }
+        let go: Bool = mem.withLock {
+            let t = cfg.uptime()
+            if let last = lastAckTry, t - last < Self.ackRetryEvery { return false }
+            lastAckTry = t
+            return true
+        }
+        guard go, !mem.withLock({ halted }) else { return }
+        try? await sendAck(pending)
+    }
+
+    /// TEST ONLY: makes an outbox flush leave a pending `credential.ack` alone (it counts as just tried), or lets it go out.
+    #if DEBUG
+    public func holdBackAckRetries(_ hold: Bool) { mem.withLock { lastAckTry = hold ? cfg.uptime() : nil } }
+    #endif
+
+    /// Whether the stored blob's `credential.ack` is still to be sent.
+    public var credentialAckPending: Bool { ackPendingVersion != nil }
+
+    /// The version of the stored blob whose `credential.ack` is still to be sent, or nil.
+    var ackPendingVersion: Int64? { mem.withLock { st.ackPending } }
+
+    /// The blob of [version] is confirmed (or replaced): nothing is left to send for it.
+    func ackSettled(_ version: Int64) async throws {
+        try await lock.withLock {
+            let changed: Bool = mem.withLock {
+                guard st.ackPending == version else { return false }
+                st.ackPending = nil
+                return true
+            }
+            if changed { try save() }
         }
     }
 

@@ -9,6 +9,11 @@ public extension FailureKind {
     var message: String {
         switch self {
         case .network: DataStrings.failureNetwork
+        case .offline: DataStrings.failureOffline
+        case .relayQuota: DataStrings.failureRelayQuota
+        case .payloadTooLarge: DataStrings.failurePayloadTooLarge
+        case .relayRefused: DataStrings.failureRelayRefused
+        case .clockOff: DataStrings.failureClockOff
         case .unauthorized: DataStrings.failureUnauthorized
         case .setupCodeInvalid: DataStrings.failureSetupCode
         case .termsRequired: DataStrings.failureTerms
@@ -111,6 +116,11 @@ public extension FailureKind {
     var messageKey: String {
         switch self {
         case .network: "data_failure_network"
+        case .offline: "data_failure_offline"
+        case .relayQuota: "data_failure_relay_quota"
+        case .payloadTooLarge: "data_failure_payload_too_large"
+        case .relayRefused: "data_failure_relay_refused"
+        case .clockOff: "data_failure_clock_off"
         case .unauthorized: "data_failure_unauthorized"
         case .setupCodeInvalid: "data_failure_setup_code"
         case .termsRequired: "data_failure_terms"

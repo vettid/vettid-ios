@@ -25,6 +25,7 @@ extension VaultDevice {
     /// refused here, before the secret is asked for.
     public typealias TransferSecretFor = @Sendable (_ capabilities: [String], _ timeScale: UInt64) async throws -> [UInt8]?
 
+    // swiftlint:disable function_body_length
     /// Starts a direct transfer to this phone from the old app's QR or link (§6.7.1), as vettid-vault's `PairAttested`:
     /// fetches the claim from the link's relay, checks it against the QR, pins the vault from the bundle and sends `hs.init`
     /// (purpose app, ctx = the bundle's invite id) with the device attestation over the §11.7 challenge (the `hs.init` id,
@@ -42,7 +43,7 @@ extension VaultDevice {
         guard now() < Date(timeIntervalSince1970: TimeInterval(q.exp)) else { throw NotATransferCode(expired: true) }
         let blob = try await relayFor(q.relay).getClaim(q.claimID)
         try Task.checkCancellation()
-        try await lock.withLock {
+        let (prepared, attest): (PreparedInit, DeviceAttest) = try await lock.withLock {
             guard mem.withLock({ st.deviceID == nil }) else { throw VaultStateError(message: "already paired with a vault") }
             let t = now()
             let b: InviteBundle
@@ -63,33 +64,60 @@ extension VaultDevice {
             let id = Ulid.new(at)
             // A second code scanned while a transfer is open: the key the first one attested can no longer be bound.
             if let old = mem.withLock({ alt().transferAttestKeyID }) { try? attester.discard(keyID: old) }
-            let attest = try attester.attest(try AltChannel.devattChallenge(requestID: id, vaultID: "", ts: Timestamps.formatMillis(at)))
-            // A new attestation is a new key (§11.7.1).
-            let profile = JsonBuilder().string("name", mem.withLock { st.name }).bytes()
-            mem.withLock {
-                st.signerSeen = false
-                var a = alt()
-                a.transferAttestKeyID = attest.iosKeyID
-                setAlt(a)
-            }
-            // §6.2, §6.7.1 (0.15.0): a transfer's hs.init carries the new app's app key.
+            var attestedKey: [UInt8]?
             do {
-                try await startInit(
+                let challenge = try AltChannel.devattChallenge(requestID: id, vaultID: "", ts: Timestamps.formatMillis(at))
+                let attest = try attester.attest(challenge)
+                attestedKey = attest.iosKeyID
+                // A new attestation is a new key (§11.7.1).
+                let profile = JsonBuilder().string("name", mem.withLock { st.name }).bytes()
+                mem.withLock {
+                    st.signerSeen = false
+                    var a = alt()
+                    a.transferAttestKeyID = attest.iosKeyID
+                    setAlt(a)
+                }
+                // §6.2, §6.7.1 (0.15.0): a transfer's hs.init carries the new app's app key.
+                let p = try prepareInit(
                     purpose: .app, ctx: b.inviteID, depositToken: b.token, profile: profile, at: at, deviceAttest: attest, id: id,
                     apiKey: secrets.apiKey, unlockSecret: unlockSecret
                 )
                 try save()
+                return (p, attest)
             } catch {
-                discardFailedTransfer(attest, attester)
+                // Nothing was sent, and what this call pinned and attested is its own whatever handshake is in flight; it is
+                // dropped on every path, also when the attestation itself failed.
+                discardFailedTransfer(attestedKey, attester, handshake: nil, alwaysOurs: true)
                 throw error
             }
         }
+        // The deposit is made outside the lock; a refusal drops the handshake and the attested key as before.
+        do {
+            try await sendInit(prepared)
+        } catch {
+            // Saved under the lock, as ``abandonTransfer()`` does: a kill after a refused deposit finds no pinned vault
+            // without a device id and no attest key id that no vault binds.
+            try? await lock.withLock { discardFailedTransfer(attest.iosKeyID, attester, handshake: prepared.initiator) }
+            throw error
+        }
     }
+
+    // swiftlint:enable function_body_length
 
     /// The `hs.init` could not be sent: the key it attested is bound by no vault (IOS-PLAN §6.2), and the handshake and the
     /// pinned vault go with it.
-    private func discardFailedTransfer(_ attest: DeviceAttest, _ attester: any Attester) {
-        if let key = attest.iosKeyID { try? attester.discard(keyID: key) }
+    /// Callers hold ``lock``. A newer transfer that replaced this one, or one that paired meanwhile, is left alone.
+    private func discardFailedTransfer(
+        _ keyID: [UInt8]?, _ attester: any Attester, handshake: Initiator?, alwaysOurs: Bool = false
+    ) {
+        // Ours when the handshake in flight is this one's, or none is and none was answered (it was dropped), whatever the key
+        // ids say (they may both be absent). [alwaysOurs]: the caller is inside the call that pinned and attested, under the lock.
+        let ours: Bool = mem.withLock {
+            alwaysOurs || (st.deviceID == nil && alt().transferAttestKeyID == keyID
+                && (ini === handshake || (ini == nil && answeredInit == nil)))
+        }
+        guard ours else { return }
+        if let key = keyID { try? attester.discard(keyID: key) }
         dropPairing()
         mem.withLock {
             st.vault = nil
@@ -97,6 +125,7 @@ extension VaultDevice {
             a.transferAttestKeyID = nil
             setAlt(a)
         }
+        try? save()
     }
 
     /// The SAS of the pairing handshake, once the vault's `hs.resp` checked out (§6.3): at once when it is there, else when
@@ -104,7 +133,12 @@ extension VaultDevice {
     public func awaitPairingSas() async throws -> String {
         let stream = sasBroadcast.stream()
         if let s = pairingSas { return s }
-        for await s in stream { return s }
+        if mem.withLock({ finFailed }) { throw PairingNotCompleted() }
+        for await s in stream {
+            // The empty text says the fin failed (``notifyFinFailed(ifOwed:)``).
+            if s.isEmpty { throw PairingNotCompleted() }
+            return s
+        }
         throw CancellationError()
     }
 
@@ -154,18 +188,13 @@ extension VaultDevice {
     /// `relay.token.issued{kind: "standing"}`, deposited to the vault's mailbox, returning once the relay answered `201`.
     /// The previous token's `jti` is not denylisted. Throws when the renewal could not be deposited (the caller goes on).
     public func renewStandingToken() async throws {
-        try await lock.withLock {
-            let before = Set(mem.withLock { st.outbox.map(\.id) })
-            do {
-                let tok = try mintForVault()
-                _ = try await sendLocked(id: nil, type: "relay.token.issued", body: Self.standing(tok), re: nil, status: nil, exp: nil)
-            } catch {
-                // A renewal that failed is not kept for a later flush: it would go out after the approval, whose token it is not.
-                mem.withLock { st.outbox.removeAll { $0.type == "relay.token.issued" && !before.contains($0.id) } }
-                try? save()
-                throw error
-            }
+        // Sealed and saved under the lock, deposited after it.
+        let entry = try await lock.withLock {
+            let tok = try mintForVault()
+            return try enqueueLocked(id: nil, type: "relay.token.issued", body: Self.standing(tok), re: nil, status: nil, exp: nil)
         }
+        // A renewal that failed is not kept for a later flush: it would go out after the approval, whose token it is not.
+        try await deliver(entry, keepOnFailure: false)
     }
 
     // MARK: - The new app: one collect before the drop (§11.14.10 rule 5)

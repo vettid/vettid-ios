@@ -12,6 +12,8 @@ public protocol UnlockActions: AnyObject, Sendable {
     /// The credential password, asked for with the PIN when the owner check is due (§3.6.5).
     func setPassword(_ v: String)
     func submit()
+    /// Stops waiting for the answer to the unlock being sent (offered once the wait is long).
+    func cancelUnlock()
     func cancelRecoveryAndUnlock()
     /// (iPhone, IOS-PLAN §6.3 item 5) The member's tap on "Try this phone's earlier keys", with the PIN just handed over.
     func submitEarlierSecret()
@@ -55,6 +57,7 @@ public final class NoUnlockActions: UnlockActions {
     public func setPin(_ v: String) {}
     public func setPassword(_ v: String) {}
     public func submit() {}
+    public func cancelUnlock() {}
     public func cancelRecoveryAndUnlock() {}
     public func submitEarlierSecret() {}
     public func showSignerHelp(_ show: Bool) {}

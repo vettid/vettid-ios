@@ -40,7 +40,10 @@ public struct TransferInContent: View {
     }
 
     public var body: some View {
-        Group { screen }.announcesStepChanges(of: state.step)
+        Group { screen }
+            .announcesStepChanges(of: state.step)
+            // The comparison and the waits for the old phone run for minutes (up to 11); the screen stays on.
+            .keepsScreenOn(state.step == .connecting || state.step == .compare)
     }
 
     @ViewBuilder private var screen: some View {

@@ -64,7 +64,7 @@ extension VaultDevice {
             sent = true
             // A failed deposit is a send without an answer; a halted or quieted device refuses at once.
             do {
-                _ = try await lock.withLock { try await sendOnceLocked(id: held.id, type: held.type, body: held.body, exp: held.exp) }
+                _ = try await sendOnceUnlocked(id: held.id, type: held.type, body: held.body, exp: held.exp)
             } catch let e as VaultStateError where e == Self.haltedError || e == Self.quietedError {
                 throw e
             } catch {}
