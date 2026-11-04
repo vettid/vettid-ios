@@ -54,28 +54,32 @@ public final class RelayStream: CollectStream, @unchecked Sendable {
             }
             // (Chosen; not in the spec: RELAY-PROTOCOL says nothing of pings.) A ping every 25 s while the session is open keeps a
             // connection that an idle timeout on the path would drop alive, and tells a dead one by the failed ping.
-            let pings = PingState()
-            let keepalive = Task {
-                while !Task.isCancelled {
-                    try? await Task.sleep(nanoseconds: UInt64(Self.pingInterval * 1e9))
-                    if Task.isCancelled { return }
-                    // A ping whose answer did not come in a whole interval means a path that is dead without saying so: the
-                    // socket is ended, so that `receive()` fails and the collector falls back.
-                    guard pings.sending() else {
-                        task.cancel(with: .goingAway, reason: nil)
-                        return
-                    }
-                    task.sendPing { error in
-                        if error != nil { task.cancel(with: .goingAway, reason: nil) } else { pings.answered() }
-                    }
-                }
-            }
+            let keepalive = Self.keepalive(task)
             continuation.onTermination = { _ in
                 reader.cancel()
                 keepalive.cancel()
             }
         }
         task.resume()
+    }
+
+    /// The ping every ``pingInterval``; a ping still unanswered at the next tick, or one that fails, ends the socket, so that
+    /// `receive()` fails and the collector falls back.
+    private static func keepalive(_ task: URLSessionWebSocketTask) -> Task<Void, Never> {
+        let pings = PingState()
+        return Task {
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: UInt64(pingInterval * 1e9))
+                if Task.isCancelled { return }
+                guard pings.sending() else {
+                    task.cancel(with: .goingAway, reason: nil)
+                    return
+                }
+                task.sendPing { error in
+                    if error != nil { task.cancel(with: .goingAway, reason: nil) } else { pings.answered() }
+                }
+            }
+        }
     }
 
     public func ack(_ msgID: String) async -> Bool {
