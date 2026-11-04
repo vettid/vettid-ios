@@ -158,21 +158,24 @@ extension VaultDeviceTests {
         let refresh = try v.seal("relay.token.refresh", "{}")
         let reached = AsyncStream<Bool>.makeStream()
         d.flushSeen = { reached.continuation.yield($0) }
+        let flushReached = Box(false)
         d.beforeFinalSave = { [d] in
             // In the window: the answer is queued and not saved. The flush runs apart (one that did take the entry would wait
             // for the lock this handling holds) and the handling goes on once it has reached the entry, left alone or taken.
             Task { await d.flushOutbox() }
-            // Bounded: a flush that never reaches the entry fails the test (the stream is not finished by the flush) instead of
-            // hanging it.
-            await withTaskGroup(of: Void.self) { group in
-                group.addTask { for await _ in reached.stream { break } }
-                group.addTask { try? await Task.sleep(for: .seconds(5)) }
-                await group.next()
+            // Bounded: a flush that never reaches the entry is recorded and fails the test below, instead of hanging it.
+            let got = await withTaskGroup(of: Bool.self) { group in
+                group.addTask { for await _ in reached.stream { return true }; return false }
+                group.addTask { try? await Task.sleep(for: .seconds(5)); return false }
+                let first = await group.next() ?? false
                 group.cancelAll()
+                return first
             }
+            flushReached.value = got
             store.arm()
         }
         await #expect(throws: (any Error).self) { try await d.handle(refresh) }
+        #expect(flushReached.value, "the flush reached the entry inside the window")
         #expect(await relay.noDeposit(within: 0.3), "the flush deposited nothing")
         d.beforeFinalSave = nil
         d.flushSeen = nil
