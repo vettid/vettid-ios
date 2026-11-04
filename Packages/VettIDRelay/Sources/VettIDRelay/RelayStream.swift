@@ -54,13 +54,19 @@ public final class RelayStream: CollectStream, @unchecked Sendable {
             }
             // (Chosen; not in the spec: RELAY-PROTOCOL says nothing of pings.) A ping every 25 s while the session is open keeps a
             // connection that an idle timeout on the path would drop alive, and tells a dead one by the failed ping.
+            let pings = PingState()
             let keepalive = Task {
                 while !Task.isCancelled {
                     try? await Task.sleep(nanoseconds: UInt64(Self.pingInterval * 1e9))
                     if Task.isCancelled { return }
-                    // A ping that fails ends the socket (the reader's receive fails, and the collector falls back).
+                    // A ping whose answer did not come in a whole interval means a path that is dead without saying so: the
+                    // socket is ended, so that `receive()` fails and the collector falls back.
+                    guard pings.sending() else {
+                        task.cancel(with: .goingAway, reason: nil)
+                        return
+                    }
                     task.sendPing { error in
-                        if error != nil { task.cancel(with: .goingAway, reason: nil) }
+                        if error != nil { task.cancel(with: .goingAway, reason: nil) } else { pings.answered() }
                     }
                 }
             }
@@ -97,6 +103,23 @@ public final class RelayStream: CollectStream, @unchecked Sendable {
             return code == 0 ? (error as? URLError) ?? URLError(.networkConnectionLost) : URLError(.networkConnectionLost)
         }
     }
+}
+
+/// Whether the last ping of a session was answered (``RelayStream``'s keepalive).
+final class PingState: @unchecked Sendable {
+    private let lock = NSLock()
+    private var outstanding = false
+
+    /// A ping is due: false when the one before is still unanswered (the session is to end), else it is marked sent.
+    func sending() -> Bool {
+        lock.withLock {
+            if outstanding { return false }
+            outstanding = true
+            return true
+        }
+    }
+
+    func answered() { lock.withLock { outstanding = false } }
 }
 
 /// What a ``MailboxCollector`` collects from: a relay client, or a fake in tests.

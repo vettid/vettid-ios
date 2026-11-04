@@ -557,6 +557,15 @@ enum SourceStep { case messages([RelayMessage]), error(Error) }
         #expect(got.all.isEmpty)
     }
 
+    /// The keepalive ends a session whose ping went unanswered for a whole interval.
+    @Test func aPingStillUnansweredAtTheNextTickEndsTheSession() {
+        let state = PingState()
+        #expect(state.sending(), "the first ping goes out")
+        state.answered()
+        #expect(state.sending(), "answered: the next goes out")
+        #expect(!state.sending(), "not answered by the next tick: the session ends")
+    }
+
     @Test func theCloseCodes() {
         #expect(RelayStream.closeError(code: 1000, error: URLError(.unknown)) == nil)
         #expect(RelayStream.closeError(code: 4404, error: URLError(.unknown)) as? RelayError == RelayError(status: 404, code: RelayError.mailboxUnknown))
