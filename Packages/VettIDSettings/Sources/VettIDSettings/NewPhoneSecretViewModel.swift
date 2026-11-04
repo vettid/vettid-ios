@@ -82,7 +82,7 @@ public final class NewPhoneSecretViewModel {
                 self?.state = NewPhoneSecretState(done: true)
             } catch {
                 // Neither entry is kept after an answer.
-                self?.state = NewPhoneSecretState(error: failureKind(error), retryAt: waits.record(.newPhoneSecret, error: error))
+                self?.state = NewPhoneSecretState(error: failureKind(error), retryAt: self?.waits.record(.newPhoneSecret, error: error))
             }
         }
     }

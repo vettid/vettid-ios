@@ -63,7 +63,7 @@ public final class RotateViewModel {
                 try await repo.rotate(password: pw)
                 self?.state = RotateState(done: true)
             } catch {
-                self?.state = RotateState(error: failureKind(error), retryAt: waits.record(.rotate, error: error))
+                self?.state = RotateState(error: failureKind(error), retryAt: self?.waits.record(.rotate, error: error))
             }
         }
     }
