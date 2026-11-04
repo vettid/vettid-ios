@@ -810,6 +810,17 @@
         }
       }
     },
+    "data_failure_move_not_finished": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The move to this phone isn't finished. Use Finish the move on this phone, then try again."
+          }
+        }
+      }
+    },
     "data_failure_transfer_incomplete": {
       "extractionState": "manual",
       "localizations": {
