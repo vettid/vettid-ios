@@ -162,7 +162,14 @@ extension VaultDeviceTests {
             // In the window: the answer is queued and not saved. The flush runs apart (one that did take the entry would wait
             // for the lock this handling holds) and the handling goes on once it has reached the entry, left alone or taken.
             Task { await d.flushOutbox() }
-            for await _ in reached.stream { break }
+            // Bounded: a flush that never reaches the entry fails the test (the stream is not finished by the flush) instead of
+            // hanging it.
+            await withTaskGroup(of: Void.self) { group in
+                group.addTask { for await _ in reached.stream { break } }
+                group.addTask { try? await Task.sleep(for: .seconds(5)) }
+                await group.next()
+                group.cancelAll()
+            }
             store.arm()
         }
         await #expect(throws: (any Error).self) { try await d.handle(refresh) }

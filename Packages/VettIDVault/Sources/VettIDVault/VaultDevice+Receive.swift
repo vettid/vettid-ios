@@ -31,7 +31,7 @@ extension VaultDevice {
             let before = mem.withLock {
                 HandlingStart(
                     seen: st.seen, seenInner: st.seenInner, issuedExpMs: st.issuedExpMs,
-                    outbox: Set(st.outbox.map(\.id)), awaiting: Set(awaiting.map { ObjectIdentifier($0.resp) })
+                    outbox: Set(st.outbox.map(\.id)), awaiting: awaiting.map(\.resp)
                 )
             }
             mem.withLock { memory.keptOnError = [] }
@@ -61,7 +61,7 @@ extension VaultDevice {
         let seenInner: [String: Int64]
         let issuedExpMs: Int64
         let outbox: Set<String>
-        let awaiting: Set<ObjectIdentifier>
+        let awaiting: [Responder]
     }
 
     /// A failed handling is undone: its message ids are forgotten, the entries it queued are taken out (and are no longer in
@@ -75,8 +75,9 @@ extension VaultDevice {
             let gone = Set(st.outbox.map(\.id)).subtracting(before.outbox).subtracting(memory.keptOnError)
             st.outbox.removeAll { gone.contains($0.id) }
             outboxInFlight.subtract(gone)
-            for a in awaiting where !before.awaiting.contains(ObjectIdentifier(a.resp)) { a.resp.abort() }
-            awaiting.removeAll { !before.awaiting.contains(ObjectIdentifier($0.resp)) }
+            let known: (Responder) -> Bool = { r in before.awaiting.contains { $0 === r } }
+            for a in awaiting where !known(a.resp) { a.resp.abort() }
+            awaiting.removeAll { !known($0.resp) }
         }
     }
 
