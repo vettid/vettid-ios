@@ -38,8 +38,7 @@ public final class OnboardingViewModel: OnboardingActions {
         self.vault = vault
         self.inbox = inbox
         state = OnboardingState(devHint: account.devHint)
-        // A wait the setup code was told outlives a flow built again (it is kept by the app), and follows the inbox.
-        state.codeWait = inbox.codeWait
+        // A wait the setup code was told outlives a flow built again (it is kept by the app): the flow follows the inbox.
         followers.add(follow(self, read: { $0.inbox.codeWait }, apply: { $0.state.codeWait = $1 }))
         followers.add(follow(self, read: { $0.account.phase }, apply: { $0.route($1) }))
         followers.add(follow(self, read: { $0.inbox.link }, apply: { vm, raw in if let raw { vm.receiveLink(raw) } }))

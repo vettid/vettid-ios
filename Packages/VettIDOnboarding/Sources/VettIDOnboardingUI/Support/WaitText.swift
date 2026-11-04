@@ -93,7 +93,9 @@ public struct WaitingContent<Content: View>: View {
     }
 
     /// One `TimelineView` always, so that the content keeps its identity (a scanner's camera is not torn down when the wait ends):
-    /// it ticks each second while the wait runs, and once a day (in effect never) otherwise.
+    /// it ticks each second while the wait runs. The schedule is chosen when the view is updated, so after the wait ends the one-second
+    /// ticks go on until the view is next updated (they only build the content again, which then shows the wait as over); a view
+    /// built with no wait running ticks once a day.
     public var body: some View {
         let running = wait?.isRunning() == true
         TimelineView(.periodic(from: .now, by: running ? 1 : 86_400)) { _ in content(wait?.isRunning() == true) }
