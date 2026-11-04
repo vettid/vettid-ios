@@ -124,10 +124,12 @@ extension VaultDevice {
         // an hs.fin that never arrives leaves the code burnt. It goes out after the lock (``afterLock(_:)``) and again at
         // each flush.
         let fin = try storeFin(res.fin, vault: v, epoch: res.epoch.ctx, at: t)
+        // Stored by that write: kept, with its deposit and the code, when the handling's final write fails.
+        mem.withLock { _ = keptOnError.insert(fin.id) }
         // The code is shown once the fin has gone out, or, when the relay would not take it, is kept for the next flush.
         let shown = res.sas
         let mine = generation
-        afterLock { [self] in
+        afterLock(keep: true) { [self] in
             do {
                 try await deliver(fin)
             } catch let x as RelayError where Self.isTerminal(x) {

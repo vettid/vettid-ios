@@ -196,8 +196,15 @@ public final class VaultDevice: @unchecked Sendable {
     var keptTypes: [String: Int] = [:]
     /// How many times ``clearInbox()`` ran.
     var inboxClears = 0
-    /// The ids of the outbox entries the last successful write stored (``save()``).
-    var savedOutbox: Set<String> = []
+    /// The outbox entries the handling of the message in hand stored with a write of its own (an `hs.fin`): kept when the
+    /// handling ends in an error, with the work after the lock that belongs to them.
+    var keptOnError: Set<String> = []
+    /// The ids of the events published, newest last, and the same as a set: an event is published once, though a message whose
+    /// handling failed is handled again (``publishOnce(_:)``). Bounded, memory only, gone with the device.
+    var publishedOrder: [String] = []
+    var publishedIDs: Set<String> = []
+    /// The (type, id) of the events a clear spared for a running call (``keepingEvents(_:_:)``).
+    var sparedEvents: Set<String> = []
     var inboxWaiters: [OneShot<Bool>] = []
     let eventBroadcast = Broadcast<VaultMessage>()
     let timeDropBroadcast = Broadcast<String>()
@@ -387,8 +394,8 @@ public final class VaultDevice: @unchecked Sendable {
     func save() throws {
         // One write at a time, in the order of the snapshots: an older snapshot must not be stored after a newer one.
         try saveOrder.withLock {
-            let (data, outboxIDs): (Data?, Set<String>) = try mem.withLock {
-                if forgotten { return (nil, []) }
+            let data: Data? = try mem.withLock {
+                if forgotten { return nil }
                 if halted { throw Self.haltedError }
                 if st.vault != nil {
                     st.vault?.sessions = Base64s.encodeStd(try keyring.export())
@@ -397,12 +404,9 @@ public final class VaultDevice: @unchecked Sendable {
                         (try? a.resp.export()).map { AwaitingRekey(createdMs: a.createdMs, state: Base64s.encodeStd($0)) }
                     }
                 }
-                return (try JSONEncoder().encode(st), Set(st.outbox.map(\.id)))
+                return try JSONEncoder().encode(st)
             }
-            if let data {
-                try cfg.store.save(Array(data))
-                mem.withLock { savedOutbox = outboxIDs }
-            }
+            if let data { try cfg.store.save(Array(data)) }
         }
     }
 
@@ -522,6 +526,9 @@ public final class VaultDevice: @unchecked Sendable {
             mem.withLock {
                 forgotten = true
                 handshakeGeneration &+= 1
+                publishedOrder.removeAll()
+                publishedIDs.removeAll()
+                sparedEvents.removeAll()
                 keyring.destroy()
                 ini?.abort()
                 ini = nil

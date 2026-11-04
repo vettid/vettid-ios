@@ -416,7 +416,8 @@ extension VaultDevice {
     /// that nobody took are dropped.
     public func clearInbox() {
         mem.withLock {
-            inboxClears += 1
+            // The events spared are noted by their ids: only those go when the last call that kept their type ends.
+            for m in inbox where keptTypes[m.type, default: 0] > 0 { sparedEvents.insert("\(m.type)/\(m.id)") }
             inbox.removeAll { keptTypes[$0.type, default: 0] == 0 }
         }
     }
@@ -424,14 +425,15 @@ extension VaultDevice {
     /// Runs [body], during which ``clearInbox()`` keeps the events of [types]: for a call that sends a request and then waits
     /// for the event that answers it (the answer to the request may come before the wait begins).
     public func keepingEvents<T>(_ types: Set<String>, _ body: () async throws -> T) async rethrows -> T {
-        let clears: Int = mem.withLock {
-            for t in types { keptTypes[t, default: 0] += 1 }
-            return inboxClears
-        }
+        mem.withLock { for t in types { keptTypes[t, default: 0] += 1 } }
         defer {
             mem.withLock {
                 for t in types { keptTypes[t] = max(0, (keptTypes[t] ?? 1) - 1) }
-                if inboxClears != clears { inbox.removeAll { keptTypes[$0.type, default: 0] == 0 && types.contains($0.type) } }
+                // The events a clear spared for a type no call keeps any more, and that nobody took, go; those that arrived
+                // after the clear are the inbox's as ever.
+                let ended = types.filter { keptTypes[$0, default: 0] == 0 }
+                inbox.removeAll { ended.contains($0.type) && sparedEvents.contains("\($0.type)/\($0.id)") }
+                sparedEvents = sparedEvents.filter { !ended.contains(String($0.prefix { $0 != "/" })) }
             }
         }
         return try await body()
@@ -445,6 +447,18 @@ extension VaultDevice {
 
     /// How many events the inbox holds.
     public var inboxCount: Int { mem.withLock { inbox.count } }
+
+    /// ``publish(_:)`` unless this event was published already: a message whose handling ended in an error is handled again
+    /// when the relay delivers it again, and its event must not be shown twice (chosen; not in the spec: the last 512 ids).
+    func publishOnce(_ m: VaultMessage) {
+        let first: Bool = mem.withLock {
+            guard publishedIDs.insert(m.id).inserted else { return false }
+            publishedOrder.append(m.id)
+            if publishedOrder.count > 512 { publishedIDs.remove(publishedOrder.removeFirst()) }
+            return true
+        }
+        if first { publish(m) }
+    }
 
     func publish(_ m: VaultMessage) {
         let waiters: [OneShot<Bool>] = mem.withLock {
@@ -471,9 +485,11 @@ extension VaultDevice {
     /// Contract: only from code that ``handle(_:)`` runs. Outside it there is no box to take the work, and the work would be
     /// lost; that is a programming error, caught by an assertion in debug builds. A release build does not crash on it (the
     /// work is dropped, which a deposit owed in the outbox survives).
-    func afterLock(_ work: @escaping @Sendable () async -> Void) {
+    /// [keep]: the work belongs to something a write of the handling's own stored (an `hs.fin`), so it is not dropped when the
+    /// handling ends in an error (``AfterLockWork/drop()``).
+    func afterLock(keep: Bool = false, _ work: @escaping @Sendable () async -> Void) {
         assert(AfterLockWork.current != nil, "afterLock outside handle(_:): the work would be lost")
-        AfterLockWork.current?.add(work)
+        AfterLockWork.current?.add(work, keep: keep)
     }
 }
 
@@ -481,18 +497,18 @@ extension VaultDevice {
 final class AfterLockWork: @unchecked Sendable {
     @TaskLocal static var current: AfterLockWork?
     private let lock = NSLock()
-    private var work: [@Sendable () async -> Void] = []
+    private var work: [(keep: Bool, run: @Sendable () async -> Void)] = []
 
-    func add(_ w: @escaping @Sendable () async -> Void) { lock.withLock { work.append(w) } }
+    func add(_ w: @escaping @Sendable () async -> Void, keep: Bool = false) { lock.withLock { work.append((keep, w)) } }
 
     func run() async {
         let all: [@Sendable () async -> Void] = lock.withLock {
             defer { work.removeAll() }
-            return work
+            return work.map(\.run)
         }
         for w in all { await w() }
     }
 
     /// Forgets the work queued by the handling without running it.
-    func drop() { lock.withLock { work.removeAll() } }
+    func drop() { lock.withLock { work.removeAll { !$0.keep } } }
 }

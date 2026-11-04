@@ -17,6 +17,7 @@ extension VaultDevice {
             // is on disk would leave the device unable to read the new epoch after a restart), and the entries it put in the
             // outbox are taken out again.
             after.drop()
+            await after.run() // what belongs to an entry the handling stored itself (an hs.fin and its code)
             throw error
         }
         // The replies to the vault go out after the lock: a relay that stalls holds up this message's ack, not the
@@ -29,6 +30,7 @@ extension VaultDevice {
             let t = now()
             let outboxBefore: Set<String> = mem.withLock { Set(st.outbox.map(\.id)) }
             let seenBefore = mem.withLock { (st.seen, st.seenInner) }
+            mem.withLock { keptOnError = [] }
             let fresh: Bool = mem.withLock {
                 guard st.seen[m.msgID] == nil else { return false }
                 st.seen[m.msgID] = Self.ms(t)
@@ -40,11 +42,12 @@ extension VaultDevice {
                 try await handleFresh(m, t)
             } catch {
                 // The message is not taken as handled (its ids are forgotten, so that the relay's redelivery is handled and
-                // answered, not acked unanswered), and the entries the handling queued that no write stored are taken out
-                // again; one a write did store (an `hs.fin` saved by the handling itself) stays, as on disk.
+                // answered, not acked unanswered), and the entries the handling queued are taken out again, so that the
+                // redelivery's answer is the only one: even one that another write happened to store. The exception is what
+                // the handling stored by a write of its own (an `hs.fin`, ``keptOnError``): it is on disk by that write.
                 mem.withLock {
                     (st.seen, st.seenInner) = seenBefore
-                    st.outbox.removeAll { !outboxBefore.contains($0.id) && !savedOutbox.contains($0.id) }
+                    st.outbox.removeAll { !outboxBefore.contains($0.id) && !keptOnError.contains($0.id) }
                 }
                 throw error
             }
@@ -179,7 +182,7 @@ extension VaultDevice {
             if inner.status != Inner.statusOK, inner.error?.code == Self.codeOwnerCheckRequired { ownerCheckBroadcast.emit(inner.type) }
             mem.withLock { pending[re] }?.complete(inner)
         } else {
-            publish(VaultMessage(inner: inner))
+            publishOnce(VaultMessage(inner: inner))
         }
         await maintain(t)
     }
