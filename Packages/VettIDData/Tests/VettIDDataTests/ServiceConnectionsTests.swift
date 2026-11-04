@@ -63,9 +63,10 @@ import VettIDVault
         // A key whose standard form has "+" and "/", so that its URL-safe form really differs.
         let std = Base64s.encodeStd([UInt8](repeating: 0xFB, count: 32))
         let padded = std.replacingOccurrences(of: "+", with: "-").replacingOccurrences(of: "/", with: "_")
+        let unpadded = padded.replacingOccurrences(of: "=", with: "")
         #expect(padded != std && padded.hasSuffix("="))
         #expect(padBits != Self.ikStd && Data(base64Encoded: padBits) != nil)
-        for bad in [#""ik":"\#(padBits)""#, #""ik":"\#(Self.ikStd.prefix(20))\n\#(Self.ikStd.dropFirst(20))""#, #""ik":"\#(Self.ikURL)""#, #""ik":"\#(padded)""#, #""ik":"""#, #""ik":"!!!""#, #""ik":"\#(short)""#, #""ik":7"#, #""ik":null"#, #""ik":"\#(Self.ikStd)00""#] {
+        for bad in [#""ik":"\#(padBits)""#, #""ik":"\#(Self.ikStd.prefix(20))\n\#(Self.ikStd.dropFirst(20))""#, #""ik":"\#(Self.ikURL)""#, #""ik":"\#(padded)""#, #""ik":"\#(unpadded)""#, #""ik":"""#, #""ik":"!!!""#, #""ik":"\#(short)""#, #""ik":7"#, #""ik":null"#, #""ik":"\#(Self.ikStd)00""#] {
             let r = try outgoing(#","peer_kind":"service",\#(bad)"#)
             #expect(r.ik == nil && r.sas == "654321" && r.isService, "\(bad)")
         }

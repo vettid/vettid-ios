@@ -162,7 +162,7 @@ public struct ServiceRequestLines: View {
     }
 }
 
-/// The fingerprint of a service's `ik` on its connection request, beside the name and above the code (VAULT-MESSAGING
+/// The fingerprint of a service's `ik` on its connection request, under the service lines and above the code (VAULT-MESSAGING
 /// §6.4 "What the member sees before approving", §10.8): the label "Vault key fingerprint" and the fingerprint as the
 /// connection's page shows it. The member can compare it with one the service publishes where they trust it; the safety
 /// code does not say who holds the key. Shown only with an `ik`.
