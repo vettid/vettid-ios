@@ -12,6 +12,7 @@ import VettIDDataTesting
         return Array(try JSONEncoder().encode(a))
     }
 
+    #if DEBUG
     /// The record is read ahead; a read that a change of the record overtook (the generation moved while the read waited, as at
     /// a lock or a wipe) is not taken in: the file is read again, and its newer content is the one used.
     @Test func aReadMadeAheadThatTheRecordOvertookIsDropped() async throws {
@@ -33,6 +34,7 @@ import VettIDDataTesting
         try await start.value
         #expect(m.record.value.userGuid == "new", "the stale bytes were not taken in")
     }
+    #endif
 
     /// Without a change meanwhile, the bytes read ahead are the ones used.
     @Test func aReadMadeAheadIsUsedWhenNothingMoved() async throws {

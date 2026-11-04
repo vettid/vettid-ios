@@ -173,6 +173,7 @@ struct ProfilePhotoCacheTests {
         #expect(cache.cached("not base64 !!!") == nil)
     }
 
+    #if DEBUG
     /// The lock empties the cache, and a decode that was under way when it came is not stored after it.
     @Test func theLockEmptiesTheCacheAndADecodeUnderWay() async {
         let cache = ProfilePhotoCache()
@@ -194,4 +195,5 @@ struct ProfilePhotoCacheTests {
         #expect(await late.value == nil, "a decode that a clear overtook is not returned")
         #expect(cache.cached(b) == nil)
     }
+    #endif
 }

@@ -259,7 +259,9 @@ final class AccountRecord {
     }
 
     /// TEST ONLY. Awaited by ``VaultManager/preparedOffMain()`` after its reads, before it looks whether the record moved.
+    #if DEBUG
     var afterOffMainRead: (@Sendable () async -> Void)?
+    #endif
 
     /// Whether the record has not been read yet.
     var needsLoad: Bool { !loaded }

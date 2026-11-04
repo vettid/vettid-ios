@@ -90,6 +90,8 @@ public final class ProfilePhotoCache {
 
     static let limit = 128
     static let byteLimit = 16 * 1_024 * 1_024
+    /// The photos whose digest is remembered: 32 (chosen; not in the spec), the strings being shared with the lists.
+    static let digestLimit = 32
 
     private let store: NSCache<NSData, UIImage> = {
         let cache = NSCache<NSData, UIImage>()
@@ -100,7 +102,9 @@ public final class ProfilePhotoCache {
     /// Bumped by ``clear()``: a decode that was under way is not stored after it, nor returned.
     private var generation = 0
     /// TEST ONLY. Awaited after a decode ended, before the generation is looked at.
+    #if DEBUG
     var afterDecode: (@Sendable () async -> Void)?
+    #endif
 
     init() {}
 
@@ -109,10 +113,15 @@ public final class ProfilePhotoCache {
     private var digests: [(photo: String, digest: NSData)] = []
 
     private func key(_ base64: String) -> NSData {
-        if let known = digests.last(where: { $0.photo == base64 }) { return known.digest }
+        if let i = digests.lastIndex(where: { $0.photo == base64 }) {
+            // A hit moves to the end, so that the memo drops the least recently used.
+            let known = digests.remove(at: i)
+            digests.append(known)
+            return known.digest
+        }
         let digest = Data(SHA256.hash(data: Data(base64.utf8))) as NSData
         digests.append((base64, digest))
-        if digests.count > 32 { digests.removeFirst(digests.count - 32) } // (chosen; not in the spec) the strings are shared with the lists
+        if digests.count > Self.digestLimit { digests.removeFirst(digests.count - Self.digestLimit) }
         return digest
     }
 
@@ -130,7 +139,9 @@ public final class ProfilePhotoCache {
         if let held = store.object(forKey: k) { return held }
         let started = generation
         guard let image = await ProfilePhotos.decoded(base64) else { return nil }
+        #if DEBUG
         await afterDecode?()
+        #endif
         guard started == generation else { return nil }
         let cost = image.cgImage.map { $0.bytesPerRow * $0.height } ?? 0
         store.setObject(image, forKey: k, cost: cost)
