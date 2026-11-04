@@ -28,6 +28,7 @@ extension VaultManager {
                 canary: canaryStore.map { s in FileRead { try s.load() } }
             )
         }.value
+        await record.afterOffMainRead?()
         // A reset of the record or a wipe meanwhile (the files were replaced or erased): what was read is stale and dropped.
         if record.generation != recordGeneration { reads.record = nil }
         if canary.wipes != canaryWipes || record.generation != recordGeneration { reads.canary = nil }
