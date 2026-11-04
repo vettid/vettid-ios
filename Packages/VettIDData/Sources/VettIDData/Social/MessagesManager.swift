@@ -114,7 +114,8 @@ public final class MessagesManager: MessagesRepository {
     static let readsAtOnce = 4
 
     /// The newest page of each of [ids], at most ``readsAtOnce`` at a time. A failure stops the reads not yet started and
-    /// is thrown once the ones under way ended (the first of the list's order when several failed), unless [quietly]:
+    /// is thrown once the ones under way ended, cancelled with it (of the failures that came before the others were cancelled, the
+    /// one first in the list's order), unless [quietly]:
     /// then failures are left for the screens to retry. A cancellation of the caller is thrown.
     private func loadNewest(of ids: [String], quietly: Bool) async throws {
         var failure: ReadFailure?

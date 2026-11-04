@@ -443,14 +443,16 @@ extension VaultDevice {
         return try await body()
     }
 
+    #if DEBUG
     /// How many calls keep the events of [type] (tests).
     func keptCount(_ type: String) -> Int { mem.withLock { memory.keptTypes[type, default: 0] } }
 
     /// The ids of the outbox's entries (tests).
     var outboxIDs: [String] { mem.withLock { st.outbox.map(\.id) } }
 
-    /// How many events the inbox holds.
+    /// How many events the inbox holds (tests).
     public var inboxCount: Int { mem.withLock { inbox.count } }
+    #endif
 
     /// ``publish(_:)`` unless this event was published already: a message whose handling ended in an error is handled again
     /// when the relay delivers it again, and its event must not be shown twice (chosen; not in the spec: the last 512 ids).

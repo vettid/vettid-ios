@@ -215,6 +215,20 @@ extension VaultDeviceTests {
         #expect(d.mem.withLock { d.awaiting.count } == before + 1)
     }
 
+    /// A rekey's `hs.init` that is delivered again after the undo of a failed handling is answered with a fresh `hs.resp`.
+    @Test func aRekeyRedeliveredAfterTheUndoIsAnswered() async throws {
+        let store = FlakyStore()
+        let (d, v) = try await pairedDevice(store: store)
+        let rekey = v.msg(try v.rekey(d).envelope)
+        store.arm()
+        await #expect(throws: (any Error).self) { try await d.handle(rekey) }
+        #expect(await relay.noDeposit(within: 0.3), "no hs.resp before the responder is stored")
+        store.disarm()
+        try await d.handle(rekey)
+        _ = try await relay.nextDeposit() // the hs.resp
+        #expect(d.mem.withLock { d.awaiting.count } == 1)
+    }
+
     /// An event is published once, though its message is handled again after a failed save.
     @Test func anEventIsPublishedOnceAfterAFailedSave() async throws {
         let store = FlakyStore()

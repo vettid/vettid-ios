@@ -124,7 +124,9 @@ extension VaultDevice {
         // an hs.fin that never arrives leaves the code burnt. It goes out after the lock (``afterLock(_:)``) and again at
         // each flush.
         let fin = try storeFin(res.fin, vault: v, epoch: res.epoch.ctx, at: t)
-        // Stored by that write: kept, with its deposit and the code, when the handling's final write fails.
+        // Kept, with its deposit and the code, when the handling's final write fails, whether or not its own write succeeded: the
+        // handshake's state (the epoch, `ini`) is not undone, so the fin it owes is not either; an unsaved one stays in memory and
+        // is stored by the next write, and its deposit waits for a write that works (``deliver``).
         mem.withLock { _ = memory.keptOnError.insert(fin.id) }
         // The code is shown once the fin has gone out, or, when the relay would not take it, is kept for the next flush.
         let shown = res.sas
