@@ -30,6 +30,32 @@ struct TouchTargetTests {
         #expect(target.width == plain.width && target.height >= Spacing.touchTarget)
     }
 
+    /// In a leading-aligned column a short label stays where it was: the extra hit area is on its trailing side.
+    @Test func aShortTextButtonKeepsItsLeadingEdge() async {
+        final class Box { var minX: CGFloat = -1 }
+        func leadingX(_ target: Bool) async -> CGFloat {
+            let box = Box()
+            let label = Text("OK").onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).minX } action: { box.minX = $0 }
+            let column = VStack(alignment: .leading, spacing: 0) {
+                Text("A message that is wider than the button under it")
+                Button {} label: { target ? AnyView(label.textButtonTarget()) : AnyView(label) }.buttonStyle(.plain)
+            }
+            let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
+            window.rootViewController = UIHostingController(rootView: column.vettIDTheme(.light))
+            window.isHidden = false
+            defer { window.isHidden = true }
+            let end = ContinuousClock.now.advanced(by: .seconds(2))
+            while box.minX < 0, ContinuousClock.now < end {
+                window.layoutIfNeeded()
+                try? await Task.sleep(for: .milliseconds(50))
+            }
+            return box.minX
+        }
+        let plain = await leadingX(false)
+        let targeted = await leadingX(true)
+        #expect(plain >= 0 && abs(plain - targeted) < 0.5, "\(plain) vs \(targeted)")
+    }
+
     @Test func aTextButtonIsATargetHighAtEverySize() {
         for type in [DynamicTypeSize.large, .accessibility5] {
             let button = Button {} label: { Text("Try again").textButtonTarget() }.buttonStyle(.plain)

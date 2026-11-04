@@ -161,6 +161,8 @@ import UIKit
             let usual = SecretTextInput.font(monospaced: monospaced, compatibleWith: regular)
             let stepped = SecretTextInput.font(monospaced: monospaced, compatibleWith: bold)
             #expect(weight(stepped) > weight(usual), "monospaced: \(monospaced)")
+            // The field swaps its font only when the name differs (`updateUIView`).
+            #expect(stepped.fontName != usual.fontName, "monospaced: \(monospaced)")
         }
     }
 

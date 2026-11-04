@@ -21,6 +21,14 @@ struct ContrastTests {
         #expect(VettIDColors.light.primary == VettIDPalette.goldDeep)
     }
 
+    /// The boundary of a card and of the Service label is the 3:1 outline, not the faint one.
+    @Test(arguments: [("dark", VettIDColors.dark), ("light", VettIDColors.light)])
+    func cardAndLabelBordersAreTheOutline(_ theme: String, _ c: VettIDColors) {
+        #expect(DetailCard<EmptyView>.border(c) == c.outline && ServiceLabel.border(c) == c.outline, "\(theme)")
+        #expect(contrastRatio(DetailCard<EmptyView>.border(c), c.background) >= 3, "\(theme)")
+        #expect(contrastRatio(ServiceLabel.border(c), c.background) >= 3, "\(theme)")
+    }
+
     @Test(arguments: [("dark", VettIDColors.dark), ("light", VettIDColors.light)])
     func schemeMeetsAA(_ theme: String, _ c: VettIDColors) {
         func expectContrast(_ name: String, _ fg: ThemeColor, _ bg: ThemeColor, _ minimum: Double) {

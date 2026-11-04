@@ -207,12 +207,15 @@ public struct DetailCard<Content: View>: View {
 
     public init(@ViewBuilder content: () -> Content) { self.content = content() }
 
+    /// The card's boundary: the 3:1 outline.
+    static func border(_ colors: VettIDColors) -> ThemeColor { colors.outline }
+
     public var body: some View {
         VStack(alignment: .leading, spacing: 0) { content }
             .padding(Spacing.l)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(colors.background, in: VettIDShape.card)
-            .overlay(VettIDShape.card.stroke(colors.outline, lineWidth: 1))
+            .overlay(VettIDShape.card.stroke(Self.border(colors), lineWidth: 1))
             .padding(.horizontal, Spacing.s)
     }
 }

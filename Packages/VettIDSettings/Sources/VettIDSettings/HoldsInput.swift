@@ -2,9 +2,9 @@
 /// approval, a call, a credential operation"), so that it waits (at most the app's 5-minute limit) before covering the
 /// screen. A started credential operation counts from the moment its screen opens until it is done or sent, typed or not
 /// (name change, change PIN, change password, Delete vault, rotate, new credential, new phone secret, the alarm, a transfer
-/// to a new phone); so does the credential window's dialog. iOS has no calls yet. The lead's reading of
-/// VAULT-MESSAGING §3.6.5 (2026-11-03; a spec erratum is pending) is that, when calls land, the call's own UI stays up
-/// while the shell is covered by the check as usual; on that reading a call does not hold input.
+/// to a new phone); so does the credential window's dialog. VAULT-MESSAGING §3.6.5: the check does not
+/// interrupt a call. iOS has no calls yet. Read here as: the call's own UI stays up while the shell is covered, so a call
+/// does not hold input (the spec's wording on this is pending).
 public extension ChangeNameState {
     /// From the moment the form is open until the request is sent.
     var holdsInput: Bool { step != .sent }

@@ -486,8 +486,9 @@ public struct FormScaffold<Header: View, Content: View, TopActions: View>: View 
 public extension View {
     /// The label of a plain text button, as tall as a target (48 pt) and at least 44 pt wide, and hit over its whole frame:
     /// put it inside the button's label, since a frame outside a `.plain` button leaves the hit area at the text
-    /// (IOS-PLAN ID5). A text wider than 44 pt keeps its width, so only a short word ("OK") gets a frame wider than itself.
+    /// (IOS-PLAN ID5). A text wider than 44 pt keeps its width, so only a short word ("OK") gets a frame wider than itself,
+    /// and its extra hit area is on the trailing side: the text stays where it was in a leading-aligned row.
     func textButtonTarget() -> some View {
-        frame(minWidth: Spacing.minTarget, minHeight: Spacing.touchTarget).contentShape(Rectangle())
+        frame(minWidth: Spacing.minTarget, minHeight: Spacing.touchTarget, alignment: .leading).contentShape(Rectangle())
     }
 }

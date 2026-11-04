@@ -72,6 +72,9 @@ public struct ServiceLabel: View {
 
     public init() {}
 
+    /// The label's boundary: the 3:1 outline.
+    static func border(_ colors: VettIDColors) -> ThemeColor { colors.outline }
+
     public var body: some View {
         Text(ServiceTexts.label)
             .vettIDFont(.labelSmall)
@@ -80,7 +83,7 @@ public struct ServiceLabel: View {
             .fixedSize()
             .padding(.horizontal, Spacing.s)
             .padding(.vertical, 2)
-            .overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).stroke(colors.outline, lineWidth: 1))
+            .overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).stroke(Self.border(colors), lineWidth: 1))
             .accessibilityIdentifier("service_label")
     }
 }
