@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+import VettIDDataTesting
 @testable import VettIDOnboarding
 
 /// "Opening VettID" that stays: after the bound, in the foreground, "Try again" is offered, once at a time.
@@ -63,6 +64,25 @@ import Testing
         #expect(reads.count == 2)
         await gate.open()
         await vm.settle()
+    }
+
+    /// "Try again" joined to a read already under way stays busy until that read ends.
+    @Test func tryAgainStaysBusyWhileAReadAlreadyRuns() async {
+        let reads = SingleFlight()
+        let gate = TestDeferred<Void>()
+        let reread: @MainActor () async -> Void = { await reads.run { try? await gate.value() } }
+        let foreground = Task { await reread() }
+        await Task.yield()
+        let vm = StartingViewModel(stuckAfter: .zero, sleep: { _ in }, reread: reread)
+        await vm.watch()
+        vm.retry()
+        await Task.yield()
+        await Task.yield()
+        #expect(vm.retrying)
+        gate.complete(())
+        await foreground.value
+        await vm.settle()
+        #expect(!vm.retrying)
     }
 
     @MainActor final class Counter { var count = 0 }

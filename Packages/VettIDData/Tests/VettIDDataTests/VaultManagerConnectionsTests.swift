@@ -147,6 +147,11 @@ import VettIDVault
         try await c.declineOutgoing(waiting.connectionID)
         #expect(c.requests.isEmpty && !service.declinedSent.contains(waiting.connectionID))
         #expect(await kind { try await c.declineOutgoing(waiting.connectionID) } == .notFound)
+
+        // A block made on the vault's side declines a request there too.
+        let blockedID = try service.peerAccepts(first: "Sam", last: "Roe")
+        try service.blockPeer(of: blockedID)
+        #expect(service.declinedSent.contains(blockedID))
     }
 
     /// The owner's own metadata, the asks (§10.4.1), the peer's profile changing, and a removal.

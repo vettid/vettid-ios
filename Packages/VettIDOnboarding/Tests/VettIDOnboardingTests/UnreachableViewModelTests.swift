@@ -22,47 +22,72 @@ import VettIDDataTesting
         #expect(vault.calls == ["refresh"] && !vm.retrying)
     }
 
-    /// "Try again" reads through the app's one read at a time when it is given one (a foreground read may be under way), and
-    /// never beside it: while one read runs another ask does nothing.
+    /// "Try again" reads through the app's one read at a time when it is given one (a foreground read may be under way): it
+    /// does not read beside it, and stays busy until that read ends.
     @Test func tryAgainUsesTheAppsSingleRead() async {
         let vault = FakeVaultRepository(.unreachable(.phoneLocked))
         let reads = SingleFlight()
         let gate = TestDeferred<Void>()
-        var started = 0
+        let started = Counter()
         let reread: @MainActor () async -> Void = {
             await reads.run {
-                started += 1
+                started.count += 1
                 try? await gate.value()
             }
         }
         // A foreground read is under way.
         let foreground = Task { await reread() }
         await settle()
-        #expect(reads.running && started == 1)
+        #expect(reads.running && started.count == 1)
         let vm = UnreachableViewModel(account: vault, reread: reread)
         vm.retry()
         await settle()
-        #expect(started == 1 && !vault.calls.contains("refresh"), "no second read beside the first")
+        #expect(vm.retrying, "busy while the read it joined runs")
+        #expect(started.count == 1 && !vault.calls.contains("refresh"), "no second read beside the first")
         gate.complete(())
         await foreground.value
         await settle()
         #expect(!reads.running && !vm.retrying)
         vm.retry()
         await settle()
-        #expect(started == 2)
+        #expect(started.count == 2)
     }
 
     @Test func aSingleFlightRunsOneJobAtATime() async {
         let flight = SingleFlight()
         let gate = TestDeferred<Void>()
+        let ran = Counter()
         let first = Task { await flight.run { try? await gate.value() } }
         await settle()
-        let second = await flight.run { Issue.record("ran beside the first") }
-        #expect(!second)
+        let done = Counter()
+        let second = Task {
+            let result = await flight.run { ran.count += 1 }
+            done.count += 1
+            return result
+        }
+        await settle()
+        #expect(done.count == 0, "the second ask waits for the run under way")
         gate.complete(())
         #expect(await first.value)
-        #expect(await flight.run {})
+        #expect(await second.value == false && done.count == 1 && ran.count == 0)
+        #expect(!flight.running)
+        #expect(await flight.run { ran.count += 1 } && ran.count == 1)
     }
+
+    /// A cancelled caller leaves nothing set.
+    @Test func aCancelledCallerLeavesTheFlightClear() async {
+        let flight = SingleFlight()
+        let gate = TestDeferred<Void>()
+        let caller = Task { await flight.run { try? await gate.value() } }
+        await settle()
+        caller.cancel()
+        gate.complete(())
+        _ = await caller.value
+        await settle()
+        #expect(!flight.running)
+    }
+
+    @MainActor final class Counter { var count = 0 }
 
     /// A wipe that did not finish offers "Erase VettID's data on this phone": local only; when it cannot finish the member
     /// is told to remove the app.
