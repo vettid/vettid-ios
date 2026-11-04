@@ -98,6 +98,62 @@ import VettIDDataTesting
         #expect(vault.phase == .unlocked)
     }
 
+    /// A `429` on the end of setup holds "Done" for its wait: a second tap during it sends nothing (VAULT-MESSAGING §10.1).
+    @Test func aRateLimitedFinishHoldsDone() async {
+        let vault = FakeVaultRepository(.setup(.finishing))
+        let vm = OnboardingViewModel(account: vault, vault: vault, inbox: SetupLinkInbox())
+        vault.fail["finishSetup"] = FakeVaultRepository.failure(.rateLimited, retry: 120)
+        vm.finish()
+        await vm.settle()
+        #expect(vm.state.error == .rateLimited && vm.state.finishWaiting && !vm.state.waiting)
+        vm.finish()
+        await vm.settle()
+        #expect(vault.calls.filter { $0 == "finishSetup" }.count == 1, "the double tap sends nothing during the wait")
+        #expect(vault.phase == .setup(.finishing))
+    }
+
+    /// A refresh that is rate-limited is shown with its wait, but holds neither the setup code nor "Done".
+    @Test func aRateLimitedRefreshHoldsNothing() async {
+        let vault = FakeVaultRepository()
+        let vm = OnboardingViewModel(account: vault, vault: vault, inbox: SetupLinkInbox())
+        vm.startTransfer()
+        vault.fail["refresh"] = FakeVaultRepository.failure(.rateLimited, retry: 120)
+        vm.leaveMove()
+        await vm.settle()
+        #expect(vm.state.error == .rateLimited && vm.state.errorWait != nil)
+        #expect(!vm.state.waiting && !vm.state.finishWaiting)
+        vm.start()
+        vm.typeCode()
+        vm.setEmail("sam@example.org")
+        vm.setCode("K7QM-4XRP")
+        vm.submitCode()
+        await vm.settle()
+        #expect(vault.calls.contains("redeemSetupCode"), "the redeem is not held by another operation's wait")
+    }
+
+    /// Leaving the steps of the operation clears the failure shown and keeps the wait; a fresh welcome keeps it too.
+    @Test func aWaitSurvivesNavigationAndAFreshWelcome() async {
+        let vault = FakeVaultRepository()
+        let vm = OnboardingViewModel(account: vault, vault: vault, inbox: SetupLinkInbox())
+        await vm.settle()
+        vm.start()
+        vm.typeCode()
+        vm.setEmail("sam@example.org")
+        vm.setCode("K7QM-4XRP")
+        vault.fail["redeemSetupCode"] = FakeVaultRepository.failure(.rateLimited, retry: 120)
+        vm.submitCode()
+        await vm.settle()
+        #expect(vm.state.waiting)
+        _ = vm.back()
+        #expect(vm.state.error == nil && vm.state.errorWait == nil && vm.state.waiting, "the shown failure goes, the wait stays")
+        // The welcome screen made afresh (nothing set up again) carries the wait over.
+        vault.phase = .setup(.newVault)
+        await vm.settle()
+        vm.useAnotherCode()
+        await vm.settle()
+        #expect(vm.state.step == .welcome && vm.state.waiting)
+    }
+
     /// The refresh after leaving a move shows its failure, without holding the next screen busy.
     @Test func aFailedRefreshAfterAMoveIsShown() async {
         let vault = FakeVaultRepository()

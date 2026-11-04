@@ -57,7 +57,7 @@ extension OnboardingStrings {
     static var returnRefusedCheckFirst: String {
         String(
             localized: "ios_unlock_return_check_first",
-            defaultValue: "The owner check comes first. Finish it, then return to the earlier release.",
+            defaultValue: "The daily PIN and password check comes first. Finish it, then return to the earlier release.",
             bundle: .module
         )
     }

@@ -102,7 +102,7 @@ public struct SetupScanScreen: View {
                 ScannerBox(onText: actions.scanned, onTypeInstead: actions.typeCode, camera: camera)
             }
             ScanRefusalNotice(state: state)
-            ErrorNotice(state: state, override: .setupCodeInvalid, overrideText: OnboardingStrings.setupInvalid)
+            ErrorNotice(state: state, override: .setupCodeInvalid, overrideText: OnboardingStrings.setupInvalid, hold: state.codeWait)
             TextLink(OnboardingStrings.setupOpenSite, action: onOpenAccountSite).padding(.top, Spacing.l)
             DevHintNotice(state: state)
         }
@@ -128,7 +128,7 @@ public struct SetupTypeScreen: View {
 
     public var body: some View {
         // Built again each second while a `429`'s wait runs: the send is held back for all of it (VAULT-MESSAGING §10.1).
-        WaitingContent(until: state.errorWait) { waiting in form(waiting: waiting) }
+        WaitingContent(until: state.codeWait) { waiting in form(waiting: waiting) }
     }
 
     @ViewBuilder private func form(waiting: Bool) -> some View {
@@ -180,7 +180,7 @@ public struct SetupTypeScreen: View {
                 .accessibilityIdentifier("setup_code")
             }
             .padding(.top, Spacing.m)
-            ErrorNotice(state: state, override: .setupCodeInvalid, overrideText: OnboardingStrings.setupInvalid)
+            ErrorNotice(state: state, override: .setupCodeInvalid, overrideText: OnboardingStrings.setupInvalid, hold: state.codeWait)
             DevHintNotice(state: state)
         }
     }

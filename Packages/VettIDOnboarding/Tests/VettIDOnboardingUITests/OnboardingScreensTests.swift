@@ -67,6 +67,30 @@ import VettIDUI
         #expect(WaitText.message(.rateLimited, retryAt: nil, timeScale: 1) == FailureKind.rateLimited.message)
     }
 
+    /// A `429`'s notice counts its wait down: the wait of the failure shown, else the wait of the operation the screen sends. It is
+    /// not read from the start-over time, and not dropped.
+    @Test func theNoticeCountsTheWaitDown() {
+        var state = OnboardingState(step: .setupType)
+        let wait = WaitDeadline(seconds: 90)
+        // A failure shown with its wait.
+        state.error = .rateLimited
+        state.errorWait = wait
+        #expect(ErrorNotice.shownWait(state, hold: nil)?.wait == wait)
+        // `errorRetryAt` (the start-over time of another failure) is not a wait.
+        state.errorWait = nil
+        state.errorRetryAt = Date().addingTimeInterval(90)
+        #expect(ErrorNotice.shownWait(state, hold: nil) == nil)
+        // No failure shown (the step was left): the held operation's wait is still counted down.
+        state.error = nil
+        #expect(ErrorNotice.shownWait(state, hold: wait)?.wait == wait)
+        #expect(ErrorNotice.shownWait(state, hold: nil) == nil)
+        // Another failure shown: its own text, not a countdown.
+        state.error = .network
+        #expect(ErrorNotice.shownWait(state, hold: wait) == nil)
+        // A wait that ended counts down nothing.
+        #expect(ErrorNotice.shownWait(OnboardingState(), hold: WaitDeadline(seconds: 0)) == nil)
+    }
+
     /// iPhone only: a refused start-over says from when it is possible; without a time, the general text.
     @Test func aRefusedStartOverSaysWhen() {
         let at = Date(timeIntervalSince1970: 1_800_000_000)

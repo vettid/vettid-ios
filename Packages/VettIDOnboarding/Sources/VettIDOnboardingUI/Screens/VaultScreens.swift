@@ -355,10 +355,16 @@ public struct DoneScreen: View {
     }
 
     public var body: some View {
+        // Built again each second while a wait runs: "Done" is held for all of it (VAULT-MESSAGING §10.1).
+        WaitingContent(until: state.finishWait) { waiting in form(waiting: waiting) }
+    }
+
+    @ViewBuilder private func form(waiting: Bool) -> some View {
         FormScaffold(
             title: OnboardingStrings.doneTitle,
             message: OnboardingStrings.doneBody,
             primaryLabel: OnboardingStrings.doneGo,
+            primaryEnabled: !waiting,
             busy: state.busy,
             onPrimary: actions.finish,
             header: {
@@ -369,7 +375,7 @@ public struct DoneScreen: View {
         ) {
             NoticeCard(.info, title: OnboardingStrings.doneNextTitle, message: OnboardingStrings.doneNextBody)
             // (iOS) A failed finishSetup is shown here; vettid-android's done screen shows none.
-            ErrorNotice(state: state)
+            ErrorNotice(state: state, hold: state.finishWait)
         }
         .accessibilityIdentifier("onboarding_done")
     }

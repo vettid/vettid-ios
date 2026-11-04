@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+import VettIDSettings
 @testable import VettID
 import VettIDData
 
@@ -22,6 +23,19 @@ struct OpenedLinkTests {
         #expect(!AppRoot.dropSetupLink(phase: .unlocked, inbox: inbox))
         // The vault deleted in the same run: nothing is left for the onboarding to redeem.
         #expect(!AppRoot.dropSetupLink(phase: .signedOut, inbox: inbox) && inbox.link == nil)
+    }
+
+    /// A wait the vault asked for survives a lock and ends with a wipe or another vault.
+    @Test func aWaitSurvivesALockAndEndsWithAWipe() {
+        let waits = WaitRegistry()
+        _ = waits.record(.rotate, error: VaultFailure(.backoff, code: "backoff", retryAfterSeconds: 600))
+        for phase in [AppPhase.locked, .unlocked, .starting, .unreachable(.network), .deleting] {
+            if AppRoot.waitsEnd(with: phase) { waits.clearAll() }
+            #expect(waits.current(.rotate) != nil, "\(phase)")
+        }
+        for phase in [AppPhase.signedOut, .setup(.newVault)] { #expect(AppRoot.waitsEnd(with: phase), "\(phase)") }
+        if AppRoot.waitsEnd(with: .signedOut) { waits.clearAll() }
+        #expect(waits.current(.rotate) == nil)
     }
 
     /// A setup link on a phone that already has a vault is said to be unused, not queued for a later setup.

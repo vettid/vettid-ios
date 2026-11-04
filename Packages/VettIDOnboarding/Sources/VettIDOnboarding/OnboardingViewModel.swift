@@ -159,10 +159,14 @@ public final class OnboardingViewModel: OnboardingActions {
         }
     }
 
+    /// The operations a `429`'s wait holds back (VAULT-MESSAGING §10.1).
+    enum WaitHold { case setupCode, finish }
+
     /// Marks the flow busy at once (a second tap or scan is ignored), then runs [block]; a failure is shown, and
     /// [onFailure] runs after it. [marksBusy] false: a background refresh that blocks nothing.
     func attempt(
         marksBusy: Bool = true,
+        holds: WaitHold? = nil,
         onFailure: @escaping @MainActor () -> Void = {},
         _ block: @escaping @MainActor () async throws -> Void
     ) {
@@ -179,7 +183,14 @@ public final class OnboardingViewModel: OnboardingActions {
                 state.errorCode = e.code
                 state.errorRetryAt = e.kind == .enrollmentStarted && e.retryAfterSeconds > 0
                     ? Date().addingTimeInterval(Double(e.retryAfterSeconds)) : nil
-                state.errorWait = e.kind == .rateLimited && e.retryAfterSeconds > 0 ? WaitDeadline(seconds: e.retryAfterSeconds) : nil
+                // The failure shown counts its wait down; only the operation that was told to wait is held back by it.
+                let wait = e.kind == .rateLimited && e.retryAfterSeconds > 0 ? WaitDeadline(seconds: e.retryAfterSeconds) : nil
+                state.errorWait = wait
+                switch holds {
+                case .setupCode: state.codeWait = wait
+                case .finish: state.finishWait = wait
+                case nil: break
+                }
                 onFailure()
             } catch {
                 // Only a cancellation gets here: every repository failure is a VaultFailure.
@@ -302,7 +313,7 @@ public final class OnboardingViewModel: OnboardingActions {
     /// Redeems [code]; [scanned] is the QR text it came from, not redeemed again after a failure.
     private func redeem(_ code: SetupCodeInput, scanned: String? = nil) {
         guard !state.busy, !state.waiting else { return }
-        attempt(onFailure: { [weak self] in self?.failedScan = scanned }) { [self] in
+        attempt(holds: .setupCode, onFailure: { [weak self] in self?.failedScan = scanned }) { [self] in
             let hint = try await account.redeemSetupCode(code)
             state.emailHint = hint
             state.codeInput = ""
@@ -507,12 +518,15 @@ public final class OnboardingViewModel: OnboardingActions {
     private func freshState() -> OnboardingState {
         var s = OnboardingState(devHint: account.devHint)
         s.deletedNotice = account.vaultDeletedNotice
+        // A wait the vault asked for outlives the welcome screen afresh (VAULT-MESSAGING §10.1).
+        s.codeWait = state.codeWait
+        s.finishWait = state.finishWait
         return s
     }
 
     public func finish() {
-        guard !finishing, !state.busy else { return }
+        guard !finishing, !state.busy, !state.finishWaiting else { return }
         finishing = true
-        attempt(onFailure: { [weak self] in self?.finishing = false }) { [vault] in try await vault.finishSetup() }
+        attempt(holds: .finish, onFailure: { [weak self] in self?.finishing = false }) { [vault] in try await vault.finishSetup() }
     }
 }

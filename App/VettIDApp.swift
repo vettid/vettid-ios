@@ -122,8 +122,8 @@ struct AppRoot: View {
     @State private var banners = BannerBudget()
     /// A setup link was opened on a phone that already has a vault: said once.
     @State private var setupLinkIgnored = false
-    /// The one read of the phase at a time (``refreshAgain(anyPhase:)``).
-    @State private var reads = SingleFlight()
+    /// The one read of the phase at a time, whoever asks.
+    @State private var reader: PhaseReader
     @Environment(\.openURL) private var openURL
     @Environment(\.scenePhase) private var scenePhase
     /// "Allow screenshots" (IOS-PLAN §4): it ends when the vault is no longer open, and after its hour.
@@ -144,6 +144,7 @@ struct AppRoot: View {
         self.inviteInbox = inviteInbox
         self.notifications = notifications
         _held = State(initialValue: vault.phase)
+        _reader = State(initialValue: PhaseReader(phase: { vault.phase }, refresh: { try? await vault.refresh() }))
         _shell = State(initialValue: ShellModel(account: vault, vault: vault, ownerChecks: vault.ownerChecks))
     }
 
@@ -171,7 +172,7 @@ struct AppRoot: View {
             // outside the subtree it covers, so they close for it here.
             .environment(\.vettIDCovered, (shownPhase == .unlocked && shell.checkCovers) || vault.credentialRequired)
             // The launch read goes through the same guard as "Try again" and the foreground: one read at a time.
-            .task { await refreshAgain() }
+            .task { await reader.ask() }
             // A start before the first unlock (or while the iPhone was locked) read nothing: read again once the app is
             // active and protected data is available (IOS-PLAN §6.1, §6.3).
             .onChange(of: scenePhase) { _, now in
@@ -232,8 +233,8 @@ struct AppRoot: View {
         guard vault.phase != .unlocked, !RootHold.holds(phase: vault.phase, finishingMove: vault.finishingMove) else { return }
         shell.reset()
         AcceptedScans.reset()
-        // A wait the vault asked for outlives a screen, not the open vault.
-        WaitRegistry.shared.clearAll()
+        // A wait the vault asked for outlives a screen and a lock; it ends with a wipe or another vault (chosen; not in the spec).
+        if Self.waitsEnd(with: vault.phase) { WaitRegistry.shared.clearAll() }
         // The vault is no longer open (locked, signed out, unreachable): the allowance ends.
         screenshots.vaultClosed()
     }
@@ -245,6 +246,14 @@ struct AppRoot: View {
         guard hasVault(phase), inbox.link != nil else { return false }
         inbox.consume()
         return true
+    }
+
+    /// A wipe, or no vault yet (a new setup): the waits kept for the vault that was here end. A lock does not end them.
+    static func waitsEnd(with phase: AppPhase) -> Bool {
+        switch phase {
+        case .signedOut, .setup: true
+        default: false
+        }
     }
 
     /// A vault is set up on this phone (the setup flow has nothing to do).
@@ -270,26 +279,8 @@ struct AppRoot: View {
         NotificationCenter.default.publisher(for: UIApplication.protectedDataDidBecomeAvailableNotification)
     }
 
-    /// Whether [phase] is a start that could not read this phone's state yet.
-    static func readsAgain(_ phase: AppPhase) -> Bool {
-        switch phase {
-        case .starting, .unreachable(.phoneLocked, _): true
-        default: false
-        }
-    }
-
     private func retryRefresh() {
-        Task { await refreshAgain() }
-    }
-
-    /// Reads the phase again while it is a start that could not read it yet; one read at a time, whoever asks ("Try again" on
-    /// the start screen, the foreground, protected data).
-    /// [anyPhase]: the member asked ("Try again" on the unreachable screen), whatever failed the read.
-    private func refreshAgain(anyPhase: Bool = false) async {
-        guard anyPhase || Self.readsAgain(vault.phase) else { return }
-        // An extra read for an ask made during one is made only while the phase is still one that could not be read; the
-        // member's own "Try again" is always answered.
-        await reads.run(forced: anyPhase, stillNeeded: { Self.readsAgain(vault.phase) }) { try? await vault.refresh() }
+        Task { await reader.ask() }
     }
 
     /// IOS-PLAN §6.6: what is in flight (a lock's first attempt, the outbox, a vote window's lock) is finished in a
@@ -345,9 +336,9 @@ struct AppRoot: View {
         case .signedOut, .setup:
             OnboardingFlow(account: vault, vault: vault, inbox: inbox, routes: onboardingRoutes) { openPortal() }
         case .starting:
-            StartingScreen(reread: { await refreshAgain() })
+            StartingScreen(reread: { await reader.tryAgain() })
         case .unreachable:
-            UnreachableFlow(account: vault, timeScale: vault.timeScale, reread: { await refreshAgain(anyPhase: true) }) { openPortal() }
+            UnreachableFlow(account: vault, timeScale: vault.timeScale, reread: { await reader.tryAgain() }) { openPortal() }
         case .locked:
             UnlockFlow(vault: vault, account: vault, ownerCheck: vault.ownerChecks, releaseNotes: releaseNotes) { openPortal() }
         case .deleting:

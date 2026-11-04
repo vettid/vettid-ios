@@ -145,7 +145,7 @@ import VettIDDataTesting
         vault.fail["redeemSetupCode"] = FakeVaultRepository.failure(.rateLimited, retry: 120)
         vm.submitCode()
         await vm.settle()
-        let wait = try #require(vm.state.errorWait)
+        let wait = try #require(vm.state.codeWait)
         #expect(vm.state.error == .rateLimited && vm.state.waiting && (90...120).contains(wait.remaining()))
         let sent = vault.calls.filter { $0 == "redeemSetupCode" }.count
         vm.submitCode()

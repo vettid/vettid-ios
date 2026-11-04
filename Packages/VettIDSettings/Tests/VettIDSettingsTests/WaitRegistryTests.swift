@@ -43,7 +43,6 @@ import VettIDDataTesting
     /// The app leaving the foreground drops what was typed and keeps the wait (Change PIN and Change password rebuild their state).
     @Test func theAppLeavingTheForegroundKeepsTheWait() async {
         repo.phoneSecret = false
-        repo.fail["changePin"] = wait()
         let pin = ChangePinViewModel(vault: repo, waits: waits)
         _ = waits.record(.changePin, error: wait())
         pin.forgetSecrets()

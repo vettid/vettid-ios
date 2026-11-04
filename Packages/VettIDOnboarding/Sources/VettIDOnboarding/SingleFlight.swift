@@ -6,7 +6,7 @@ import Foundation
 /// run that started it, checked again before each extra run) or a member asked for it ([forced]). The app's read of the phase is
 /// one (the launch, "Try again", the foreground and protected data all ask for it), so that a hung first read is not joined by a
 /// second beside it, and a "Try again" stays busy until the read it asked for has ended. Waiters return only when the whole run
-/// ends, the extra reads included.
+/// ends, the extra reads included. A joiner's [stillNeeded] is ignored: the starter's is used.
 @MainActor
 public final class SingleFlight {
     private var current: Task<Void, Never>?
