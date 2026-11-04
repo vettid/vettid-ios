@@ -149,6 +149,7 @@ import VettIDVault
         #expect(await kind { try await c.declineOutgoing(waiting.connectionID) } == .notFound)
 
         // A block made on the vault's side declines a request there too.
+        _ = try await c.createInvite(.oneHour)
         let blockedID = try service.peerAccepts(first: "Sam", last: "Roe")
         try service.blockPeer(of: blockedID)
         #expect(service.declinedSent.contains(blockedID))
