@@ -29,23 +29,29 @@ import VettIDUI
 
     /// Every screen that sends a PIN, a password or a code says a wait the same way (a `429` or a backoff).
     @Test func aWaitIsSaidTheSameEverywhere() {
-        let soon = Date().addingTimeInterval(90)
+        let t0 = ContinuousClock.now
+        let wait = WaitDeadline(seconds: 90, now: t0)
         for kind in [FailureKind.rateLimited, .backoff] {
-            #expect(WaitText.message(kind, retryAt: soon, timeScale: 1).hasPrefix("Too many attempts. Try again in "))
-            #expect(WaitText.spoken(kind, retryAt: soon)?.hasPrefix("Too many attempts. Try again in ") == true)
+            #expect(WaitText.message(kind, retryAt: wait, timeScale: 1, now: t0).hasPrefix("Too many attempts. Try again in "))
+            #expect(WaitText.spoken(kind, retryAt: wait, now: t0)?.hasPrefix("Too many attempts. Try again in ") == true)
         }
         // A field's spoken error is the same at every tick: only the visible text counts down.
-        let t0 = Date(), later = t0.addingTimeInterval(1), end = t0.addingTimeInterval(90)
-        func shown(_ now: Date) -> String { WaitText.message(.backoff, retryAt: end, timeScale: 1, now: now) }
-        func spoken(_ now: Date) -> String? { WaitText.steadySpoken(.backoff, retryAt: end, timeScale: 1, now: now) }
+        let later = t0.advanced(by: .seconds(1))
+        func shown(_ now: ContinuousClock.Instant) -> String { WaitText.message(.backoff, retryAt: wait, timeScale: 1, now: now) }
+        func spoken(_ now: ContinuousClock.Instant) -> String? {
+            WaitText.steadySpoken(.backoff, retryAt: wait, timeScale: 1, now: now)
+        }
         #expect(shown(t0) != shown(later))
         #expect(spoken(t0) == spoken(later) && spoken(t0) != nil)
-        #expect(WaitText.steadySpoken(.badPin, retryAt: end, timeScale: 1) == nil)
+        #expect(WaitText.steadySpoken(.badPin, retryAt: wait, timeScale: 1, now: t0) == nil)
         // A long wait is h:mm:ss, not "120:00".
         #expect(WaitText.clock(90) == "1:30" && WaitText.clock(3_599) == "59:59" && WaitText.clock(7_200) == "2:00:00")
-        #expect(WaitText.message(.badPin, retryAt: soon, timeScale: 1) == FailureKind.badPin.message)
-        #expect(WaitText.spoken(.badPin, retryAt: soon) == nil && WaitText.spoken(.rateLimited, retryAt: nil) == nil)
-        #expect(WaitText.message(.backoff, retryAt: Date().addingTimeInterval(-1), timeScale: 1) == FailureKind.backoff.message)
+        #expect(WaitText.message(.badPin, retryAt: wait, timeScale: 1, now: t0) == FailureKind.badPin.message)
+        #expect(WaitText.spoken(.badPin, retryAt: wait, now: t0) == nil && WaitText.spoken(.rateLimited, retryAt: nil) == nil)
+        // Over: the failure's own text, and nothing held back.
+        let over = t0.advanced(by: .seconds(91))
+        #expect(WaitText.message(.backoff, retryAt: wait, timeScale: 1, now: over) == FailureKind.backoff.message)
+        #expect(wait.isRunning(now: t0) && !wait.isRunning(now: over))
     }
 
     /// A rate-limited redeem says how long to wait (Android's text of the recovery); no wait left, the general text.

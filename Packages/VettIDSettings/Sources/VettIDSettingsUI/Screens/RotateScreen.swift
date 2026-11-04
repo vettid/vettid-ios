@@ -29,7 +29,7 @@ public struct RotateContent: View {
     }
 
     public var body: some View {
-        screenBody.holdsInput(state.holdsInput)
+        WaitingContent(until: state.errorRetryAt) { _ in screenBody }.holdsInput(state.holdsInput)
     }
 
     @ViewBuilder private var screenBody: some View {
@@ -46,7 +46,7 @@ public struct RotateContent: View {
     private var form: some View {
         FormScaffold(
             title: CredentialStrings.rotateTitle, message: CredentialStrings.rotateBody, primaryLabel: CredentialStrings.rotateSubmit,
-            primaryEnabled: !state.password.isEmpty && !state.busy, busy: state.busy, onPrimary: actions.onSubmit,
+            primaryEnabled: !state.password.isEmpty && !state.busy && !state.waiting, busy: state.busy, onPrimary: actions.onSubmit,
             onBack: actions.onBack
         ) {
             VStack(alignment: .leading, spacing: Spacing.l) {

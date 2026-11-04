@@ -21,7 +21,9 @@ public struct CredentialState: Equatable, Sendable, CustomStringConvertible, Cus
     public var windowPassword = ""
     public var windowError: FailureKind?
     /// The end of the wait the unlock window's failure asked for (``WaitText``), or nil.
-    public var windowRetryAt: Date?
+    public var windowRetryAt: WaitDeadline?
+    /// The unlock window's wait runs: the open is held back until it ends.
+    public var windowWaiting: Bool { windowRetryAt?.isRunning() == true }
 
     /// Whether the screen offers New credential (`credential.reset`, VAULT-MESSAGING §3.5.5). Held back until a lost answer
     /// to it was decided (IOS-PLAN 0.1.9 §6.3, ANDROID-PLAN 0.1.51), which VaultManager+Reset.swift now does (0.48.0
@@ -109,7 +111,7 @@ public final class CredentialViewModel {
 
     public func openWindow() {
         let pw = local.windowPassword
-        guard !pw.isEmpty else { return }
+        guard !pw.isEmpty, !local.windowWaiting else { return }
         local.busy = true
         local.windowError = nil
         let repo = repo

@@ -50,7 +50,7 @@ public struct ChangePinContent: View {
     }
 
     public var body: some View {
-        steps.holdsInput(state.holdsInput)
+        WaitingContent(until: state.errorRetryAt) { _ in steps }.holdsInput(state.holdsInput)
     }
 
     @ViewBuilder private var steps: some View {
@@ -70,7 +70,7 @@ public struct ChangePinContent: View {
     private var last: Bool { state.step == .confirm }
 
     private var canContinue: Bool {
-        pin.count > 0 && !state.busy && (!last || !state.withPassword || !state.password.isEmpty)
+        pin.count > 0 && !state.busy && !(last && state.waiting) && (!last || !state.withPassword || !state.password.isEmpty)
     }
 
     private func next() {

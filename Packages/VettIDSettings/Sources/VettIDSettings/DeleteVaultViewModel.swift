@@ -19,7 +19,12 @@ public struct DeleteVaultState: Equatable, Sendable, CustomStringConvertible, Cu
     public var busy = false
     public var error: FailureKind?
     /// The end of the wait the failure asked for (`retry_after`), or nil (``WaitText``).
-    public var errorRetryAt: Date?
+    public var errorRetryAt: WaitDeadline?
+    /// The wait runs: the send is held back until it ends (VAULT-MESSAGING §10.1: the app does not resend before it ends).
+    public var waiting: Bool { errorRetryAt?.isRunning() == true }
+
+    /// Clears the failure, except while its wait runs (the notice says why the send is held back).
+    public mutating func clearError() { if !waiting { error = nil } }
     /// (iPhone; chosen, not in the spec) The deletion got no answer and the account service still lists the vault: it may
     /// or may not have been deleted. Said so, with a check that sends nothing to the vault.
     public var unconfirmed = false
@@ -31,7 +36,7 @@ public struct DeleteVaultState: Equatable, Sendable, CustomStringConvertible, Cu
 
     /// Whether the deletion can go, with [pinTyped] digits on the keypad (the PIN is handed over with the first press).
     public func ready(pinTyped: Int) -> Bool {
-        DeletePhrase.matches(phrase) && pinTyped >= Self.minPin && !password.isEmpty && acknowledged
+        DeletePhrase.matches(phrase) && pinTyped >= Self.minPin && !password.isEmpty && acknowledged && !waiting
     }
 
     public var description: String {
@@ -68,12 +73,12 @@ public final class DeleteVaultViewModel {
     /// The PIN from the keypad, handed over once with the first press.
     public func setPin(_ v: String) {
         state.pin = String(v.filter { $0.isASCII && $0.isNumber }.prefix(PinPolicy.maxLength))
-        state.error = nil
+        state.clearError()
     }
 
     public func setPassword(_ v: String) {
         state.password = v
-        state.error = nil
+        state.clearError()
     }
 
     public func setAcknowledged(_ v: Bool) { state.acknowledged = v }
@@ -100,7 +105,7 @@ public final class DeleteVaultViewModel {
         guard s.ready(pinTyped: s.pin.count), !s.busy else { return }
         state.confirming = false
         state.busy = true
-        state.error = nil
+        state.clearError()
         state.errorRetryAt = nil
         state.unconfirmed = false
         state.notDeleted = false

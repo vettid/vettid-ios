@@ -8,10 +8,15 @@ public struct RotateState: Equatable, Sendable, CustomStringConvertible, CustomD
     public var busy = false
     public var error: FailureKind?
     /// The end of the wait the failure asked for (`retry_after`), or nil (``WaitText``).
-    public var errorRetryAt: Date?
+    public var errorRetryAt: WaitDeadline?
+    /// The wait runs: the send is held back until it ends (VAULT-MESSAGING §10.1: the app does not resend before it ends).
+    public var waiting: Bool { errorRetryAt?.isRunning() == true }
+
+    /// Clears the failure, except while its wait runs (the notice says why the send is held back).
+    public mutating func clearError() { if !waiting { error = nil } }
     public var done = false
 
-    public init(error: FailureKind? = nil, retryAt: Date? = nil, done: Bool = false) {
+    public init(error: FailureKind? = nil, retryAt: WaitDeadline? = nil, done: Bool = false) {
         self.error = error
         errorRetryAt = retryAt
         self.done = done
@@ -40,14 +45,14 @@ public final class RotateViewModel {
 
     public func setPassword(_ v: String) {
         state.password = v
-        state.error = nil
+        state.clearError()
     }
 
     public func submit() {
         let pw = state.password
-        guard !pw.isEmpty, !state.busy else { return }
+        guard !pw.isEmpty, !state.busy, !state.waiting else { return }
         state.busy = true
-        state.error = nil
+        state.clearError()
         let repo = repo
         work.launch { [weak self] in
             do {

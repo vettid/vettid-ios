@@ -17,10 +17,11 @@ struct ErrorNotice: View {
         if let kind = state.error {
             let text = override != nil && kind == override
                 ? overrideText ?? kind.message(timeScale: timeScale) : Self.message(kind, state.errorRetryAt, timeScale: timeScale)
-            let spoken = kind == .rateLimited ? WaitText.spoken(kind, retryAt: state.errorRetryAt) : nil
+            let wait = state.errorRetryAt.map { WaitDeadline(date: $0) }
+            let spoken = kind == .rateLimited ? WaitText.spoken(kind, retryAt: wait) : nil
             Group {
-                if kind == .rateLimited, WaitText.seconds(until: state.errorRetryAt) != nil {
-                    WaitNotice(kind, title: OnboardingStrings.progressFailed, retryAt: state.errorRetryAt)
+                if kind == .rateLimited, WaitText.seconds(until: wait) != nil {
+                    WaitNotice(kind, title: OnboardingStrings.progressFailed, retryAt: wait)
                 } else {
                     NoticeCard(.urgent, title: OnboardingStrings.progressFailed, message: text, announce: .assertive, spokenMessage: spoken)
                 }
@@ -36,8 +37,8 @@ extension ErrorNotice {
     static func message(_ kind: FailureKind, _ retryAt: Date?, timeScale: UInt64) -> String {
         if kind == .enrollmentStarted, let retryAt { return FailureKind.enrollmentStartedText(after: retryAt) }
         // A `429`'s wait (`Retry-After`), in Android's words for the recovery's (RecoveryStrings.recoverRateLimitedWait).
-        if kind == .rateLimited, WaitText.seconds(until: retryAt) != nil {
-            return WaitText.message(kind, retryAt: retryAt, timeScale: timeScale)
+        if kind == .rateLimited, let retryAt, WaitText.seconds(until: WaitDeadline(date: retryAt)) != nil {
+            return WaitText.message(kind, retryAt: WaitDeadline(date: retryAt), timeScale: timeScale)
         }
         return kind.message(timeScale: timeScale)
     }

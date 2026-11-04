@@ -41,7 +41,8 @@ public struct NewPhoneSecretContent: View {
     }
 
     public var body: some View {
-        screenBody.holdsInput(state.holdsInput)
+        // Built again each second while a wait runs, so that the send is held back for all of it and released after.
+        WaitingContent(until: state.errorRetryAt) { _ in screenBody }.holdsInput(state.holdsInput)
     }
 
     @ViewBuilder private var screenBody: some View {

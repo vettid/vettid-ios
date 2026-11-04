@@ -52,7 +52,7 @@ public struct DeleteVaultContent: View {
     }
 
     public var body: some View {
-        form.holdsInput(state.holdsInput)
+        WaitingContent(until: state.errorRetryAt) { _ in form }.holdsInput(state.holdsInput)
     }
 
     @ViewBuilder private var form: some View {

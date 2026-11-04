@@ -26,7 +26,12 @@ public struct ChangePinState: Equatable, Sendable, CustomStringConvertible, Cust
     public var busy = false
     public var error: FailureKind?
     /// The end of the wait the failure asked for (`retry_after`), or nil (``WaitText``).
-    public var errorRetryAt: Date?
+    public var errorRetryAt: WaitDeadline?
+    /// The wait runs: the send is held back until it ends (VAULT-MESSAGING §10.1: the app does not resend before it ends).
+    public var waiting: Bool { errorRetryAt?.isRunning() == true }
+
+    /// Clears the failure, except while its wait runs (the notice says why the send is held back).
+    public mutating func clearError() { if !waiting { error = nil } }
     public var done = false
     /// (Release R, VAULT-MESSAGING §11.14.9) `pin.change` is a credential operation: the password too, and the phone's next
     /// secret. Its answer gives the recovery 10 new attempts.
@@ -115,7 +120,7 @@ public final class ChangePinViewModel {
     /// The current PIN from the keypad, handed over once.
     public func setCurrent(_ v: String) {
         state.current = Self.digits(v)
-        state.error = nil
+        state.clearError()
     }
 
     /// The new PIN from the keypad, handed over once.
@@ -133,7 +138,7 @@ public final class ChangePinViewModel {
 
     public func setPassword(_ v: String) {
         state.password = v
-        state.error = nil
+        state.clearError()
     }
 
     /// The keypad's "Continue": from the current PIN to the new one, then (the rules and "different" checked) to its
@@ -205,6 +210,7 @@ public final class ChangePinViewModel {
     }
 
     public func submit() {
+        if state.waiting { return }
         let s = state
         let problem = PinPolicy.check(s.pin)
         if s.current.isEmpty { return }
@@ -229,7 +235,7 @@ public final class ChangePinViewModel {
 
     private func send(_ s: ChangePinState) {
         state.busy = true
-        state.error = nil
+        state.clearError()
         state.check = nil
         let vault = vault
         work.launch { [weak self] in
@@ -284,7 +290,7 @@ public final class ChangePinViewModel {
     /// PIN, a wrong password the password (the confirmation is typed again on the keypad with it); the new PIN stays. Any
     /// other failure has every entry typed again, from the current PIN (on the iPhone's keypad steps; vettid-android
     /// clears the current PIN and the password): chosen; not in the spec.
-    private func failed(_ kind: FailureKind, kept s: ChangePinState, retryAt: Date? = nil) {
+    private func failed(_ kind: FailureKind, kept s: ChangePinState, retryAt: WaitDeadline? = nil) {
         var next: ChangePinState
         switch kind {
         case .badPin:
