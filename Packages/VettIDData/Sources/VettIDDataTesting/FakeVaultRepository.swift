@@ -40,6 +40,8 @@ public final class FakeVaultRepository: CustomStringConvertible {
     public var unconfirmedMove: UnconfirmedMove?
     public var returnPins: [String] = []
     public var returnStarts = true
+    /// TEST ONLY: why the way back is refused when ``returnStarts`` is false.
+    public var returnRefusal: ReturnRefusal?
 
     // VaultRepository.
     /// Set by a test: the open app was sent to the unlock screen after repeated relay refusals.
@@ -326,9 +328,6 @@ extension FakeVaultRepository: AccountRepository {
         calls.append("dismissVaultDeletedNotice")
         vaultDeletedNotice = false
     }
-
-    /// TEST ONLY: why the way back is refused when ``returnStarts`` is false.
-    public var returnRefusal: ReturnRefusal?
 
     public func returnToPreviousReleaseRefusal() -> ReturnRefusal? { returnRefusal }
 
