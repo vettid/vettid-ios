@@ -61,42 +61,55 @@ extension MailboxCollectorTests {
     /// The same through the collector: three sessions of a minute, each ended by a ping; the second socket is tried after
     /// 5 s of long-poll, the third after 10 s (with the count reset, both would come after 5 s).
     @Test func socketsEndedByPingsBackOffInTheCollector() async throws {
-        let clock = PauseClock()
-        let ping = RelayError(status: 503, code: "http_ping")
-        let sockets = (1...3).map { FakeStream([Self.msg("01S\($0)")], end: ping) }
-        let polls = (0..<200).map { SourceStep.messages([Self.msg("01P\($0)")]) }
-        let src = FakeSource(polls, stream: sockets[0], later: Array(sockets.dropFirst()))
-        let opened = Recorder<Date>()
-        await #expect(throws: RelayError.self) {
-            try await MailboxCollector(source: src, mode: .webSocket, now: { clock.value }, sleep: { clock.advance($0) }).run {
-                if $0.msgID.hasPrefix("01S") {
-                    opened.add(clock.value)
-                    clock.advance(60) // the session holds a minute, then its ping goes unanswered
-                } else {
-                    clock.advance(1) // a long-poll round
-                }
-            }
-        }
-        let gaps = zip(opened.all.dropFirst(), opened.all).map { $0.timeIntervalSince($1) - 60 }
-        // Each gap is the pause rounded up to the next whole long-poll round.
+        let gaps = await socketGaps(sessions: 3, held: 60, end: RelayError(status: 503, code: "http_ping"))
         #expect(gaps.count == 2 && gaps[0] > 5 && gaps[0] <= 6 && gaps[1] > 10 && gaps[1] <= 11, "\(gaps)")
     }
 
-    /// A session that held and then closed normally (a relay restart) is collected by long-poll for the first refusal
-    /// pause (5 s) before the socket is tried again, not reopened at once.
-    @Test func aSessionClosedNormallyAfterItHeldPausesTheSocket() async throws {
+    /// The times the sockets' messages were handled, with [sessions] sockets that each hold [held] seconds (their message's
+    /// handling) and then end with [end] (nil: closed normally); every long-poll round takes 1 s, and the pause's jitter is
+    /// [jitter]. Gaps between them less [held] are the pauses, rounded up to the next whole round.
+    func socketGaps(sessions: Int, held: TimeInterval, end: Error?, jitter: TimeInterval = 0) async -> [TimeInterval] {
         let clock = PauseClock()
-        let src = FakeSource([.messages([Self.msg("01B")])], stream: FakeStream([Self.msg("01A")], end: nil))
-        let opensWhenHandled = Recorder<Int>()
+        let sockets = (1...sessions).map { FakeStream([Self.msg("01S\($0)")], end: end) }
+        let polls = (0..<2_000).map { SourceStep.messages([Self.msg("01P\($0)")]) }
+        let src = FakeSource(polls, stream: sockets[0], later: Array(sockets.dropFirst()))
+        let opened = Recorder<Date>()
+        let collector = MailboxCollector(
+            source: src, mode: .webSocket, now: { clock.value }, sleep: { clock.advance($0) }, random: { _ in jitter }
+        )
         await #expect(throws: RelayError.self) {
-            try await MailboxCollector(source: src, mode: .webSocket, now: { clock.value }, sleep: { clock.advance($0) }).run {
-                opensWhenHandled.add(src.lock.withLock { src.streamOpens })
-                if $0.msgID == "01A" { clock.advance(10) } // the session holds 10 s, then the relay closes it normally
+            try await collector.run {
+                if $0.msgID.hasPrefix("01S") {
+                    opened.add(clock.value)
+                    clock.advance(held)
+                } else {
+                    clock.advance(1)
+                }
             }
         }
-        // 01B came by long-poll before the socket was opened again: the pause, not an immediate reconnect.
-        #expect(opensWhenHandled.all == [1, 1])
-        #expect(MailboxCollector(source: src).socketPause(MailboxCollector.closedNormally, 0) == 5)
+        return zip(opened.all.dropFirst(), opened.all).map { $0.timeIntervalSince($1) - held }
+    }
+
+    /// A session that held a minute and then closed normally (a relay restart) is collected by long-poll for the first
+    /// refusal pause (5 s) and the jitter before the socket is tried again: not reopened at once, and reopened after it.
+    @Test func aSessionClosedNormallyAfterItHeldPausesTheSocket() async throws {
+        let gaps = await socketGaps(sessions: 3, held: 60, end: nil, jitter: 3)
+        #expect(gaps.count == 2 && gaps.allSatisfy { $0 > 8 && $0 <= 9 }, "5 s and 3 s of jitter each time: \(gaps)")
+        #expect(MailboxCollector(source: FakeSource([])).socketPause(MailboxCollector.normalClose, 0) == 5)
+    }
+
+    /// A relay that closes normally every few seconds backs off: a session shorter than ``MailboxCollector/heldSession``
+    /// adds to the pauses in a row.
+    @Test func aRelayThatKeepsClosingBacksOff() async throws {
+        let gaps = await socketGaps(sessions: 4, held: 3, end: nil)
+        #expect(gaps.count == 3 && gaps[0] > 5 && gaps[0] <= 6 && gaps[1] > 10 && gaps[1] <= 11 && gaps[2] > 20 && gaps[2] <= 21, "\(gaps)")
+    }
+
+    /// A ping end after a session longer than the fallback period starts the refusals in a row again: an occasional
+    /// one in a long run is paused 5 s each time, not more each time.
+    @Test func aPingEndAfterAVeryLongSessionResetsTheRefusals() async throws {
+        let gaps = await socketGaps(sessions: 3, held: 400, end: RelayError(status: 503, code: "http_ping"))
+        #expect(gaps.count == 2 && gaps.allSatisfy { $0 > 5 && $0 <= 6 }, "\(gaps)")
     }
 
     /// The relay's close code 4404 wins over this side's ping end: the collection ends with `mailbox_unknown`, and is not
