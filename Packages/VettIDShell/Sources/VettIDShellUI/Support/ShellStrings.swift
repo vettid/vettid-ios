@@ -280,7 +280,12 @@ enum ShellStrings {
     }
 
     static var ownerCheckNoticeFailedPin: String {
-        String(localized: "owner_check_notice_failed_pin", defaultValue: "A daily check failed: wrong PIN.", bundle: .module)
+        String(localized: "owner_check_notice_failed_pin", defaultValue: "A PIN check failed: wrong PIN.", bundle: .module)
+    }
+
+    /// A failed check whose `ref` is neither `pin` nor `password` (the vault sends only those two today).
+    static var ownerCheckNoticeFailed: String {
+        String(localized: "owner_check_notice_failed", defaultValue: "A daily check failed.", bundle: .module)
     }
 
     static var ownerCheckNoticeFailedPassword: String {

@@ -81,6 +81,8 @@ import VettIDData
         #expect(OwnerCheckNoticeText.of(notice("owner_check.locked", "10")) == .locked)
         #expect(OwnerCheckNoticeText.of(notice("owner_check.failed", "pin")) == .failedPin)
         #expect(OwnerCheckNoticeText.of(notice("owner_check.failed", "password")) == .failedPassword)
+        #expect(OwnerCheckNoticeText.of(notice("owner_check.failed", nil)) == .failed)
+        #expect(OwnerCheckNoticeText.of(notice("owner_check.failed", "other")) == .failed)
         #expect(OwnerCheckNoticeText.of(notice("owner_check.hold_changed", "off")) == .holdOff)
         #expect(OwnerCheckNoticeText.of(notice("owner_check.hold_changed", "on")) == .holdOn)
         #expect(OwnerCheckNoticeText.of(notice("owner_check.hold_changed", "on:expired")) == .holdExpired)

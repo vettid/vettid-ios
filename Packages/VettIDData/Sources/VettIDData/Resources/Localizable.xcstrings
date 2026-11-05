@@ -2115,7 +2115,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "A daily check failed: wrong PIN"
+            "value": "A PIN check failed: wrong PIN"
           }
         }
       }

@@ -562,6 +562,17 @@
         }
       }
     },
+    "owner_check_notice_failed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A daily check failed."
+          }
+        }
+      }
+    },
     "owner_check_notice_failed_password": {
       "extractionState": "manual",
       "localizations": {
@@ -579,7 +590,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "A daily check failed: wrong PIN."
+            "value": "A PIN check failed: wrong PIN."
           }
         }
       }

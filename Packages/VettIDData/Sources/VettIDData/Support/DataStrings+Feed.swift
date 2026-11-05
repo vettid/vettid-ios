@@ -378,7 +378,7 @@ extension DataStrings {
     static var feedCheckFailedPin: String {
         String(
             localized: "data_feed_check_failed_pin",
-            defaultValue: "A daily check failed: wrong PIN",
+            defaultValue: "A PIN check failed: wrong PIN",
             bundle: .module
         )
     }

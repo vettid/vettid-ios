@@ -74,6 +74,7 @@ public enum HistoryKindTexts {
         "history_kind_owner_check_passed": "Daily check passed",
         "history_kind_owner_check_held": "Vault held for the daily check",
         "history_kind_owner_check_failed": "Daily check failed",
+        "history_kind_owner_check_failed_pin": "A PIN check failed: wrong PIN",
         "history_kind_owner_check_locked": "Vault locked after failed daily checks",
         "history_kind_owner_check_hold_changed": "Daily check hold changed",
         "history_kind_device_paired": "Device paired",

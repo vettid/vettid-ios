@@ -163,7 +163,7 @@ import VettIDVault
         #expect(t("credential.alarm", nil) == "Your credential was used somewhere else")
         #expect(t("credential.password_failed", nil) == "Wrong credential password entered")
         #expect(t("credential.rotated", nil) == "Your credential was renewed" && t("credential.reset", nil) == "Your credential was reset")
-        #expect(t("owner_check.failed", "pin") == "A daily check failed: wrong PIN")
+        #expect(t("owner_check.failed", "pin") == "A PIN check failed: wrong PIN")
         #expect(t("owner_check.failed", "password") == "A daily check failed: wrong password")
         #expect(t("owner_check.failed", nil) == "A daily check failed" && t("owner_check.locked", nil) == "Your vault locked after 10 failed checks")
         #expect(t("owner_check.hold_changed", "on") == "Hold turned on" && t("owner_check.hold_changed", "off") == "Hold turned off")
