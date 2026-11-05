@@ -43,9 +43,13 @@ struct FakeTransferStore {
     var revokedDeposits = 0
     var collectRefused = false
     var collectFailures = 0
-    /// The collects of the device's mailbox being answered now (a long poll held while nothing waits), by number.
+    /// The collects of the device's mailbox being answered now (a long poll held while nothing waits), by number. (Kept
+    /// here for the file's length; they count every collect of the device's mailbox.)
     var collecting: Set<Int> = []
     var collectSeq = 0
+    /// At the last restart of a test phone: the collects its old process left in flight, and whether one outlived the wait.
+    var restartLeft = 0
+    var restartOutlived = false
 }
 
 // TEST ONLY. A direct transfer in both directions, as vettid-vault answers it: as the new phone's target
@@ -259,6 +263,12 @@ extension FakeVaultService {
     /// The collects of the device's mailbox the fake is answering now, by number: a long poll it holds while nothing
     /// waits, which takes the next message queued.
     public var collectsInFlight: Set<Int> { locked { transfer.collecting } }
+
+    /// At the last restart of a test phone (``TestVaultPhone/restart()``): how many collects its old process left in
+    /// flight at the halt, and whether one was still in flight when the wait for them gave up.
+    public var lastRestartCollects: (left: Int, outlived: Bool) { locked { (transfer.restartLeft, transfer.restartOutlived) } }
+
+    func noteRestart(left: Int, outlived: Bool) { locked { (transfer.restartLeft, transfer.restartOutlived) = (left, outlived) } }
 
     /// An answer to a `device.list` this phone did not ask just now: sealed under the session, with the `re` of another
     /// request, and a list that does not hold this phone. It is no answer to the check's own request (§11.14.10).

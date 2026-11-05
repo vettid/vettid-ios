@@ -5,12 +5,13 @@ extension TestVaultPhone {
     /// The manager halted (``VaultManager/halt()``), and the process's requests gone with it: a long poll its device left
     /// waiting at the fake relay ends before the next process starts, so that it takes nothing the vault sends from then on
     /// (a halt cancels the task, not the fake's answer to it). Only the collects in flight at the halt are waited for, at
-    /// most a second: another phone's later ones are not.
+    /// most a second: another phone's later ones are not. What it found is kept (``FakeVaultService/lastRestartCollects``).
     func haltProcess() async throws {
         await manager.halt()
         let left = service.collectsInFlight
         for _ in 0..<200 where !service.collectsInFlight.isDisjoint(with: left) {
             try await Task.sleep(for: .milliseconds(5))
         }
+        service.noteRestart(left: left.count, outlived: !service.collectsInFlight.isDisjoint(with: left))
     }
 }

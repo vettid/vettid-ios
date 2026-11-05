@@ -208,6 +208,8 @@ import VettIDDataTesting
         _ = try await scanned()
         #expect(await eventually { !service.collectsInFlight.isEmpty }, "the old device is collecting")
         try await phone.restart()
+        // The run met the race: a collect was held across the halt (else it proves nothing), and it ended in the wait.
+        #expect(service.lastRestartCollects.left > 0 && !service.lastRestartCollects.outlived, "\(service.lastRestartCollects)")
         service.approveTransferIn()
         phone.clockAhead = 700
         try await m.refresh()
