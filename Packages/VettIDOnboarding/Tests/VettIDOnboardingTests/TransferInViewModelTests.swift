@@ -54,6 +54,34 @@ import VettIDDataTesting
         #expect(vm.state.secondsLeft == 570 && vm.state.step == .compare && !vm.state.checking)
     }
 
+    /// (§11.14.10 rule 5) From the end of the vault's 10 minutes, counted from the stored start of the `hs.init`, the
+    /// transfer is not abandoned: no Cancel, and Back only leaves the screen.
+    @Test func noAbandonFromTheVaultsTenMinutes() async throws {
+        let vm = model()
+        vault.transferStartedAt = clock.now().addingTimeInterval(-30)
+        vm.scan()
+        vm.scanned(try qr())
+        await clock.runCurrent()
+        #expect(vm.state.secondsLeft == 630 && !vm.state.closing, "counted from the stored start")
+        await clock.advance(seconds: 570)
+        #expect(vm.state.closing && !vm.state.checking)
+        vm.cancel()
+        #expect(!vm.back(), "Back leaves the screen")
+        await vm.settle()
+        #expect(vm.state.step == .compare && !vault.calls.contains("abandonTransferIn"))
+    }
+
+    /// (§11.14.10 rule 5) A transfer whose session ended in the window has its own step, never "timed out".
+    @Test func anEndedSessionHasItsOwnStep() async throws {
+        let vm = model()
+        vm.scan()
+        vm.scanned(try qr())
+        await clock.runCurrent()
+        vault.transferApproval.fail(VaultFailure(.other, code: VaultManager.codeTransferSessionEnded))
+        await vm.settle()
+        #expect(vm.state.step == .stopped && vm.state.sas == nil)
+    }
+
     /// (§11.14.10 rule 5) Past the deadline the old phone can no longer approve: while the vault is checked for an approval
     /// that came in time, the screen says so instead of counting "0:00 left" beside the code.
     @Test func pastTheDeadlineTheScreenChecksInsteadOfCounting() async throws {
@@ -64,8 +92,9 @@ import VettIDDataTesting
         #expect(!vm.state.checking)
         await clock.advance(seconds: 660)
         #expect(vm.state.secondsLeft == 0 && vm.state.checking && vm.state.step == .compare)
+        // No abandon now: Cancel is gone, and asking for it changes nothing.
         vm.cancel()
-        #expect(!vm.state.checking)
+        #expect(vm.state.checking && vm.state.step == .compare)
     }
 
     /// Release R: the phone key made for the transfer is known to the screen ("Finish the move" follows).

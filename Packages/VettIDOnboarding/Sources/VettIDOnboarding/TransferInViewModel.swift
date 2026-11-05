@@ -15,6 +15,8 @@ public final class TransferInViewModel: TransferInActions {
     /// The one deadline: 11 minutes after the `hs.init` was started (VAULT-MESSAGING §11.14.10 rule 5; owner decision,
     /// 2026-10-23): the vault's 10 minutes (§6.7, 0.10.4) plus about a minute of grace.
     static let window: TimeInterval = 660
+    /// The vault's 10 minutes (§6.7, 0.10.4): no abandon from their end (§11.14.10 rule 5).
+    static let approvalWindow: TimeInterval = 600
 
     public private(set) var state = TransferInState()
 
@@ -63,6 +65,9 @@ public final class TransferInViewModel: TransferInActions {
             state.step = .intro
             state.inputProblem = nil
             return true
+        case .compare where state.closing:
+            // Leaving is all that Back does then (the screen goes, and the wait goes on in the background).
+            return false
         case .connecting, .compare:
             cancel()
             return true
@@ -105,9 +110,11 @@ public final class TransferInViewModel: TransferInActions {
         // after every await it stops if it was cancelled: Swift cannot interrupt an await, and a repository that returns
         // normally after `cancel()` must not move the state.
         waiter = Task { @MainActor [weak self, move, vault, now, sleep] in
-            let deadline = now().addingTimeInterval(Self.window)
+            let scanned = now()
             guard let sas = await Self.connect(Weak(self), move, sleep, text, from: from) else { return }
-            await Self.awaitApproval(Weak(self), move, vault, sas: sas, deadline: deadline)
+            // Counted from the stored start of the `hs.init`, as the manager's deadline is (the scan's moment without it).
+            let started = move.transferStartedAt ?? scanned
+            await Self.awaitApproval(Weak(self), move, vault, sas: sas, deadline: started.addingTimeInterval(Self.window))
         }
     }
 
@@ -177,6 +184,10 @@ public final class TransferInViewModel: TransferInActions {
     private func approvalFailed(_ e: VaultFailure) {
         ticker?.cancel()
         state.sas = nil
+        if e.code == VaultManager.codeTransferSessionEnded {
+            state.step = .stopped
+            return
+        }
         switch e.kind {
         case .rejected: state.step = .rejected
         case .noResponse: state.step = .timedOut
@@ -234,16 +245,20 @@ public final class TransferInViewModel: TransferInActions {
         let left = max(Int64(deadline.timeIntervalSince(now()).rounded(.down)), 0)
         state.secondsLeft = left
         state.checking = left == 0
+        state.closing = Double(left) <= Self.window - Self.approvalWindow
         return left > 0
     }
 
     /// Leaves a transfer in progress: nothing was approved, so nothing changes; the handshake state is dropped.
     public func cancel() {
+        // No abandon from the end of the vault's 10 minutes (§11.14.10 rule 5): the button is gone then.
+        guard !state.closing else { return }
         waiter?.cancel()
         ticker?.cancel()
         state.step = .intro
         state.busy = false
         state.checking = false
+        state.closing = false
         state.sas = nil
         state.deadline = nil
         work.launch { [weak self] in await self?.abandon() }

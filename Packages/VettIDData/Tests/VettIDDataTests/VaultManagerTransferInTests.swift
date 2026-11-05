@@ -233,8 +233,9 @@ import VettIDDataTesting
         try await phone.restartLeavingCollects()
         phone.windowPauses.holding = true
         service.approveTransferIn()
-        // The dead request took it: nothing is queued until its lease ends.
-        #expect(await eventually { service.lastRestartCollects.left > 0 })
+        // The dead request took it: nothing is queued, it is leased, until its lease ends.
+        #expect(service.lastRestartCollects.left > 0, "a collect was left open")
+        #expect(await eventually { service.mailboxCounts == (queued: 0, leased: 1) }, "\(service.mailboxCounts)")
         phone.clockAhead = 700
         try await m.refresh()
         #expect(await eventually(within: .seconds(30)) { m.finishMovePending && m.record.value.transferStartedMs == nil })

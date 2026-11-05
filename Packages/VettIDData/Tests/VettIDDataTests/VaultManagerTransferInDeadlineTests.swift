@@ -68,8 +68,9 @@ extension VaultManagerTransferInTests {
         #expect(phone.attester.discarded == phone.attester.attested)
     }
 
-    /// A collect that keeps failing until the window of collects ends (here at once) drops: no reason to keep the keys longer.
-    @Test func aFailedCollectDropsEvenWithAnApprovalWaiting() async throws {
+    /// The mailbox gone (`mailbox_unknown`) at the deadline: the session ended, reported as ended (not as a drop), and the
+    /// keys go: no reason to keep them longer.
+    @Test func aGoneMailboxEndsTheSessionEvenWithAnApprovalWaiting() async throws {
         defer { phone.close() }
         _ = try await scanned()
         phone.clockAhead = 600
@@ -81,7 +82,7 @@ extension VaultManagerTransferInTests {
         phone.clockAhead = 700
         phone.deadlinePauses.release()
         let failure = await vaultFailure { _ = try await waiting.value }
-        #expect(failure?.kind == .noResponse && !deviceHoldsVault && !pendingRecord)
+        #expect(failure?.code == VaultManager.codeTransferSessionEnded && !deviceHoldsVault && !pendingRecord)
     }
 
     /// No user action extends the deadline: asking again, or leaving and coming back, keeps the stored moment.
@@ -261,11 +262,16 @@ extension VaultManagerTransferInTests {
         _ = try await scanned()
         try await phone.restart()
         phone.windowPauses.holding = true
-        service.approveTransferIn()
-        service.failNextCollects(RelayClient.defaultAttempts + 1)
         phone.clockAhead = 700
         try await m.refresh()
+        // Only the window collects: a failure is its own to retry. The stopped collector's long poll may be held at the
+        // relay: what it takes is leased, as a relay does, and reappears.
+        service.leasesCollected = 0.3
+        m.session?.device.stop()
+        service.failNextCollects(RelayClient.defaultAttempts + 1)
+        service.approveTransferIn()
         #expect(await eventually(within: .seconds(30)) { m.finishMovePending && m.record.value.transferStartedMs == nil })
+        #expect(service.collectFailuresLeft == 0, "the window met the failure, and tried again")
         phone.windowPauses.release()
     }
 
@@ -289,8 +295,8 @@ extension VaultManagerTransferInTests {
         #expect(m.transferEnd == nil)
     }
 
-    /// An abandon during the window cuts it short and drops at once.
-    @Test func anAbandonCutsTheWindowShort() async throws {
+    /// No abandon during the window (§11.14.10 rule 5): it is refused, and the transfer waits for the window's end.
+    @Test func noAbandonDuringTheWindow() async throws {
         defer { phone.close() }
         _ = try await scanned()
         try await phone.restart()
@@ -298,8 +304,73 @@ extension VaultManagerTransferInTests {
         phone.clockAhead = 700
         try await m.refresh()
         #expect(await eventually { !phone.windowPauses.lengths.isEmpty })
-        try await m.abandonTransferIn()
-        #expect(m.record.value.transferStartedMs == nil && !deviceHoldsVault && !pendingRecord)
+        let refused = await vaultFailure { try await m.abandonTransferIn() }
+        #expect(refused?.code == VaultManager.codeTransferWaiting)
+        #expect(m.record.value.transferStartedMs != nil && deviceHoldsVault && pendingRecord, "kept for the window")
+        phone.windowPauses.release()
+        #expect(await eventually(within: .seconds(30)) { m.record.value.transferStartedMs == nil })
+    }
+
+    /// Nor from the end of the vault's 10 minutes, before the deadline: an approval may just have reached the vault.
+    @Test func noAbandonFromTheVaultsTenMinutes() async throws {
+        defer { phone.close() }
+        _ = try await scanned()
+        phone.clockAhead = 610
+        let refused = await vaultFailure { try await m.abandonTransferIn() }
+        #expect(refused?.code == VaultManager.codeTransferWaiting)
+        #expect(m.record.value.transferStartedMs != nil && deviceHoldsVault && pendingRecord)
+    }
+
+    /// A new code during the window is refused (one window at a time): the old window's drop must never take a new
+    /// transfer's keys with it.
+    @Test func aNewCodeDuringTheWindowIsRefused() async throws {
+        defer { phone.close() }
+        _ = try await scanned()
+        try await phone.restart()
+        phone.windowPauses.holding = true
+        phone.clockAhead = 700
+        try await m.refresh()
+        #expect(await eventually { !phone.windowPauses.lengths.isEmpty })
+        phone.clockAhead = 0
+        // Refused at once, before anything is sent (a transfer that went on would wait for its `hs.resp`).
+        let attempt = Attempt()
+        let task = Task { @MainActor in attempt.failure = await vaultFailure { _ = try await m.transferIn(code: try code()) } }
+        #expect(await eventually(within: .seconds(5)) { attempt.failure != nil }, "refused at once")
+        task.cancel()
+        let refused = attempt.failure
+        #expect(refused?.kind == .enrollmentStarted && refused?.code == VaultManager.codeTransferWaiting)
+        #expect(service.transferInits.count == 1, "nothing sent for the new code")
+        phone.windowPauses.release()
+    }
+
+    /// A session that ends during the window (`mailbox_unknown`) is reported as ended, never as dropped, also on the
+    /// welcome screen.
+    @Test func anEndedSessionInTheWindowIsReportedAsEnded() async throws {
+        defer { phone.close() }
+        _ = try await scanned()
+        try await phone.restart()
+        phone.windowPauses.holding = true
+        service.refusesCollect = true
+        phone.clockAhead = 700
+        try await m.refresh()
+        #expect(await eventually(within: .seconds(30)) { m.transferEnd == .stopped })
+        #expect(m.record.value.transferStartedMs == nil && !deviceHoldsVault, "its dead handshake goes")
+        phone.windowPauses.release()
+    }
+
+    /// Back in the foreground during the window, a full window runs again: a suspended app's collects were cut, and their
+    /// leases may still run.
+    @Test func aReturnToTheForegroundRunsAFullWindowAgain() async throws {
+        defer { phone.close() }
+        _ = try await scanned()
+        try await phone.restart()
+        phone.windowPauses.holding = true
+        phone.clockAhead = 700
+        try await m.refresh()
+        #expect(await eventually { phone.windowPauses.lengths == [90] })
+        m.onForeground()
+        #expect(await eventually { phone.windowPauses.lengths == [90, 90] }, "\(phone.windowPauses.lengths)")
+        phone.windowPauses.release()
     }
 
     /// A rejection during the window drops at once, without waiting for its end.
@@ -375,5 +446,11 @@ extension VaultManagerTransferInTests {
         #expect(deviceHoldsVault, "the pinned vault kept")
         #expect(pendingRecord, "the epoch-1 secret kept")
         phone.windowPauses.release()
+    }
+
+    /// What a transfer started in a task of its own ended with.
+    @MainActor
+    final class Attempt {
+        var failure: VaultFailure?
     }
 }

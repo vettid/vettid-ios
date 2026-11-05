@@ -3648,6 +3648,39 @@
         }
       }
     },
+    "transfer_in_checking_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Checking with your vault"
+          }
+        }
+      }
+    },
+    "transfer_in_stopped_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This phone stopped before it could check whether your old phone approved. If you approved the move there, recover your vault on this phone. If not, show a new code on your old phone."
+          }
+        }
+      }
+    },
+    "transfer_in_stopped_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The move stopped on this phone"
+          }
+        }
+      }
+    },
     "transfer_in_title": {
       "extractionState": "manual",
       "localizations": {

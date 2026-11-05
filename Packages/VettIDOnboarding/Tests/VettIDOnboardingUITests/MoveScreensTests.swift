@@ -52,7 +52,9 @@ import VettIDUI
             ("paste, running", with(.paste) { $0.input = "eyJ2Ijoy"; $0.busy = true }),
             ("connecting", with(.connecting) { $0.busy = true }),
             ("compare", with(.compare) { $0.sas = "042817"; $0.secondsLeft = 540 }),
-            ("compare, checking", with(.compare) { $0.sas = "042817"; $0.checking = true }),
+            ("compare, checking", with(.compare) { $0.sas = "042817"; $0.checking = true; $0.closing = true }),
+            ("compare, closing", with(.compare) { $0.sas = "042817"; $0.secondsLeft = 40; $0.closing = true }),
+            ("stopped", with(.stopped)),
             ("done", with(.done)),
             ("done, phone secret", with(.done) { $0.phoneSecret = true }),
             ("done, no user_guid", with(.done) { $0.canUnlockLater = false }),
@@ -144,6 +146,22 @@ import VettIDUI
         }
     }
 
+    /// (§11.14.10 rule 5) Leaving the screen from the end of the vault's 10 minutes abandons nothing: the manager waits for
+    /// the transfer in the background.
+    @Test func leavingLateHandsTheWaitToTheBackground() async throws {
+        let vault = FakeVaultRepository(.setup(.vaultElsewhere))
+        let clock = VirtualTime()
+        let model = TransferInViewModel(move: vault, vault: vault, now: clock.now, sleep: clock.sleep)
+        model.scan()
+        model.scanned(try qr(clock))
+        await clock.runCurrent()
+        await clock.advance(seconds: 610)
+        #expect(model.state.closing)
+        TransferInRoute.leave(model, move: vault, movedIn: false)
+        for _ in 0..<50 { await Task.yield() }
+        #expect(vault.calls.contains("waitForTransferInBackground") && !vault.calls.contains("abandonTransferIn"))
+    }
+
     private func handshakeWindow(_ vault: FakeVaultRepository, _ clock: VirtualTime) async throws -> UIWindow {
         let model = TransferInViewModel(move: vault, vault: vault, now: clock.now, sleep: clock.sleep)
         model.scan()
@@ -155,7 +173,7 @@ import VettIDUI
 
     @Test func onlyAHandshakeUnderWayIsCancelled() {
         let cancelling: Set<TransferInStep> = [.connecting, .compare]
-        for step in [TransferInStep.intro, .scan, .paste, .connecting, .compare, .done, .rejected, .timedOut, .notAnswered] {
+        for step in [TransferInStep.intro, .scan, .paste, .connecting, .compare, .done, .rejected, .timedOut, .notAnswered, .stopped] {
             #expect(TransferInRoute.cancels(step) == cancelling.contains(step), "\(step)")
         }
     }

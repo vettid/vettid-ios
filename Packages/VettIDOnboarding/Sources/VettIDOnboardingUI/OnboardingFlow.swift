@@ -16,7 +16,7 @@ public struct OnboardingRoutes: Sendable {
         _ onOpenAccountSite: @escaping @MainActor () -> Void
     ) -> AnyView
     /// The direct transfer from the old phone (§6.7.1).
-    public var transferIn: @MainActor (_ onLeave: @escaping @MainActor () -> Void) -> AnyView
+    public var transferIn: @MainActor (_ onLeave: @escaping @MainActor () -> Void, _ onRecover: @escaping @MainActor () -> Void) -> AnyView
     /// The last screen after a move to this phone (``OnboardingState/movedIn``): "Finish the move" while
     /// ``OnboardingState/finishMovePending``, otherwise the move's own "done" screen; `finish` leaves onboarding.
     public var movedIn: @MainActor (_ state: OnboardingState, _ finish: @escaping @MainActor () -> Void) -> AnyView
@@ -27,7 +27,9 @@ public struct OnboardingRoutes: Sendable {
             _ onNewVault: @escaping @MainActor () -> Void,
             _ onOpenAccountSite: @escaping @MainActor () -> Void
         ) -> AnyView,
-        transferIn: @escaping @MainActor (_ onLeave: @escaping @MainActor () -> Void) -> AnyView,
+        transferIn: @escaping @MainActor (
+            _ onLeave: @escaping @MainActor () -> Void, _ onRecover: @escaping @MainActor () -> Void
+        ) -> AnyView,
         movedIn: @escaping @MainActor (_ state: OnboardingState, _ finish: @escaping @MainActor () -> Void) -> AnyView
     ) {
         self.recover = recover
@@ -38,7 +40,7 @@ public struct OnboardingRoutes: Sendable {
     /// Nothing wired yet (previews, the screen catalog, and the app until those rows arrive).
     public static let pending = OnboardingRoutes(
         recover: { _, _, _ in AnyView(EmptyView()) },
-        transferIn: { _ in AnyView(EmptyView()) },
+        transferIn: { _, _ in AnyView(EmptyView()) },
         movedIn: { _, _ in AnyView(EmptyView()) }
     )
 }
@@ -56,7 +58,9 @@ public extension OnboardingRoutes {
                     )
                 )
             },
-            transferIn: { onLeave in AnyView(TransferInRoute(move: move, vault: vault, onLeave: onLeave)) },
+            transferIn: { onLeave, onRecover in
+                AnyView(TransferInRoute(move: move, vault: vault, onLeave: onLeave, onRecover: onRecover))
+            },
             movedIn: { state, finish in AnyView(MovedInScreen(state: state, vault: vault, finish: finish)) }
         )
     }
@@ -163,7 +167,7 @@ public struct OnboardingContent: View {
         case .recover:
             routes.recover({ [actions] in actions.leaveMove() }, { [actions] in actions.newVaultAfterMove() }, onOpenAccountSite)
         case .transferIn:
-            routes.transferIn({ [actions] in actions.leaveMove() })
+            routes.transferIn({ [actions] in actions.leaveMove() }, { [actions] in actions.startRecovery() })
         }
     }
 

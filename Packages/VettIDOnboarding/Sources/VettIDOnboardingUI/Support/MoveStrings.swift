@@ -170,6 +170,7 @@ enum MoveStrings {
     /// completing.
     static func transferEndTitle(_ end: TransferEnd) -> String {
         switch end {
+        case .stopped: transferInStoppedTitle
         case .timedOut:
             String(localized: "transfer_in_background_timeout_title", defaultValue: "The move to this phone didn't finish", bundle: .module)
         case .declined:
@@ -179,6 +180,7 @@ enum MoveStrings {
 
     static func transferEndBody(_ end: TransferEnd) -> String {
         switch end {
+        case .stopped: transferInStoppedBody
         case .timedOut:
             String(
                 localized: "transfer_in_background_timeout_body",
@@ -195,6 +197,28 @@ enum MoveStrings {
                 bundle: .module
             )
         }
+    }
+
+    /// The title of the screen after the deadline, while the vault is checked.
+    static var transferInCheckingTitle: String {
+        String(localized: "transfer_in_checking_title", defaultValue: "Checking with your vault", bundle: .module)
+    }
+
+    /// (§11.14.10 rule 5) The transfer's session ended during the window: this phone could not tell whether the old phone
+    /// approved.
+    static var transferInStoppedTitle: String {
+        String(localized: "transfer_in_stopped_title", defaultValue: "The move stopped on this phone", bundle: .module)
+    }
+
+    static var transferInStoppedBody: String {
+        String(
+            localized: "transfer_in_stopped_body",
+            defaultValue: """
+                This phone stopped before it could check whether your old phone approved. If you approved the move there, \
+                recover your vault on this phone. If not, show a new code on your old phone.
+                """,
+            bundle: .module
+        )
     }
 
     /// After the deadline, while the vault is checked for an approval that came in time.

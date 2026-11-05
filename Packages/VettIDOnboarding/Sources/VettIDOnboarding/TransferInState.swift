@@ -19,6 +19,9 @@ public enum TransferInStep: Equatable, Sendable {
     /// No `hs.resp` within 60 seconds (§6.7.1 step 2, 0.10.6): the code may have been used already, or this phone could not
     /// be verified (a dropped `hs.init` is never answered). A new code is offered.
     case notAnswered
+    /// The transfer's session ended during the settlement window (§11.14.10 rule 5): this phone could not tell whether
+    /// the old phone approved. A new code, or a recovery.
+    case stopped
 }
 
 /// The state of the transfer on the new phone. The pasted code is the member's own text and is not printed. Mirrors
@@ -38,6 +41,9 @@ public struct TransferInState: Equatable, Sendable, CustomStringConvertible, Cus
     /// The deadline passed while the screen waited: the old phone can no longer approve, and the vault is being checked for
     /// an approval that came in time (§11.14.10 rule 5's window). The code is no longer shown.
     public var checking = false
+    /// From the end of the vault's 10 minutes (counted from the stored start of the `hs.init`) the transfer can no longer
+    /// be abandoned (§11.14.10 rule 5): no Cancel, and leaving the screen hands the wait to the background.
+    public var closing = false
     public var busy = false
     public var error: FailureKind?
     public var errorCode: String?

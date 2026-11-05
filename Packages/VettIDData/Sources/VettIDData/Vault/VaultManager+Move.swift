@@ -36,29 +36,6 @@ extension VaultManager: MoveRepository {
     public nonisolated static let codeNotTransfer = "not_transfer"
     /// How long the new phone waits for the old phone's approval after its `hs.init` (§6.7, 0.10.4).
     nonisolated static let pairingWindow: TimeInterval = 660
-    /// Each collect before the drop is bounded by this many seconds in all (VAULT-MESSAGING §11.14.10 rule 5).
-    nonisolated static let collectBound: TimeInterval = 30
-    /// The relay's visibility timeout when it advertises none (RELAY-PROTOCOL §6.3), and the most of an advertised one that
-    /// the window takes (chosen; not in the spec).
-    nonisolated static let defaultVisibility: TimeInterval = 60
-    nonisolated static let maxVisibility: TimeInterval = 300
-    /// The longest long poll of the window (RELAY-PROTOCOL §6.3's `wait` cap), and the window's margin over the lease.
-    nonisolated static let windowPoll: TimeInterval = 25
-    nonisolated static let windowMargin: TimeInterval = 5
-    /// What a long poll of the window leaves of the time left, to handle what it brings.
-    nonisolated static let handlingMargin: TimeInterval = 5
-    /// How much longer than its `wait` a collect of the window is bounded: more than the transport's own long-poll timeout
-    /// (60 s), so that the window never cancels a request the relay may be answering, which would leave what it was handed
-    /// leased to a dead request (chosen; not in the spec).
-    nonisolated static let collectSlack: TimeInterval = 70
-
-    /// How long the collects before the drop go on (§11.14.10 rule 5): the relay's visibility timeout [visibility], the
-    /// long-poll cap and a margin (90 s for a relay's 60 s). A `device.paired` that a killed app's long poll was handed,
-    /// as late as the long poll allows, is leased to it for at most that long, and then reappears.
-    nonisolated static func settleWindow(visibility: TimeInterval?) -> TimeInterval {
-        min(max(visibility ?? defaultVisibility, 0), maxVisibility) + windowPoll + windowMargin
-    }
-
     // MARK: - The new phone (§6.7.1)
 
     /// Starts the transfer from the old phone's code ([code]: the scanned QR or a pasted link): the code is checked here
@@ -74,9 +51,7 @@ extension VaultManager: MoveRepository {
             try prepared()
             let s = try await openSession()
             let d = s.device
-            // One vault per phone: no transfer onto a phone that holds one, or may hold a provisional one.
-            if d.deviceID != nil || d.vaultID != nil || d.recovering { throw VaultFailure(.vaultExists) }
-            if let refusal = startOverRefusal(nil) { throw refusal }
+            try refuseTransferIn(d)
             moveFlags.book.transferWaiter?.cancel()
             moveFlags.book.transferWaiter = nil
             let rec = record.generation
@@ -129,6 +104,15 @@ extension VaultManager: MoveRepository {
         }
     }
 
+    /// Why no transfer can start on [d] now, if it cannot.
+    private func refuseTransferIn(_ d: VaultDevice) throws {
+        // One vault per phone: no transfer onto a phone that holds one, or may hold a provisional one.
+        if d.deviceID != nil || d.vaultID != nil || d.recovering { throw VaultFailure(.vaultExists) }
+        if let refusal = startOverRefusal(nil) { throw refusal }
+        // One window at a time (§11.14.10 rule 5): a new code only after the window of the last one ended.
+        if moveFlags.book.settling != nil { throw VaultFailure(.enrollmentStarted, code: Self.codeTransferWaiting) }
+    }
+
     /// The epoch-1 record of the transfer is stored with it, before anything is sent: a drop deletes this one (§11.14.10).
     func noteTransferEpoch(_ id: String) throws {
         try record.update(since: record.generation) { $0.transferEpochID = id }
@@ -159,10 +143,12 @@ extension VaultManager: MoveRepository {
     /// `credential.utk.get`, §6.7.1 step 5). ``FailureKind/rejected`` when the owner rejected it; ``FailureKind/noResponse``
     /// at the deadline, **11 minutes after the `hs.init` was started** (§11.14.10 rule 5, owner decision 2026-10-23: one
     /// deadline, stored with the transfer, which no user action extends). At the deadline, and not before, the mailbox is
-    /// collected for one relay visibility timeout (``settleWindow(visibility:)``, owner decision 2026-11-05): a `device.paired{transfer}`
-    /// the collects bring is applied and the move completes instead; otherwise the transfer is dropped. A fin the relay refused for good at its first deposit (``PairingNotCompleted``) before the deadline drops the transfer too; after
-    /// it the collect runs all the same. Any other failure before the deadline is rethrown and the transfer kept. True when the vault gave
-    /// this phone the member's `user_guid` (§6.7.1, 0.17.0), which its unlocks need.
+    /// collected for the settlement window (``collectBeforeDrop(_:)``, VAULT-MESSAGING 0.85.2): a `device.paired{transfer}`
+    /// the collects bring is applied and the move completes instead; a rejection is ``FailureKind/rejected``; a session that
+    /// ended is ``codeTransferSessionEnded``; otherwise the transfer is dropped. A fin the relay refused for good at its first
+    /// deposit (``PairingNotCompleted``) before the deadline drops the transfer too; after it the window runs all the same.
+    /// Any other failure before the deadline is rethrown and the transfer kept. True when the vault gave this phone the
+    /// member's `user_guid` (§6.7.1, 0.17.0), which its unlocks need.
     public func awaitTransferIn() async throws -> Bool {
         try await guarded {
             let s = try await openSession()
@@ -237,8 +223,7 @@ extension VaultManager: MoveRepository {
     /// The end of a transfer to this phone is settled by **one task** that every caller joins (the screen's wait, a start's
     /// resume, an abandon): a paired transfer's take-over is done once, and the window of collects at the deadline is run
     /// once. [collect]: the deadline is reached, so a transfer not yet paired gets the window of collects before the drop
-    /// (``collectBeforeDrop(_:)``). [guid]: the
-    /// `user_guid` the caller has.
+    /// (``collectBeforeDrop(_:)``). [guid]: the `user_guid` the caller has.
     func settleTransfer(_ s: VaultSession, collect: Bool, guid: String?) async -> TransferSettled {
         if let running = moveFlags.book.settling { return await running.value }
         let task = Task { @MainActor [self] in
@@ -258,16 +243,23 @@ extension VaultManager: MoveRepository {
                 await dropTransfer(d)
                 return .dropped
             }
-            switch await collectBeforeDrop(d) {
-            case .paired(let paired): guid = paired
-            case .rejected:
+            let end = await collectBeforeDrop(d)
+            if case .paired(let paired) = end {
+                guid = paired
+            } else if d.deviceID != nil {
+                // Paired all the same (its event was taken elsewhere): the move completed, and is reported so, not as a drop.
+            } else if case .rejected = end {
                 // A rejection in the window ends as a rejection, not as a drop at the deadline.
                 await dropTransfer(d)
                 return .failed(PairingRejected())
-            case .nothing where halted:
+            } else if halted {
                 // The process is ending (``halt()`` cut the window): nothing is decided; the next process runs its own window.
                 return .failed(CancellationError())
-            case .nothing:
+            } else if case .ended = end {
+                // The session ended: reported as ended, never as dropped; its handshake is dead and goes.
+                await dropTransfer(d)
+                return .failed(VaultFailure(.other, code: Self.codeTransferSessionEnded))
+            } else {
                 await dropTransfer(d)
                 return .dropped
             }
@@ -319,92 +311,6 @@ extension VaultManager: MoveRepository {
         record.value.transferStartedMs.map { Date(timeIntervalSince1970: Double($0) / 1000 + Self.pairingWindow) }
     }
 
-    /// What a collect before the drop found: a `device.paired{transfer}` (its `user_guid` if the vault sent one).
-    /// Whether the window of collects before the drop has ended (set by its timer, read by the loop).
-    private final class Flag: @unchecked Sendable {
-        private let lock = NSLock()
-        private var on = false
-        var value: Bool { lock.withLock { on } }
-        func set() { lock.withLock { on = true } }
-    }
-
-    /// How the window of collects before the drop ended.
-    enum WindowEnd: Sendable {
-        case paired(String?)
-        case rejected
-        case nothing
-    }
-
-    /// The collects before the drop (§11.14.10 rule 5, owner decision 2026-11-05): collects of the mailbox for
-    /// ``settleWindow(visibility:)`` (``VaultManagerConfig/transferWindowSleep``), until a `device.paired{transfer}` comes
-    /// (it is applied) or a `device.pair.rejected` (at once). Long polls sized from the time left, or `wait=0` collects while
-    /// the device's own collector long-polls; none is ever cancelled while out (``collectSlack``). A collect that fails is
-    /// tried again after a pause (``VaultManagerConfig/transferRetrySleep``). After the window, one `wait=0` collect, and a
-    /// round of the collector that was out then is waited for, so that what it took is handled before the decision. A
-    /// window cut short (an abandon, the process ending: ``cutSettleWindow()``) ends with what was already handled.
-    private func collectBeforeDrop(_ d: VaultDevice) async -> WindowEnd {
-        // The window is the manager's, not its caller's: a screen that goes away does not cut it (nor a long poll it has out).
-        let window = Task { @MainActor [self] in await collectWindow(d) }
-        moveFlags.book.settleWindow = window
-        defer { moveFlags.book.settleWindow = nil }
-        return await window.value
-    }
-
-    private func collectWindow(_ d: VaultDevice) async -> WindowEnd {
-        let visibility = (try? await d.relayLimits()).map { TimeInterval($0.visibilityTimeoutSeconds) }
-        let length = Self.settleWindow(visibility: visibility)
-        let ended = Flag()
-        let windowSleep = config.transferWindowSleep
-        let timer = Task { try? await windowSleep(.seconds(length)); ended.set() }
-        defer { timer.cancel() }
-        let until = config.now().addingTimeInterval(length)
-        var failures = 0
-        while !Task.isCancelled {
-            let last = ended.value
-            let left = until.timeIntervalSince(config.now()) - Self.handlingMargin
-            let wait = last || d.collecting ? 0 : min(Self.windowPoll, max(left, 0)).rounded(.down)
-            do {
-                try await d.collectOnce(timeout: wait + Self.collectSlack, wait: wait, sleep: config.transferCollectSleep)
-                failures = 0
-            } catch {
-                failures += 1
-            }
-            if last { await collectorRound(d) }
-            let found = await pairedOrRejected(d)
-            if case .nothing = found {} else { return found }
-            if last { return .nothing }
-            // Between collects: a pause after a failure (1 s, doubled, at most 8 s), or while the collector long-polls.
-            if failures > 0 || wait == 0 {
-                try? await config.transferRetrySleep(.seconds(failures > 0 ? min(Double(1 << min(failures - 1, 3)), 8) : 1))
-            }
-        }
-        return await pairedOrRejected(d)
-    }
-
-    /// The `device.paired` or `device.pair.rejected` the device has handled, if any.
-    private func pairedOrRejected(_ d: VaultDevice) async -> WindowEnd {
-        do {
-            return .paired(try await d.awaitTransfer(timeout: 0.05))
-        } catch is PairingRejected {
-            return .rejected
-        } catch {
-            return .nothing
-        }
-    }
-
-    /// Waits for the device collector's request that is out now to end, its messages handled (at most the long-poll cap
-    /// and the handling margin).
-    private func collectorRound(_ d: VaultDevice) async {
-        guard d.collecting, let out = d.collectRequestSince else { return }
-        let sleep = config.transferRetrySleep
-        for _ in 0..<Int((Self.windowPoll + Self.handlingMargin) * 20) where d.collecting && d.collectRequestSince == out {
-            try? await sleep(.milliseconds(50))
-        }
-    }
-
-    /// Cuts the window of collects before the drop short (``collectBeforeDrop(_:)``): an abandon, the process ending.
-    func cutSettleWindow() { moveFlags.book.settleWindow?.cancel() }
-
     /// The code of the refusal of an enrollment (or another vault's code) while a move to this phone is under way, in the
     /// kind ``FailureKind/enrollmentStarted``: "a move to this phone is still under way" (the wording is I3.3b's).
     public nonisolated static let codeTransferWaiting = "transfer_waiting"
@@ -424,19 +330,10 @@ extension VaultManager: MoveRepository {
             return await settleTransfer(s, collect: false, guid: nil)
         } else if d.hasVault, transferDeadline != nil {
             // Before the deadline or past it, in the background: past it, the window of collects before the drop runs there,
-            // so that the start does not wait for it (chosen; the spec's erratum follows).
-            moveFlags.book.transferWaiter = Task { @MainActor [weak self] in
-                // Nobody is on the transfer screen: the welcome screen says how the move ended, when it did not complete.
-                do {
-                    _ = try await self?.awaitTransferIn()
-                } catch let f as VaultFailure where f.code == Self.codeTransferDeadline {
-                    self?.transferEnd = .timedOut
-                } catch let f as VaultFailure where f.kind == .rejected {
-                    self?.transferEnd = .declined
-                } catch is PairingRejected {
-                    self?.transferEnd = .declined
-                } catch {}
-            }
+            // so that the start does not wait for it (§11.14.10 rule 5).
+            moveFlags.book.transferWaiter?.cancel()
+            moveFlags.book.transferWaiter = nil
+            waitForTransferInBackground()
         }
         return nil
     }
@@ -456,18 +353,18 @@ extension VaultManager: MoveRepository {
     /// Drops a transfer this phone started and has not completed: the handshake, the pinned vault, the attested key and the
     /// pending epoch-1 record (the vault holds neither before the approval, §6.7.1: "Aborted. Nothing else changes"). A
     /// **paired** transfer is not dropped: its pending record is this phone's secret; the take-over is completed instead.
+    /// Refused, with ``codeTransferWaiting``, from the end of the vault's 10 minutes on (``abandonClosed``, §11.14.10 rule 5):
+    /// the transfer then waits for its window.
     public func abandonTransferIn() async throws {
         try await guarded {
+            if let s = session, s.device.deviceID == nil, abandonClosed {
+                throw VaultFailure(.enrollmentStarted, code: Self.codeTransferWaiting)
+            }
             moveFlags.book.transferWaiter?.cancel()
             moveFlags.book.transferWaiter = nil
             guard let s = session else { return }
             if s.device.deviceID != nil {
                 _ = await settleTransfer(s, collect: false, guid: nil)
-            } else if let running = moveFlags.book.settling {
-                // The deadline's settlement is running (its window of collects): cut short, it decides with what it found, and
-                // this joins it instead of dropping beside it.
-                cutSettleWindow()
-                _ = await running.value
             } else {
                 await dropTransfer(s.device)
             }

@@ -260,10 +260,10 @@ public final class TestVaultPhone {
     public let keptEndPauses = TestPauses()
     /// The new phone's wait for the deadline of its transfer (11 minutes, §11.14.10 rule 5), released by the test.
     public let deadlinePauses = TestPauses()
-    /// The bound of each collect before the drop (30 s): never released unless a test wants a timed-out collect.
+    /// The bound of each collect before the drop (`wait` + 70 s): never released unless a test wants a timed-out collect.
     public let collectPauses = TestPauses()
-    /// The window of collects before the drop (65 s): over at once (one collect), unless a test holds it (``TestPauses/holding``)
-    /// and releases it.
+    /// The window of collects before the drop (90 s): over almost at once (a collect or two), unless a test holds it
+    /// (``TestPauses/holding``) and releases it.
     public let windowPauses = { let p = TestPauses(); p.holding = false; return p }()
     var waitsForOldCollects = true
     /// Whether a change's wait lasts until the test releases it (``changeWaits``).

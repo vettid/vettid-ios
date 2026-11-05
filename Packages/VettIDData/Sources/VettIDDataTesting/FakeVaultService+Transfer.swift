@@ -273,6 +273,12 @@ extension FakeVaultService {
 
     func noteRestart(left: Int, outlived: Bool) { locked { (transfer.restartLeft, transfer.restartOutlived) = (left, outlived) } }
 
+    /// The messages queued for the device's mailbox, and those leased to a collect and not acked.
+    public var mailboxCounts: (queued: Int, leased: Int) { locked { (queued.count, transfer.leased.count) } }
+
+    /// The collect failures asked for (``failNextCollects(_:)``) not yet used.
+    public var collectFailuresLeft: Int { locked { transfer.collectFailures } }
+
     /// The relay's lease of a collected message (RELAY-PROTOCOL §6.3: a message not acked within it reappears); nil, the
     /// default: a collected message is gone, acked or not.
     public var leasesCollected: TimeInterval? {

@@ -175,7 +175,7 @@ public struct VaultManagerConfig: Sendable {
     public var transferSleep: LockSleep = realLockSleep
     /// The new phone's wait for the deadline of its transfer (VAULT-MESSAGING §11.14.10 rule 5; a pause the tests release).
     public var transferDeadlineSleep: LockSleep = realLockSleep
-    /// The bound of each collect before the drop (30 s; a pause the tests release).
+    /// The bound of each collect before the drop (its `wait` + ``VaultManager/collectSlack``; a pause the tests release).
     public var transferCollectSleep: LockSleep = realLockSleep
     /// The window of collects before the drop (``VaultManager/settleWindow(visibility:)``, 90 s for a relay's 60 s; a pause
     /// the tests release).

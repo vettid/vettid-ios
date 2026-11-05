@@ -276,7 +276,8 @@ public final class OnboardingViewModel: OnboardingActions {
     /// The portal's same-device Universal Link: redeemed only while nothing is set up on this phone.
     private func receiveLink(_ raw: String) {
         inbox.consume()
-        guard account.phase == .signedOut, !state.busy else { return }
+        // A setup link is ignored on the transfer screen (§11.14.10 rule 5: no enrollment while a transfer is pinned).
+        guard account.phase == .signedOut, !state.busy, state.step != .transferIn else { return }
         guard let secret = SetupCodes.parseLink(raw, api: account.apiOrigin) else {
             state.step = .setupScan
             state.scanRefusal = .notACode
