@@ -55,6 +55,7 @@ public extension FailureKind {
         case .eraseFailed: DataStrings.failureEraseFailed
         case .deviceSecret: DataStrings.failureDeviceSecret
         case .transferIncomplete: DataStrings.failureTransferIncomplete
+        case .moveNotFinished: DataStrings.failureMoveNotFinished
         case .busy: DataStrings.failureBusy
         case .retry: DataStrings.failureRetry
         case .counterUnavailable: DataStrings.failureCounterUnavailable
@@ -162,6 +163,7 @@ public extension FailureKind {
         case .eraseFailed: "data_failure_erase_failed"
         case .deviceSecret: "data_failure_device_secret"
         case .transferIncomplete: "data_failure_transfer_incomplete"
+        case .moveNotFinished: "data_failure_move_not_finished"
         case .busy: "data_failure_busy"
         case .retry: "data_failure_retry"
         case .counterUnavailable: "data_failure_counter_unavailable"

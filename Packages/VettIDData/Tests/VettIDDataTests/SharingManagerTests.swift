@@ -16,6 +16,8 @@ final class FakeSharingOps: SharingOps, @unchecked Sendable {
     @TestLocked var rulePages: [String] = []
     /// Codes `tag.set` answers with, one per call, before it succeeds.
     @TestLocked var setErrors: [String] = []
+    /// When set, `share.rule.set` is refused with it.
+    @TestLocked var ruleError: VaultOpError?
     @TestLocked var deleteError: String?
 
     static func error(_ type: String, _ code: String) -> VaultOpError { VaultOpError(type: type, code: code, detail: "", body: nil) }
@@ -61,6 +63,7 @@ final class FakeSharingOps: SharingOps, @unchecked Sendable {
 
     func ruleSet(_ body: JsonObject) async throws -> JsonObject {
         ruleSets.append(body)
+        if let e = ruleError { throw e }
         return try StrictJson.parseObject(ruleAnswer)
     }
 

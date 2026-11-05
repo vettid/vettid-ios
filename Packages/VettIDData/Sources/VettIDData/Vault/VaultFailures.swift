@@ -156,6 +156,7 @@ enum VaultFailures {
         // §3.5.9, §10.1 (0.51.2, 0.52.0): with or without `{"reason": "no_holder"}`.
         case codeCredentialRequired: .credentialRequired
         case codeForbidden: holderOnly(type) ? .notHolder : .vaultCode(codeForbidden)
+        case codeTransferIncomplete where moveGatedTypes.contains(type): .moveNotFinished
         default: mappedOpFailure(code) ?? .vaultCode(shownCode(code))
         }
     }
@@ -186,7 +187,7 @@ enum VaultFailures {
         case "stored_mismatch": .storedMismatch
         case "weak_password": .weakPassword
         case "device_secret": .deviceSecret
-        case "transfer_incomplete": .transferIncomplete
+        case codeTransferIncomplete: .transferIncomplete
         case "response_too_large": .responseTooLarge
         default: nil
         }
@@ -203,6 +204,15 @@ enum VaultFailures {
         "vault.owner-check", "pin.change", "vault.secret.renew", "account.name.set", "vault.delete", "credential.get",
         "credential.ack", "credential.reset", "credential.unlock", "credential.rotate", "credential.password.change",
     ]
+
+    /// (VAULT-MESSAGING 0.83.11 §11.14.10) The requests the vault answers `transfer_incomplete` before the new phone's first
+    /// unlock from storage: ``FailureKind/moveNotFinished``. Every other type keeps ``FailureKind/transferIncomplete``. Mirrors
+    /// vettid-android `VaultCodes.MOVE_GATED`.
+    static let moveGatedTypes: Set<String> = [
+        "connection.authenticate.approve", "leash.grant.issue", "device.pair.approve", "share.rule.set",
+    ]
+
+    static let codeTransferIncomplete = "transfer_incomplete"
 
     static func holderOnly(_ type: String) -> Bool { holderOnlyTypes.contains(type) || type.hasPrefix("device.transfer.") }
 

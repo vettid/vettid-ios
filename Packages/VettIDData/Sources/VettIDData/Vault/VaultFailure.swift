@@ -95,6 +95,9 @@ public enum FailureKind: Hashable, Sendable, CaseIterable {
     case deviceSecret
     /// The move to this phone did not finish (`transfer_incomplete`): the old phone approves it again.
     case transferIncomplete
+    /// (VAULT-MESSAGING 0.83.11 §11.14.10) `transfer_incomplete` to one of ``VaultFailures/moveGatedTypes``: the move to this
+    /// phone is not finished ("Finish the move" is still to do). Not ``transferIncomplete``, which is the unlock's.
+    case moveNotFinished
     /// The service is busy (`busy`, the heavy-derivation permit): nothing was used or changed; try again in a minute.
     case busy
     /// The service was too slow (`retry`): nothing was used or changed; try again.
@@ -168,7 +171,7 @@ public enum FailureKind: Hashable, Sendable, CaseIterable {
             .manifestUnavailable, .releaseUnknown, .enclave, .notFound, .connectionUnavailable, .inviteInvalid, .inviteExpired,
             .inviteNotConnection, .inviteUnavailable, .blocked, .credentialLocked, .conflict, .limit, .inUse,
             .ownerCheckRequired, .rejected, .signerRefused, .clock, .noVault, .localState, .eraseFailed, .deviceSecret,
-            .transferIncomplete, .busy, .retry, .counterUnavailable, .storedMismatch, .weakPassword, .hardwareKeys,
+            .transferIncomplete, .moveNotFinished, .busy, .retry, .counterUnavailable, .storedMismatch, .weakPassword, .hardwareKeys,
             .appleUnreachable, .phoneLocked, .unconfirmedChanges, .responseTooLarge, .changeUnresolved, .changeChecking,
             .changeCheckingPassword, .credentialUnsettled, .pinUncertain, .renewUnconfirmed, .timeScale, .credentialRequired,
             .notHolder, .vaultCode(VaultFailures.unknownCode), .other,
