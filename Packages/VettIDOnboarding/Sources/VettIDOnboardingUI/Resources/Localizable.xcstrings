@@ -3648,6 +3648,17 @@
         }
       }
     },
+    "transfer_in_checking_leave": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You can leave the app. The check finishes in the background or the next time you open VettID."
+          }
+        }
+      }
+    },
     "transfer_in_checking_title": {
       "extractionState": "manual",
       "localizations": {

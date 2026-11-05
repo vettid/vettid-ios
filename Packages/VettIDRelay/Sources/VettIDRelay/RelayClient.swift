@@ -199,6 +199,8 @@ public final class RelayClient: Sendable {
         var longPoll = false
         var policy: HTTPTransport.Policy = .unsentOnly
         var maxBody = RelayClient.maxJSONRead
+        /// The attempts of this call; nil: the client's.
+        var attempts: Int?
     }
 
     private func backoff(_ attempt: Int) -> TimeInterval {
@@ -208,7 +210,7 @@ public final class RelayClient: Sendable {
 
     func execute(_ c: Call) async throws -> HTTPAnswer {
         var last: Error?
-        for i in 0..<max(maxAttempts, 1) {
+        for i in 0..<max(c.attempts ?? maxAttempts, 1) {
             if i > 0 {
                 if let e = last as? RelayError, e.retryAfterSeconds > 0 {
                     try await sleep(Double(e.retryAfterSeconds) + random(Self.jitter))
@@ -342,11 +344,13 @@ public final class RelayClient: Sendable {
         return try await requireJSON(Call(method: "POST", path: "/v1/mailbox/\(mailboxID)", body: body, token: token)).string("msg_id")
     }
 
-    /// Long-polls this mailbox (§6.3): [wait] ≤ 25 s, [max] ≤ 100.
-    public func collect(wait: TimeInterval = defaultWait, max: Int = defaultMax) async throws -> [RelayMessage] {
+    /// Long-polls this mailbox (§6.3): [wait] ≤ 25 s, [max] ≤ 100. [attempts]: how many times it is tried (nil: the
+    /// client's; 1 for a caller that retries itself and bounds the call).
+    public func collect(wait: TimeInterval = defaultWait, max: Int = defaultMax, attempts: Int? = nil) async throws -> [RelayMessage] {
         let w = Swift.min(Swift.max(Int(wait), 0), Self.maxWait)
         let m = Swift.min(Swift.max(max, 1), Self.maxCollect)
-        let c = Call(method: "GET", path: "/v1/mailbox", query: "wait=\(w)&max=\(m)", longPoll: true)
+        var c = Call(method: "GET", path: "/v1/mailbox", query: "wait=\(w)&max=\(m)", longPoll: true)
+        c.attempts = attempts
         guard let o = try await json(c) else { return [] }
         return try o.array("messages").map { try RelayMessage.parse(try $0.asObject()) }
     }

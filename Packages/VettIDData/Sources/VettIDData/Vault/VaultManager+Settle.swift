@@ -24,9 +24,8 @@ extension VaultManager {
     nonisolated static let handlingMargin: TimeInterval = 5
     /// How much longer than its `wait` a collect of the window is bounded: more than the transport's own long-poll timeout
     /// (60 s; rule 5: longer than `wait` + 10 s), so that the window never cancels a request the relay may be answering,
-    /// which would leave what it was handed leased to a dead request. The relay client's own retries of a failed attempt
-    /// (5xx, 429) run inside the same bound: one that is still out when it ends is cancelled; only a relay that fails and
-    /// then answers after more than a minute meets that (chosen; not in the spec).
+    /// which would leave what it was handed leased to a dead request. Each collect is one attempt (the window retries
+    /// itself), so no retry of the relay client's runs into the bound (chosen; not in the spec).
     nonisolated static let collectSlack: TimeInterval = 70
     /// The bound of the registration that gives the relay's visibility timeout; past it, the default (chosen; not in the
     /// spec: a relay that answers `retry_after` must not hold the window).
@@ -84,7 +83,7 @@ extension VaultManager {
             // Signed out or wiped meanwhile (every device forgotten): the session this window collects for is gone. A
             // background ends the session too, and the foreground takes it back: that is no end of the transfer's.
             if moveFlags.book.sessionEnds != sessionEnds { return .ended(drop: false) }
-            clock.follow(self)
+            clock.follow(self, uptime: config.uptime())
             let last = clock.over
             let left = clock.until.timeIntervalSince(config.now()) - Self.handlingMargin
             let wait = last || collectorRuns(d) ? 0 : min(Self.windowPoll, max(left, 0)).rounded(.down)
@@ -98,7 +97,12 @@ extension VaultManager {
             if last { await collectorRound(session?.device ?? d) }
             let found = await pairedOrRejected(d)
             if case .nothing = found {} else { return found }
-            if last { return .nothing }
+            // Decided only if nothing cut the last collects: a background (it stops the collector, whose long poll may have
+            // been handed the pairing) or a freeze during them starts a full window again instead.
+            if last {
+                clock.follow(self, uptime: config.uptime())
+                if clock.over { return .nothing }
+            }
             await pauseBetweenCollects(failures: failures, wait: wait)
         }
         return await pairedOrRejected(d)
@@ -123,12 +127,19 @@ extension VaultManager {
         private(set) var until = Date()
         private var backgrounds: Int
         private var sawBackground: Bool
+        private var lastLook: TimeInterval?
 
         init(length: TimeInterval, backgrounds: Int, background: Bool) {
             self.length = length
             self.backgrounds = backgrounds
             sawBackground = background
         }
+
+        /// The longest a pass of the window takes when nothing froze it: a long poll and its bound, the collector's round
+        /// and the longest pause between collects. A longer gap between two looks is a freeze (a suspension the app was
+        /// not told of), taken as a background (chosen; not in the spec).
+        static let passBound = VaultManager.windowPoll + VaultManager.collectSlack + VaultManager.windowPoll
+            + VaultManager.handlingMargin + 8
 
         /// The window is over, and may be decided.
         var over: Bool { ended.value && !sawBackground }
@@ -142,8 +153,11 @@ extension VaultManager {
 
         func stop() { timer?.cancel() }
 
-        /// Notes a background, and starts a full window again at the first look back in the foreground after one.
-        func follow(_ m: VaultManager) {
+        /// Notes a background or a freeze since the last look ([uptime], monotonic), and starts a full window again at the
+        /// first look back in the foreground after one.
+        func follow(_ m: VaultManager, uptime: TimeInterval) {
+            if let lastLook, uptime - lastLook > Self.passBound { sawBackground = true }
+            lastLook = uptime
             if m.backgrounded || m.moveFlags.book.backgrounds != backgrounds {
                 sawBackground = true
                 backgrounds = m.moveFlags.book.backgrounds
@@ -160,7 +174,7 @@ extension VaultManager {
     /// collector. `gone` on `mailbox_unknown`.
     private func windowCollect(_ d: VaultDevice, wait: TimeInterval) async -> Collected {
         do {
-            try await d.collectOnce(timeout: wait + Self.collectSlack, wait: wait, sleep: config.transferCollectSleep)
+            try await d.collectOnce(timeout: wait + Self.collectSlack, wait: wait, attempts: 1, sleep: config.transferCollectSleep)
             return .collected
         } catch let e as RelayError where e.code == RelayError.mailboxUnknown {
             return .gone

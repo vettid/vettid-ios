@@ -221,6 +221,15 @@ enum MoveStrings {
         )
     }
 
+    /// Back during the check (vettid-android `transfer_in_checking_leave`).
+    static var transferInCheckingLeave: String {
+        String(
+            localized: "transfer_in_checking_leave",
+            defaultValue: "You can leave the app. The check finishes in the background or the next time you open VettID.",
+            bundle: .module
+        )
+    }
+
     /// After the deadline, while the vault is checked for an approval that came in time.
     static var transferInChecking: String {
         String(localized: "transfer_in_checking", defaultValue: "Checking whether your old phone approved in time…", bundle: .module)

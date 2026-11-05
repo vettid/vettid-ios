@@ -44,6 +44,8 @@ public struct TransferInState: Equatable, Sendable, CustomStringConvertible, Cus
     /// From the end of the vault's 10 minutes (counted from the stored start of the `hs.init`) the transfer can no longer
     /// be abandoned (§11.14.10 rule 5): no Cancel, and leaving the screen hands the wait to the background.
     public var closing = false
+    /// Back was asked for during the check (it stays): the screen says the member can leave the app.
+    public var leaveHint = false
     public var busy = false
     public var error: FailureKind?
     public var errorCode: String?

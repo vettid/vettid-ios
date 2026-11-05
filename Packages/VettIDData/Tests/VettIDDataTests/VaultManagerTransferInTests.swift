@@ -228,7 +228,7 @@ import VettIDDataTesting
     @Test func aPairedLeasedToTheKilledAppIsFoundInTheWindow() async throws {
         defer { phone.close() }
         _ = try await scanned()
-        service.leasesCollected = 0.3
+        service.leasesCollected = 3
         #expect(await eventually { !service.collectsInFlight.isEmpty }, "the old device is collecting")
         try await phone.restartLeavingCollects()
         phone.windowPauses.holding = true

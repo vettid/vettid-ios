@@ -66,8 +66,10 @@ public final class TransferInViewModel: TransferInActions {
             state.inputProblem = nil
             return true
         case .compare where closesNow:
-            // Leaving is all that Back does then (the screen goes, and the wait goes on in the background).
-            return false
+            // No abandon now (§11.14.10 rule 5): Back stays, and says that the app can be left (the check goes on in the
+            // background), as vettid-android does.
+            state.leaveHint = true
+            return true
         case .connecting, .compare:
             cancel()
             return true
@@ -244,8 +246,10 @@ public final class TransferInViewModel: TransferInActions {
     private func tickOnce(_ deadline: Date) -> Bool {
         let left = max(Int64(deadline.timeIntervalSince(now()).rounded(.down)), 0)
         state.secondsLeft = left
-        state.checking = left == 0
+        // From the end of the vault's 10 minutes the old phone can no longer approve: the code goes, and the screen checks
+        // (as vettid-android does).
         state.closing = Double(left) <= Self.window - Self.approvalWindow
+        state.checking = state.closing
         return left > 0
     }
 
@@ -263,6 +267,7 @@ public final class TransferInViewModel: TransferInActions {
         state.busy = false
         state.checking = false
         state.closing = false
+        state.leaveHint = false
         state.sas = nil
         state.deadline = nil
         work.launch { [weak self] in await self?.abandon() }

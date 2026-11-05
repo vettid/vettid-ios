@@ -61,7 +61,7 @@ extension FakeVaultService {
                 return true
             }
             if fails { return .json(503, #"{"code":"unavailable","message":""}"#) }
-            return collect()
+            return collect(r)
         }
         if r.path.hasPrefix("/v1/blob/") { return deviceBlob(r) }
         if r.path.hasPrefix("/v1/mailbox/"), r.method == "DELETE" {
@@ -89,7 +89,7 @@ extension FakeVaultService {
     }
 
     /// One collect: the queued messages, waiting briefly while there are none.
-    private func collect() -> FakeHTTPServer.Answer {
+    private func collect(_ r: FakeHTTPServer.Request) -> FakeHTTPServer.Answer {
         cond.lock()
         defer { cond.unlock() }
         transfer.collectSeq += 1
@@ -102,7 +102,9 @@ extension FakeVaultService {
         if holdMessagesValue { return .json(200, #"{"messages":[]}"#) }
         let msgs = takeQueued().map { JsonBuilder().string("msg_id", $0.msgID).string("sender", $0.sender).base64("payload", $0.payload).build() }
         let answer = FakeHTTPServer.Answer.json(200, #"{"messages":\#(JsonBuilder.array(msgs))}"#)
-        if !msgs.isEmpty, let gate = transfer.collectGate { return .held(gate, answer) }
+        if !msgs.isEmpty, let gate = transfer.collectGate, transfer.collectGateWait.map({ r.query?.contains("wait=\($0)&") == true }) ?? true {
+            return .held(gate, answer)
+        }
         return answer
     }
 

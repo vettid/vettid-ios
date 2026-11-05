@@ -64,10 +64,13 @@ import VettIDDataTesting
         await clock.runCurrent()
         #expect(vm.state.secondsLeft == 630 && !vm.state.closing, "counted from the stored start")
         await clock.advance(seconds: 570)
-        #expect(vm.state.closing && !vm.state.checking)
+        // From the end of the vault's 10 minutes the code goes and the screen checks.
+        #expect(vm.state.closing && vm.state.checking)
         vault.abandonClosed = true
         vm.cancel()
-        #expect(!vm.back(), "Back leaves the screen")
+        #expect(!vm.state.leaveHint)
+        #expect(vm.back(), "Back stays on the screen")
+        #expect(vm.state.leaveHint, "and says the app can be left")
         await vm.settle()
         #expect(vm.state.step == .compare && !vault.calls.contains("abandonTransferIn"))
     }
@@ -81,7 +84,7 @@ import VettIDDataTesting
         #expect(!vm.state.closing)
         vault.abandonClosed = true
         vm.cancel()
-        #expect(!vm.back(), "Back leaves the screen")
+        #expect(vm.back() && vm.state.leaveHint, "Back stays, and says the app can be left")
         await vm.settle()
         #expect(vm.state.step == .compare && !vault.calls.contains("abandonTransferIn"))
     }

@@ -55,6 +55,7 @@ struct FakeTransferStore {
     var claimGate: FakeHTTPServer.Gate?
     var collectGate: FakeHTTPServer.Gate?
     var opensAtDelete = false
+    var collectGateWait: Int?
     var leased: [(message: RelayMessage, until: Date)] = []
 }
 
@@ -291,6 +292,13 @@ extension FakeVaultService {
     public var holdsCollectAnswers: FakeHTTPServer.Gate? {
         get { locked { transfer.collectGate } }
         set { locked { transfer.collectGate = newValue } }
+    }
+
+    /// Only the collects of this `wait` are held (``holdsCollectAnswers``): the test phone's collector long-polls with
+    /// `wait=1`, a settlement window's collects with 0 or more.
+    public var holdsCollectAnswersOfWait: Int? {
+        get { locked { transfer.collectGateWait } }
+        set { locked { transfer.collectGateWait = newValue } }
     }
 
     /// The long polls held out (``holdsCollectAnswers``) answer when the mailbox is deleted (a wipe), before its answer.

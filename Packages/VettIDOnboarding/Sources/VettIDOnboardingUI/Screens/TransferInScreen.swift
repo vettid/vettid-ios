@@ -101,7 +101,7 @@ public struct TransferInContent: View {
             Outcome(
                 title: MoveStrings.transferInStoppedTitle, body: MoveStrings.transferInStoppedBody,
                 primary: MoveStrings.transferInScanNew, onPrimary: actions.again, onBack: onLeave,
-                link: (OnboardingStrings.welcomeRecover, onRecover)
+                link: (OnboardingStrings.elsewhereRecover, onRecover)
             )
             .accessibilityElement(children: .contain)
             .accessibilityIdentifier("transfer_stopped")
@@ -173,6 +173,10 @@ public struct TransferInContent: View {
                 if state.checking {
                     // Past the deadline the old phone can no longer approve: no code to compare, and no time left to count.
                     WaitingRow(text: MoveStrings.transferInChecking, identifier: "checking_old_phone")
+                    if state.leaveHint {
+                        NoticeCard(.info, title: MoveStrings.transferInCheckingLeave, message: "", announce: .polite)
+                            .accessibilityIdentifier("checking_leave_hint")
+                    }
                 } else {
                     if let sas = state.sas { SasBox(sas: sas) }
                     WaitingRow(
