@@ -65,7 +65,7 @@ public final class TransferInViewModel: TransferInActions {
             state.step = .intro
             state.inputProblem = nil
             return true
-        case .compare where state.closing:
+        case .compare where closesNow:
             // Leaving is all that Back does then (the screen goes, and the wait goes on in the background).
             return false
         case .connecting, .compare:
@@ -250,9 +250,17 @@ public final class TransferInViewModel: TransferInActions {
     }
 
     /// Leaves a transfer in progress: nothing was approved, so nothing changes; the handshake state is dropped.
+    /// From the end of the vault's 10 minutes, counted from the stored start of the `hs.init` and the clock now (the
+    /// ticker's ``TransferInState/closing`` may be a second behind): no abandon (§11.14.10 rule 5).
+    public var closesNow: Bool {
+        guard state.step == .compare else { return false }
+        guard let started = move.transferStartedAt else { return state.closing }
+        return now() >= started.addingTimeInterval(Self.approvalWindow)
+    }
+
     public func cancel() {
         // No abandon from the end of the vault's 10 minutes (§11.14.10 rule 5): the button is gone then.
-        guard !state.closing else { return }
+        guard !closesNow else { return }
         waiter?.cancel()
         ticker?.cancel()
         state.step = .intro

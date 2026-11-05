@@ -368,9 +368,106 @@ extension VaultManagerTransferInTests {
         phone.clockAhead = 700
         try await m.refresh()
         #expect(await eventually { phone.windowPauses.lengths == [90] })
+        // A return to the foreground alone (no background before it) changes nothing, over a few rounds of the window.
+        m.onForeground()
+        try await Task.sleep(for: .milliseconds(300))
+        #expect(phone.windowPauses.lengths == [90])
+        await m.onBackground(budget: .seconds(1))
         m.onForeground()
         #expect(await eventually { phone.windowPauses.lengths == [90, 90] }, "\(phone.windowPauses.lengths)")
         phone.windowPauses.release()
+    }
+
+    /// A background and a return to the foreground before the deadline (the session ends with the background) lose nothing:
+    /// an approval waiting is applied at the deadline.
+    @Test func aBackgroundBeforeTheDeadlineKeepsTheMove() async throws {
+        defer { phone.close() }
+        _ = try await scanned()
+        try await phone.restart()
+        phone.clockAhead = 300
+        try await m.refresh()
+        #expect(await deadlineWaiting())
+        // The background stops the collector while its long poll may be held at the relay: what it takes is leased, as a
+        // relay does, and reappears within the window.
+        service.leasesCollected = 0.3
+        phone.windowPauses.holding = true
+        await m.onBackground(budget: .seconds(1))
+        m.onForeground()
+        service.approveTransferIn()
+        phone.clockAhead = 700
+        phone.deadlinePauses.release()
+        #expect(await eventually(within: .seconds(30)) { m.finishMovePending && m.record.value.transferStartedMs == nil })
+        #expect(m.transferEnd == nil)
+        phone.windowPauses.release()
+    }
+
+    /// The same during the window.
+    @Test func aBackgroundDuringTheWindowKeepsTheMove() async throws {
+        defer { phone.close() }
+        _ = try await scanned()
+        try await phone.restart()
+        phone.windowPauses.holding = true
+        phone.clockAhead = 700
+        try await m.refresh()
+        #expect(await eventually { !phone.windowPauses.lengths.isEmpty }, "the window runs")
+        service.leasesCollected = 0.3
+        await m.onBackground(budget: .seconds(1))
+        m.onForeground()
+        service.approveTransferIn()
+        #expect(await eventually(within: .seconds(30)) { m.finishMovePending && m.record.value.transferStartedMs == nil })
+        #expect(m.transferEnd == nil)
+        phone.windowPauses.release()
+    }
+
+    /// A wipe during the window ends the transfer's session: reported as ended (the screen's "The move stopped on this
+    /// phone"), never as timed out.
+    @Test func aWipeDuringTheWindowEndsAsStopped() async throws {
+        defer { phone.close() }
+        _ = try await scanned()
+        phone.clockAhead = 600
+        m.session?.device.stop()
+        phone.windowPauses.holding = true
+        let waiting = Task { try await m.awaitTransferIn() }
+        #expect(await deadlineWaiting())
+        phone.clockAhead = 700
+        phone.deadlinePauses.release()
+        #expect(await eventually { !phone.windowPauses.lengths.isEmpty }, "the window runs")
+        try await m.eraseThisPhone()
+        let attempt = Attempt()
+        let task = Task { @MainActor in attempt.failure = await vaultFailure { _ = try await waiting.value } }
+        #expect(await eventually(within: .seconds(10)) { attempt.failure != nil }, "the window ended")
+        task.cancel()
+        waiting.cancel()
+        #expect(attempt.failure?.code == VaultManager.codeTransferSessionEnded, "\(String(describing: attempt.failure))")
+        phone.windowPauses.release()
+    }
+
+    /// No new code from the end of the vault's 10 minutes, after the screen that waited went: it would abandon the
+    /// transfer waiting (§11.14.10 rule 5).
+    @Test func aNewCodeFromTheVaultsTenMinutesIsRefused() async throws {
+        defer { phone.close() }
+        _ = try await scanned()
+        m.waitForTransferInBackground()
+        phone.clockAhead = 610
+        let attempt = Attempt()
+        let task = Task { @MainActor in attempt.failure = await vaultFailure { _ = try await m.transferIn(code: try code()) } }
+        #expect(await eventually(within: .seconds(5)) { attempt.failure != nil }, "refused at once")
+        task.cancel()
+        #expect(attempt.failure?.code == VaultManager.codeTransferWaiting && service.transferInits.count == 1)
+        #expect(m.moveFlags.book.transferWaiter != nil, "the background wait goes on")
+    }
+
+    /// An abandon from the end of the vault's 10 minutes is refused also without a session (a background ended it), and
+    /// the transfer is then waited for in the background.
+    @Test func anAbandonWithoutASessionIsRefusedToo() async throws {
+        defer { phone.close() }
+        _ = try await scanned()
+        phone.clockAhead = 610
+        await m.onBackground(budget: .seconds(1))
+        #expect(m.session == nil)
+        let refused = await vaultFailure { try await m.abandonTransferIn() }
+        #expect(refused?.code == VaultManager.codeTransferWaiting)
+        #expect(m.moveFlags.book.transferWaiter != nil && m.record.value.transferStartedMs != nil)
     }
 
     /// A rejection during the window drops at once, without waiting for its end.

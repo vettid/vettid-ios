@@ -47,6 +47,9 @@ extension VaultManager: MoveRepository {
         // A new move: the notice of how the last one ended goes, whatever this one does.
         transferEnd = nil
         return try await guarded {
+            // One window at a time, and no new code from the end of the vault's 10 minutes (§11.14.10 rule 5): said before the
+            // code is looked at.
+            if abandonClosed { throw VaultFailure(.enrollmentStarted, code: Self.codeTransferWaiting) }
             let link = try Self.transferLink(code, now: config.now())
             try prepared()
             let s = try await openSession()
@@ -109,8 +112,6 @@ extension VaultManager: MoveRepository {
         // One vault per phone: no transfer onto a phone that holds one, or may hold a provisional one.
         if d.deviceID != nil || d.vaultID != nil || d.recovering { throw VaultFailure(.vaultExists) }
         if let refusal = startOverRefusal(nil) { throw refusal }
-        // One window at a time (§11.14.10 rule 5): a new code only after the window of the last one ended.
-        if moveFlags.book.settling != nil { throw VaultFailure(.enrollmentStarted, code: Self.codeTransferWaiting) }
     }
 
     /// The epoch-1 record of the transfer is stored with it, before anything is sent: a drop deletes this one (§11.14.10).
@@ -236,14 +237,17 @@ extension VaultManager: MoveRepository {
     }
 
     private func runSettle(_ s: VaultSession, collect: Bool, guid: String?) async -> TransferSettled {
-        let d = s.device
+        var s = s
         var guid = guid
-        if d.deviceID == nil {
+        if s.device.deviceID == nil {
             guard collect else {
-                await dropTransfer(d)
+                await dropTransfer(s.device)
                 return .dropped
             }
-            let end = await collectBeforeDrop(d)
+            let end = await collectBeforeDrop(s.device)
+            // A background may have ended the session meanwhile: what follows goes through the current one.
+            if !halted { s = await settlingSession(s) }
+            let d = s.device
             if case .paired(let paired) = end {
                 guid = paired
             } else if d.deviceID != nil {
@@ -264,6 +268,7 @@ extension VaultManager: MoveRepository {
                 return .dropped
             }
         }
+        let d = s.device
         guid = guid ?? d.transferUserGuid
         do {
             try await completeTransferIn(s, guid: guid)
@@ -317,9 +322,11 @@ extension VaultManager: MoveRepository {
 
     /// Once per process, at the start (before anything else is decided about this phone; §11.14.10 rule 5): a transfer whose
     /// `device.paired` arrived is completed whatever its age; one still waiting is waited for in the background
-    /// (``awaitTransferIn()``): before its deadline until it, past it for the window of collects before the drop
-    /// (chosen; the erratum of §11.14.10 rule 5 follows), and then applied or dropped. Meanwhile the welcome screen is shown: a code can be scanned again, and no enrollment can start (the vault is pinned,
-    /// ``startOverRefusal(_:)``). Waiting here is (chosen; not in the spec): Android shows the welcome screen and does not wait.
+    /// (``waitForTransferInBackground()``): before its deadline until it, past it for the settlement window (rule 5,
+    /// VAULT-MESSAGING 0.85.2), and then applied or dropped. Meanwhile the welcome screen is shown and no enrollment can
+    /// start (the vault is pinned, ``startOverRefusal(_:)``); a new code can be scanned before the end of the vault's 10
+    /// minutes, not from then on (``abandonClosed``). Waiting before the deadline is (chosen; not in the spec): Android
+    /// shows the welcome screen and does not wait.
     @discardableResult
     func resumeTransferIn(_ s: VaultSession) async -> TransferSettled? {
         guard !moveFlags.book.transferResumed else { return nil }
@@ -357,7 +364,9 @@ extension VaultManager: MoveRepository {
     /// the transfer then waits for its window.
     public func abandonTransferIn() async throws {
         try await guarded {
-            if let s = session, s.device.deviceID == nil, abandonClosed {
+            // Refused with or without a session (a background ends it); the transfer is then waited for in the background.
+            if session?.device.deviceID == nil, abandonClosed {
+                waitForTransferInBackground()
                 throw VaultFailure(.enrollmentStarted, code: Self.codeTransferWaiting)
             }
             moveFlags.book.transferWaiter?.cancel()

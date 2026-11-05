@@ -141,6 +141,7 @@ extension VaultManager {
         guard began == foregrounds else { return }
         backgrounded = true
         moveFlags.book.lifecycle += 1
+        moveFlags.book.backgrounds += 1
         stopCollecting()
     }
 

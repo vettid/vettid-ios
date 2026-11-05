@@ -71,6 +71,20 @@ import VettIDDataTesting
         #expect(vm.state.step == .compare && !vault.calls.contains("abandonTransferIn"))
     }
 
+    /// The moment is the stored start's and the clock's, not the ticker's last second: no abandon even before it ticks.
+    @Test func noAbandonFromTheVaultsTenMinutesBeforeTheTickerTicks() async throws {
+        let vm = model()
+        vm.scan()
+        vm.scanned(try qr())
+        await clock.runCurrent()
+        #expect(!vm.state.closing)
+        vault.transferStartedAt = clock.now().addingTimeInterval(-605)
+        vm.cancel()
+        #expect(!vm.back(), "Back leaves the screen")
+        await vm.settle()
+        #expect(vm.state.step == .compare && !vault.calls.contains("abandonTransferIn"))
+    }
+
     /// (§11.14.10 rule 5) A transfer whose session ended in the window has its own step, never "timed out".
     @Test func anEndedSessionHasItsOwnStep() async throws {
         let vm = model()

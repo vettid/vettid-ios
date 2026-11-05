@@ -63,8 +63,9 @@ extension VaultManager {
     /// that fails is tried again after a pause (``VaultManagerConfig/transferRetrySleep``). After the window, one `wait=0`
     /// collect, and a round of the collector that was out then is waited for, so that what it took is handled before the
     /// decision. The window is the manager's, not its caller's: a screen that goes away does not cut it; only the process
-    /// ending does (``cutSettleWindow()``). Back in the foreground during it, a full window runs again (chosen; rule 5 says
-    /// so of an app stopped during the window: a suspended app's collects were cut, and their leases may still run).
+    /// ending does (``cutSettleWindow()``). Back in the foreground after a background during it, a full window runs again
+    /// (chosen; rule 5 says so of an app stopped during the window: a suspended app's collects were cut, and their leases
+    /// may still run).
     func collectBeforeDrop(_ d: VaultDevice) async -> WindowEnd {
         let window = Task { @MainActor [self] in await collectWindow(d) }
         moveFlags.book.settleWindow = window
@@ -78,24 +79,28 @@ extension VaultManager {
         var timer = windowTimer(length, ended)
         defer { timer.cancel() }
         var until = config.now().addingTimeInterval(length)
-        var lifecycle = moveFlags.book.lifecycle
+        let sessionEnds = moveFlags.book.sessionEnds
+        var backgrounds = moveFlags.book.backgrounds
         var failures = 0
         while !Task.isCancelled {
-            if moveFlags.book.lifecycle != lifecycle {
-                lifecycle = moveFlags.book.lifecycle
-                if !backgrounded {
-                    timer.cancel()
-                    ended = Flag()
-                    timer = windowTimer(length, ended)
-                    until = config.now().addingTimeInterval(length)
-                }
+            // Signed out or wiped meanwhile (every device forgotten): the session this window collects for is gone. A
+            // background ends the session too, and the foreground opens another one: that is no end of the transfer's.
+            if moveFlags.book.sessionEnds != sessionEnds { return .ended }
+            // A window that saw the app in the background (it may have been suspended: its collects were cut, its timer ran
+            // on) decides nothing until it is back in the foreground, and then runs a full window again (chosen; rule 5
+            // says so of an app stopped during the window).
+            if !backgrounded, moveFlags.book.backgrounds != backgrounds {
+                backgrounds = moveFlags.book.backgrounds
+                timer.cancel()
+                ended = Flag()
+                timer = windowTimer(length, ended)
+                until = config.now().addingTimeInterval(length)
             }
-            // Signed out or wiped meanwhile: the session this window collects for is gone.
-            if session?.device !== d { return .ended }
-            let last = ended.value
+            let last = ended.value && !backgrounded
             let left = until.timeIntervalSince(config.now()) - Self.handlingMargin
-            let wait = last || d.collecting ? 0 : min(Self.windowPoll, max(left, 0)).rounded(.down)
+            let wait = last || collectorRuns(d) ? 0 : min(Self.windowPoll, max(left, 0)).rounded(.down)
             do {
+                // On `d`, whatever the session: its relay client works on after a background stopped its collector.
                 try await d.collectOnce(timeout: wait + Self.collectSlack, wait: wait, sleep: config.transferCollectSleep)
                 failures = 0
             } catch let e as RelayError where e.code == RelayError.mailboxUnknown {
@@ -103,7 +108,7 @@ extension VaultManager {
             } catch {
                 failures += 1
             }
-            if last { await collectorRound(d) }
+            if last { await collectorRound(session?.device ?? d) }
             let found = await pairedOrRejected(d)
             if case .nothing = found {} else { return found }
             if last { return .nothing }
@@ -114,6 +119,9 @@ extension VaultManager {
         }
         return await pairedOrRejected(d)
     }
+
+    /// Whether a collector long-polls the mailbox now: [d]'s, or the device of a session opened since (the foreground).
+    private func collectorRuns(_ d: VaultDevice) -> Bool { d.collecting || session?.device.collecting == true }
 
     /// The window's length, from the relay's advertised visibility timeout (its registration, bounded by ``limitsBound``).
     private func windowLength(_ d: VaultDevice) async -> TimeInterval {
@@ -137,8 +145,15 @@ extension VaultManager {
         }
     }
 
-    /// The `device.paired` or `device.pair.rejected` the device has handled, if any.
+    /// The `device.paired` or `device.pair.rejected` handled, if any: by [d], or by the device of a session opened since
+    /// (its collector may have taken it).
     private func pairedOrRejected(_ d: VaultDevice) async -> WindowEnd {
+        let found = await handled(by: d)
+        if case .nothing = found, let other = session?.device, other !== d { return await handled(by: other) }
+        return found
+    }
+
+    private func handled(by d: VaultDevice) async -> WindowEnd {
         do {
             return .paired(try await d.awaitTransfer(timeout: 0.05))
         } catch is PairingRejected {
@@ -200,5 +215,18 @@ extension VaultManager {
             if let end { transferEnd = end }
             try? await refresh()
         }
+    }
+}
+
+extension VaultManager {
+    /// The session the end of a window is settled through: [s], unless a background ended it and the foreground opened
+    /// another, whose device is the one that writes the stored state now. When only [s]'s device applied the pairing (it
+    /// saved it), the current session is reloaded so that its device knows it. [s]'s device is stopped either way.
+    func settlingSession(_ s: VaultSession) async -> VaultSession {
+        guard let current = session, current.device !== s.device else { return s }
+        s.device.stop()
+        guard s.device.deviceID != nil, current.device.deviceID == nil else { return current }
+        stopCollecting()
+        return (try? await openSession()) ?? s
     }
 }

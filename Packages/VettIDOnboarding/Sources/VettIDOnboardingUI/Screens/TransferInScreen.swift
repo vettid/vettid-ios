@@ -332,7 +332,7 @@ public struct TransferInRoute: View {
         model.setInput("")
         // From the end of the vault's 10 minutes the transfer is not abandoned (§11.14.10 rule 5): the manager waits for it
         // in the background, and how it ended is told on the welcome screen.
-        if model.state.step == .compare, model.state.closing, !movedIn {
+        if model.closesNow, !movedIn {
             move.waitForTransferInBackground()
             return
         }
