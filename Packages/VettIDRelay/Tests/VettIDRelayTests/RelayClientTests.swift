@@ -376,11 +376,14 @@ enum SourceStep { case messages([RelayMessage]), error(Error) }
         var steps: [SourceStep]
         var acks: [String] = []
         var stream: CollectStream?
+        /// The streams the opens after [stream] get, in order.
+        var later: [CollectStream]
         var streamOpens = 0
 
-        init(_ steps: [SourceStep], stream: CollectStream? = nil) {
+        init(_ steps: [SourceStep], stream: CollectStream? = nil, later: [CollectStream] = []) {
             self.steps = steps
             self.stream = stream
+            self.later = later
         }
 
         func collect(wait: TimeInterval, max: Int) async throws -> [RelayMessage] {
@@ -397,7 +400,7 @@ enum SourceStep { case messages([RelayMessage]), error(Error) }
             try lock.withLock {
                 streamOpens += 1
                 guard let s = stream else { throw URLError(.cannotConnectToHost) }
-                stream = nil
+                stream = later.isEmpty ? nil : later.removeFirst()
                 return s
             }
         }
