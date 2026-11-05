@@ -15,9 +15,9 @@ import VettIDOnboarding
         var s = RecoverState()
         s.wrongCodes = 2
         s.otherApi = "https://account.staging.vettid.org"
-        #expect(RecoveryTexts.refusal(.badCode, s, timeScale: 1) == "That code is not right. After 5 wrong codes the recovery is cancelled. Wrong codes from this phone: 2 of 5.")
+        #expect(RecoveryTexts.refusal(.badCode, s, timeScale: 1) == "That code is not right. After 5 wrong codes the recovery is canceled. Wrong codes from this phone: 2 of 5.")
         #expect(RecoveryTexts.refusal(.otherEnvironment, s, timeScale: 1) == "That code is from another VettID environment (https://account.staging.vettid.org), not the one this app uses.")
-        #expect(RecoveryTexts.refusal(.notAvailable, s, timeScale: 1) == "This recovery is not available: its code may not be ready yet (24 hours after the request), or the recovery was cancelled, used or has expired. Check the account site.")
+        #expect(RecoveryTexts.refusal(.notAvailable, s, timeScale: 1) == "This recovery is not available: its code may not be ready yet (24 hours after the request), or the recovery was canceled, used or has expired. Check the account site.")
         #expect(RecoveryTexts.refusal(.notAvailable, s, timeScale: 24).contains("(1 hour after the request)"))
         #expect(RecoveryTexts.refusal(.notOffered, s, timeScale: 1) == "This vault's release does not offer recovery.")
         let all = CodeRefusal.allCases.map { RecoveryTexts.refusal($0, s, timeScale: 1) }

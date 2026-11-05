@@ -178,7 +178,7 @@ enum ProfileStrings {
         String(
             localized: "settings_photo_capture_body",
             defaultValue: """
-                Centre your face in the square. Every connection sees this photo.
+                Center your face in the square. Every connection sees this photo.
                 """,
             bundle: .module
         )

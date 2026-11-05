@@ -447,7 +447,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "**Your vote is in the published results.** %@ also once showed a different vote under your code. Save the proof and show it to the organisation."
+            "value": "**Your vote is in the published results.** %@ also once showed a different vote under your code. Save the proof and show it to the organization."
           }
         }
       }
@@ -458,7 +458,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "%@ holds a different vote under your code than the one you cast. Save the proof and show it to the organisation."
+            "value": "%@ holds a different vote under your code than the one you cast. Save the proof and show it to the organization."
           }
         }
       }
@@ -491,7 +491,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "%@ holds a vote under your code that you said is not yours. Save the proof and show it to the organisation."
+            "value": "%@ holds a vote under your code that you said is not yours. Save the proof and show it to the organization."
           }
         }
       }
@@ -535,7 +535,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "You can save the proof and show it to the organisation."
+            "value": "You can save the proof and show it to the organization."
           }
         }
       }
@@ -799,7 +799,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "%@ did not accept your vote. You can save the proof and show it to the organisation."
+            "value": "%@ did not accept your vote. You can save the proof and show it to the organization."
           }
         }
       }
@@ -843,7 +843,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "%@ says you were not on the list for this vote. You can save the proof and show it to the organisation."
+            "value": "%@ says you were not on the list for this vote. You can save the proof and show it to the organization."
           }
         }
       }
@@ -1151,7 +1151,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The file shows how you voted. Keep it private, and share it only with the organisation."
+            "value": "The file shows how you voted. Keep it private, and share it only with the organization."
           }
         }
       }
@@ -1195,7 +1195,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The vote you voted on differs from the one published on the public site, so your vote may not count. Save the proof and show it to the organisation."
+            "value": "The vote you voted on differs from the one published on the public site, so your vote may not count. Save the proof and show it to the organization."
           }
         }
       }

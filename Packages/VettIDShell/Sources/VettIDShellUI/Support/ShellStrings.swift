@@ -162,13 +162,13 @@ enum ShellStrings {
     }
 
     static var accountMembershipCanceled: String {
-        String(localized: "account_membership_canceled", defaultValue: "Account cancelled", bundle: .module)
+        String(localized: "account_membership_canceled", defaultValue: "Account canceled", bundle: .module)
     }
 
     static func accountMembershipCanceledUntil(_ s: String) -> String {
         String(
             localized: "account_membership_canceled_until",
-            defaultValue: "Account cancelled: your vault is deleted on \(s)",
+            defaultValue: "Account canceled: your vault is deleted on \(s)",
             bundle: .module
         )
     }
@@ -214,7 +214,7 @@ enum ShellStrings {
     }
 
     static func accountSubscriptionCanceled(_ s: String) -> String {
-        String(localized: "account_subscription_canceled", defaultValue: "\(s): cancelled", bundle: .module)
+        String(localized: "account_subscription_canceled", defaultValue: "\(s): canceled", bundle: .module)
     }
 
     static var accountTerms: String {

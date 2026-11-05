@@ -89,6 +89,7 @@
 		A3AE95670EF0C2711A08679E /* UnlockCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA46D6F62E13C2404BDC26A2 /* UnlockCatalog.swift */; };
 		A404E200ACF0AAD3C6729CBD /* VettIDNotify in Frameworks */ = {isa = PBXBuildFile; productRef = CB04C08D571D6A92DD0A5FB1 /* VettIDNotify */; };
 		A65E5E4EFA6A74AF7B884B2E /* AppAttestDeviceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9D2B5CA030BC6FA62B3EEF7D /* AppAttestDeviceTests.swift */; };
+		A6678DFF01647F791ED36333 /* AmericanSpellingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2E046F31EC24A8B89BD71C6 /* AmericanSpellingTests.swift */; };
 		A8DF3EAE2376C25D4EA3B564 /* VettIDHistory in Frameworks */ = {isa = PBXBuildFile; productRef = 357729FB7655C77D062C45E6 /* VettIDHistory */; };
 		AA35614CE1F4D97BC627B12F /* VettIDApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B5C81B56C71C53452A052D2A /* VettIDApp.swift */; };
 		AA5AD3F7057CFA0BB16F4515 /* ShellCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2C4EF17933B13C37D62C1ED /* ShellCatalog.swift */; };
@@ -229,6 +230,7 @@
 		B5C81B56C71C53452A052D2A /* VettIDApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VettIDApp.swift; sourceTree = "<group>"; };
 		BC218FA20D284028E26100BA /* ThemeChoiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThemeChoiceTests.swift; sourceTree = "<group>"; };
 		C237293096175603123FFEBC /* VettIDCrypto */ = {isa = PBXFileReference; lastKnownFileType = folder; name = VettIDCrypto; path = Packages/VettIDCrypto; sourceTree = SOURCE_ROOT; };
+		C2E046F31EC24A8B89BD71C6 /* AmericanSpellingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AmericanSpellingTests.swift; sourceTree = "<group>"; };
 		CA46D6F62E13C2404BDC26A2 /* UnlockCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnlockCatalog.swift; sourceTree = "<group>"; };
 		CA9F0084CA34E6D53027BDA1 /* VettIDTesting */ = {isa = PBXFileReference; lastKnownFileType = folder; name = VettIDTesting; path = Packages/VettIDTesting; sourceTree = SOURCE_ROOT; };
 		CEAFD630960C3CA7D7885DEB /* GalleryScreenshots.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GalleryScreenshots.swift; sourceTree = "<group>"; };
@@ -360,6 +362,7 @@
 		62784A6FFC43A9CA3605D642 /* AppTests */ = {
 			isa = PBXGroup;
 			children = (
+				C2E046F31EC24A8B89BD71C6 /* AmericanSpellingTests.swift */,
 				9D2B5CA030BC6FA62B3EEF7D /* AppAttestDeviceTests.swift */,
 				D78BD3F6C3BB2643C264466A /* AppEnvironmentTests.swift */,
 				EB1D13186B27047D3E39486C /* AppLockWindowTests.swift */,
@@ -777,6 +780,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A6678DFF01647F791ED36333 /* AmericanSpellingTests.swift in Sources */,
 				A65E5E4EFA6A74AF7B884B2E /* AppAttestDeviceTests.swift in Sources */,
 				926662D958BB0CF0087EB183 /* AppEnvironmentTests.swift in Sources */,
 				48C14D9734DD1B7FCF3CF6B0 /* AppLockWindowTests.swift in Sources */,

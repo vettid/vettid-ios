@@ -135,7 +135,7 @@ public enum HistoryKindTexts {
         "history_kind_recovery_registered": "Recovery phone registered",
         "history_kind_recovery_device_paired": "Recovery phone paired",
         "history_kind_recovery_completed": "Recovery completed",
-        "history_kind_recovery_cancelled": "Recovery cancelled",
+        "history_kind_recovery_cancelled": "Recovery canceled",
         "history_kind_recovery_expired": "Recovery expired",
         "history_kind_recovery_voided": "Recovery voided",
         "history_kind_item_added": "Item added",

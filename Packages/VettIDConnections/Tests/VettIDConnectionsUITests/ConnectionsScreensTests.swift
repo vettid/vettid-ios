@@ -62,7 +62,7 @@ import VettIDUI
     @Test func thePillOffersWhatTheAppHas() {
         let c = Self.connection("c1", favorite: true)
         let screen = ConnectionDetailScreen(state: ConnectionDetailState(connectionID: "c1"), actions: DetailActions())
-        #expect(screen.pill(c).map(\.label) == ["Remove \u{2068}Ada Lovelace\u{2069} from favourites", "Remove"])
+        #expect(screen.pill(c).map(\.label) == ["Remove \u{2068}Ada Lovelace\u{2069} from favorites", "Remove"])
         var actions = DetailActions()
         actions.onMessage = {}
         var state = ConnectionDetailState(connectionID: "c1")

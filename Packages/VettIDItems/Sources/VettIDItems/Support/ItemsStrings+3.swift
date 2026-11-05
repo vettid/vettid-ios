@@ -323,7 +323,7 @@ public extension ItemsStrings {
         String(
             localized: "items_tags_empty_body",
             defaultValue: """
-                Tags organise your items and decide what you share with each connection
+                Tags organize your items and decide what you share with each connection
                 """,
             bundle: .module
         )
@@ -339,14 +339,14 @@ public extension ItemsStrings {
         )
     }
 
-    static var tagsEditColour: String { String(localized: "items_tags_edit_colour", defaultValue: "Edit colour", bundle: .module) }
+    static var tagsEditColour: String { String(localized: "items_tags_edit_colour", defaultValue: "Edit color", bundle: .module) }
 
     static func tagsCdColour(_ a: String) -> String {
-        String(localized: "items_tags_cd_colour", defaultValue: "Edit the colour of \(a)", bundle: .module)
+        String(localized: "items_tags_cd_colour", defaultValue: "Edit the color of \(a)", bundle: .module)
     }
 
     static func tagsColourTitle(_ a: String) -> String {
-        String(localized: "items_tags_colour_title", defaultValue: "Colour of \(a)", bundle: .module)
+        String(localized: "items_tags_colour_title", defaultValue: "Color of \(a)", bundle: .module)
     }
 
     static var tagsColourProfileTitle: String {
@@ -354,7 +354,7 @@ public extension ItemsStrings {
     }
 
     static var tagsColourProfile: String {
-        String(localized: "items_tags_colour_profile", defaultValue: "Your shared profile always uses your colour", bundle: .module)
+        String(localized: "items_tags_colour_profile", defaultValue: "Your shared profile always uses your color", bundle: .module)
     }
 
     static func tagsCdColourSelected(_ a: String) -> String {

@@ -1162,7 +1162,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Account cancelled"
+            "value": "Account canceled"
           }
         }
       }
@@ -4136,7 +4136,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Centre your face in the square. Every connection sees this photo."
+            "value": "Center your face in the square. Every connection sees this photo."
           }
         }
       }

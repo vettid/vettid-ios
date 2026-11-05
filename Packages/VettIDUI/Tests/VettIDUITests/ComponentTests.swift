@@ -39,7 +39,7 @@ struct StringsTests {
         #expect(UIStrings.tagsMoreDescription(4) == "4 more tags")
         #expect(UIStrings.tagsMore(4) == "+4")
         #expect(UIStrings.account("Mesmer") == "Account: Mesmer")
-        #expect(UIStrings.favoriteAdd("Alice") == "Add Alice to favourites")
+        #expect(UIStrings.favoriteAdd("Alice") == "Add Alice to favorites")
         #expect(UIStrings.safetyCode("0 4 2 8 1 7") == "Safety code 0 4 2 8 1 7")
     }
 }

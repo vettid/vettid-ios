@@ -135,7 +135,7 @@ public enum VoteStrings {
     }
 
     public static func voteConflictAfterVerified(_ a1: String) -> String {
-        String(localized: "vote_conflict_after_verified", defaultValue: "**Your vote is in the published results.** \(a1) also once showed a different vote under your code. Save the proof and show it to the organisation.", bundle: .module)
+        String(localized: "vote_conflict_after_verified", defaultValue: "**Your vote is in the published results.** \(a1) also once showed a different vote under your code. Save the proof and show it to the organization.", bundle: .module)
     }
 
     /// The rest of the published results failed the app's observer's check (BALLOT-PROTOCOL §8.4) under a `verified` or
@@ -183,11 +183,11 @@ public enum VoteStrings {
     }
 
     public static var voteFailedBody: String {
-        String(localized: "vote_failed_body", defaultValue: "You can save the proof and show it to the organisation.", bundle: .module)
+        String(localized: "vote_failed_body", defaultValue: "You can save the proof and show it to the organization.", bundle: .module)
     }
 
     public static func voteConflictBody(_ a1: String) -> String {
-        String(localized: "vote_conflict_body", defaultValue: "\(a1) holds a different vote under your code than the one you cast. Save the proof and show it to the organisation.", bundle: .module)
+        String(localized: "vote_conflict_body", defaultValue: "\(a1) holds a different vote under your code than the one you cast. Save the proof and show it to the organization.", bundle: .module)
     }
 
     public static func voteStateLatePending(_ a1: String) -> String {
@@ -203,11 +203,11 @@ public enum VoteStrings {
     }
 
     public static func voteRefusedNotEligible(_ a1: String) -> String {
-        String(localized: "vote_refused_not_eligible", defaultValue: "\(a1) says you were not on the list for this vote. You can save the proof and show it to the organisation.", bundle: .module)
+        String(localized: "vote_refused_not_eligible", defaultValue: "\(a1) says you were not on the list for this vote. You can save the proof and show it to the organization.", bundle: .module)
     }
 
     public static func voteRefusedBadBallot(_ a1: String) -> String {
-        String(localized: "vote_refused_bad_ballot", defaultValue: "\(a1) did not accept your vote. You can save the proof and show it to the organisation.", bundle: .module)
+        String(localized: "vote_refused_bad_ballot", defaultValue: "\(a1) did not accept your vote. You can save the proof and show it to the organization.", bundle: .module)
     }
 
     public static func voteRefusedEnded(_ a1: String) -> String {
@@ -271,7 +271,7 @@ public enum VoteStrings {
     }
 
     public static var voteSaveProofWarning: String {
-        String(localized: "vote_save_proof_warning", defaultValue: "The file shows how you voted. Keep it private, and share it only with the organisation.", bundle: .module)
+        String(localized: "vote_save_proof_warning", defaultValue: "The file shows how you voted. Keep it private, and share it only with the organization.", bundle: .module)
     }
 
     public static var voteRejectedTitle: String {
@@ -311,7 +311,7 @@ public enum VoteStrings {
     }
 
     public static var voteSiteMismatchAfter: String {
-        String(localized: "vote_site_mismatch_after", defaultValue: "The vote you voted on differs from the one published on the public site, so your vote may not count. Save the proof and show it to the organisation.", bundle: .module)
+        String(localized: "vote_site_mismatch_after", defaultValue: "The vote you voted on differs from the one published on the public site, so your vote may not count. Save the proof and show it to the organization.", bundle: .module)
     }
 
     public static var voteUnpublished: String {
@@ -375,7 +375,7 @@ public enum VoteStrings {
     }
 
     public static func voteDisputedBody(_ a1: String) -> String {
-        String(localized: "vote_disputed_body", defaultValue: "\(a1) holds a vote under your code that you said is not yours. Save the proof and show it to the organisation.", bundle: .module)
+        String(localized: "vote_disputed_body", defaultValue: "\(a1) holds a vote under your code that you said is not yours. Save the proof and show it to the organization.", bundle: .module)
     }
 
     public static var voteRejectedSignature: String {
