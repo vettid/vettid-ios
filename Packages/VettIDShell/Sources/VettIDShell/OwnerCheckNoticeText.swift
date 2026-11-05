@@ -5,8 +5,11 @@ import VettIDData
 /// `OwnerCheckBanners`' `noticeText` and `holdChangedText`.
 public enum OwnerCheckNoticeText: Equatable, Sendable {
     case locked
+    /// `ref` `pin`: a wrong PIN on a daily check or on another operation that checks the PIN as one does
+    /// (VAULT-MESSAGING §3.6.1, e.g. a wallet limit raise), so the text doesn't say "daily".
     case failedPin
     case failedPassword
+    case failed
     case holdOff
     case holdOffUntil(Date)
     case holdOn
@@ -17,7 +20,12 @@ public enum OwnerCheckNoticeText: Equatable, Sendable {
     public static func of(_ n: OwnerCheckNotice) -> OwnerCheckNoticeText {
         switch n.kind {
         case "owner_check.locked": return .locked
-        case "owner_check.failed": return n.ref == "password" ? .failedPassword : .failedPin
+        case "owner_check.failed":
+            switch n.ref {
+            case "pin": return .failedPin
+            case "password": return .failedPassword
+            default: return .failed
+            }
         default: return holdChanged(n.ref)
         }
     }

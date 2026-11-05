@@ -1456,6 +1456,17 @@
         }
       }
     },
+    "history_kind_owner_check_failed_pin": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A PIN check failed: wrong PIN"
+          }
+        }
+      }
+    },
     "history_kind_owner_check_locked": {
       "extractionState": "manual",
       "localizations": {

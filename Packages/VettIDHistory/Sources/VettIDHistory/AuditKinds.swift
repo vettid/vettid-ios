@@ -157,6 +157,9 @@ public enum AuditKinds {
         // (VAULT-MESSAGING §3.6.8, release L) The vault locked itself: `vault.locked` with `ref` `idle`.
         case kindLocked where ref == refIdle:
             return .known("history_kind_vault_locked_idle")
+        // (VAULT-MESSAGING §3.6.1) A wrong PIN on a check, daily or not (a wallet limit raise is one): `ref` `pin`.
+        case "owner_check.failed" where ref == "pin":
+            return .known("history_kind_owner_check_failed_pin")
         default:
             break
         }
