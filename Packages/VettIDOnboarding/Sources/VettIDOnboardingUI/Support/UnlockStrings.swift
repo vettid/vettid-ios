@@ -169,13 +169,13 @@ extension OnboardingStrings {
         String(
             localized: "unlock_unreadable",
             defaultValue: """
-                Your vault did not recognise this phone. It may have been replaced by a recovery or a transfer.
+                Your vault did not recognize this phone. It may have been replaced by a recovery or a transfer.
                 """,
             bundle: .module
         )
     }
     static var unlockNotRecognisedTitle: String {
-        String(localized: "unlock_not_recognised_title", defaultValue: "Your vault did not recognise this phone", bundle: .module)
+        String(localized: "unlock_not_recognised_title", defaultValue: "Your vault did not recognize this phone", bundle: .module)
     }
     static var unlockNotRecognisedBody: String {
         String(

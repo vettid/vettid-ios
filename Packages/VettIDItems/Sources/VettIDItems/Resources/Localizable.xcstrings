@@ -29,7 +29,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Keep documents, logins and secrets in your vault, organised by tags"
+            "value": "Keep documents, logins and secrets in your vault, organized by tags"
           }
         }
       }
@@ -2284,7 +2284,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Tags organise your vault and decide what you share. When you share a tag with a connection, items with that tag follow that sharing rule: you are asked first, or they are shared automatically."
+            "value": "Tags organize your vault and decide what you share. When you share a tag with a connection, items with that tag follow that sharing rule: you are asked first, or they are shared automatically."
           }
         }
       }
@@ -3197,7 +3197,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Tags organise your items and decide what you share with each connection"
+            "value": "Tags organize your items and decide what you share with each connection"
           }
         }
       }
@@ -3219,7 +3219,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Edit colour"
+            "value": "Edit color"
           }
         }
       }
@@ -3230,7 +3230,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Edit the colour of %@"
+            "value": "Edit the color of %@"
           }
         }
       }
@@ -3241,7 +3241,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Colour of %@"
+            "value": "Color of %@"
           }
         }
       }
@@ -3263,7 +3263,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Your shared profile always uses your colour"
+            "value": "Your shared profile always uses your color"
           }
         }
       }

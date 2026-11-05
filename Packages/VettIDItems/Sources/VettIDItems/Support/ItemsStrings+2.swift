@@ -391,7 +391,7 @@ public extension ItemsStrings {
         String(
             localized: "items_tags_note",
             defaultValue: """
-                Tags organise your vault and decide what you share. When you share a tag with a connection, items \
+                Tags organize your vault and decide what you share. When you share a tag with a connection, items \
                 with that tag follow that sharing rule: you are asked first, or they are shared automatically.
                 """,
             bundle: .module

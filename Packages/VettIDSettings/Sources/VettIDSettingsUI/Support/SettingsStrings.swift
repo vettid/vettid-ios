@@ -165,7 +165,7 @@ enum SettingsStrings {
     }
 
     static var accountCanceled: String {
-        String(localized: "settings_account_canceled", defaultValue: "Account cancelled", bundle: .module)
+        String(localized: "settings_account_canceled", defaultValue: "Account canceled", bundle: .module)
     }
 
     static var cancel: String {

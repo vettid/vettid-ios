@@ -187,7 +187,7 @@ import Testing
         let s = Samples.closed(VoteBallot(state: .recorded), check: VoteCheck(state: .verified), conflict: true)
         let f = Samples.facts(Samples.screen(s))
         #expect(f.notes.map(\.note) == [.closed, .recorded, .inResults, .inResultsConflict])
-        #expect(f.notes.last?.text == "**Your vote is in the published results.** \(service) also once showed a different vote under your code. Save the proof and show it to the organisation.")
+        #expect(f.notes.last?.text == "**Your vote is in the published results.** \(service) also once showed a different vote under your code. Save the proof and show it to the organization.")
         #expect(f.notes.last?.note.severity == .note && f.saveProof)
         // Without the flag only the results line shows, and no proof.
         let plain = Samples.facts(Samples.screen(Samples.closed(VoteBallot(state: .recorded), check: VoteCheck(state: .verified))))
@@ -263,7 +263,7 @@ import Testing
     @Test func aFailedCheckShowsTheTitleTheBodyAndTheProof() {
         let f = Samples.facts(Samples.screen(Samples.closed(VoteBallot(state: .recorded), check: VoteCheck(state: .failed))))
         let failed = f.notes.first { $0.note == .failed }
-        #expect(failed?.heading == "The published results don't match your vote" && failed?.text == "You can save the proof and show it to the organisation.")
+        #expect(failed?.heading == "The published results don't match your vote" && failed?.text == "You can save the proof and show it to the organization.")
         #expect(f.saveProof)
     }
 

@@ -136,7 +136,7 @@ import VettIDUI
         state.connection = s
         state.loading = false
         let screen = ConnectionDetailScreen(state: state, actions: actions)
-        #expect(screen.pill(s).map(\.label) == ["Add \u{2068}Example Bank\u{2069} to favourites", "History", "Remove"])
+        #expect(screen.pill(s).map(\.label) == ["Add \u{2068}Example Bank\u{2069} to favorites", "History", "Remove"])
         #expect(!DetailContent.showsSharing(s, actions) && DetailContent.showsCanAsk(s))
         #expect(ProfileCard.accountNameLabel(s) == "Name given by the service")
         #expect(ServiceCanAskCard.body(votes: false) == ServiceTexts.canAskBody && ServiceCanAskCard.body(votes: true) == ServiceTexts.canAskBodyVotes)

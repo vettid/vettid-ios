@@ -62,10 +62,10 @@ enum UIStrings {
         String(localized: "core_ui_filter_off", defaultValue: "\(label) filter off", bundle: .module)
     }
     static func favoriteAdd(_ name: String) -> String {
-        String(localized: "core_ui_favorite_add", defaultValue: "Add \(name) to favourites", bundle: .module)
+        String(localized: "core_ui_favorite_add", defaultValue: "Add \(name) to favorites", bundle: .module)
     }
     static func favoriteRemove(_ name: String) -> String {
-        String(localized: "core_ui_favorite_remove", defaultValue: "Remove \(name) from favourites", bundle: .module)
+        String(localized: "core_ui_favorite_remove", defaultValue: "Remove \(name) from favorites", bundle: .module)
     }
     static func strength(_ label: String) -> String {
         String(localized: "core_ui_cd_strength", defaultValue: "Password strength: \(label)", bundle: .module)

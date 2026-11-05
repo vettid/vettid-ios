@@ -28,8 +28,8 @@ import Testing
     }
 
     @Test func theConflictFoundAfterAVerifiedCheckIsTheOwnersText() {
-        #expect(VoteStrings.voteConflictAfterVerified("Example") == "**Your vote is in the published results.** Example also once showed a different vote under your code. Save the proof and show it to the organisation.")
-        #expect(plainText(VoteStrings.voteConflictAfterVerified("Example")) == "Your vote is in the published results. Example also once showed a different vote under your code. Save the proof and show it to the organisation.")
+        #expect(VoteStrings.voteConflictAfterVerified("Example") == "**Your vote is in the published results.** Example also once showed a different vote under your code. Save the proof and show it to the organization.")
+        #expect(plainText(VoteStrings.voteConflictAfterVerified("Example")) == "Your vote is in the published results. Example also once showed a different vote under your code. Save the proof and show it to the organization.")
         #expect(VoteTexts.text(.inResultsConflict, service: "Example", time: "") == VoteStrings.voteConflictAfterVerified("Example"))
     }
 

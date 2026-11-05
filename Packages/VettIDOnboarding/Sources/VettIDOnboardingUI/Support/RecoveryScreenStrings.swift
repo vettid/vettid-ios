@@ -106,7 +106,7 @@ enum RecoveryScreenStrings {
                 This phone forgets the recovery it registered and goes back to the start. There you can recover \
                 again, use a setup code or move VettID from your old phone.\n\
                 \n\
-                The recovery itself is not cancelled by this: it stays open until you cancel it on the account \
+                The recovery itself is not canceled by this: it stays open until you cancel it on the account \
                 site or it expires, and its code cannot be used a second time. To recover with this phone later, \
                 cancel it there and start a new recovery. Your vault is not changed.
                 """,

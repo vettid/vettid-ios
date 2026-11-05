@@ -84,7 +84,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Account cancelled"
+            "value": "Account canceled"
           }
         }
       }
@@ -95,7 +95,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Account cancelled: your vault is deleted on %@"
+            "value": "Account canceled: your vault is deleted on %@"
           }
         }
       }
@@ -260,7 +260,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "%@: cancelled"
+            "value": "%@: canceled"
           }
         }
       }

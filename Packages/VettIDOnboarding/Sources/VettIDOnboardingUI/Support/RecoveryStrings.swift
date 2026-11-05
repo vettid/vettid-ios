@@ -33,7 +33,7 @@ enum RecoveryStrings {
             localized: "recover_not_available",
             defaultValue: """
                 This recovery is not available: its code may not be ready yet (\(delay) after the request), or the recovery \
-                was cancelled, used or has expired. Check the account site.
+                was canceled, used or has expired. Check the account site.
                 """,
             bundle: .module
         )
@@ -47,7 +47,7 @@ enum RecoveryStrings {
         String(
             localized: "recover_bad_code",
             defaultValue: """
-                That code is not right. After 5 wrong codes the recovery is cancelled. Wrong codes from this phone: \(wrong)\
+                That code is not right. After 5 wrong codes the recovery is canceled. Wrong codes from this phone: \(wrong)\
                  of 5.
                 """,
             bundle: .module
@@ -58,7 +58,7 @@ enum RecoveryStrings {
         String(
             localized: "recover_voided",
             defaultValue: """
-                That was the fifth wrong code, so the recovery was cancelled. Start a new recovery on the account site.
+                That was the fifth wrong code, so the recovery was canceled. Start a new recovery on the account site.
                 """,
             bundle: .module
         )
@@ -82,7 +82,7 @@ enum RecoveryStrings {
         String(
             localized: "recover_code_gone",
             defaultValue: """
-                This recovery is no longer active: it was cancelled, already used, or voided after wrong codes. Start a new \
+                This recovery is no longer active: it was canceled, already used, or voided after wrong codes. Start a new \
                 recovery on the account site.
                 """,
             bundle: .module

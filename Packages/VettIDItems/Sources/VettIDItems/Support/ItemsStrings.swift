@@ -17,7 +17,7 @@ public enum ItemsStrings {
         String(
             localized: "items_empty_body",
             defaultValue: """
-                Keep documents, logins and secrets in your vault, organised by tags
+                Keep documents, logins and secrets in your vault, organized by tags
                 """,
             bundle: .module
         )

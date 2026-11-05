@@ -148,7 +148,7 @@ import VettIDVault
     @Test func theAccountDetails() {
         let until = now.addingTimeInterval(86_400)
         #expect(AccountDetails.membership(.canceled(deletesAt: until))
-            == "Account cancelled: your vault is deleted on \(ShellTimes.full(until))")
+            == "Account canceled: your vault is deleted on \(ShellTimes.full(until))")
         #expect(AccountDetails.membership(.registered) == "Registered, not yet a member")
         #expect(AccountDetails.subscription(.none) == "No subscription")
         #expect(AccountDetails.subscription(.active(name: nil, until: nil)) == "Subscription: active")

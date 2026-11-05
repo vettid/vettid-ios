@@ -1581,7 +1581,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Your vault did not recognise this phone"
+            "value": "Your vault did not recognize this phone"
           }
         }
       }
@@ -2076,7 +2076,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Your vault did not recognise this phone. It may have been replaced by a recovery or a transfer."
+            "value": "Your vault did not recognize this phone. It may have been replaced by a recovery or a transfer."
           }
         }
       }
@@ -4028,7 +4028,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "This recovery is not available: its code may not be ready yet (%@ after the request), or the recovery was cancelled, used or has expired. Check the account site."
+            "value": "This recovery is not available: its code may not be ready yet (%@ after the request), or the recovery was canceled, used or has expired. Check the account site."
           }
         }
       }
@@ -4050,7 +4050,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "That code is not right. After 5 wrong codes the recovery is cancelled. Wrong codes from this phone: %lld of 5."
+            "value": "That code is not right. After 5 wrong codes the recovery is canceled. Wrong codes from this phone: %lld of 5."
           }
         }
       }
@@ -4061,7 +4061,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "That was the fifth wrong code, so the recovery was cancelled. Start a new recovery on the account site."
+            "value": "That was the fifth wrong code, so the recovery was canceled. Start a new recovery on the account site."
           }
         }
       }
@@ -4094,7 +4094,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "This recovery is no longer active: it was cancelled, already used, or voided after wrong codes. Start a new recovery on the account site."
+            "value": "This recovery is no longer active: it was canceled, already used, or voided after wrong codes. Start a new recovery on the account site."
           }
         }
       }
@@ -4479,7 +4479,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "This recovery has ended: it was cancelled, it expired or it was completed. Nothing was used. To go on, start a new recovery on the account site."
+            "value": "This recovery has ended: it was canceled, it expired or it was completed. Nothing was used. To go on, start a new recovery on the account site."
           }
         }
       }
@@ -4853,7 +4853,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "This phone forgets the recovery it registered and goes back to the start. There you can recover again, use a setup code or move VettID from your old phone.\n\nThe recovery itself is not cancelled by this: it stays open until you cancel it on the account site or it expires, and its code cannot be used a second time. To recover with this phone later, cancel it there and start a new recovery. Your vault is not changed."
+            "value": "This phone forgets the recovery it registered and goes back to the start. There you can recover again, use a setup code or move VettID from your old phone.\n\nThe recovery itself is not canceled by this: it stays open until you cancel it on the account site or it expires, and its code cannot be used a second time. To recover with this phone later, cancel it there and start a new recovery. Your vault is not changed."
           }
         }
       }

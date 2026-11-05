@@ -127,7 +127,7 @@ enum UnlockCatalog {
         add("update_refused", "The update was refused") { $0.message = .updateRefused(code: "target") }
         add("previous_pin", "A PIN change got no answer: the previous PIN") { $0.pinStep = .previous }
         add("new_pin", "A PIN change got no answer: the new PIN") { $0.pinStep = .new }
-        add("not_recognised", "Not recognised: erase offered") { s in
+        add("not_recognised", "Not recognized: erase offered") { s in
             s.notRecognised = true
             s.message = .failed(.other, code: UnlockState.codeUnreadable)
         }

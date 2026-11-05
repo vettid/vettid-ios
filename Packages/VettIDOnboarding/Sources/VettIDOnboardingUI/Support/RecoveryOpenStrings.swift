@@ -233,7 +233,7 @@ enum RecoveryOpenStrings {
         String(
             localized: "onboarding_open_no_recovery",
             defaultValue: """
-                This recovery has ended: it was cancelled, it expired or it was completed. Nothing was used. To go on, start\
+                This recovery has ended: it was canceled, it expired or it was completed. Nothing was used. To go on, start\
                  a new recovery on the account site.
                 """,
             bundle: .module

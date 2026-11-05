@@ -407,7 +407,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "This invitation is no longer available: it was used, cancelled or has expired. Ask for a new one."
+            "value": "This invitation is no longer available: it was used, canceled or has expired. Ask for a new one."
           }
         }
       }

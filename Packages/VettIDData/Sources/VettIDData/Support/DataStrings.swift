@@ -356,7 +356,7 @@ enum DataStrings {
         String(
             localized: "data_failure_invite_unavailable",
             defaultValue: """
-                This invitation is no longer available: it was used, cancelled or has expired. Ask for a new one.
+                This invitation is no longer available: it was used, canceled or has expired. Ask for a new one.
                 """,
             bundle: .module
         )

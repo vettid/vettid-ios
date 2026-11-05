@@ -92,7 +92,7 @@ struct GalleryScreen: View {
                         VettIDListRow(title: row.0, supporting: row.1, meta: row.2, emphasized: i == 0, onTap: {})
                     }
 
-                    section("Connection rows (star = favourite)")
+                    section("Connection rows (star = favorite)")
                     ForEach(Self.sampleConnections, id: \.0) { name, status in
                         ConnectionRow(
                             name: name,
@@ -192,7 +192,7 @@ struct GalleryScreen: View {
 
     private var brand: some View {
         Group {
-            section("Brand and colour")
+            section("Brand and color")
             HStack(spacing: Spacing.xl) {
                 RookLogo(height: 48)
                 // Follows the theme: gold wordmark on dark, the kit's on-light file (blue wordmark) on light.
@@ -389,7 +389,7 @@ struct GalleryScreen: View {
             ("screen", c.background), ("drawer", c.surfaceContainerLow), ("grouped", c.groupedBackground),
             ("card", c.card), ("container", c.surfaceContainer), ("high", c.surfaceContainerHigh),
             ("gold fill", c.primaryContainer), ("gold content", c.primary), ("tile", c.tile),
-            ("favourite", c.favoriteTile), ("error", c.error), ("outline", c.outline),
+            ("favorite", c.favoriteTile), ("error", c.error), ("outline", c.outline),
         ]
         return LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: Spacing.s), count: 4), spacing: Spacing.s) {
             ForEach(all, id: \.0) { name, color in
