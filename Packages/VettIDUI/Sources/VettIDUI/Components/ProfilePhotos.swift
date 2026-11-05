@@ -115,6 +115,9 @@ public final class ProfilePhotoCache {
     #if DEBUG
     /// The photos whose digest is remembered, least recently used first (tests).
     var memoizedPhotos: [String] { digests.map(\.photo) }
+
+    /// Adds a photo's digest to the memo, as a decode does (tests).
+    func memoize(_ base64: String) { _ = key(base64) }
     #endif
 
     /// The digest of a photo. [remember]: it is added to the memo (a decode does; a lookup does not, so that a row drawn again after
