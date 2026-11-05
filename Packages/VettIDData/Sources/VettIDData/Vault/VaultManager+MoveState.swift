@@ -58,6 +58,8 @@ final class MoveBook {
     /// The ``VaultManager/transferIn(code:)`` calls under way: a start's resume waits for none to run (its start may be
     /// written before its handshake is saved).
     var startingIn = 0
+    /// The times a settlement window began to wait for the collector's round at its end (what a test awaits).
+    var collectorRounds = 0
     /// How many day-7 checks ended (any result): what a test awaits instead of a fixed time.
     var keptChecksFinished = 0
     /// The timer to the end of a kept transfer, and whether its end is being decided now.

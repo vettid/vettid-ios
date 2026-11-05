@@ -54,9 +54,8 @@ extension VaultManagerTransferInTests {
         #expect(await eventually { !phone.windowPauses.lengths.isEmpty }, "the window runs")
         #expect(m.session?.device.collecting == true, "the collector runs")
         let from = service.relay.requests.count
-        try await Task.sleep(for: .milliseconds(300))
-        let waits = collectWaits(from: from)
-        #expect(waits.contains(0) && !waits.contains(25), "\(waits)")
+        #expect(await eventually { collectWaits(from: from).contains(0) }, "the window's `wait=0` collects")
+        #expect(!collectWaits(from: from).contains(25), "\(collectWaits(from: from))")
         phone.windowPauses.release()
     }
 
@@ -78,8 +77,9 @@ extension VaultManagerTransferInTests {
         service.holdsCollectAnswers = gate
         service.approveTransferIn()
         #expect(await eventually { gate.waiting > 0 }, "the collector's long poll holds the pairing")
+        let rounds = m.moveFlags.book.collectorRounds
         phone.windowPauses.release()
-        try await Task.sleep(for: .milliseconds(200))
+        #expect(await eventually { m.moveFlags.book.collectorRounds > rounds }, "the window waits for the collector's round")
         // The window is at its end, waiting for the collector's round: a background stops the collector.
         await m.onBackground(budget: .seconds(1))
         service.holdsCollectAnswers = nil

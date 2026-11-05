@@ -63,10 +63,11 @@ import VettIDDataTesting
         vm.scanned(try qr())
         await clock.runCurrent()
         #expect(vm.state.secondsLeft == 630 && !vm.state.closing, "counted from the stored start")
+        // The repository says it, as the real one does from the stored start + 10 minutes.
+        vault.abandonClosed = true
         await clock.advance(seconds: 570)
         // From the end of the vault's 10 minutes the code goes and the screen checks.
         #expect(vm.state.closing && vm.state.checking)
-        vault.abandonClosed = true
         vm.cancel()
         #expect(!vm.state.leaveHint)
         #expect(vm.back(), "Back stays on the screen")
@@ -89,6 +90,18 @@ import VettIDDataTesting
         #expect(vm.state.step == .compare && !vault.calls.contains("abandonTransferIn"))
     }
 
+    /// The screen checks when the repository says the abandon is closed, to the second (not from its own rounded count):
+    /// Checking and Back always agree.
+    @Test func theScreenChecksWhenTheRepositorySays() async throws {
+        let vm = model()
+        vm.scan()
+        vm.scanned(try qr())
+        await clock.runCurrent()
+        vault.abandonClosed = true
+        await clock.advance(seconds: 1)
+        #expect(vm.state.secondsLeft > 60 && vm.state.closing && vm.state.checking && vm.closesNow)
+    }
+
     /// (§11.14.10 rule 5) A transfer whose session ended in the window has its own step, never "timed out".
     @Test func anEndedSessionHasItsOwnStep() async throws {
         let vm = model()
@@ -108,10 +121,10 @@ import VettIDDataTesting
         vm.scanned(try qr())
         await clock.runCurrent()
         #expect(!vm.state.checking)
+        vault.abandonClosed = true
         await clock.advance(seconds: 660)
         #expect(vm.state.secondsLeft == 0 && vm.state.checking && vm.state.step == .compare)
-        // No abandon now (the repository says so past the deadline): Cancel is gone, and asking for it changes nothing.
-        vault.abandonClosed = true
+        // No abandon now: Cancel is gone, and asking for it changes nothing.
         vm.cancel()
         #expect(vm.state.checking && vm.state.step == .compare)
     }

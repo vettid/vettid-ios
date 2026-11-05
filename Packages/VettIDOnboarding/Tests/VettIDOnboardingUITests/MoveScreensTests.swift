@@ -156,8 +156,8 @@ import VettIDUI
         model.scan()
         model.scanned(try qr(clock))
         await clock.runCurrent()
-        await clock.advance(seconds: 610)
         vault.abandonClosed = true
+        await clock.advance(seconds: 610)
         #expect(model.state.closing)
         TransferInRoute.leave(model, move: vault, movedIn: false)
         for _ in 0..<50 { await Task.yield() }

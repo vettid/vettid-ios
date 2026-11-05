@@ -230,6 +230,7 @@ extension VaultManager {
     /// and the handling margin).
     private func collectorRound(_ d: VaultDevice) async {
         guard d.collecting, let out = d.collectRequestSince else { return }
+        moveFlags.book.collectorRounds += 1
         let sleep = config.transferRetrySleep
         for _ in 0..<Int((Self.windowPoll + Self.handlingMargin) * 20) where d.collecting && d.collectRequestSince == out {
             try? await sleep(.milliseconds(50))

@@ -203,9 +203,9 @@ extension VaultDevice {
     public var ended: Bool { mem.withLock { halted || forgotten } }
 
     /// One collect of this device's mailbox (a long poll of [wait] seconds, `max` at its cap, RELAY-PROTOCOL §6.3), bounded
-    /// by [timeout] seconds in all, its transport retries included ([attempts]: nil for the relay client's own): each message is handled as the collector handles it
-    /// and acked. A `device.paired{transfer}` it brings is then found by ``awaitTransfer(timeout:)``. Throws when the
-    /// collect fails or times out; a task that is cancelled stops it.
+    /// by [timeout] seconds in all, its transport retries included ([attempts]: nil for the relay client's own): each
+    /// message is handled as the collector handles it and acked. A `device.paired{transfer}` it brings is then found by
+    /// ``awaitTransfer(timeout:)``. Throws when the collect fails or times out; a task that is cancelled stops it.
     public func collectOnce(
         timeout: TimeInterval = 30, wait: TimeInterval = 0, attempts: Int? = nil,
         sleep: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) }

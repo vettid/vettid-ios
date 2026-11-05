@@ -15,8 +15,6 @@ public final class TransferInViewModel: TransferInActions {
     /// The one deadline: 11 minutes after the `hs.init` was started (VAULT-MESSAGING §11.14.10 rule 5; owner decision,
     /// 2026-10-23): the vault's 10 minutes (§6.7, 0.10.4) plus about a minute of grace.
     static let window: TimeInterval = 660
-    /// The vault's 10 minutes (§6.7, 0.10.4): no abandon from their end (§11.14.10 rule 5).
-    static let approvalWindow: TimeInterval = 600
 
     public private(set) var state = TransferInState()
 
@@ -247,8 +245,8 @@ public final class TransferInViewModel: TransferInActions {
         let left = max(Int64(deadline.timeIntervalSince(now()).rounded(.down)), 0)
         state.secondsLeft = left
         // From the end of the vault's 10 minutes the old phone can no longer approve: the code goes, and the screen checks
-        // (as vettid-android does).
-        state.closing = Double(left) <= Self.window - Self.approvalWindow
+        // (as vettid-android does). The repository decides the moment, as for Back (``closesNow``): both agree to the second.
+        state.closing = move.abandonClosed
         state.checking = state.closing
         return left > 0
     }
