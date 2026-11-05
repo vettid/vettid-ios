@@ -1,4 +1,6 @@
+import CryptoKit
 import ImageIO
+import SwiftUI
 import UIKit
 
 /// Profile photos (VAULT-MESSAGING §10.8): `photo` is the standard base64 of a JPEG or PNG of at most 65,536 bytes.
@@ -72,4 +74,116 @@ public enum ProfilePhotos {
 
     private static let jpeg: [UInt8] = [0xFF, 0xD8, 0xFF]
     private static let png: [UInt8] = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]
+}
+
+/// Decoded profile photos for list rows, kept in memory only. A photo is vault content: IOS-PLAN §6.9's "no photo cache" means
+/// nothing persisted, and this cache is memory-only and emptied at the vault lock, at a hold and at a wipe (``clear()``). A row
+/// asks for a photo with ``cached(_:)`` (at once, from the cache) or ``image(_:)`` (decoded off the main actor, down to the
+/// tile size by ``ProfilePhotos/decode(_:)``).
+///
+/// (Chosen; not in the spec: the cache itself, bounded to 16 MiB of decoded pixels and 128 photos and evicted by the system
+/// under memory pressure, keyed by the SHA-256 of the photo; vettid-android decodes once per distinct photo,
+/// `rememberProfilePhoto`.)
+@MainActor
+public final class ProfilePhotoCache {
+    public static let shared = ProfilePhotoCache()
+
+    static let limit = 128
+    static let byteLimit = 16 * 1_024 * 1_024
+    /// The photos whose digest is remembered: 32 (chosen; not in the spec), the strings being shared with the lists.
+    static let digestLimit = 32
+
+    private let store: NSCache<NSData, UIImage> = {
+        let cache = NSCache<NSData, UIImage>()
+        cache.countLimit = limit
+        cache.totalCostLimit = byteLimit
+        return cache
+    }()
+    /// Bumped by ``clear()``: a decode that was under way is not stored after it, nor returned.
+    private var generation = 0
+    #if DEBUG
+    /// TEST ONLY. Awaited after a decode ended, before the generation is looked at.
+    var afterDecode: (@Sendable () async -> Void)?
+    #endif
+
+    init() {}
+
+    /// The digests made so far, newest last: a photo's digest is made once per change, and a body that evaluates again finds it by
+    /// comparing the strings (identical storage compares at once), not by hashing 80 KiB again.
+    private var digests: [(photo: String, digest: NSData)] = []
+
+    #if DEBUG
+    /// The photos whose digest is remembered, least recently used first (tests).
+    var memoizedPhotos: [String] { digests.map(\.photo) }
+
+    /// Adds a photo's digest to the memo, as a decode does (tests).
+    func memoize(_ base64: String) { _ = key(base64) }
+    #endif
+
+    /// The digest of a photo. [remember]: it is added to the memo (a decode does; a lookup does not, so that a row drawn again after
+    /// ``clear()`` leaves nothing of the photo behind).
+    private func key(_ base64: String, remember: Bool = true) -> NSData {
+        if let i = digests.lastIndex(where: { $0.photo == base64 }) {
+            // A hit moves to the end, so that the memo drops the least recently used.
+            let known = digests.remove(at: i)
+            digests.append(known)
+            return known.digest
+        }
+        let digest = Data(SHA256.hash(data: Data(base64.utf8))) as NSData
+        guard remember else { return digest }
+        digests.append((base64, digest))
+        if digests.count > Self.digestLimit { digests.removeFirst(digests.count - Self.digestLimit) }
+        return digest
+    }
+
+    /// The photo [base64] decoded earlier, if it is still held.
+    public func cached(_ base64: String?) -> UIImage? {
+        guard let base64, !base64.isEmpty else { return nil }
+        return store.object(forKey: key(base64, remember: false))
+    }
+
+    /// The photo [base64], decoded off the main actor unless it is held; nil when it does not decode (the initial tile shows),
+    /// and when the cache was cleared meanwhile.
+    public func image(_ base64: String?) async -> UIImage? {
+        guard let base64, !base64.isEmpty else { return nil }
+        let k = key(base64)
+        if let held = store.object(forKey: k) { return held }
+        let started = generation
+        guard let image = await ProfilePhotos.decoded(base64) else { return nil }
+        #if DEBUG
+        await afterDecode?()
+        #endif
+        guard started == generation else { return nil }
+        let cost = image.cgImage.map { $0.bytesPerRow * $0.height } ?? 0
+        store.setObject(image, forKey: k, cost: cost)
+        return image
+    }
+
+    /// Drops every photo, and the ones being decoded: the vault is no longer open.
+    public func clear() {
+        generation += 1
+        digests.removeAll()
+        store.removeAllObjects()
+    }
+}
+
+/// A row's photo, loaded off the main actor: [content] gets the cached photo at once, else nil (the initial tile) until the
+/// photo is decoded, then the photo. A photo that changes is loaded again; the row is not blocked meanwhile.
+public struct ProfilePhotoLoading<Content: View>: View {
+    private let base64: String?
+    private let content: (UIImage?) -> Content
+    @State private var loaded: UIImage?
+
+    public init(_ base64: String?, @ViewBuilder content: @escaping (UIImage?) -> Content) {
+        self.base64 = base64
+        self.content = content
+    }
+
+    public var body: some View {
+        content(loaded ?? ProfilePhotoCache.shared.cached(base64))
+            .task(id: base64) {
+                loaded = nil
+                loaded = await ProfilePhotoCache.shared.image(base64)
+            }
+    }
 }

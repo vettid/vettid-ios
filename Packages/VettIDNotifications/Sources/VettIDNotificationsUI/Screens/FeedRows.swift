@@ -197,9 +197,11 @@ struct FeedTile: View {
 
     var body: some View {
         if let c = item.connectionID.flatMap({ names.connections[$0] }) {
-            InitialTile(AccountNames.cleaned(c.displayName) ?? AccountNames.cleaned(c.name) ?? "",
-                        style: c.favorite ? .favorite : .connection,
-                        photo: ProfilePhotos.decode(c.photo))
+            ProfilePhotoLoading(c.photo) { photo in
+                InitialTile(AccountNames.cleaned(c.displayName) ?? AccountNames.cleaned(c.name) ?? "",
+                            style: c.favorite ? .favorite : .connection,
+                            photo: photo)
+            }
         } else {
             InitialTile("", icon: FeedIcons.icon(item.kind), colors: CategoryColors.of(FeedIcons.hue(item), dark: colors.isDark))
         }

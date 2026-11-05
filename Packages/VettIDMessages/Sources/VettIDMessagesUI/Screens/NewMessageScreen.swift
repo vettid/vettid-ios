@@ -74,14 +74,16 @@ public struct NewMessageScreen: View {
                     }
                     ForEach(state.connections) { c in
                         let name = ConversationItem.name(c)
-                        VettIDListRow(
-                            title: name,
-                            supporting: AccountNames.isolateOrNull(c.secondaryName),
-                            tileName: ConversationItem.tileName(c),
-                            tileStyle: c.favorite ? .favorite : .connection,
-                            tilePhoto: ProfilePhotos.decode(c.photo),
-                            onTap: { onPick(c.id) }
-                        )
+                        ProfilePhotoLoading(c.photo) { photo in
+                            VettIDListRow(
+                                title: name,
+                                supporting: AccountNames.isolateOrNull(c.secondaryName),
+                                tileName: ConversationItem.tileName(c),
+                                tileStyle: c.favorite ? .favorite : .connection,
+                                tilePhoto: photo,
+                                onTap: { onPick(c.id) }
+                            )
+                        }
                         .accessibilityIdentifier("pick_\(c.id)")
                     }
                 }

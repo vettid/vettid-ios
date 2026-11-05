@@ -112,7 +112,9 @@ public struct SharedWithYouScreen: View {
     public var body: some View {
         DetailScaffold(onBack: actions.onBack) {
             ScrollView {
-                VStack(alignment: .leading, spacing: 0) {
+                // Lazy: the grants and rules are as many as the connection has (nothing below the screen is built before it is
+                // scrolled to).
+                LazyVStack(alignment: .leading, spacing: 0) {
                     LargeTitle(ItemsStrings.sharedTitle(name))
                     Text(ItemsStrings.sharedBody(name))
                         .vettIDFont(.bodyMedium)

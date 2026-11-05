@@ -74,8 +74,10 @@ extension VaultDevice {
     }
 
     /// Seals a message into the outbox and saves; the caller delivers it (``deliver(_:)``). Callers hold ``lock``.
+    /// [save]: false while a message is being handled: the save that ends ``handleLocked(_:)`` stores the entry, and the
+    /// deposit is made after it (``afterLock(_:)``), so the entry is stored before it goes out all the same.
     func enqueueLocked( // swiftlint:disable:this function_parameter_count
-        id: String?, type: String, body: [UInt8], re: String?, status: String?, exp: Date?
+        id: String?, type: String, body: [UInt8], re: String?, status: String?, exp: Date?, save saves: Bool = true
     ) throws -> OutboxEntry {
         let entry: OutboxEntry = try mem.withLock {
             if halted { throw Self.haltedError }
@@ -94,7 +96,7 @@ extension VaultDevice {
             return e
         }
         do {
-            try save()
+            if saves { try save() }
         } catch {
             // Nothing will deliver it: neither kept in flight nor left in the outbox.
             mem.withLock {
@@ -288,7 +290,11 @@ extension VaultDevice {
         let nowMs = Self.ms(now())
         for e in entries {
             // Not one that is being deposited just now (a renewal reported as failed must not go out later).
-            guard mem.withLock({ st.outbox.contains(e) && outboxInFlight.insert(e.id).inserted }) else { continue }
+            let taken = mem.withLock { st.outbox.contains(e) && outboxInFlight.insert(e.id).inserted }
+            #if DEBUG
+            flushSeen?(!taken)
+            #endif
+            guard taken else { continue }
             defer { mem.withLock { _ = outboxInFlight.remove(e.id) } }
             // A handshake's fin past its time is not sent again (chosen; not in the spec). That is no failure of the pairing: the
             // fin may have reached the vault, whose answer was lost, and the transfer's `device.paired` may wait in the mailbox
@@ -407,6 +413,66 @@ extension VaultDevice {
         }
     }
 
+    /// Drops the events kept for ``awaitEvent(_:timeout:match:)`` (the last ``inboxMax``): their bodies are vault content, which
+    /// is not kept in memory once the vault is no longer open (IOS-PLAN §6.9). A wait that is under way is not ended.
+    /// Events of a type a call has announced it will wait for (``keepingEvents(_:_:)``) are kept: its answer may arrive, and a
+    /// hold begin, before its wait does. Once the last call that kept a type ended, the events of it that a clear spared and
+    /// that nobody took are dropped.
+    public func clearInbox() {
+        mem.withLock {
+            // The events spared are noted by their ids: only those go when the last call that kept their type ends.
+            for m in inbox where memory.keptTypes[m.type, default: 0] > 0 { memory.sparedEvents.insert("\(m.type)/\(m.id)") }
+            inbox.removeAll { memory.keptTypes[$0.type, default: 0] == 0 }
+        }
+    }
+
+    /// Runs [body], during which ``clearInbox()`` keeps the events of [types]: for a call that sends a request and then waits
+    /// for the event that answers it (the answer to the request may come before the wait begins).
+    public func keepingEvents<T>(_ types: Set<String>, _ body: () async throws -> T) async rethrows -> T {
+        mem.withLock { for t in types { memory.keptTypes[t, default: 0] += 1 } }
+        defer {
+            mem.withLock {
+                for t in types { memory.keptTypes[t] = max(0, (memory.keptTypes[t] ?? 1) - 1) }
+                // The events a clear spared for a type no call keeps any more, and that nobody took, go; those that arrived
+                // after the clear are the inbox's as ever.
+                let ended = types.filter { memory.keptTypes[$0, default: 0] == 0 }
+                inbox.removeAll { ended.contains($0.type) && memory.sparedEvents.contains("\($0.type)/\($0.id)") }
+                memory.sparedEvents = memory.sparedEvents.filter { !ended.contains(String($0.prefix { $0 != "/" })) }
+            }
+        }
+        return try await body()
+    }
+
+    #if DEBUG
+    /// How many calls keep the events of [type] (tests).
+    func keptCount(_ type: String) -> Int { mem.withLock { memory.keptTypes[type, default: 0] } }
+
+    /// The ids of the outbox's entries (tests).
+    var outboxIDs: [String] { mem.withLock { st.outbox.map(\.id) } }
+
+    /// How many events the inbox holds (tests).
+    public var inboxCount: Int { mem.withLock { inbox.count } }
+    #endif
+
+    /// ``publish(_:)`` unless this event was published already: a message whose handling ended in an error is handled again
+    /// when the relay delivers it again, and its event must not be shown twice (chosen; not in the spec: the last 512 ids).
+    func publishOnce(_ m: VaultMessage) {
+        let first: Bool = mem.withLock {
+            guard memory.publishedIDs.insert(m.id).inserted else { return false }
+            memory.publishedOrder.append(m.id)
+            if memory.publishedOrder.count > 512 { memory.publishedIDs.remove(memory.publishedOrder.removeFirst()) }
+            return true
+        }
+        if first { publish(m) }
+    }
+
+    /// Forgets what the inbox's bookkeeping remembers of events (the device is forgotten). Callers hold ``mem``.
+    func forgetEventMemory() {
+        memory.publishedOrder.removeAll()
+        memory.publishedIDs.removeAll()
+        memory.sparedEvents.removeAll()
+    }
+
     func publish(_ m: VaultMessage) {
         let waiters: [OneShot<Bool>] = mem.withLock {
             inbox.append(m)
@@ -432,9 +498,11 @@ extension VaultDevice {
     /// Contract: only from code that ``handle(_:)`` runs. Outside it there is no box to take the work, and the work would be
     /// lost; that is a programming error, caught by an assertion in debug builds. A release build does not crash on it (the
     /// work is dropped, which a deposit owed in the outbox survives).
-    func afterLock(_ work: @escaping @Sendable () async -> Void) {
+    /// [keep]: the work belongs to something a write of the handling's own stored (an `hs.fin`), so it is not dropped when the
+    /// handling ends in an error (``AfterLockWork/drop()``).
+    func afterLock(keep: Bool = false, _ work: @escaping @Sendable () async -> Void) {
         assert(AfterLockWork.current != nil, "afterLock outside handle(_:): the work would be lost")
-        AfterLockWork.current?.add(work)
+        AfterLockWork.current?.add(work, keep: keep)
     }
 }
 
@@ -442,15 +510,30 @@ extension VaultDevice {
 final class AfterLockWork: @unchecked Sendable {
     @TaskLocal static var current: AfterLockWork?
     private let lock = NSLock()
-    private var work: [@Sendable () async -> Void] = []
+    private var work: [(keep: Bool, run: @Sendable () async -> Void)] = []
 
-    func add(_ w: @escaping @Sendable () async -> Void) { lock.withLock { work.append(w) } }
+    func add(_ w: @escaping @Sendable () async -> Void, keep: Bool = false) { lock.withLock { work.append((keep, w)) } }
 
     func run() async {
         let all: [@Sendable () async -> Void] = lock.withLock {
             defer { work.removeAll() }
-            return work
+            return work.map(\.run)
         }
         for w in all { await w() }
     }
+
+    /// Forgets the work queued by the handling without running it.
+    func drop() { lock.withLock { work.removeAll { !$0.keep } } }
+}
+
+/// What the device remembers of events and of a handling in hand, between calls; all under ``VaultDevice``'s `mem`.
+struct EventMemory {
+    /// Event types calls wait for (``VaultDevice/keepingEvents(_:_:)``), and the events a clear spared for them.
+    var keptTypes: [String: Int] = [:]
+    var sparedEvents: Set<String> = []
+    /// Outbox entries a handling stored by a write of its own (an `hs.fin`): kept if it fails.
+    var keptOnError: Set<String> = []
+    /// The ids of the events published (``VaultDevice/publishOnce(_:)``), in order and as a set.
+    var publishedOrder: [String] = []
+    var publishedIDs: Set<String> = []
 }

@@ -161,8 +161,11 @@ import VettIDRelay
         base.relay.refuseDeposits = "unavailable"
         base.relay.refuseOnly = 3
         let outcome = enroll(d)
-        try await settle(2.5)
+        // The hook runs once the deposit's retries have failed; their backoff is random (up to about 1.5 s) and a loaded machine
+        // is slower still, so wait for the hook itself, not for a fixed time.
+        for _ in 0..<600 where !hookRan.value { try await settle(0.05) }
         #expect(hookRan.value, "the answer landed between the failure and the cleanup")
+        try await settle(0.3)
         #expect(!outcome.finished, "on to device.paired, not failed")
     }
 

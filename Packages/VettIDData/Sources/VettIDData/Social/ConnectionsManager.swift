@@ -39,6 +39,9 @@ public final class ConnectionsManager: ConnectionsRepository, ConnectionRequests
     @ObservationIgnored var requestGeneration = 0
     /// Told of every connection that is gone (removed, blocked, or removed by the peer): its messages go with it.
     @ObservationIgnored public var onForget: @MainActor (String) -> Void = { _ in }
+    /// Told whenever the connections read from the vault are dropped (the lock, a hold, a wipe), for what the app derived from
+    /// them and keeps in memory (the decoded photos).
+    @ObservationIgnored public var onForgetAll: @MainActor () -> Void = {}
 
     /// [ops] the vault's calls, opened when needed; [quietOps] those of the background reads (nil: [ops]).
     public init(
@@ -88,6 +91,7 @@ public final class ConnectionsManager: ConnectionsRepository, ConnectionRequests
         generation += 1
         connections = []
         forgetRequests()
+        onForgetAll()
     }
 
     /// The open requests, with their names and safety codes, and the other member's declines are dropped from memory; an

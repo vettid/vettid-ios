@@ -164,6 +164,8 @@ public final class AppLock {
     @ObservationIgnored private var clockSteppedBack = false
     /// The return to the foreground came while a prompt showed and was put off until the prompt ends.
     @ObservationIgnored private var returnSkipped = false
+    /// ``startOffMain()`` is reading.
+    @ObservationIgnored private var starting = false
     @ObservationIgnored private var clockObserver: (any NSObjectProtocol)?
 
     /// How far the wall clock may fall behind the clock that cannot be set before it counts as set back: network time
@@ -204,37 +206,75 @@ public final class AppLock {
     /// first (again at the next start when that fails).
     public func start() {
         guard state == .pending else { return }
+        apply(Self.readStart(store, keys))
+    }
+
+    /// ``start()`` with the reads (the retired file's removal, the preferences, the key) made off the main actor, so that the
+    /// keychain lookups and the decryption do not hold up the first frame. The lock stays pending until they are done; a
+    /// second call meanwhile does nothing.
+    public func startOffMain() async {
+        guard state == .pending, !starting else { return }
+        starting = true
+        defer { starting = false }
+        let store = store, keys = keys
+        let read = await Task.detached { Self.readStart(store, keys) }.value
+        guard state == .pending else { return }
+        apply(read)
+    }
+
+    /// What the start found, to be taken in on the main actor.
+    enum StartRead: Sendable {
+        /// Not readable yet (the iPhone has not been unlocked since it started): still pending.
+        case deferred
+        /// The settings could not be read: replaced by the defaults, the lock is off.
+        case unreadable
+        case read(AppLockPreferences, usable: Bool, invalidated: Bool)
+    }
+
+    nonisolated static func readStart(_ store: any AppLockStore, _ keys: any AppLockKeys) -> StartRead {
         try? store.deleteRetired()
         let p: AppLockPreferences
         do {
             p = try store.preferences()
         } catch KeysError.unavailable {
-            return
+            return .deferred
         } catch {
             // Settings that cannot be read are replaced by the defaults: the lock is off.
-            turnedOff(invalidated: true)
             try? store.setPreferences(AppLockPreferences())
-            return
+            return .unreadable
         }
-        timeout = p.timeout
-        method = p.method ?? .biometrics
-        prompts.newLock()
         var usable = false
+        var invalidated = false
         if p.enabled {
             do {
                 usable = try keys.exists()
             } catch KeysError.unavailable {
-                return
+                return .deferred
             } catch {
                 invalidated = true
             }
         }
-        state = usable ? .locked : .disabled
         // Bookkeeping last: a preference that cannot be written must not keep the lock pending.
         var fixed = p
         if p.enabled && p.method == nil { fixed.method = .biometrics }
         if p.enabled && !usable { fixed.enabled = false }
         if fixed != p { try? store.setPreferences(fixed) }
+        return .read(p, usable: usable, invalidated: invalidated)
+    }
+
+    private func apply(_ read: StartRead) {
+        switch read {
+        case .deferred:
+            return
+        case .unreadable:
+            turnedOff(invalidated: true)
+        case .read(let p, let usable, let keyInvalid):
+            timeout = p.timeout
+            method = p.method ?? .biometrics
+            prompts.newLock()
+            if keyInvalid { invalidated = true }
+            state = usable ? .locked : .disabled
+        }
     }
 
     /// The first-run cleanup failed for another reason than a locked iPhone: nothing can be read, and the lock never keeps

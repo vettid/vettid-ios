@@ -17,6 +17,7 @@ public protocol CollectStream: Sendable {
 public final class RelayStream: CollectStream, @unchecked Sendable {
     public static let normalClosure = 1000
     public static let closeMailboxUnknown = 4404
+    static let pingInterval: TimeInterval = 25
 
     public let messages: AsyncThrowingStream<RelayMessage, Error>
     private let task: URLSessionWebSocketTask
@@ -24,6 +25,7 @@ public final class RelayStream: CollectStream, @unchecked Sendable {
     public init(session: URLSession, request: URLRequest) {
         let task = session.webSocketTask(with: request)
         self.task = task
+        let pings = PingState()
         messages = AsyncThrowingStream { continuation in
             let reader = Task {
                 while true {
@@ -31,8 +33,14 @@ public final class RelayStream: CollectStream, @unchecked Sendable {
                     do {
                         frame = try await task.receive()
                     } catch {
-                        let status = (task.response as? HTTPURLResponse)?.statusCode ?? 0
-                        continuation.finish(throwing: Self.closeError(code: task.closeCode.rawValue, upgradeStatus: status, error: error))
+                        let response = task.response as? HTTPURLResponse
+                        let headers = (response?.allHeaderFields ?? [:]).reduce(into: [String: String]()) { out, kv in
+                            if let k = kv.key as? String, let v = kv.value as? String { out[k] = v }
+                        }
+                        continuation.finish(throwing: Self.closeError(
+                            code: task.closeCode.rawValue, upgradeStatus: response?.statusCode ?? 0, upgradeHeaders: headers,
+                            endedByPing: pings.endedByUs, error: error
+                        ))
                         return
                     }
                     let text: String? = switch frame {
@@ -46,9 +54,40 @@ public final class RelayStream: CollectStream, @unchecked Sendable {
                     continuation.yield(m)
                 }
             }
-            continuation.onTermination = { _ in reader.cancel() }
+            // (Chosen; not in the spec: RELAY-PROTOCOL says nothing of pings.) A ping every 25 s while the session is open keeps a
+            // connection that an idle timeout on the path would drop alive, and tells a dead one by the failed ping.
+            let keepalive = Self.keepalive(task, pings)
+            continuation.onTermination = { _ in
+                reader.cancel()
+                keepalive.cancel()
+            }
         }
         task.resume()
+    }
+
+    /// The ping every ``pingInterval``; a ping still unanswered at the next tick, or one that fails, ends the socket, so that
+    /// `receive()` fails and the collector falls back. (After the app resumes from the background a late tick can end a
+    /// live socket whose ping was never sent or answered in time; the only cost is a reconnect.)
+    private static func keepalive(_ task: URLSessionWebSocketTask, _ pings: PingState) -> Task<Void, Never> {
+        Task {
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: UInt64(pingInterval * 1e9))
+                if Task.isCancelled { return }
+                guard pings.sending() else {
+                    pings.end()
+                    task.cancel(with: .goingAway, reason: nil)
+                    return
+                }
+                task.sendPing { error in
+                    if error != nil {
+                        pings.end()
+                        task.cancel(with: .goingAway, reason: nil)
+                    } else {
+                        pings.answered()
+                    }
+                }
+            }
+        }
     }
 
     public func ack(_ msgID: String) async -> Bool {
@@ -63,17 +102,48 @@ public final class RelayStream: CollectStream, @unchecked Sendable {
 
     public func close() { task.cancel(with: .normalClosure, reason: nil) }
 
-    /// What a session that ended with close [code] reports: nothing for a normal closure, `mailbox_unknown` for 4404,
-    /// the HTTP status of a refused upgrade ([upgradeStatus] ≥ 400) as `http_<status>`, a transport error otherwise.
-    static func closeError(code: Int, upgradeStatus: Int = 0, error: Error) -> Error? {
+    /// What a session that ended with close [code] reports: nothing for a normal closure, `mailbox_unknown` for 4404, a
+    /// refused upgrade ([upgradeStatus] ≥ 400) as the relay's error parser reads its status and headers (`Retry-After`,
+    /// RELAY-PROTOCOL §7.2; the body of a refused upgrade is not available to `URLSessionWebSocketTask`, so the code is
+    /// `http_<status>`), a transport error otherwise.
+    static func closeError(
+        code: Int, upgradeStatus: Int = 0, upgradeHeaders: [String: String] = [:], endedByPing: Bool = false, error: Error
+    ) -> Error? {
+        // The relay's own end of the mailbox wins over ours (a 4404 racing a failed ping still ends the collection).
+        if code == closeMailboxUnknown { return RelayError(status: 404, code: RelayError.mailboxUnknown) }
+        // A socket this side ended for an unanswered ping is no transport failure of the path to hold against the socket for
+        // minutes: it is collected by long-poll for the pause of a refusal, as when a resume made a tick late (chosen; not in
+        // the spec).
+        if endedByPing { return RelayError(status: 503, code: "http_ping", message: "ping unanswered") }
         switch code {
         case normalClosure: return nil
-        case closeMailboxUnknown: return RelayError(status: 404, code: RelayError.mailboxUnknown)
         default:
-            if upgradeStatus >= 400 { return RelayError(status: upgradeStatus, code: "http_\(upgradeStatus)") }
+            if upgradeStatus >= 400 { return RelayClient.error(HTTPAnswer(status: upgradeStatus, headers: upgradeHeaders, body: [])) }
             return code == 0 ? (error as? URLError) ?? URLError(.networkConnectionLost) : URLError(.networkConnectionLost)
         }
     }
+}
+
+/// Whether the last ping of a session was answered (``RelayStream``'s keepalive).
+final class PingState: @unchecked Sendable {
+    private let lock = NSLock()
+    private var outstanding = false
+    private var ended = false
+
+    /// A ping is due: false when the one before is still unanswered (the session is to end), else it is marked sent.
+    func sending() -> Bool {
+        lock.withLock {
+            if outstanding { return false }
+            outstanding = true
+            return true
+        }
+    }
+
+    func answered() { lock.withLock { outstanding = false } }
+
+    /// The session is being ended by this side for a ping.
+    func end() { lock.withLock { ended = true } }
+    var endedByUs: Bool { lock.withLock { ended } }
 }
 
 /// What a ``MailboxCollector`` collects from: a relay client, or a fake in tests.
@@ -124,6 +194,8 @@ public struct MailboxCollector: Sendable {
     static let maxShift = 7
     static let maxDelay: TimeInterval = 30
     static let jitter: TimeInterval = 0.25
+    /// A session that closes normally sooner than this after it opened counts as a failed connection.
+    static let minSession: TimeInterval = 2
 
     let source: MailboxSource
     let mode: Mode
@@ -163,17 +235,45 @@ public struct MailboxCollector: Sendable {
     /// Runs until cancelled or a terminal relay error.
     public func run(_ handle: @Sendable (RelayMessage) async throws -> Void) async throws {
         var failures = 0
+        var socketRefusals = 0
         var pollUntil = Date.distantPast
         while true {
             try Task.checkCancellation()
             let useSocket = mode == .webSocket && now() > pollUntil
+            let started = now()
             do {
                 try await round(useSocket: useSocket, handle)
+                if useSocket, now().timeIntervalSince(started) < Self.minSession {
+                    // (chosen; not in the spec) A session the relay closes normally at once is not a connection: it is
+                    // collected by long-poll for the pause of a refusal, so that a relay that accepts and closes does not
+                    // draw a reconnect loop.
+                    pollUntil = now().addingTimeInterval(socketPause(RelayError(status: 503, code: "closed"), socketRefusals))
+                    socketRefusals += 1
+                    continue
+                }
                 if failures > 0 { onRecovered() }
                 failures = 0
+                if useSocket { socketRefusals = 0 }
             } catch let e as RelayError {
-                guard e.retryable else { throw e }
-                failures += 1
+                // An upgrade the relay refused (its code is the status's, not a relay code: 4404 is `mailbox_unknown`) is
+                // collected by long-poll for the pause, whatever its status: the long-poll then meets the refusal's real
+                // cause (a stale signature, a missing mailbox) and treats it as it does. Quota refusals are the long-poll's.
+                let refused = useSocket && e.code.hasPrefix("http_")
+                guard e.retryable || refused else { throw e }
+                if !refused { failures += 1 }
+                if useSocket {
+                    // RELAY-PROTOCOL §7.2: a client whose upgrade is answered 429 collects by long-poll and tries the
+                    // WebSocket again no sooner than retry_after, with backoff (chosen; not in the spec: 5 s, the
+                    // relay's own retry_after, doubled per refusal up to the fallback period, when the answer names none).
+                    // A socket that held for a while before it ended is not another refusal in a row (chosen; not in the spec).
+                    socketRefusals = Self.refusalsForPause(
+                        socketRefusals, lasted: now().timeIntervalSince(started), upgradeRefused: refused && e.code != "http_ping"
+                    )
+                    pollUntil = now().addingTimeInterval(socketPause(e, socketRefusals))
+                    socketRefusals += 1
+                    // The long-poll that follows at once is the wait; it backs off itself if it fails too.
+                    continue
+                }
                 try await sleep(retryDelay(failures, e.retryAfterSeconds))
             } catch is URLError {
                 // Transport failures only: a handler's own error (storage, decoding) ends the run, as in vettid-android.
@@ -183,6 +283,19 @@ public struct MailboxCollector: Sendable {
                 try await sleep(retryDelay(failures, 0))
             }
         }
+    }
+
+    /// The refusals in a row that count towards the pause: none after a session that lasted ``minSession`` or more.
+    /// An upgrade the relay refused never resets them, however long it took (the time is the handshake's, not a session's).
+    static func refusalsForPause(_ refusals: Int, lasted: TimeInterval, upgradeRefused: Bool = false) -> Int {
+        !upgradeRefused && lasted >= minSession ? 0 : refusals
+    }
+
+    /// How long the long-poll stands in for a WebSocket that a retryable relay answer ended.
+    func socketPause(_ e: RelayError, _ refusals: Int) -> TimeInterval {
+        let base = TimeInterval(e.retryAfterSeconds > 0 ? min(e.retryAfterSeconds, RelayError.maxRetryAfterSeconds) : 5)
+        // Never shorter than the relay's own retry_after (RELAY-PROTOCOL §7.2), whatever the fallback period.
+        return max(base, min(base * Double(1 << min(refusals, Self.maxShift)), fallback))
     }
 
     private func round(useSocket: Bool, _ handle: @Sendable (RelayMessage) async throws -> Void) async throws {

@@ -143,3 +143,86 @@ struct BubbleLinksTests {
         #expect(MessageBubble.linkURLs(AttributedString("plain")).isEmpty)
     }
 }
+
+/// The photos decoded for the lists are kept in memory and none outlives the lock (IOS-PLAN §4.7).
+@MainActor
+struct ProfilePhotoCacheTests {
+    private func photo(_ side: Int, _ color: UIColor) -> String {
+        let f = UIGraphicsImageRendererFormat()
+        f.scale = 1
+        return UIGraphicsImageRenderer(size: CGSize(width: side, height: side), format: f).pngData { ctx in
+            color.setFill()
+            ctx.fill(CGRect(x: 0, y: 0, width: side, height: side))
+        }.base64EncodedString()
+    }
+
+    @Test func aPhotoIsDecodedOnceAndThenHeld() async {
+        let cache = ProfilePhotoCache()
+        let a = photo(64, .red)
+        #expect(cache.cached(a) == nil, "nothing is decoded on the main actor by a lookup")
+        let first = await cache.image(a)
+        #expect(first != nil)
+        #expect(cache.cached(a) === first)
+        #expect(await cache.image(a) === first)
+    }
+
+    #if DEBUG
+    /// The memo of digests is least recently used: a hit moves to the end, and the 33rd entry evicts the one used longest ago.
+    @Test func theDigestMemoIsLeastRecentlyUsed() {
+        let cache = ProfilePhotoCache()
+        let photos = (0...ProfilePhotoCache.digestLimit).map { "photo-\($0)" }
+        for p in photos.prefix(ProfilePhotoCache.digestLimit) { cache.memoize(p) }
+        #expect(cache.memoizedPhotos == Array(photos.prefix(ProfilePhotoCache.digestLimit)))
+        _ = cache.cached(photos[0]) // a hit: photo-0 moves to the end
+        cache.memoize(photos[ProfilePhotoCache.digestLimit]) // the 33rd entry
+        let held = cache.memoizedPhotos
+        #expect(held.count == ProfilePhotoCache.digestLimit)
+        #expect(held.contains(photos[0]) && !held.contains(photos[1]), "photo-1 was the least recently used")
+        #expect(held.last == photos[ProfilePhotoCache.digestLimit])
+    }
+    #endif
+
+    #if DEBUG
+    /// A lookup leaves nothing of the photo in the memo: a row drawn again after the lock does not hold it.
+    @Test func aLookupAfterTheClearRemembersNothing() async {
+        let cache = ProfilePhotoCache()
+        let a = photo(32, .red)
+        _ = await cache.image(a)
+        #expect(cache.memoizedPhotos == [a])
+        cache.clear()
+        #expect(cache.cached(a) == nil)
+        #expect(cache.memoizedPhotos.isEmpty, "the lookup did not add the photo again")
+    }
+    #endif
+
+    @Test func aPhotoThatDoesNotDecodeIsNotHeld() async {
+        let cache = ProfilePhotoCache()
+        #expect(await cache.image("not base64 !!!") == nil)
+        #expect(await cache.image(nil) == nil && cache.cached(nil) == nil && cache.cached("") == nil)
+        #expect(cache.cached("not base64 !!!") == nil)
+    }
+
+    #if DEBUG
+    /// The lock empties the cache, and a decode that was under way when it came is not stored after it.
+    @Test func theLockEmptiesTheCacheAndADecodeUnderWay() async {
+        let cache = ProfilePhotoCache()
+        let a = photo(32, .green), b = photo(48, .blue)
+        _ = await cache.image(a)
+        #expect(cache.cached(a) != nil)
+        cache.clear()
+        #expect(cache.cached(a) == nil)
+        let reached = AsyncStream<Void>.makeStream()
+        let release = AsyncStream<Void>.makeStream()
+        cache.afterDecode = {
+            reached.continuation.yield()
+            for await _ in release.stream { return }
+        }
+        let late = Task { await cache.image(b) }
+        for await _ in reached.stream { break } // the decode has ended, and waits for the clear
+        cache.clear()
+        release.continuation.yield()
+        #expect(await late.value == nil, "a decode that a clear overtook is not returned")
+        #expect(cache.cached(b) == nil)
+    }
+    #endif
+}

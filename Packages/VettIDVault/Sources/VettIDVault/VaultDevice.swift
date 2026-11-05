@@ -129,6 +129,10 @@ public final class VaultDevice: @unchecked Sendable {
     let secrets: DeviceSecrets
     let st: DeviceState
     let lock = AsyncLock()
+    #if DEBUG
+    var beforeFinalSave: (@Sendable () async -> Void)? // TEST ONLY: before the write that ends a handling
+    var flushSeen: (@Sendable (Bool) -> Void)? // TEST ONLY: a flush reached an entry (true: it left it alone)
+    #endif
     /// A flush of the outbox runs (``flushOutbox()``). Read and written under ``mem``.
     var flushing = false
     /// Completed when the running flush ends: the flushes that wait for it wake up. Under ``mem``.
@@ -192,6 +196,8 @@ public final class VaultDevice: @unchecked Sendable {
     }
     var pending: [String: OneShot<Inner>] = [:]
     var inbox: [VaultMessage] = []
+    /// What the handling and the inbox remember between calls (``EventMemory``). Under ``mem``.
+    var memory = EventMemory()
     var inboxWaiters: [OneShot<Bool>] = []
     let eventBroadcast = Broadcast<VaultMessage>()
     let timeDropBroadcast = Broadcast<String>()
@@ -513,6 +519,7 @@ public final class VaultDevice: @unchecked Sendable {
             mem.withLock {
                 forgotten = true
                 handshakeGeneration &+= 1
+                forgetEventMemory()
                 keyring.destroy()
                 ini?.abort()
                 ini = nil

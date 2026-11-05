@@ -4,6 +4,7 @@ import VettIDAltChan
 import VettIDData
 import VettIDKeys
 import VettIDRelay
+import VettIDUI
 import VettIDVault
 
 /// The app's dependency wiring (vettid-android's Hilt `AppModule`): the build's environment (IOS-PLAN §5), the keys
@@ -26,6 +27,9 @@ final class AppComposition {
     /// A canary manifest opened with VettID or picked in Settings → Attestation, waiting for the root's dialog.
     let canaryInbox = CanaryManifestInbox()
     let firstRun: FirstRunGate
+    /// The app lock's start is under way (``startAppLock()``).
+    private var startingAppLock = false
+    private var startAppLockAgain = false
     let vault: VaultManager
     /// The app lock (ANDROID-PLAN D6, IOS-PLAN ID17): its key in the Secure Enclave; off where there is none
     /// (``NoAppLockKeys``).
@@ -96,6 +100,9 @@ final class AppComposition {
             environment: environment.kind.rawValue.uppercased()
         )
         config.attestStartOver = startOver
+        // IOS-PLAN §6.6: while the app is open the relay WebSocket collects (RELAY-PROTOCOL §6.4); the long-poll is its
+        // fallback, and the collection stops when the app leaves the foreground.
+        config.collectMode = .webSocket
         // The public votes site (IOS-PLAN §4.16): its own ephemeral session, no cookies, no cache, no redirects.
         config.votesSite = URLSessionVoteSite(base: environment.votesURL)
         config.backgroundTasks = SystemBackgroundTasks()
@@ -107,6 +114,8 @@ final class AppComposition {
             ),
             keys: hardware.appLock
         )
+        // The photos decoded for the lists are vault content: dropped with the connections (lock, hold) and at a wipe.
+        vault.connections.onForgetAll = { ProfilePhotoCache.shared.clear() }
         resetOnWipe()
     }
 
@@ -122,6 +131,7 @@ final class AppComposition {
             inbox.consume()
             canaryInbox.reset()
             notifications.reset()
+            ProfilePhotoCache.shared.clear()
         }
     }
 
@@ -146,16 +156,38 @@ final class AppComposition {
     /// since it started: any other failure of the cleanup gives way to the root's screen that says so.
     func startAppLock() {
         guard appLock.state == .pending else { return }
-        do {
-            try firstRun.ensure()
-        } catch KeysError.unavailable {
-            return
-        } catch {
-            appLock.startFailed()
+        // A request that comes while a start is under way (the iPhone was unlocked meanwhile) is run again once it ended.
+        if startingAppLock {
+            startAppLockAgain = true
             return
         }
-        vault.resumePendingWipe()
-        appLock.start()
+        startingAppLock = true
+        let gate = firstRun
+        let lock = appLock
+        let vault = vault
+        // The cleanup and the reads run off the main actor (the keychain and the files); the lock stays pending until they
+        // are done, and the screen shows no lock screen before (chosen; not in the spec).
+        Task { [weak self] in
+            defer {
+                self?.startingAppLock = false
+                if self?.startAppLockAgain == true {
+                    self?.startAppLockAgain = false
+                    self?.startAppLock()
+                }
+            }
+            let cleaned = await Task.detached { Result { try gate.ensure() } }.value
+            switch cleaned {
+            case .success:
+                break
+            case .failure(KeysError.unavailable):
+                return
+            case .failure:
+                lock.startFailed()
+                return
+            }
+            vault.resumePendingWipe()
+            await lock.startOffMain()
+        }
     }
 
     /// `Application Support/VettID` (IOS-PLAN §6.1), excluded from backups when the files are written.

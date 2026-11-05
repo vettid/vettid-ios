@@ -75,6 +75,8 @@ extension VaultManager {
         messages.forgetOpenVault()
         attachments.clear()
         forgetActivity()
+        // The events the device kept for the ones that wait for them carry the same content.
+        session?.device.clearInbox()
     }
 
     /// Another device's owner check ended the hold (§3.6.3): what was dropped at it is read again, the tags at once, then

@@ -135,17 +135,19 @@ struct ConnectionItem: View {
 
     var body: some View {
         let c = connection
-        ConnectionRow(
-            name: AccountNames.cleaned(c.displayName) ?? ConnectStrings.nameNotShared,
-            labelName: AccountNames.isolateOrNull(c.displayName) ?? ConnectStrings.nameNotShared,
-            favorite: c.favorite,
-            supporting: Self.supporting(c),
-            meta: c.lastActiveAt.map { ConnectTimes.short($0) },
-            photo: ProfilePhotos.decode(c.photo),
-            service: c.isService,
-            onFavoriteChange: { actions.onFavorite(c.id, $0) },
-            onTap: { actions.onOpen(c.id) }
-        )
+        ProfilePhotoLoading(c.photo) { photo in
+            ConnectionRow(
+                name: AccountNames.cleaned(c.displayName) ?? ConnectStrings.nameNotShared,
+                labelName: AccountNames.isolateOrNull(c.displayName) ?? ConnectStrings.nameNotShared,
+                favorite: c.favorite,
+                supporting: Self.supporting(c),
+                meta: c.lastActiveAt.map { ConnectTimes.short($0) },
+                photo: photo,
+                service: c.isService,
+                onFavoriteChange: { actions.onFavorite(c.id, $0) },
+                onTap: { actions.onOpen(c.id) }
+            )
+        }
         .accessibilityIdentifier("connection_\(c.id)")
     }
 

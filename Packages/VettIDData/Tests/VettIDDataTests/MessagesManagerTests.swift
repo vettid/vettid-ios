@@ -11,8 +11,38 @@ import VettIDDataTesting
 /// TEST ONLY. The vault calls of ``MessagesManager``: a conversation per connection, in arrival order, paged as
 /// vettid-vault pages it (by count only); every call recorded.
 final class FakeMessageOps: MessageOps, @unchecked Sendable {
-    var calls: [String] = []
-    var errors: [String: VaultOpError] = [:]
+    private let lock = NSLock()
+    private var recorded: [String] = []
+    private var failures: [String: VaultOpError] = [:]
+    private var listing = 0
+    private var listingPeak = 0
+    /// The calls, in the order they were made (a read may run alongside others).
+    var calls: [String] {
+        get { lock.withLock { recorded } }
+        set { lock.withLock { recorded = newValue } }
+    }
+    /// An error thrown by the next call of a kind (`send`, `list`, …).
+    var errors: [String: VaultOpError] {
+        get { lock.withLock { failures } }
+        set { lock.withLock { failures = newValue } }
+    }
+    /// The most `message.list` calls that were under way at once.
+    var peakListing: Int { lock.withLock { listingPeak } }
+    /// Set: each `message.list` waits this long (a read under way is seen by the others).
+    var listDelay: Duration?
+    /// The connections whose `message.list` always fails, and (when set) the only ones that wait ``listDelay``.
+    var failingLists: Set<String> {
+        get { lock.withLock { failing } }
+        set { lock.withLock { failing = newValue } }
+    }
+    var slowLists: Set<String> {
+        get { lock.withLock { slow } }
+        set { lock.withLock { slow = newValue } }
+    }
+    private var failing: Set<String> = []
+    private var slow: Set<String> = []
+    /// A wait cut short by a cancellation fails as the transport does, with `URLError(.cancelled)`.
+    var cancelAsURLError = false
     /// The conversations, oldest first.
     var stored: [String: [Message]] = [:]
     /// A page of more messages than this is `response_too_large`.
@@ -25,8 +55,10 @@ final class FakeMessageOps: MessageOps, @unchecked Sendable {
     private var sent = 0
 
     private func call(_ name: String) throws {
-        calls.append(name)
-        if let e = errors.removeValue(forKey: String(name.prefix { $0 != ":" })) { throw e }
+        try lock.withLock {
+            recorded.append(name)
+            if let e = failures.removeValue(forKey: String(name.prefix { $0 != ":" })) { throw e }
+        }
     }
 
     static func error(_ type: String, _ code: String) -> VaultOpError { VaultOpError(type: type, code: code, detail: "", body: nil) }
@@ -44,6 +76,19 @@ final class FakeMessageOps: MessageOps, @unchecked Sendable {
 
     func messagePage(_ connectionID: String, limit: Int?, before: String?) async throws -> MessagePage {
         try call("list:\(connectionID):\(limit ?? 0):\(before ?? "")")
+        lock.withLock {
+            listing += 1
+            listingPeak = max(listingPeak, listing)
+        }
+        defer { lock.withLock { listing -= 1 } }
+        if failingLists.contains(connectionID) { throw Self.error("message.list", "bad_request") }
+        if let d = listDelay, slowLists.isEmpty || slowLists.contains(connectionID) {
+            do {
+                try await Task.sleep(for: d)
+            } catch where cancelAsURLError {
+                throw URLError(.cancelled)
+            }
+        }
         if let g = listGate { try await g.value() }
         let limit = limit ?? 100
         if limit > sealable { throw Self.error("message.list", "response_too_large") }
@@ -271,6 +316,56 @@ final class FakeMessageOps: MessageOps, @unchecked Sendable {
         #expect(ops.calls == ["list:c1:100:"])
         await m.refreshConversationsQuietly()
         #expect(ops.calls.count == 1 && quiet.calls == ["list:c1:100:"])
+    }
+
+    /// The newest pages of many conversations are read at most ``MessagesManager/readsAtOnce`` at a time, and all of them are
+    /// taken in; the first failure (in the list's order) is thrown and the reads not yet started are not made.
+    @Test func manyConversationsAreReadFourAtATime() async throws {
+        let ids = (1...10).map { "c\($0)" }
+        for id in ids { ops.stored[id] = [FakeMessageOps.message(id, "\(id)-m1")] }
+        ops.listDelay = .milliseconds(30)
+        let known = ids.map { ConnectionInfo(id: $0, name: "", state: .active) }
+        let ops = ops, quiet = quiet
+        let m = MessagesManager(ops: { ops }, quietOps: { quiet }, connections: { known }, refreshConnections: {})
+        try await m.refreshConversations()
+        #expect(ops.calls.count == 10 && ops.peakListing > 1 && ops.peakListing <= MessagesManager.readsAtOnce)
+        #expect(ids.allSatisfy { m.messages($0).map(\.messageID) == ["\($0)-m1"] })
+        ops.calls = []
+        ops.errors["list"] = FakeMessageOps.error("message.list", "bad_request")
+        await #expect(throws: (any Error).self) { try await m.refreshConversations() }
+        #expect(ops.calls.count < 10, "the reads after the failure were not started")
+    }
+
+    /// A quiet refresh tries every conversation, the ones after a failed read included, and throws nothing.
+    @Test func aQuietRefreshTriesEveryConversationWhateverFailed() async throws {
+        let ids = (1...10).map { "c\($0)" }
+        for id in ids { ops.stored[id] = [FakeMessageOps.message(id, "\(id)-m1")] }
+        let known = ids.map { ConnectionInfo(id: $0, name: "", state: .active) }
+        let ops = ops, quiet = quiet
+        quiet.stored = ops.stored
+        // Four reads fail (those started first), so that the window of four is all failures: the reads after them are
+        // started all the same.
+        quiet.failingLists = ["c1", "c2", "c3", "c4"]
+        let m = MessagesManager(ops: { ops }, quietOps: { quiet }, connections: { known }, refreshConnections: {})
+        await m.refreshConversationsQuietly()
+        #expect(quiet.calls.count == 10, "the failures did not stop the others")
+        #expect(ids.filter { !m.messages($0).isEmpty }.count == 6)
+    }
+
+    /// A read cancelled with its group (the transport says `URLError(.cancelled)`) does not hide the failure that cancelled it,
+    /// even when it comes earlier in the list.
+    @Test func aReadCancelledWithItsGroupDoesNotHideTheRealFailure() async throws {
+        let ids = (1...6).map { "c\($0)" }
+        for id in ids { ops.stored[id] = [FakeMessageOps.message(id, "\(id)-m1")] }
+        let known = ids.map { ConnectionInfo(id: $0, name: "", state: .active) }
+        ops.listDelay = .seconds(5)
+        ops.slowLists = ["c1", "c2", "c4"]
+        ops.failingLists = ["c3"]
+        ops.cancelAsURLError = true
+        let ops = ops, quiet = quiet
+        let m = MessagesManager(ops: { ops }, quietOps: { quiet }, connections: { known }, refreshConnections: {})
+        let thrown = await kind { try await m.refreshConversations() }
+        #expect(thrown != nil && thrown != .network, "the failure of c3, not the cancelled reads before it")
     }
 
     /// The vault call's failure is a ``VaultFailure``; a connection the vault does not know is `not_found`.

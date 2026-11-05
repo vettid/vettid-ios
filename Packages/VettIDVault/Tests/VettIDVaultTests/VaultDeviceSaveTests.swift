@@ -1,0 +1,288 @@
+import Foundation
+import Testing
+import VettIDCrypto
+import VettIDRelay
+@testable import VettIDVault
+
+// How often the device state is written (VAULT-MESSAGING §8.3: persist, then ack; a counter is stored before the
+// message that uses it is deposited).
+extension VaultDeviceTests {
+    /// A store that counts its writes, and the writes made while a deposit was being handed to the relay.
+    final class CountingStore: DeviceStateStore, @unchecked Sendable {
+        private let lock = NSLock()
+        private var b: [UInt8]?
+        private var n = 0
+
+        var writes: Int { lock.withLock { n } }
+        func load() -> [UInt8]? { lock.withLock { b } }
+        func clear() { lock.withLock { b = nil } }
+        func save(_ state: [UInt8]) throws { lock.withLock { b = state; n += 1 } }
+        var state: DeviceState? { lock.withLock { b }.flatMap { try? JSONDecoder().decode(DeviceState.self, from: Data($0)) } }
+    }
+
+    /// A request and its answer write the state twice: the send counter before the deposit, and the answer's id before it
+    /// is acked.
+    @Test func aRequestAndItsAnswerWriteTheStateTwice() async throws {
+        let store = CountingStore()
+        let (d, v) = try await pairedDevice(store: store)
+        let before = store.writes
+        let status = Task { try await d.op("vault.status") }
+        let req = try v.open(try await relay.nextDeposit().payload)
+        #expect(store.writes == before + 1, "the counter was stored before the deposit")
+        try await d.handle(try v.seal("vault.status", #"{"state":"unlocked"}"#, re: req.id, status: Inner.statusOK))
+        _ = try await status.value
+        #expect(store.writes == before + 2)
+    }
+
+    /// A credential request's record is stored by the write that stores its counter, before the deposit: no write of its
+    /// own, and a kill after the deposit finds it.
+    @Test func aCredentialRecordIsStoredWithTheSendCounter() async throws {
+        let store = CountingStore()
+        let (d, v) = try await pairedDevice(store: store)
+        let before = store.writes
+        let id = d.newRequestID()
+        await d.trackCredential(id, exp: Date().addingTimeInterval(600))
+        #expect(store.writes == before, "no write of its own")
+        let sent = Task { try await d.request("vault.status", innerID: id) }
+        let req = try v.open(try await relay.nextDeposit().payload)
+        #expect(store.writes == before + 1)
+        #expect(store.state?.unsettled?[id] != nil, "stored before the deposit went out")
+        try await d.handle(try v.seal("vault.status", "{}", re: req.id, status: Inner.statusOK))
+        _ = try await sent.value
+        #expect(store.state?.unsettled?[id] == nil, "settled by the answer")
+    }
+
+    /// The answer to a token refresh is stored by the write that ends the handling of the message, before it is deposited:
+    /// one write for the message, not one more for the answer's record.
+    @Test func aReplyMadeWhileHandlingIsStoredByTheHandlingsWrite() async throws {
+        let store = CountingStore()
+        let (d, v) = try await pairedDevice(store: store)
+        let before = store.writes
+        let outboxAtDeposit = Recorder<Int>()
+        let stateAtDeposit = store
+        relay.onDeposit = { outboxAtDeposit.add(stateAtDeposit.state?.outbox.count ?? -1) }
+        try await d.handle(try v.seal("relay.token.refresh", "{}"))
+        _ = try await relay.nextDeposit()
+        #expect(outboxAtDeposit.all == [1], "the entry was stored when it went out")
+        // The message's write, and the removal of the entry once the relay took it.
+        #expect(store.writes == before + 2)
+        #expect(store.state?.outbox.isEmpty == true)
+    }
+}
+
+extension VaultDeviceTests {
+    /// A store whose writes fail once armed.
+    final class FlakyStore: DeviceStateStore, @unchecked Sendable {
+        private let lock = NSLock()
+        private var b: [UInt8]?
+        private var armed = false
+
+        private var allowed: Int?
+
+        func arm() { lock.withLock { armed = true } }
+        func disarm() { lock.withLock { armed = false; allowed = nil } }
+        /// The next [n] writes succeed, then every write fails.
+        func failAfter(_ n: Int) { lock.withLock { allowed = n } }
+        func load() -> [UInt8]? { lock.withLock { b } }
+        func clear() { lock.withLock { b = nil } }
+        var state: DeviceState? { lock.withLock { b }.flatMap { try? JSONDecoder().decode(DeviceState.self, from: Data($0)) } }
+        func save(_ state: [UInt8]) throws {
+            try lock.withLock {
+                if let n = allowed {
+                    if n == 0 { throw CocoaError(.fileWriteOutOfSpace) }
+                    allowed = n - 1
+                }
+                if armed { throw CocoaError(.fileWriteOutOfSpace) }
+                b = state
+            }
+        }
+    }
+
+    /// The replies made while a message is handled go out only when the save that ends the handling succeeded: a failing
+    /// write deposits nothing (a token answer, and a rekey's `hs.resp` before its responder is on disk), and leaves nothing
+    /// in the outbox.
+    @Test func noReplyIsDepositedWhenTheSaveFailed() async throws {
+        let store = FlakyStore()
+        let (d, v) = try await pairedDevice(store: store)
+        store.arm()
+        await #expect(throws: (any Error).self) { try await d.handle(try v.seal("relay.token.refresh", "{}")) }
+        #expect(await relay.noDeposit(within: 0.3), "no token answer")
+        #expect(d.outboxIDs.isEmpty)
+        await #expect(throws: (any Error).self) { try await d.handle(v.msg(try v.rekey(d).envelope)) }
+        #expect(await relay.noDeposit(within: 0.3), "no hs.resp before the responder is stored")
+    }
+
+    /// A message whose handling failed to save is handled again when the relay delivers it again, and answered: it was not
+    /// taken as seen.
+    @Test func aMessageWhoseSaveFailedIsAnsweredWhenDeliveredAgain() async throws {
+        let store = FlakyStore()
+        let (d, v) = try await pairedDevice(store: store)
+        let refresh = try v.seal("relay.token.refresh", "{}")
+        store.arm()
+        await #expect(throws: (any Error).self) { try await d.handle(refresh) }
+        store.disarm()
+        try await d.handle(refresh)
+        let answer = try v.open(try await relay.nextDeposit().payload)
+        #expect(answer.type == "relay.token.refresh" && answer.re != nil, "the redelivery was answered, not acked unanswered")
+    }
+
+    #if DEBUG
+    /// A reply queued by a handling that failed is taken out whatever wrote it, and the redelivery's is the only answer: one
+    /// standing token for one refresh, not two. Another write (a flush's, an earlier message's) stores the queued answer
+    /// before the final write fails; the answer is taken out all the same.
+    @Test func aRefreshAnsweredAfterAFailedSaveGetsOneAnswer() async throws {
+        let store = FlakyStore()
+        let (d, v) = try await pairedDevice(store: store)
+        let refresh = try v.seal("relay.token.refresh", "{}")
+        d.beforeFinalSave = { [d] in
+            try? d.save() // another write stores the queued answer
+            store.arm()
+        }
+        await #expect(throws: (any Error).self) { try await d.handle(refresh) }
+        #expect(store.state?.outbox.count == 1, "the answer is on disk, stored by the other write")
+        #expect(d.outboxIDs.isEmpty, "and gone from memory all the same, so the redelivery's is the only one")
+        d.beforeFinalSave = nil
+        store.disarm()
+        try await d.handle(refresh)
+        _ = try await relay.nextDeposit()
+        #expect(await relay.noDeposit(within: 0.3), "one answer, not two")
+    }
+    #endif
+
+    #if DEBUG
+    /// A flush that runs between the queueing of an answer and the write that stores it deposits nothing of it: the entry is in
+    /// flight from its queueing, and the failed final write then leaves no answer to have gone out.
+    @Test func aFlushBeforeTheFinalSaveDepositsNoUnsavedAnswer() async throws {
+        let store = FlakyStore()
+        let (d, v) = try await pairedDevice(store: store)
+        let refresh = try v.seal("relay.token.refresh", "{}")
+        let reached = AsyncStream<Bool>.makeStream()
+        d.flushSeen = { reached.continuation.yield($0) }
+        let flushReached = Box(false)
+        d.beforeFinalSave = { [d] in
+            // In the window: the answer is queued and not saved. The flush runs apart (one that did take the entry would wait
+            // for the lock this handling holds) and the handling goes on once it has reached the entry, left alone or taken.
+            Task { await d.flushOutbox() }
+            // Bounded: a flush that never reaches the entry is recorded and fails the test below, instead of hanging it.
+            let got = await withTaskGroup(of: Bool.self) { group in
+                group.addTask { for await _ in reached.stream { return true }; return false }
+                group.addTask { try? await Task.sleep(for: .seconds(5)); return false }
+                let first = await group.next() ?? false
+                group.cancelAll()
+                return first
+            }
+            flushReached.value = got
+            store.arm()
+        }
+        await #expect(throws: (any Error).self) { try await d.handle(refresh) }
+        #expect(flushReached.value, "the flush reached the entry inside the window")
+        #expect(await relay.noDeposit(within: 0.3), "the flush deposited nothing")
+        d.beforeFinalSave = nil
+        d.flushSeen = nil
+        store.disarm()
+        try await d.handle(refresh)
+        _ = try await relay.nextDeposit()
+        #expect(await relay.noDeposit(within: 0.3), "one answer")
+    }
+    #endif
+
+    /// A standing token minted by a handling that failed is forgotten with it: the redelivery issues the token (the vault must
+    /// not be left with the old one).
+    @Test func aRenewalDueIsIssuedByTheRedeliveryAfterAFailedSave() async throws {
+        let store = FlakyStore()
+        let (d, v) = try await pairedDevice(store: store)
+        d.mem.withLock { d.st.issuedExpMs = 1_000 } // the renewal is due
+        let event = try v.seal("message.new", #"{"n":1}"#)
+        store.arm()
+        await #expect(throws: (any Error).self) { try await d.handle(event) }
+        #expect(d.mem.withLock { d.st.issuedExpMs } == 1_000, "the minted token is forgotten with the handling")
+        store.disarm()
+        try await d.handle(event)
+        let issued = try v.open(try await relay.nextDeposit().payload)
+        #expect(issued.type == "relay.token.issued", "the redelivery issued it")
+    }
+
+    /// The responder of a rekey whose answer was dropped (the handling failed) does not stay among the awaiting ones.
+    @Test func aDroppedRekeyAnswerLeavesNoResponderAwaiting() async throws {
+        let store = FlakyStore()
+        let (d, v) = try await pairedDevice(store: store)
+        let before = d.mem.withLock { d.awaiting.count }
+        store.arm()
+        await #expect(throws: (any Error).self) { try await d.handle(v.msg(try v.rekey(d).envelope)) }
+        #expect(d.mem.withLock { d.awaiting.count } == before, "no stale responder takes a slot")
+        store.disarm()
+        try await d.handle(v.msg(try v.rekey(d).envelope))
+        #expect(d.mem.withLock { d.awaiting.count } == before + 1)
+    }
+
+    /// A rekey's `hs.init` that is delivered again after the undo of a failed handling is answered with a fresh `hs.resp`.
+    @Test func aRekeyRedeliveredAfterTheUndoIsAnswered() async throws {
+        let store = FlakyStore()
+        let (d, v) = try await pairedDevice(store: store)
+        let rekey = v.msg(try v.rekey(d).envelope)
+        store.arm()
+        await #expect(throws: (any Error).self) { try await d.handle(rekey) }
+        #expect(await relay.noDeposit(within: 0.3), "no hs.resp before the responder is stored")
+        store.disarm()
+        try await d.handle(rekey)
+        _ = try await relay.nextDeposit() // the hs.resp
+        #expect(d.mem.withLock { d.awaiting.count } == 1)
+    }
+
+    /// An event is published once, though its message is handled again after a failed save.
+    @Test func anEventIsPublishedOnceAfterAFailedSave() async throws {
+        let store = FlakyStore()
+        let (d, v) = try await pairedDevice(store: store)
+        let event = try v.seal("message.new", #"{"n":1}"#)
+        store.arm()
+        await #expect(throws: (any Error).self) { try await d.handle(event) }
+        #expect(d.inboxCount == 1)
+        store.disarm()
+        try await d.handle(event)
+        #expect(d.inboxCount == 1, "the redelivery did not publish it again")
+    }
+
+    /// An `hs.fin` that the handling itself wrote to disk is not taken out of memory when the final write fails: the next
+    /// good write does not lose it.
+    @Test func anHsFinOnDiskIsNotLostByAFailedFinalSave() async throws {
+        let (d, store) = try await respondingWithAFailingFinalSave()
+        #expect(d.outboxIDs.count == 1, "the fin that is on disk stays in memory")
+        #expect(store.state?.outbox.count == 1)
+        try d.save()
+        #expect(store.state?.outbox.count == 1, "the next good write keeps it")
+    }
+
+    /// The fin that the handling stored stays owed and goes out at the next flush once writes work again (it is counted by a
+    /// write before it is sent, so none goes out while they fail): a pairing code is spent by its handshake.
+    @Test func theFinStoredByTheHandlingIsDepositedAfterAFailedFinalSave() async throws {
+        // (The code of a transfer, ``theCodeIsShownAfterAFailedFinalSave``, goes with it; an app pairing shows none.)
+        let (d, _) = try await respondingWithAFailingFinalSave()
+        #expect(await relay.noDeposit(within: 0.3), "nothing is sent while the writes fail")
+        await d.flushOutbox()
+        _ = try await relay.nextDeposit()
+        #expect(d.outboxIDs.isEmpty, "the relay took it")
+    }
+
+    private func respondingWithAFailingFinalSave() async throws -> (VaultDevice, FlakyStore) {
+        let store = FlakyStore()
+        let d = try await VaultDevice.create(config(store), secrets: try DeviceSecrets.generate())
+        let v = try FakeVault(relayURL: relay.baseURL)
+        try await d.handle(try v.enrolled(d))
+        try await d.awaitEnrolled(timeout: 1)
+        let paired = Task { try await d.completeEnrollment(timeout: 2) }
+        let (_, initMsg) = try await relay.nextDeposit()
+        store.failAfter(1) // the fin's own write, then the final write fails
+        await #expect(throws: (any Error).self) { try await d.handle(try v.respond(initMsg, d)) }
+        store.disarm()
+        paired.cancel()
+        return (d, store)
+    }
+}
+
+private final class Recorder<T: Sendable>: @unchecked Sendable {
+    private let lock = NSLock()
+    private var items: [T] = []
+
+    func add(_ v: T) { lock.withLock { items.append(v) } }
+    var all: [T] { lock.withLock { items } }
+}

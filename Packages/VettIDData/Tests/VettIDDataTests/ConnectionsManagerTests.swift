@@ -284,7 +284,10 @@ final class FakeConnectionOps: ConnectionOps, @unchecked Sendable {
         m.forgetRequests()
         #expect(m.connections.map(\.id) == ["c1"] && m.requests.isEmpty && m.peerDeclines.isEmpty && m.local == .init())
         m.onEvent(event("connection.request.pending", #"{"pending_id":"p3","sas":"042817"}"#))
+        var told = 0
+        m.onForgetAll = { told += 1 }
         m.forgetOpenVault()
+        #expect(told == 1, "what the app derived from the connections (the decoded photos) is told to go")
         #expect(m.connections.isEmpty && m.requests.isEmpty && m.peerDeclines.isEmpty && m.local == .init())
         // A late `failed` for a decline already told does not tell it again.
         m.onEvent(event("connection.event", #"{"connection_id":"c2","event":"failed","reason":"declined"}"#))

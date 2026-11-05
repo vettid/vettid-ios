@@ -227,7 +227,7 @@ struct CredentialOps: Sendable {
         // than a minute (VAULT-MESSAGING 0.46.0 §11.14.9 step 1).
         let exp: Date
         if let given = options.exp { exp = given } else { exp = try await requestExp() }
-        try await device.trackCredential(id, exp: exp)
+        await device.trackCredential(id, exp: exp)
         let r: VaultMessage
         do {
             r = try await device.request(type, body: body, innerID: id, exp: exp)
@@ -317,7 +317,7 @@ struct CredentialOps: Sendable {
                 type: type, id: change.id, exp: change.exp,
                 body: try build(type, utk: utk, fields: fields + more, id: change.id, CredOpOptions())
             )
-            try await device.trackCredential(change.id, exp: change.exp)
+            await device.trackCredential(change.id, exp: change.exp)
             return try await sendChange(held, first: true)
         }
     }
@@ -339,7 +339,7 @@ struct CredentialOps: Sendable {
                 type: type, id: change.id, exp: change.exp,
                 body: try build(type, utk: utk, fields: fields + more, id: change.id, CredOpOptions())
             )
-            try await device.trackCredential(change.id, exp: change.exp)
+            await device.trackCredential(change.id, exp: change.exp)
             return try await sendChange(held, first: true)
         }
     }

@@ -8,22 +8,33 @@ extension VaultDevice {
     /// rekey's new epoch that arrived before the rekey's `hs.fin` is neither recorded as seen nor acked
     /// (``LeaveUnacked``): the relay delivers it again, and it is opened once `hs.fin` has arrived (§6.3, §8.4).
     public func handle(_ m: RelayMessage) async throws {
-        var failure: (any Error)?
         let after = AfterLockWork()
         do {
             try await AfterLockWork.$current.withValue(after) { try await handleLocked(m) }
         } catch {
-            failure = error
+            // The replies queued while handling are stored by the save that ends it, and go out only after it succeeded: when
+            // the handling ended in an error (the save included), none is deposited (a rekey's `hs.resp` before its responder
+            // is on disk would leave the device unable to read the new epoch after a restart), and the entries it put in the
+            // outbox are taken out again.
+            after.drop()
+            await after.run() // what belongs to an entry the handling stored itself (an hs.fin and its code)
+            throw error
         }
         // The replies to the vault go out after the lock: a relay that stalls holds up this message's ack, not the
         // answers to every other request. They are this call's own.
         await after.run()
-        if let failure { throw failure }
     }
 
     private func handleLocked(_ m: RelayMessage) async throws {
         try await lock.withLock {
             let t = now()
+            let before = mem.withLock {
+                HandlingStart(
+                    seen: st.seen, seenInner: st.seenInner, issuedExpMs: st.issuedExpMs,
+                    outbox: Set(st.outbox.map(\.id)), awaiting: awaiting.map(\.resp)
+                )
+            }
+            mem.withLock { memory.keptOnError = [] }
             let fresh: Bool = mem.withLock {
                 guard st.seen[m.msgID] == nil else { return false }
                 st.seen[m.msgID] = Self.ms(t)
@@ -32,20 +43,62 @@ extension VaultDevice {
             }
             guard fresh else { return }
             do {
-                try await process(m, t)
-            } catch let e as CryptoError where e.kind == .early {
-                mem.withLock { _ = st.seen.removeValue(forKey: m.msgID) }
-                try save()
-                throw LeaveUnacked(e.description)
-            } catch is CryptoError, is TokenError {
-                // dropped (§13.6: a message that does not verify changes nothing)
-            } catch is RelayError, is URLError, is VaultStateError {
-                // A reply to the vault that the relay refused or could not take (a token refresh, a rekey's answer, a
-                // handshake's fin). The message itself was handled; it is acked and never handled again. Letting it out
-                // would end the collector, and without the ack the same message would fail again at every start.
+                try await handleFresh(m, t)
+            } catch {
+                // The message is not taken as handled (its ids are forgotten, so that the relay's redelivery is handled and
+                // answered, not acked unanswered), and the entries the handling queued are taken out again, so that the
+                // redelivery's answer is the only one: even one that another write happened to store. The exception is what
+                // the handling stored by a write of its own (an `hs.fin`, ``memory.keptOnError``): it is on disk by that write.
+                forgetHandling(before)
+                throw error
             }
-            try save()
         }
+    }
+
+    /// What a handling can change in the state without a write of its own, as it was when the handling began.
+    struct HandlingStart {
+        let seen: [String: Int64]
+        let seenInner: [String: Int64]
+        let issuedExpMs: Int64
+        let outbox: Set<String>
+        let awaiting: [Responder]
+    }
+
+    /// A failed handling is undone: its message ids are forgotten, the entries it queued are taken out (and are no longer in
+    /// flight: their deposit was dropped with the handling's work after the lock), the standing token it minted is forgotten
+    /// (the redelivery issues one), and the rekey responders it made are dropped (their `hs.resp` never went out).
+    private func forgetHandling(_ before: HandlingStart) {
+        mem.withLock {
+            st.seen = before.seen
+            st.seenInner = before.seenInner
+            st.issuedExpMs = before.issuedExpMs
+            let gone = Set(st.outbox.map(\.id)).subtracting(before.outbox).subtracting(memory.keptOnError)
+            st.outbox.removeAll { gone.contains($0.id) }
+            outboxInFlight.subtract(gone)
+            let known: (Responder) -> Bool = { r in before.awaiting.contains { $0 === r } }
+            for a in awaiting where !known(a.resp) { a.resp.abort() }
+            awaiting.removeAll { !known($0.resp) }
+        }
+    }
+
+    private func handleFresh(_ m: RelayMessage, _ t: Date) async throws {
+        do {
+            try await process(m, t)
+        } catch let e as CryptoError where e.kind == .early {
+            mem.withLock { _ = st.seen.removeValue(forKey: m.msgID) }
+            try save()
+            throw LeaveUnacked(e.description)
+        } catch is CryptoError, is TokenError {
+            // dropped (§13.6: a message that does not verify changes nothing)
+        } catch is RelayError, is URLError, is VaultStateError {
+            // A reply to the vault that the relay refused or could not take (a token refresh, a rekey's answer, a
+            // handshake's fin). The message itself was handled; it is acked and never handled again. Letting it out
+            // would end the collector, and without the ack the same message would fail again at every start.
+        }
+        #if DEBUG
+        await beforeFinalSave?()
+        #endif
+        try save()
     }
 
     static func prune(_ m: inout [String: Int64], _ t: Date) {
@@ -146,7 +199,7 @@ extension VaultDevice {
             if inner.re == nil {
                 let tok = try mintForVault()
                 let entry = try enqueueLocked(
-                    id: nil, type: inner.type, body: Self.standing(tok), re: inner.id, status: Inner.statusOK, exp: nil
+                    id: nil, type: inner.type, body: Self.standing(tok), re: inner.id, status: Inner.statusOK, exp: nil, save: false
                 )
                 afterLock { [self] in try? await deliver(entry) }
             } else {
@@ -159,7 +212,7 @@ extension VaultDevice {
             if inner.status != Inner.statusOK, inner.error?.code == Self.codeOwnerCheckRequired { ownerCheckBroadcast.emit(inner.type) }
             mem.withLock { pending[re] }?.complete(inner)
         } else {
-            publish(VaultMessage(inner: inner))
+            publishOnce(VaultMessage(inner: inner))
         }
         await maintain(t)
     }
@@ -200,7 +253,7 @@ extension VaultDevice {
             return (a, env, v)
         }
         guard let (a, env, v) = prepared else { return }
-        try save()
+        // The responder is stored by the save that ends ``handleLocked(_:)``, before this deposit (``afterLock(_:)``).
         afterLock { [self] in
             do {
                 try await depositToVault(v, env)
@@ -268,12 +321,16 @@ extension VaultDevice {
         do {
             if issuedExp != 0, Double(issuedExp) / 1000 - t.timeIntervalSince1970 < Self.issueBefore {
                 let tok = try mintForVault()
-                let e = try enqueueLocked(id: nil, type: "relay.token.issued", body: Self.standing(tok), re: nil, status: nil, exp: nil)
+                let e = try enqueueLocked(
+                    id: nil, type: "relay.token.issued", body: Self.standing(tok), re: nil, status: nil, exp: nil, save: false
+                )
                 afterLock { [self] in try? await deliver(e) }
             }
             let exp = Double(v.tokenExpMs) / 1000
             if exp - t.timeIntervalSince1970 < Self.refreshBefore, t.timeIntervalSince1970 < exp {
-                let e = try enqueueLocked(id: nil, type: "relay.token.refresh", body: VaultJSON.empty, re: nil, status: nil, exp: nil)
+                let e = try enqueueLocked(
+                    id: nil, type: "relay.token.refresh", body: VaultJSON.empty, re: nil, status: nil, exp: nil, save: false
+                )
                 afterLock { [self] in try? await deliver(e) }
             }
         } catch {

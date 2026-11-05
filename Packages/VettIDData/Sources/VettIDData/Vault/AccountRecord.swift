@@ -2,6 +2,14 @@ import Foundation
 import VettIDKeys
 import VettIDVault
 
+/// The bytes of a file as one read of it found them, or what stopped the read: read off the main actor at the start, taken
+/// in on the main actor by the one that owns the file.
+struct FileRead: Sendable {
+    let bytes: Result<[UInt8]?, any Error>
+
+    init(_ read: @Sendable () throws -> [UInt8]?) { bytes = Result { try read() } }
+}
+
 /// What this phone knows of its member without signing in (VAULT-MESSAGING §11.12.1): the `user_guid` and `vault_id`
 /// from the setup code's redeem, the masked email to show, and where setting the vault up stands. Kept in the encrypted
 /// file store; members this build does not know are ignored when read. The account snapshot and the name request,
@@ -231,9 +239,9 @@ final class AccountRecord {
 
     /// Reads the record when it has not been read yet. Throws ``KeysError/unavailable(_:)`` while the iPhone is locked,
     /// and a loss (``KeysError/corrupt(_:)``) for a record that does not decrypt or parse; it is read again next time.
-    func load() throws {
+    func load(read: FileRead? = nil) throws {
         guard !loaded else { return }
-        if let b = try store.load() {
+        if let b = try (read ?? FileRead { try store.load() }).bytes.get() {
             do {
                 value = try JSONDecoder().decode(LocalAccount.self, from: Data(b))
             } catch {
@@ -249,6 +257,17 @@ final class AccountRecord {
         loaded = true
         onChange?(value)
     }
+
+    #if DEBUG
+    /// TEST ONLY. Awaited by ``VaultManager/preparedOffMain()`` after its reads, before it looks whether the record moved.
+    var afterOffMainRead: (@Sendable () async -> Void)?
+    #endif
+
+    /// Whether the record has not been read yet.
+    var needsLoad: Bool { !loaded }
+
+    /// The record's file, to be read off the main actor (``VaultManager/readLocalFiles()``) and given to ``load(read:)``.
+    var file: EncryptedFileStore { store }
 
     /// Whether a wipe runs or did not finish: the guard of ``WipeRun``.
     var closed: Bool { wiping || eraseFailed }
