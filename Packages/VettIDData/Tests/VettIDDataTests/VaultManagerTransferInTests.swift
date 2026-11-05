@@ -201,6 +201,19 @@ import VettIDDataTesting
         #expect(m.phase == .setup(.finishing), "\(state)")
     }
 
+    /// The same with the killed app's long poll still waiting at the relay when the vault sends `device.paired`: a dead
+    /// process's requests are gone with it, so the new process's one collect finds it.
+    @Test func aCollectLeftWaitingByTheKilledAppTakesNothingAfterTheRestart() async throws {
+        defer { phone.close() }
+        _ = try await scanned()
+        #expect(await eventually { !service.collectsInFlight.isEmpty }, "the old device is collecting")
+        try await phone.restart()
+        service.approveTransferIn()
+        phone.clockAhead = 700
+        try await m.refresh()
+        #expect(m.finishMovePending && m.record.value.transferStartedMs == nil && m.phase == .setup(.finishing))
+    }
+
     /// ... or dropped, when nothing waits.
     @Test func killedBeforeTheDeadlineAndStartedAfterItNothingWaitsDrops() async throws {
         defer { phone.close() }

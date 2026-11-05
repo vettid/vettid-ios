@@ -43,6 +43,9 @@ struct FakeTransferStore {
     var revokedDeposits = 0
     var collectRefused = false
     var collectFailures = 0
+    /// The collects of the device's mailbox being answered now (a long poll held while nothing waits), by number.
+    var collecting: Set<Int> = []
+    var collectSeq = 0
 }
 
 // TEST ONLY. A direct transfer in both directions, as vettid-vault answers it: as the new phone's target
@@ -252,6 +255,10 @@ extension FakeVaultService {
     /// The next [n] collects of this phone's own relay fail with a 503, which the collection tries again: then the relay
     /// connection comes back.
     public func failNextCollects(_ n: Int) { locked { transfer.collectFailures = n } }
+
+    /// The collects of the device's mailbox the fake is answering now, by number: a long poll it holds while nothing
+    /// waits, which takes the next message queued.
+    public var collectsInFlight: Set<Int> { locked { transfer.collecting } }
 
     /// An answer to a `device.list` this phone did not ask just now: sealed under the session, with the `re` of another
     /// request, and a list that does not hold this phone. It is no answer to the check's own request (§11.14.10).
