@@ -123,4 +123,73 @@ extension VaultManagerTransferInTests {
         #expect(m.phase == .setup(.finishing), "Finish the move is asked")
         phone.windowPauses.release()
     }
+
+    /// A freeze shorter than a visibility timeout (30 s) is caught by the heartbeat, and moves the window's end out.
+    @Test func aFreezeOfLessThanAVisibilityTimeoutIsCaught() async throws {
+        defer { phone.close() }
+        _ = try await scanned()
+        try await phone.restart()
+        phone.windowPauses.holding = true
+        phone.clockAhead = 700
+        try await m.refresh()
+        #expect(await eventually { phone.windowPauses.lengths == [90] }, "the window runs")
+        phone.uptimeAhead += 30
+        #expect(await eventually { phone.windowPauses.lengths.count == 2 }, "\(phone.windowPauses.lengths)")
+        phone.windowPauses.release()
+    }
+
+    /// A freeze moves the end out to `now` + the window, at most one visibility timeout past the first end: 70 s in, the
+    /// end is the first end + 60 s (80 s left), not a full window again (90 s).
+    @Test func aFreezeMovesTheEndOutRatherThanRestarting() async throws {
+        defer { phone.close() }
+        _ = try await scanned()
+        try await phone.restart()
+        phone.windowPauses.holding = true
+        phone.clockAhead = 700
+        try await m.refresh()
+        #expect(await eventually { phone.windowPauses.lengths == [90] }, "the window runs")
+        phone.clockAhead += 70
+        phone.uptimeAhead += 30
+        #expect(await eventually { phone.windowPauses.lengths.count == 2 }, "\(phone.windowPauses.lengths)")
+        let lengths = phone.windowPauses.lengths
+        #expect(lengths.count == 2 && (79...80).contains(lengths[1]), "\(lengths)")
+        phone.windowPauses.release()
+    }
+
+    /// Backgrounds again and again cannot move the end past the first end + one visibility timeout: once it is there, no
+    /// later one moves it.
+    @Test func repeatedBackgroundsStopAtTheCap() async throws {
+        defer { phone.close() }
+        _ = try await scanned()
+        try await phone.restart()
+        phone.windowPauses.holding = true
+        phone.clockAhead = 700
+        try await m.refresh()
+        #expect(await eventually { phone.windowPauses.lengths == [90] }, "the window runs")
+        phone.clockAhead += 70
+        for _ in 0..<3 {
+            await m.onBackground(budget: .seconds(1))
+            m.onForeground()
+            try await Task.sleep(for: .milliseconds(150))
+        }
+        let lengths = phone.windowPauses.lengths
+        #expect(lengths.count == 2 && (79...80).contains(lengths[1]), "\(lengths)")
+        phone.windowPauses.release()
+    }
+
+    /// When the relay cannot be asked for its visibility timeout, the window takes the one the mailbox's registration gave
+    /// (kept with the device), not the default.
+    @Test func theStoredVisibilityTimeoutIsTheFallback() async throws {
+        defer { phone.close() }
+        service.relayVisibility = 120
+        _ = try await scanned()
+        try await phone.restart()
+        service.refusesRegistration = true
+        phone.windowPauses.holding = true
+        phone.clockAhead = 700
+        try await m.refresh()
+        #expect(await eventually(within: .seconds(30)) { !phone.windowPauses.lengths.isEmpty }, "the window runs")
+        #expect(phone.windowPauses.lengths == [150], "120 s + 25 s + 5 s: \(phone.windowPauses.lengths)")
+        phone.windowPauses.release()
+    }
 }

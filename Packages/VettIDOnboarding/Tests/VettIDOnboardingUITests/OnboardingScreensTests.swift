@@ -153,7 +153,7 @@ private final class Log {
         #expect(MoveStrings.transferEndTitle(.timedOut) == "The move to this phone didn't finish")
         #expect(MoveStrings.transferEndBody(.timedOut) == """
             Your old phone didn't approve the move in time, so nothing changed: your vault is still on your old phone. \
-            To try again, show a new code on your old phone, then tap Move from my old phone.
+            To try again, show a new code on your old phone.
             """)
         #expect(MoveStrings.transferEndTitle(.declined) == "The move was declined")
         #expect(MoveStrings.transferInChecking == "Checking whether your old phone approved in time…")

@@ -56,6 +56,8 @@ struct FakeTransferStore {
     var collectGate: FakeHTTPServer.Gate?
     var opensAtDelete = false
     var collectGateWait: Int?
+    var visibility = 60
+    var registerRefused = false
     var leased: [(message: RelayMessage, until: Date)] = []
 }
 
@@ -292,6 +294,18 @@ extension FakeVaultService {
     public var holdsCollectAnswers: FakeHTTPServer.Gate? {
         get { locked { transfer.collectGate } }
         set { locked { transfer.collectGate = newValue } }
+    }
+
+    /// The `visibility_timeout_seconds` the device's relay registers with (60).
+    public var relayVisibility: Int {
+        get { locked { transfer.visibility } }
+        set { locked { transfer.visibility = newValue } }
+    }
+
+    /// The device's relay refuses a registration (503): the limits cannot be read.
+    public var refusesRegistration: Bool {
+        get { locked { transfer.registerRefused } }
+        set { locked { transfer.registerRefused = newValue } }
     }
 
     /// Only the collects of this `wait` are held (``holdsCollectAnswers``): the test phone's collector long-polls with

@@ -250,7 +250,8 @@ public final class VaultDevice: @unchecked Sendable {
     /// A new device with fresh state; registers its mailbox on its relay.
     public static func create(_ cfg: DeviceConfig, secrets: DeviceSecrets) async throws -> VaultDevice {
         let d = try VaultDevice(cfg: cfg, secrets: secrets, st: DeviceState(role: cfg.role, name: cfg.name, relayURL: cfg.relayURL))
-        _ = try await d.own.register()
+        let limits = try await d.own.register().limits
+        d.mem.withLock { d.st.relayVisibilitySeconds = limits.visibilityTimeoutSeconds }
         try d.save()
         return d
     }
@@ -504,7 +505,7 @@ public final class VaultDevice: @unchecked Sendable {
     }
 
     /// The limits this device's relay advertises (RELAY-PROTOCOL §6.1; register is idempotent).
-    public func relayLimits() async throws -> RelayLimits { try await own.register().limits }
+    public func relayLimits() async throws -> RelayLimits { try await registered() }
 
     /// A fresh inner id (a ULID by this device's clock), for a request the member may retry as the same one.
     public func newRequestID() -> String { Ulid.new(now()) }

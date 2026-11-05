@@ -54,7 +54,6 @@ import VettIDUI
             ("compare", with(.compare) { $0.sas = "042817"; $0.secondsLeft = 540 }),
             ("compare, checking", with(.compare) { $0.sas = "042817"; $0.checking = true; $0.closing = true }),
             ("compare, closing", with(.compare) { $0.sas = "042817"; $0.secondsLeft = 40; $0.closing = true; $0.checking = true }),
-            ("compare, leave hint", with(.compare) { $0.checking = true; $0.closing = true; $0.leaveHint = true }),
             ("stopped", with(.stopped)),
             ("done", with(.done)),
             ("done, phone secret", with(.done) { $0.phoneSecret = true }),
@@ -171,6 +170,17 @@ import VettIDUI
         await clock.runCurrent()
         #expect(model.state.step == .compare)
         return host(TransferInRoute(move: vault, vault: vault, onLeave: {}, camera: nil, model: model))
+    }
+
+    /// The check shows "You can leave the app…" the whole time, not only once Back was pressed (as vettid-android does).
+    @Test func theCheckShowsTheLeaveNoteTheWholeTime() {
+        var state = TransferInState(step: .compare)
+        state.sas = "042817"
+        #expect(TransferInContent.leaveNote(state) == nil, "not while the code is compared")
+        state.checking = true
+        state.closing = true
+        #expect(TransferInContent.leaveNote(state)
+            == "You can leave the app. The check finishes in the background or the next time you open VettID.")
     }
 
     @Test func onlyAHandshakeUnderWayIsCancelled() {

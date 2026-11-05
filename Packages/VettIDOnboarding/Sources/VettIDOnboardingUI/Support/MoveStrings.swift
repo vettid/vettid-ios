@@ -186,7 +186,7 @@ enum MoveStrings {
                 localized: "transfer_in_background_timeout_body",
                 defaultValue: """
                     Your old phone didn't approve the move in time, so nothing changed: your vault is still on your old \
-                    phone. To try again, show a new code on your old phone, then tap Move from my old phone.
+                    phone. To try again, show a new code on your old phone.
                     """,
                 bundle: .module
             )

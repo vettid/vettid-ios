@@ -199,6 +199,21 @@ extension VaultDevice {
 
     // MARK: - The new app: the collects before the drop (§11.14.10 rule 5)
 
+    /// The relay's limits from a registration of the mailbox again (idempotent, RELAY-PROTOCOL §6.1); its visibility
+    /// timeout is kept with the state (``storedRelayVisibility``).
+    func registered() async throws -> RelayLimits {
+        let limits = try await own.register().limits
+        let changed: Bool = mem.withLock {
+            defer { st.relayVisibilitySeconds = limits.visibilityTimeoutSeconds }
+            return st.relayVisibilitySeconds != limits.visibilityTimeoutSeconds
+        }
+        if changed { _ = try? await lock.withLock { try save() } }
+        return limits
+    }
+
+    /// The visibility timeout the mailbox's last registration gave, if one was kept (seconds).
+    public var storedRelayVisibility: TimeInterval? { mem.withLock { st.relayVisibilitySeconds.map { TimeInterval($0) } } }
+
     /// Halted (``halt()``) or forgotten (``forget()``): a device that writes nothing any more, not one to use again.
     public var ended: Bool { mem.withLock { halted || forgotten } }
 

@@ -37,6 +37,11 @@ public struct TransferInContent: View {
         self.onRecover = onRecover
     }
 
+    /// The note the check shows the whole time it runs (as vettid-android does): Back stays, and the app can be left.
+    static func leaveNote(_ state: TransferInState) -> String? {
+        state.step == .compare && state.checking ? MoveStrings.transferInCheckingLeave : nil
+    }
+
     private var back: @MainActor () -> Void {
         let actions = actions
         let onLeave = onLeave
@@ -173,9 +178,8 @@ public struct TransferInContent: View {
                 if state.checking {
                     // Past the deadline the old phone can no longer approve: no code to compare, and no time left to count.
                     WaitingRow(text: MoveStrings.transferInChecking, identifier: "checking_old_phone")
-                    if state.leaveHint {
-                        NoticeCard(.info, title: MoveStrings.transferInCheckingLeave, message: "", announce: .polite)
-                            .accessibilityIdentifier("checking_leave_hint")
+                    if let note = Self.leaveNote(state) {
+                        NoticeCard(.info, title: note, message: "", announce: .polite).accessibilityIdentifier("checking_leave_hint")
                     }
                 } else {
                     if let sas = state.sas { SasBox(sas: sas) }

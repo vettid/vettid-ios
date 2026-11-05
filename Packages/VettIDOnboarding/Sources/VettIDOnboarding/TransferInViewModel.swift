@@ -64,9 +64,7 @@ public final class TransferInViewModel: TransferInActions {
             state.inputProblem = nil
             return true
         case .compare where closesNow:
-            // No abandon now (§11.14.10 rule 5): Back stays, and says that the app can be left (the check goes on in the
-            // background), as vettid-android does.
-            state.leaveHint = true
+            // No abandon now (§11.14.10 rule 5): Back stays (the screen says the app can be left), as vettid-android does.
             return true
         case .connecting, .compare:
             cancel()
@@ -265,7 +263,6 @@ public final class TransferInViewModel: TransferInActions {
         state.busy = false
         state.checking = false
         state.closing = false
-        state.leaveHint = false
         state.sas = nil
         state.deadline = nil
         work.launch { [weak self] in await self?.abandon() }
