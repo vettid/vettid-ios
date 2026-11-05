@@ -65,20 +65,21 @@ import VettIDDataTesting
         #expect(vm.state.secondsLeft == 630 && !vm.state.closing, "counted from the stored start")
         await clock.advance(seconds: 570)
         #expect(vm.state.closing && !vm.state.checking)
+        vault.abandonClosed = true
         vm.cancel()
         #expect(!vm.back(), "Back leaves the screen")
         await vm.settle()
         #expect(vm.state.step == .compare && !vault.calls.contains("abandonTransferIn"))
     }
 
-    /// The moment is the stored start's and the clock's, not the ticker's last second: no abandon even before it ticks.
+    /// The repository decides, not the ticker's last second: no abandon even before the ticker shows it.
     @Test func noAbandonFromTheVaultsTenMinutesBeforeTheTickerTicks() async throws {
         let vm = model()
         vm.scan()
         vm.scanned(try qr())
         await clock.runCurrent()
         #expect(!vm.state.closing)
-        vault.transferStartedAt = clock.now().addingTimeInterval(-605)
+        vault.abandonClosed = true
         vm.cancel()
         #expect(!vm.back(), "Back leaves the screen")
         await vm.settle()
@@ -106,7 +107,8 @@ import VettIDDataTesting
         #expect(!vm.state.checking)
         await clock.advance(seconds: 660)
         #expect(vm.state.secondsLeft == 0 && vm.state.checking && vm.state.step == .compare)
-        // No abandon now: Cancel is gone, and asking for it changes nothing.
+        // No abandon now (the repository says so past the deadline): Cancel is gone, and asking for it changes nothing.
+        vault.abandonClosed = true
         vm.cancel()
         #expect(vm.state.checking && vm.state.step == .compare)
     }

@@ -49,6 +49,12 @@ final class MoveBook {
     /// forgotten (a wipe, a sign-out): what the settlement window watches, as a background ends the session too.
     var backgrounds = 0
     var sessionEnds = 0
+    /// The session a transfer to this phone is waited for and settled through (``VaultManager/awaitTransferIn()``): a
+    /// background ends the manager's session, and the foreground takes this one back rather than load a second device from
+    /// the same stored state (one device, one writer, per transfer).
+    var transferSession: VaultSession?
+    /// The ``VaultManager/awaitTransferIn()`` calls under way (the screen's, the background's).
+    var waitingIn = 0
     /// How many day-7 checks ended (any result): what a test awaits instead of a fixed time.
     var keptChecksFinished = 0
     /// The timer to the end of a kept transfer, and whether its end is being decided now.

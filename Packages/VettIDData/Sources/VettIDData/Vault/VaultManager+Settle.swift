@@ -51,8 +51,9 @@ extension VaultManager {
     enum WindowEnd: Sendable {
         case paired(String?)
         case rejected
-        /// The transfer's session ended: `mailbox_unknown`, or the app signed out or wiped (the session went).
-        case ended
+        /// The transfer's session ended: `mailbox_unknown` ([drop]: its dead handshake goes), or the app signed out or
+        /// wiped (nothing is written: the wipe or the sign-out has it).
+        case ended(drop: Bool)
         case nothing
     }
 
@@ -81,22 +82,28 @@ extension VaultManager {
         var until = config.now().addingTimeInterval(length)
         let sessionEnds = moveFlags.book.sessionEnds
         var backgrounds = moveFlags.book.backgrounds
+        // A window that saw the app in the background (it may have been suspended: its collects were cut, its timer ran on),
+        // also one that started there, decides nothing until it is back in the foreground, and then runs a full window again
+        // (chosen; rule 5 says so of an app stopped during the window; not in the spec: no cap; nothing is decided until the
+        // app stays in the foreground for one window).
+        var sawBackground = backgrounded
         var failures = 0
         while !Task.isCancelled {
             // Signed out or wiped meanwhile (every device forgotten): the session this window collects for is gone. A
-            // background ends the session too, and the foreground opens another one: that is no end of the transfer's.
-            if moveFlags.book.sessionEnds != sessionEnds { return .ended }
-            // A window that saw the app in the background (it may have been suspended: its collects were cut, its timer ran
-            // on) decides nothing until it is back in the foreground, and then runs a full window again (chosen; rule 5
-            // says so of an app stopped during the window).
-            if !backgrounded, moveFlags.book.backgrounds != backgrounds {
+            // background ends the session too, and the foreground takes it back: that is no end of the transfer's.
+            if moveFlags.book.sessionEnds != sessionEnds { return .ended(drop: false) }
+            if backgrounded || moveFlags.book.backgrounds != backgrounds {
+                sawBackground = true
                 backgrounds = moveFlags.book.backgrounds
+            }
+            if sawBackground, !backgrounded {
+                sawBackground = false
                 timer.cancel()
                 ended = Flag()
                 timer = windowTimer(length, ended)
                 until = config.now().addingTimeInterval(length)
             }
-            let last = ended.value && !backgrounded
+            let last = ended.value && !sawBackground
             let left = until.timeIntervalSince(config.now()) - Self.handlingMargin
             let wait = last || collectorRuns(d) ? 0 : min(Self.windowPoll, max(left, 0)).rounded(.down)
             do {
@@ -104,7 +111,7 @@ extension VaultManager {
                 try await d.collectOnce(timeout: wait + Self.collectSlack, wait: wait, sleep: config.transferCollectSleep)
                 failures = 0
             } catch let e as RelayError where e.code == RelayError.mailboxUnknown {
-                return .ended
+                return .ended(drop: true)
             } catch {
                 failures += 1
             }
@@ -180,7 +187,7 @@ extension VaultManager {
     /// Whether an abandon of the transfer waiting is refused (§11.14.10 rule 5): from the end of the vault's 10 minutes
     /// (``vaultApprovalWindow`` after the stored start), and while the window runs. An approval may just have reached the
     /// vault, and abandoning while a `device.paired` may be leased could leave a vault whose only app cannot open it.
-    var abandonClosed: Bool {
+    public var abandonClosed: Bool {
         if moveFlags.book.settling != nil { return true }
         guard let started = record.value.transferStartedMs else { return false }
         return config.now().timeIntervalSince1970 >= Double(started) / 1000 + Self.vaultApprovalWindow
@@ -224,9 +231,29 @@ extension VaultManager {
     /// saved it), the current session is reloaded so that its device knows it. [s]'s device is stopped either way.
     func settlingSession(_ s: VaultSession) async -> VaultSession {
         guard let current = session, current.device !== s.device else { return s }
-        s.device.stop()
-        guard s.device.deviceID != nil, current.device.deviceID == nil else { return current }
+        guard s.device.deviceID != nil, current.device.deviceID == nil else {
+            await s.device.halt()
+            return current
+        }
+        // Neither device writes the stored state while the current session is loaded again from it: the newer one stops
+        // for good (it would save its stale state back), and the window's, which saved the pairing, after the reload.
+        await current.device.halt()
         stopCollecting()
-        return (try? await openSession()) ?? s
+        guard let fresh = try? await openSession() else { return s }
+        await s.device.halt()
+        return fresh
+    }
+
+    /// The transfer's own session taken back by an opening (the foreground after a background) while the transfer is
+    /// waited for: its device, stopped by the background, collects again. Nil when there is none to take back.
+    func takeBackTransferSession() -> VaultSession? {
+        guard !halted, session == nil, let held = moveFlags.book.transferSession, held.identity == record.value.activeIdentity,
+              moveFlags.book.transferWaiter != nil || moveFlags.book.settling != nil || moveFlags.book.waitingIn > 0
+        else { return nil }
+        session = held
+        memberVault.set(device: held.device)
+        if !backgrounded { held.device.start() }
+        observe(held)
+        return held
     }
 }

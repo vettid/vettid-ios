@@ -250,13 +250,9 @@ public final class TransferInViewModel: TransferInActions {
     }
 
     /// Leaves a transfer in progress: nothing was approved, so nothing changes; the handshake state is dropped.
-    /// From the end of the vault's 10 minutes, counted from the stored start of the `hs.init` and the clock now (the
-    /// ticker's ``TransferInState/closing`` may be a second behind): no abandon (§11.14.10 rule 5).
-    public var closesNow: Bool {
-        guard state.step == .compare else { return false }
-        guard let started = move.transferStartedAt else { return state.closing }
-        return now() >= started.addingTimeInterval(Self.approvalWindow)
-    }
+    /// No abandon now (§11.14.10 rule 5), as the repository decides it (``TransferInBackground/abandonClosed``): the
+    /// ticker's ``TransferInState/closing`` only hides the button.
+    public var closesNow: Bool { state.step == .compare && move.abandonClosed }
 
     public func cancel() {
         // No abandon from the end of the vault's 10 minutes (§11.14.10 rule 5): the button is gone then.

@@ -342,7 +342,7 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
     /// The session, opened once: the device keys (made when missing), the device restored from its state or created
     /// (registering its mailbox at the relay), and its collector started.
     func openSession() async throws -> VaultSession {
-        if let session, session.identity == record.value.activeIdentity { return session }
+        if let session = session ?? takeBackTransferSession(), session.identity == record.value.activeIdentity { return session }
         if session != nil { try await dropSession(forget: false) } // a session of another identity than the record's is stale
         if let opening { return try await join(opening) }
         guard !halted else { throw VaultFailure(.other, code: "halted") }

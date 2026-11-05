@@ -125,6 +125,8 @@ public final class FakeVaultRepository: CustomStringConvertible {
     public var transferEnd: TransferEnd?
     /// The stored start of the transfer to this phone (``TransferInBackground/transferStartedAt``).
     public var transferStartedAt: Date?
+    /// ``TransferInBackground/abandonClosed``.
+    public var abandonClosed = false
     /// (VAULT-MESSAGING §11.14.9 "A lost answer") Where the decision of a lost change stands, set by a test.
     public var changeCheck: ChangeCheck?
     /// Which PIN the unlock asks for; ``UnlockAttempt/newPinNeeded`` moves it to ``UnlockPinStep/new``.

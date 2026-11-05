@@ -32,11 +32,14 @@ public extension TransferEndNotice {
 @MainActor
 public protocol TransferInBackground: AnyObject {
     var transferStartedAt: Date? { get }
+    /// No abandon (nor a new code) now: from the end of the vault's 10 minutes, and while the settlement window runs.
+    var abandonClosed: Bool { get }
 
     func waitForTransferInBackground()
 }
 
 public extension TransferInBackground {
     var transferStartedAt: Date? { nil }
+    var abandonClosed: Bool { false }
     func waitForTransferInBackground() {}
 }
