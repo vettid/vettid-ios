@@ -233,6 +233,7 @@ public final class TransferInViewModel: TransferInActions {
     private func tickOnce(_ deadline: Date) -> Bool {
         let left = max(Int64(deadline.timeIntervalSince(now()).rounded(.down)), 0)
         state.secondsLeft = left
+        state.checking = left == 0
         return left > 0
     }
 
@@ -242,6 +243,7 @@ public final class TransferInViewModel: TransferInActions {
         ticker?.cancel()
         state.step = .intro
         state.busy = false
+        state.checking = false
         state.sas = nil
         state.deadline = nil
         work.launch { [weak self] in await self?.abandon() }

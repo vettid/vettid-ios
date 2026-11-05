@@ -87,7 +87,9 @@ public struct StoredStateUnreadable: Error, Equatable, Sendable, CustomStringCon
 
 /// The owner rejected this device's pairing or transfer on their phone after its `hs.fin` (`device.pair.rejected`,
 /// VAULT-MESSAGING §6.7, 0.10.5). The device has dropped the handshake's epoch and the request token.
-public struct PairingRejected: Error, Equatable, Sendable {}
+public struct PairingRejected: Error, Equatable, Sendable {
+    public init() {}
+}
 
 /// The device's `hs.fin` was refused for good by the relay at its first deposit: the vault will not finish the pairing or
 /// transfer, whose code is spent. The member scans a new code.

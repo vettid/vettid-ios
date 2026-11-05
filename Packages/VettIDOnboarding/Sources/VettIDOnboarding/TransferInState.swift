@@ -35,6 +35,9 @@ public struct TransferInState: Equatable, Sendable, CustomStringConvertible, Cus
     /// 11 minutes after the `hs.init` was started (VAULT-MESSAGING §11.14.10 rule 5).
     public var deadline: Date?
     public var secondsLeft: Int64 = 0
+    /// The deadline passed while the screen waited: the old phone can no longer approve, and the vault is being checked for
+    /// an approval that came in time (§11.14.10 rule 5's window). The code is no longer shown.
+    public var checking = false
     public var busy = false
     public var error: FailureKind?
     public var errorCode: String?

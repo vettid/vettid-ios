@@ -51,7 +51,21 @@ import VettIDDataTesting
         await clock.runCurrent()
         #expect(vm.state.secondsLeft == 660)
         await clock.advance(seconds: 90)
-        #expect(vm.state.secondsLeft == 570 && vm.state.step == .compare)
+        #expect(vm.state.secondsLeft == 570 && vm.state.step == .compare && !vm.state.checking)
+    }
+
+    /// (§11.14.10 rule 5) Past the deadline the old phone can no longer approve: while the vault is checked for an approval
+    /// that came in time, the screen says so instead of counting "0:00 left" beside the code.
+    @Test func pastTheDeadlineTheScreenChecksInsteadOfCounting() async throws {
+        let vm = model()
+        vm.scan()
+        vm.scanned(try qr())
+        await clock.runCurrent()
+        #expect(!vm.state.checking)
+        await clock.advance(seconds: 660)
+        #expect(vm.state.secondsLeft == 0 && vm.state.checking && vm.state.step == .compare)
+        vm.cancel()
+        #expect(!vm.state.checking)
     }
 
     /// Release R: the phone key made for the transfer is known to the screen ("Finish the move" follows).

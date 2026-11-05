@@ -197,18 +197,19 @@ extension VaultDevice {
         try await deliver(entry, keepOnFailure: false)
     }
 
-    // MARK: - The new app: one collect before the drop (§11.14.10 rule 5)
+    // MARK: - The new app: the collects before the drop (§11.14.10 rule 5)
 
-    /// One collect of this device's mailbox (`wait=0`, `max` at its cap, RELAY-PROTOCOL §6.3), bounded by [timeout] seconds
-    /// in all, its transport retries included: each message is handled as the collector handles it and acked. A
-    /// `device.paired{transfer}` it brings is then found by ``awaitTransfer(timeout:)``. Throws when the collect fails or
-    /// times out; a task that is cancelled stops it.
+    /// One collect of this device's mailbox (a long poll of [wait] seconds, `max` at its cap, RELAY-PROTOCOL §6.3), bounded
+    /// by [timeout] seconds in all, its transport retries included: each message is handled as the collector handles it
+    /// and acked. A `device.paired{transfer}` it brings is then found by ``awaitTransfer(timeout:)``. Throws when the
+    /// collect fails or times out; a task that is cancelled stops it.
     public func collectOnce(
-        timeout: TimeInterval = 30, sleep: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) }
+        timeout: TimeInterval = 30, wait: TimeInterval = 0,
+        sleep: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) }
     ) async throws {
         let own = own
         let messages: [RelayMessage] = try await withThrowingTaskGroup(of: [RelayMessage]?.self) { group in
-            group.addTask { try await own.collect(wait: 0, max: RelayClient.maxCollect) }
+            group.addTask { try await own.collect(wait: wait, max: RelayClient.maxCollect) }
             group.addTask {
                 try await sleep(.seconds(timeout))
                 return nil

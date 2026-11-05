@@ -50,6 +50,9 @@ struct FakeTransferStore {
     /// At the last restart of a test phone: the collects its old process left in flight, and whether one outlived the wait.
     var restartLeft = 0
     var restartOutlived = false
+    /// RELAY-PROTOCOL §6.3's lease, when a test asks for it: a collected message not acked within it is collected again.
+    var leaseFor: TimeInterval?
+    var leased: [(message: RelayMessage, until: Date)] = []
 }
 
 // TEST ONLY. A direct transfer in both directions, as vettid-vault answers it: as the new phone's target
@@ -269,6 +272,32 @@ extension FakeVaultService {
     public var lastRestartCollects: (left: Int, outlived: Bool) { locked { (transfer.restartLeft, transfer.restartOutlived) } }
 
     func noteRestart(left: Int, outlived: Bool) { locked { (transfer.restartLeft, transfer.restartOutlived) = (left, outlived) } }
+
+    /// The relay's lease of a collected message (RELAY-PROTOCOL §6.3: a message not acked within it reappears); nil, the
+    /// default: a collected message is gone, acked or not.
+    public var leasesCollected: TimeInterval? {
+        get { locked { transfer.leaseFor } }
+        set { locked { transfer.leaseFor = newValue } }
+    }
+
+    /// The messages whose lease ended, queued again (first). Callers hold ``cond``.
+    func requeueEndedLeases() {
+        let now = Date()
+        queued = transfer.leased.filter { $0.until <= now }.map(\.message) + queued
+        transfer.leased.removeAll { $0.until <= now }
+    }
+
+    /// The queued messages, taken by a collect: leased, when the test asks for leases. Callers hold ``cond``.
+    func takeQueued() -> [RelayMessage] {
+        requeueEndedLeases()
+        let taken = queued
+        queued.removeAll()
+        if let lease = transfer.leaseFor { transfer.leased += taken.map { ($0, Date().addingTimeInterval(lease)) } }
+        return taken
+    }
+
+    /// An ack ends a message's lease. Callers hold ``cond``.
+    func acked(_ msgID: String) { transfer.leased.removeAll { $0.message.msgID == msgID } }
 
     /// An answer to a `device.list` this phone did not ask just now: sealed under the session, with the `re` of another
     /// request, and a list that does not hold this phone. It is no answer to the check's own request (§11.14.10).

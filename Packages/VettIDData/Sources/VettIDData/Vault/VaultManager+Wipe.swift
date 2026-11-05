@@ -121,6 +121,7 @@ extension VaultManager {
     package func halt() async {
         halted = true
         moveFlags.book.transferWaiter?.cancel()
+        cutSettleWindow()
         keptTimer?.cancel()
         keptTimer = nil
         changeGeneration += 1

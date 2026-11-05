@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+import VettIDRelay
 @testable import VettIDData
 import VettIDDataTesting
 @testable import VettIDVault
@@ -67,7 +68,7 @@ extension VaultManagerTransferInTests {
         #expect(phone.attester.discarded == phone.attester.attested)
     }
 
-    /// A collect that fails drops at once: no reason to keep the keys longer.
+    /// A collect that keeps failing until the window of collects ends (here at once) drops: no reason to keep the keys longer.
     @Test func aFailedCollectDropsEvenWithAnApprovalWaiting() async throws {
         defer { phone.close() }
         _ = try await scanned()
@@ -155,6 +156,7 @@ extension VaultManagerTransferInTests {
         let second = Task { try await m.refresh() }
         try await first.value
         try await second.value
+        _ = await eventually(within: .seconds(30)) { m.finishMovePending && m.phase == .setup(.finishing) }
         #expect(m.finishMovePending && m.phase == .setup(.finishing) && phone.attester.discarded.isEmpty)
         #expect(service.requestsSeen.filter { $0 == "credential.get" }.count == 1)
     }
@@ -182,7 +184,7 @@ extension VaultManagerTransferInTests {
         #expect(await deadlineWaiting())
         phone.clockAhead = 661
         phone.deadlinePauses.release()
-        #expect(await eventually { m.record.value.transferStartedMs == nil && !pendingRecord })
+        #expect(await eventually(within: .seconds(30)) { m.record.value.transferStartedMs == nil && !pendingRecord })
         #expect(phone.attester.discarded == phone.attester.attested)
     }
 }
@@ -228,5 +230,150 @@ extension VaultManagerTransferInTests {
         try await m.refresh()
         let refusal = await vaultFailure { _ = try await m.redeemSetupCode(.secret(service.secret)) }
         #expect(refusal?.kind == .enrollmentStarted && refusal?.code == VaultManager.codeTransferWaiting)
+    }
+
+    // MARK: - The window of collects before the drop (§11.14.10 rule 5, owner decision 2026-11-05)
+
+    /// A start past the deadline does not wait for the window: the welcome screen shows, the transfer stays pinned, and a
+    /// `device.paired` that comes during the window is applied.
+    @Test func aStartPastTheDeadlineDoesNotWaitForTheWindow() async throws {
+        defer { phone.close() }
+        _ = try await scanned()
+        try await phone.restart()
+        phone.windowPauses.holding = true
+        phone.clockAhead = 700
+        try await m.refresh()
+        #expect(m.record.value.transferStartedMs != nil && !m.finishMovePending, "still waiting, not dropped")
+        #expect(await eventually { !phone.windowPauses.lengths.isEmpty }, "the window runs")
+        service.approveTransferIn()
+        #expect(await eventually(within: .seconds(30)) { m.finishMovePending && m.record.value.transferStartedMs == nil })
+        // The relay's visibility timeout (60 s), the long-poll cap and a margin.
+        #expect(phone.windowPauses.lengths == [90] && VaultManager.settleWindow(visibility: 60) == 90)
+        // No collect of the window is bounded below the transport's own long-poll timeout: none is ever cut while out.
+        let bounds = phone.collectPauses.lengths
+        #expect(!bounds.isEmpty && bounds.allSatisfy { $0 >= 70 }, "\(bounds)")
+        phone.windowPauses.release()
+    }
+
+    /// A collect that fails during the window is tried again, and the `device.paired` it then brings is applied.
+    @Test func aFailedCollectInTheWindowIsTriedAgain() async throws {
+        defer { phone.close() }
+        _ = try await scanned()
+        try await phone.restart()
+        phone.windowPauses.holding = true
+        service.approveTransferIn()
+        service.failNextCollects(RelayClient.defaultAttempts + 1)
+        phone.clockAhead = 700
+        try await m.refresh()
+        #expect(await eventually(within: .seconds(30)) { m.finishMovePending && m.record.value.transferStartedMs == nil })
+        phone.windowPauses.release()
+    }
+
+    /// The window ends without a `device.paired`: dropped, the key discarded and the epoch-1 secret deleted.
+    @Test func theWindowEndsWithNothingAndTheTransferIsDropped() async throws {
+        defer { phone.close() }
+        _ = try await scanned()
+        try await phone.restart()
+        phone.windowPauses.holding = true
+        phone.clockAhead = 700
+        try await m.refresh()
+        #expect(await eventually { !phone.windowPauses.lengths.isEmpty })
+        #expect(m.record.value.transferStartedMs != nil, "kept while the window runs")
+        #expect(m.transferEnd == nil, "not told while the window runs")
+        phone.windowPauses.release()
+        #expect(await eventually(within: .seconds(30)) { m.record.value.transferStartedMs == nil })
+        #expect(!deviceHoldsVault && !pendingRecord && !m.finishMovePending)
+        // Nobody is on the transfer screen: the welcome screen says the move didn't finish, until it is seen.
+        #expect(await eventually(within: .seconds(30)) { m.transferEnd == .timedOut })
+        m.acknowledgeTransferEnd()
+        #expect(m.transferEnd == nil)
+    }
+
+    /// An abandon during the window cuts it short and drops at once.
+    @Test func anAbandonCutsTheWindowShort() async throws {
+        defer { phone.close() }
+        _ = try await scanned()
+        try await phone.restart()
+        phone.windowPauses.holding = true
+        phone.clockAhead = 700
+        try await m.refresh()
+        #expect(await eventually { !phone.windowPauses.lengths.isEmpty })
+        try await m.abandonTransferIn()
+        #expect(m.record.value.transferStartedMs == nil && !deviceHoldsVault && !pendingRecord)
+    }
+
+    /// A rejection during the window drops at once, without waiting for its end.
+    @Test func aRejectionInTheWindowDropsAtOnce() async throws {
+        defer { phone.close() }
+        _ = try await scanned()
+        try await phone.restart()
+        phone.windowPauses.holding = true
+        phone.clockAhead = 700
+        try await m.refresh()
+        #expect(await eventually { !phone.windowPauses.lengths.isEmpty })
+        service.rejectTransferIn()
+        #expect(await eventually(within: .seconds(30)) { m.record.value.transferStartedMs == nil })
+        #expect(!deviceHoldsVault && !m.finishMovePending)
+        // The welcome screen says the move was declined.
+        #expect(await eventually(within: .seconds(30)) { m.transferEnd == .declined })
+        phone.windowPauses.release()
+    }
+
+    /// A rejection that comes during the running app's window ends as a rejection, not as a drop at the deadline.
+    @Test func aRejectionInTheRunningAppsWindowIsARejection() async throws {
+        defer { phone.close() }
+        _ = try await scanned()
+        phone.clockAhead = 600
+        m.session?.device.stop()
+        phone.windowPauses.holding = true
+        let waiting = Task { try await m.awaitTransferIn() }
+        #expect(await deadlineWaiting())
+        phone.clockAhead = 700
+        phone.deadlinePauses.release()
+        #expect(await eventually { !phone.windowPauses.lengths.isEmpty }, "the window runs")
+        service.rejectTransferIn()
+        let failure = await vaultFailure { _ = try await waiting.value }
+        #expect(failure?.kind == .rejected && !deviceHoldsVault && !pendingRecord)
+        phone.windowPauses.release()
+    }
+
+    /// The window is the manager's: the screen that waited going away does not cut it, and an approval that comes later in
+    /// it is still applied.
+    @Test func aScreenThatGoesAwayDoesNotCutTheWindow() async throws {
+        defer { phone.close() }
+        _ = try await scanned()
+        phone.clockAhead = 600
+        m.session?.device.stop()
+        phone.windowPauses.holding = true
+        let waiting = Task { try await m.awaitTransferIn() }
+        #expect(await deadlineWaiting())
+        phone.clockAhead = 700
+        phone.deadlinePauses.release()
+        #expect(await eventually { !phone.windowPauses.lengths.isEmpty }, "the window runs")
+        waiting.cancel()
+        service.approveTransferIn()
+        #expect(await eventually(within: .seconds(30)) { m.finishMovePending && m.record.value.transferStartedMs == nil })
+        phone.windowPauses.release()
+    }
+
+    /// The process ending during the window decides nothing: the transfer stays for the next process, which runs its own
+    /// window, and no notice is set.
+    @Test func theProcessEndingDuringTheWindowKeepsTheTransfer() async throws {
+        defer { phone.close() }
+        _ = try await scanned()
+        try await phone.restart()
+        phone.windowPauses.holding = true
+        phone.clockAhead = 700
+        try await m.refresh()
+        #expect(await eventually { !phone.windowPauses.lengths.isEmpty }, "the window runs")
+        let old = m
+        try await phone.restart()
+        #expect(old.transferEnd == nil, "nothing told")
+        // The next process starts its own window, the transfer still there.
+        try await m.refresh()
+        #expect(m.record.value.transferStartedMs != nil, "kept for the next process")
+        #expect(deviceHoldsVault, "the pinned vault kept")
+        #expect(pendingRecord, "the epoch-1 secret kept")
+        phone.windowPauses.release()
     }
 }

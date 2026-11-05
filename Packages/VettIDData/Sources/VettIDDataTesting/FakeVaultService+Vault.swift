@@ -58,7 +58,10 @@ extension FakeVaultService {
             return collect()
         }
         if r.path.hasPrefix("/v1/blob/") { return deviceBlob(r) }
-        if r.path.hasPrefix("/v1/mailbox/"), r.method == "DELETE" { return .empty(204) }
+        if r.path.hasPrefix("/v1/mailbox/"), r.method == "DELETE" {
+            locked { acked(String(r.path.dropFirst("/v1/mailbox/".count))) }
+            return .empty(204)
+        }
         return .json(404, #"{"code":"not_found","message":""}"#)
     }
 
@@ -88,10 +91,10 @@ extension FakeVaultService {
         transfer.collecting.insert(id)
         defer { transfer.collecting.remove(id) }
         let deadline = Date().addingTimeInterval(Self.collectHold)
+        requeueEndedLeases()
         while queued.isEmpty || holdMessagesValue, cond.wait(until: deadline) {}
         if holdMessagesValue { return .json(200, #"{"messages":[]}"#) }
-        let msgs = queued.map { JsonBuilder().string("msg_id", $0.msgID).string("sender", $0.sender).base64("payload", $0.payload).build() }
-        queued.removeAll()
+        let msgs = takeQueued().map { JsonBuilder().string("msg_id", $0.msgID).string("sender", $0.sender).base64("payload", $0.payload).build() }
         return .json(200, #"{"messages":\#(JsonBuilder.array(msgs))}"#)
     }
 

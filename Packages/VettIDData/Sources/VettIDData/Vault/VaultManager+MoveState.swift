@@ -19,6 +19,7 @@ final class MoveFlags {
     var keptCheckPending = false
     var movedBack = false
     var movedAway = false
+    var transferEnd: TransferEnd?
     var finishMoveHold: FailureKind?
 }
 
@@ -39,6 +40,8 @@ final class MoveBook {
     var openTransferID: String?
     /// The one task that settles the end of a transfer to this phone (a take-over, or a drop): every caller joins it.
     var settling: Task<TransferSettled, Never>?
+    /// The window of collects before the drop that the settlement is running, to cut it short.
+    var settleWindow: Task<VaultManager.WindowEnd, Never>?
     /// The wait of a transfer found waiting at a start (before its deadline), and whether the start was looked at.
     var transferWaiter: Task<Void, Never>?
     var transferResumed = false
@@ -125,6 +128,14 @@ extension VaultManager {
         get { moveFlags.movedAway }
         set { moveFlags.movedAway = newValue }
     }
+
+    /// A move waited for in the background ended without completing (``TransferEndNotice/transferEnd``).
+    public internal(set) var transferEnd: TransferEnd? {
+        get { moveFlags.transferEnd }
+        set { moveFlags.transferEnd = newValue }
+    }
+
+    public func acknowledgeTransferEnd() { transferEnd = nil }
 
     /// (VAULT-MESSAGING 0.45.0 §11.14.9 step 2) Why "Finish the move" is held: a PIN or password change is being decided
     /// or the PIN is uncertain (the gate's failure kind); nil when the move can be finished. Observable: updated wherever a

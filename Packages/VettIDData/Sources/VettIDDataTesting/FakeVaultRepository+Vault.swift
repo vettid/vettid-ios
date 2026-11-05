@@ -39,6 +39,11 @@ extension FakeVaultRepository: VaultRepository {
         if changeCheck?.undecided == false { changeCheck = nil }
     }
 
+    public func acknowledgeTransferEnd() {
+        calls.append("acknowledgeTransferEnd")
+        transferEnd = nil
+    }
+
     public func acknowledgeMovedAway() {
         calls.append("acknowledgeMovedAway")
         movedAway = false

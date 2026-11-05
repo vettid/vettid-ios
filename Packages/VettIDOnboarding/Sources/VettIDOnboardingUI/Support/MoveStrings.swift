@@ -1,4 +1,5 @@
 import Foundation
+import VettIDData
 
 /// The move to this phone: the transfer from the old phone and "Finish the move" (vettid-android `feature/onboarding`
 /// `strings.xml`, word for word). The key `onboarding_moved_recovered_body` comes with the recovery screens.
@@ -163,6 +164,42 @@ enum MoveStrings {
 
     static var transferInAgain: String {
         String(localized: "transfer_in_again", defaultValue: "Try again", bundle: .module)
+    }
+
+    /// (§11.14.10 rule 5) The welcome screen's notice of a move that was waited for in the background and ended without
+    /// completing.
+    static func transferEndTitle(_ end: TransferEnd) -> String {
+        switch end {
+        case .timedOut:
+            String(localized: "transfer_in_background_timeout_title", defaultValue: "The move to this phone didn't finish", bundle: .module)
+        case .declined:
+            String(localized: "transfer_in_background_declined_title", defaultValue: "The move was declined", bundle: .module)
+        }
+    }
+
+    static func transferEndBody(_ end: TransferEnd) -> String {
+        switch end {
+        case .timedOut:
+            String(
+                localized: "transfer_in_background_timeout_body",
+                defaultValue: """
+                    Your old phone didn't approve the move in time, so nothing changed: your vault is still on your old \
+                    phone. To try again, show a new code on your old phone, then tap Move from my old phone.
+                    """,
+                bundle: .module
+            )
+        case .declined:
+            String(
+                localized: "transfer_in_background_declined_body",
+                defaultValue: "The move was declined on your old phone. Nothing changed: your vault is still on your old phone.",
+                bundle: .module
+            )
+        }
+    }
+
+    /// After the deadline, while the vault is checked for an approval that came in time.
+    static var transferInChecking: String {
+        String(localized: "transfer_in_checking", defaultValue: "Checking whether your old phone approved in time…", bundle: .module)
     }
 
     static var transferInNoAnswerTitle: String {

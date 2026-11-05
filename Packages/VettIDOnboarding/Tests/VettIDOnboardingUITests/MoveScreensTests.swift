@@ -52,6 +52,7 @@ import VettIDUI
             ("paste, running", with(.paste) { $0.input = "eyJ2Ijoy"; $0.busy = true }),
             ("connecting", with(.connecting) { $0.busy = true }),
             ("compare", with(.compare) { $0.sas = "042817"; $0.secondsLeft = 540 }),
+            ("compare, checking", with(.compare) { $0.sas = "042817"; $0.checking = true }),
             ("done", with(.done)),
             ("done, phone secret", with(.done) { $0.phoneSecret = true }),
             ("done, no user_guid", with(.done) { $0.canUnlockLater = false }),

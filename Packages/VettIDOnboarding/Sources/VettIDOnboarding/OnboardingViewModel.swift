@@ -53,6 +53,7 @@ public final class OnboardingViewModel: OnboardingActions {
         followers.add(follow(self, read: { $0.inbox.link }, apply: { vm, raw in if let raw { vm.receiveLink(raw) } }))
         followers.add(follow(self, read: { $0.vault.finishMovePending }, apply: { $0.state.finishMovePending = $1 }))
         followers.add(follow(self, read: { $0.account.vaultDeletedNotice }, apply: { $0.state.deletedNotice = $1 }))
+        followers.add(follow(self, read: { $0.vault.transferEnd }, apply: { $0.state.transferEnd = $1 }))
     }
 
     deinit { followers.cancelAll() }
@@ -546,6 +547,12 @@ public final class OnboardingViewModel: OnboardingActions {
     public func dismissDeletedNotice() {
         state.deletedNotice = false
         account.dismissVaultDeletedNotice()
+    }
+
+    /// Seen once the member leaves the welcome screen.
+    public func dismissTransferEnd() {
+        state.transferEnd = nil
+        vault.acknowledgeTransferEnd()
     }
 
     /// The welcome screen afresh, nothing of before kept but the notice of a deleted vault.

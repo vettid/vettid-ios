@@ -191,10 +191,13 @@ import VettIDDataTesting
         service.approveTransferIn()
         phone.clockAhead = 700
         try await m.refresh()
+        // The window of collects runs in the background (§11.14.10 rule 5, chosen): the start does not wait for it.
+        _ = await eventually(within: .seconds(30)) { m.finishMovePending && m.record.value.transferStartedMs == nil }
         // Each part on its own, with the state that tells a dropped transfer (nothing collected) from a take-over that
         // failed (the phase's failure).
         let state = "phase \(m.phase), paired at the vault \(service.transferPaired), finishMovePending \(m.finishMovePending), "
-            + "transferStartedMs set \(m.record.value.transferStartedMs != nil), deviceID set \(m.session?.device.deviceID != nil)"
+            + "transferStartedMs set \(m.record.value.transferStartedMs != nil), deviceID set \(m.session?.device.deviceID != nil), "
+            + "restart \(service.lastRestartCollects)"
         #expect(service.transferPaired, "the vault paired the transfer: \(state)")
         #expect(m.finishMovePending, "the transfer was applied: \(state)")
         #expect(m.record.value.transferStartedMs == nil, "the take-over completed: \(state)")
@@ -213,7 +216,30 @@ import VettIDDataTesting
         service.approveTransferIn()
         phone.clockAhead = 700
         try await m.refresh()
-        #expect(m.finishMovePending && m.record.value.transferStartedMs == nil && m.phase == .setup(.finishing))
+        _ = await eventually(within: .seconds(30)) { m.finishMovePending && m.record.value.transferStartedMs == nil }
+        let state = "phase \(m.phase), finishMovePending \(m.finishMovePending), clock set \(m.record.value.transferStartedMs != nil), "
+            + "deviceID set \(m.session?.device.deviceID != nil), end \(String(describing: m.transferEnd))"
+        #expect(m.finishMovePending && m.record.value.transferStartedMs == nil && m.phase == .setup(.finishing), "\(state)")
+    }
+
+    /// A real process death with its long poll still open at the relay: the `device.paired` the vault sends next goes to the
+    /// dead request and is leased to it (RELAY-PROTOCOL §6.3). The new process's window of collects outlasts the lease, so
+    /// it finds the `device.paired` when it reappears, and the move is applied instead of dropped.
+    @Test func aPairedLeasedToTheKilledAppIsFoundInTheWindow() async throws {
+        defer { phone.close() }
+        _ = try await scanned()
+        service.leasesCollected = 0.3
+        #expect(await eventually { !service.collectsInFlight.isEmpty }, "the old device is collecting")
+        try await phone.restartLeavingCollects()
+        phone.windowPauses.holding = true
+        service.approveTransferIn()
+        // The dead request took it: nothing is queued until its lease ends.
+        #expect(await eventually { service.lastRestartCollects.left > 0 })
+        phone.clockAhead = 700
+        try await m.refresh()
+        #expect(await eventually(within: .seconds(30)) { m.finishMovePending && m.record.value.transferStartedMs == nil })
+        #expect(m.phase == .setup(.finishing) && phone.attester.discarded.isEmpty, "phase \(m.phase), discarded \(phone.attester.discarded.count)")
+        phone.windowPauses.release()
     }
 
     /// ... or dropped, when nothing waits.
@@ -223,7 +249,12 @@ import VettIDDataTesting
         try await phone.restart()
         phone.clockAhead = 700
         try await m.refresh()
+        _ = await eventually(within: .seconds(30)) { m.record.value.transferStartedMs == nil }
         #expect(!deviceHoldsVault && !pendingRecord && m.record.value.transferStartedMs == nil)
+        #expect(await eventually(within: .seconds(30)) { m.transferEnd == .timedOut }, "the welcome screen says the move didn't finish")
+        // A new transfer clears it, even one whose code is not a transfer code.
+        _ = try? await m.transferIn(code: "not a code")
+        #expect(m.transferEnd == nil)
         #expect(phone.attester.discarded == phone.attester.attested && !m.finishMovePending)
     }
 

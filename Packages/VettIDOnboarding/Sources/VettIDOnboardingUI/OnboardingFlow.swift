@@ -184,7 +184,8 @@ public struct OnboardingContent: View {
             WelcomeScreen(
                 onStart: { actions.start() }, onTransfer: { actions.startTransfer() }, onRecover: { actions.startRecovery() },
                 deletedNotice: state.deletedNotice, onOpenAccountSite: onOpenAccountSite,
-                onNoticeSeen: { actions.dismissDeletedNotice() }
+                onNoticeSeen: { actions.dismissDeletedNotice() },
+                transferEnd: state.transferEnd, onTransferEndSeen: { actions.dismissTransferEnd() }
             )
         }
     }

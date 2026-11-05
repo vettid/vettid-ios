@@ -1310,6 +1310,50 @@
         }
       }
     },
+    "transfer_in_background_declined_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The move was declined on your old phone. Nothing changed: your vault is still on your old phone."
+          }
+        }
+      }
+    },
+    "transfer_in_background_declined_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The move was declined"
+          }
+        }
+      }
+    },
+    "transfer_in_background_timeout_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your old phone didn't approve the move in time, so nothing changed: your vault is still on your old phone. To try again, show a new code on your old phone, then tap Move from my old phone."
+          }
+        }
+      }
+    },
+    "transfer_in_background_timeout_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The move to this phone didn't finish"
+          }
+        }
+      }
+    },
     "unlock_bad_pin": {
       "extractionState": "manual",
       "localizations": {
@@ -3589,6 +3633,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Release %lld is no longer available, so your vault can't go back to it. Try again with your PIN, or contact VettID."
+          }
+        }
+      }
+    },
+    "transfer_in_checking": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Checking whether your old phone approved in time…"
           }
         }
       }

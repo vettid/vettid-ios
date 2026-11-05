@@ -260,8 +260,12 @@ public final class TestVaultPhone {
     public let keptEndPauses = TestPauses()
     /// The new phone's wait for the deadline of its transfer (11 minutes, §11.14.10 rule 5), released by the test.
     public let deadlinePauses = TestPauses()
-    /// The bound of the one collect before the drop (30 s): never released unless a test wants a timed-out collect.
+    /// The bound of each collect before the drop (30 s): never released unless a test wants a timed-out collect.
     public let collectPauses = TestPauses()
+    /// The window of collects before the drop (65 s): over at once (one collect), unless a test holds it (``TestPauses/holding``)
+    /// and releases it.
+    public let windowPauses = { let p = TestPauses(); p.holding = false; return p }()
+    var waitsForOldCollects = true
     /// Whether a change's wait lasts until the test releases it (``changeWaits``).
     public var holdsChangeWaits: Bool {
         get { changeWaits.holding }
@@ -313,7 +317,7 @@ public final class TestVaultPhone {
         let waits = Waits(
             requestTimeout: requestTimeout, pauses: changePauses, changeWaits: changeWaits, deletion: deletionPauses,
             transfer: transferPauses, keep: keepPauses, keptEnd: keptEndPauses, deadline: deadlinePauses,
-            collect: collectPauses, lockStatusWait: lockStatusWait
+            collect: collectPauses, window: windowPauses, lockStatusWait: lockStatusWait
         )
         var config = try Self.configured(
             service, appKeys, seedWrap, wrapped, phoneKeys, fileKeys, protectedData, directory, gate, clock,
@@ -350,21 +354,14 @@ public final class TestVaultPhone {
         Waits(
             requestTimeout: requestTimeout, pauses: changePauses, changeWaits: changeWaits, deletion: deletionPauses,
             transfer: transferPauses, keep: keepPauses, keptEnd: keptEndPauses, deadline: deadlinePauses,
-            collect: collectPauses, lockStatusWait: lockStatusWait
+            collect: collectPauses, window: windowPauses, lockStatusWait: lockStatusWait
         )
     }
 
     /// A test phone's waits: how long a request waits for its answer, and the pauses the test releases.
     private struct Waits {
         let requestTimeout: TimeInterval
-        let pauses: TestPauses
-        let changeWaits: TestPauses
-        let deletion: TestPauses
-        let transfer: TestPauses
-        let keep: TestPauses
-        let keptEnd: TestPauses
-        let deadline: TestPauses
-        let collect: TestPauses
+        let pauses, changeWaits, deletion, transfer, keep, keptEnd, deadline, collect, window: TestPauses
         let lockStatusWait: TimeInterval
     }
 
@@ -407,6 +404,9 @@ public final class TestVaultPhone {
         c.keptEndSleep = { d in try await keptEnd.sleep(Double(d.components.seconds) + Double(d.components.attoseconds) / 1e18) }
         c.transferDeadlineSleep = { d in try await deadline.sleep(Double(d.components.seconds) + Double(d.components.attoseconds) / 1e18) }
         c.transferCollectSleep = { d in try await collect.sleep(Double(d.components.seconds) + Double(d.components.attoseconds) / 1e18) }
+        let window = waits.window
+        c.transferWindowSleep = { d in if window.holding { try await window.sleep(Double(d.components.seconds)) } }
+        c.transferRetrySleep = { _ in try await Task.sleep(for: .milliseconds(10)) }
         c.uptime = { uptime.monotonic }
         return c
     }
@@ -519,7 +519,7 @@ public final class TestPauses: @unchecked Sendable {
     public var lengths: [TimeInterval] { lock.withLock { asked } }
 
     /// False: a pause lasts five seconds instead of waiting for ``release()`` (its length is recorded all the same).
-    var holding: Bool {
+    public var holding: Bool {
         get { lock.withLock { hold } }
         set { lock.withLock { hold = newValue } }
     }

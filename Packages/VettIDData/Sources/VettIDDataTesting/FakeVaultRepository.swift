@@ -122,6 +122,7 @@ public final class FakeVaultRepository: CustomStringConvertible {
     public var movedBack = false
     public var rotateOffered = false
     public var movedAway = false
+    public var transferEnd: TransferEnd?
     /// (VAULT-MESSAGING §11.14.9 "A lost answer") Where the decision of a lost change stands, set by a test.
     public var changeCheck: ChangeCheck?
     /// Which PIN the unlock asks for; ``UnlockAttempt/newPinNeeded`` moves it to ``UnlockPinStep/new``.

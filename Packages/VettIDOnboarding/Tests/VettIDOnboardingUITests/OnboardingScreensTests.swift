@@ -29,7 +29,7 @@ import VettIDUI
             .appendingPathComponent("Sources/VettIDOnboardingUI/Resources/Localizable.xcstrings")
         let doc = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
         let keys = try #require((doc["strings"] as? [String: Any])?.keys)
-        #expect(keys.count == 470)
+        #expect(keys.count == 475)
         let missing = "\u{0}missing"
         // vettid-android's names: the onboarding feature's, its unlock, owner-check and app-lock screens', the app's root
         // screens', core/ui's erase text, the release update's and What's new's, a vault being deleted (`vault_delet`,
@@ -147,5 +147,18 @@ import VettIDUI
 @MainActor
 private final class Log {
     var items: [String] = []
+
+    /// (§11.14.10 rule 5) The welcome screen's notice of a move that ended in the background, word for word.
+    @Test func theTransferEndNoticeReadsAsApproved() {
+        #expect(MoveStrings.transferEndTitle(.timedOut) == "The move to this phone didn't finish")
+        #expect(MoveStrings.transferEndBody(.timedOut) == """
+            Your old phone didn't approve the move in time, so nothing changed: your vault is still on your old phone. \
+            To try again, show a new code on your old phone, then tap Move from my old phone.
+            """)
+        #expect(MoveStrings.transferEndTitle(.declined) == "The move was declined")
+        #expect(MoveStrings.transferInChecking == "Checking whether your old phone approved in time…")
+        #expect(MoveStrings.transferEndBody(.declined)
+            == "The move was declined on your old phone. Nothing changed: your vault is still on your old phone.")
+    }
 }
 #endif

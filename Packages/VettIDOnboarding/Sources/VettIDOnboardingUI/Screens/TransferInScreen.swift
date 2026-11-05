@@ -151,15 +151,20 @@ public struct TransferInContent: View {
 
     private var compare: some View {
         FormScaffold(
-            title: MoveStrings.transferInCompareTitle, message: MoveStrings.transferInCompareBody, primaryLabel: nil,
-            secondaryLabel: MoveStrings.transferInCancel, onPrimary: {}, onSecondary: actions.cancel
+            title: MoveStrings.transferInCompareTitle, message: state.checking ? nil : MoveStrings.transferInCompareBody,
+            primaryLabel: nil, secondaryLabel: MoveStrings.transferInCancel, onPrimary: {}, onSecondary: actions.cancel
         ) {
             VStack(alignment: .leading, spacing: Spacing.l) {
-                if let sas = state.sas { SasBox(sas: sas) }
-                WaitingRow(
-                    text: MoveStrings.transferInWaiting(formatWait(state.secondsLeft)), identifier: "waiting_old_phone",
-                    timeLeft: (state.secondsLeft, MoveStrings.transferInWaiting(spokenDuration(state.secondsLeft)))
-                )
+                if state.checking {
+                    // Past the deadline the old phone can no longer approve: no code to compare, and no time left to count.
+                    WaitingRow(text: MoveStrings.transferInChecking, identifier: "checking_old_phone")
+                } else {
+                    if let sas = state.sas { SasBox(sas: sas) }
+                    WaitingRow(
+                        text: MoveStrings.transferInWaiting(formatWait(state.secondsLeft)), identifier: "waiting_old_phone",
+                        timeLeft: (state.secondsLeft, MoveStrings.transferInWaiting(spokenDuration(state.secondsLeft)))
+                    )
+                }
             }
         }
         .accessibilityElement(children: .contain)
