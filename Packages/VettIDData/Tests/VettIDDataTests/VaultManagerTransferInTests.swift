@@ -191,7 +191,14 @@ import VettIDDataTesting
         service.approveTransferIn()
         phone.clockAhead = 700
         try await m.refresh()
-        #expect(m.finishMovePending && m.record.value.transferStartedMs == nil && m.phase == .setup(.finishing))
+        // Each part on its own, with the state that tells a dropped transfer (nothing collected) from a take-over that
+        // failed (the phase's failure).
+        let state = "phase \(m.phase), paired at the vault \(service.transferPaired), finishMovePending \(m.finishMovePending), "
+            + "transferStartedMs set \(m.record.value.transferStartedMs != nil), deviceID set \(m.session?.device.deviceID != nil)"
+        #expect(service.transferPaired, "the vault paired the transfer: \(state)")
+        #expect(m.finishMovePending, "the transfer was applied: \(state)")
+        #expect(m.record.value.transferStartedMs == nil, "the take-over completed: \(state)")
+        #expect(m.phase == .setup(.finishing), "\(state)")
     }
 
     /// ... or dropped, when nothing waits.
