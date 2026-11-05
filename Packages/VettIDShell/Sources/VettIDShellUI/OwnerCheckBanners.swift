@@ -87,6 +87,7 @@ public struct OwnerCheckBanners: View {
         case .locked: ShellStrings.ownerCheckNoticeLocked
         case .failedPin: ShellStrings.ownerCheckNoticeFailedPin
         case .failedPassword: ShellStrings.ownerCheckNoticeFailedPassword
+        case .failed: ShellStrings.ownerCheckNoticeFailed
         case .holdOff: ShellStrings.ownerCheckNoticeHoldOff
         case .holdOffUntil(let until): ShellStrings.ownerCheckNoticeHoldOffUntil(ShellTimes.full(until))
         case .holdOn: ShellStrings.ownerCheckNoticeHoldOn

@@ -28,7 +28,7 @@ import VettIDVault
             .appendingPathComponent("Sources/VettIDShellUI/Resources/Localizable.xcstrings")
         let doc = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
         let keys = try #require((doc["strings"] as? [String: Any])?.keys)
-        #expect(keys.count == 84)
+        #expect(keys.count == 85)
         let missing = "\u{0}missing"
         for key in keys {
             let text = Bundle.module.localizedString(forKey: key, value: missing, table: nil)
@@ -77,7 +77,7 @@ import VettIDVault
         #expect(TopLevelDestination.allCases.map(\.label) == labels)
         #expect(ShellStrings.drawerVersion("2.0.0", 1) == "VettID 2.0.0 (1)")
         #expect(ShellStrings.ownerCheckWarning("3:00 PM") == "Your daily check is due at 3:00 PM.")
-        #expect(ShellStrings.ownerCheckNoticeMore("A daily check failed: wrong PIN.", 2) == "A daily check failed: wrong PIN. And 2 more.")
+        #expect(ShellStrings.ownerCheckNoticeMore("A PIN check failed: wrong PIN.", 2) == "A PIN check failed: wrong PIN. And 2 more.")
         #expect(ShellStrings.accountSubscriptionTrialUntil("Annual", "Dec 1") == "Annual: trial until Dec 1")
         #expect(ShellStrings.accountEmailNote == "Only you see this address.")
         #expect(ShellStrings.renewPromptAction == "New phone secret")
@@ -120,6 +120,11 @@ import VettIDVault
         #expect(OwnerCheckBanners.holdOffText(nil) == "The hold is off.")
         let failed = OwnerCheckNotice(itemID: "1", kind: "owner_check.failed", ref: "password", at: nil, urgent: true)
         #expect(OwnerCheckBanners.noticeText(failed, count: 1, now: now) == "A daily check failed: wrong credential password.")
+        // A wrong PIN may come from a check that isn't the daily one (a wallet limit raise), so it doesn't say "daily".
+        let pin = OwnerCheckNotice(itemID: "3", kind: "owner_check.failed", ref: "pin", at: nil, urgent: true)
+        #expect(OwnerCheckBanners.noticeText(pin, count: 1, now: now) == "A PIN check failed: wrong PIN.")
+        let other = OwnerCheckNotice(itemID: "4", kind: "owner_check.failed", ref: nil, at: nil, urgent: true)
+        #expect(OwnerCheckBanners.noticeText(other, count: 1, now: now) == "A daily check failed.")
         let at = OwnerCheckNotice(itemID: "2", kind: "owner_check.locked", ref: nil, at: now, urgent: true)
         #expect(OwnerCheckBanners.noticeText(at, count: 3, now: now)
             == "Your vault locked after ten wrong daily checks. (\(ShellTimes.time(now))) And 2 more.")
