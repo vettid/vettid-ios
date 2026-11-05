@@ -10,7 +10,7 @@ enum FeedTimes {
     static func time(_ d: Date) -> String { d.formatted(date: .omitted, time: .shortened) }
     static func full(_ d: Date) -> String { d.formatted(date: .abbreviated, time: .shortened) }
 
-    /// Needs attention ([day] nil), Today, Yesterday, Earlier (undated), then the date ("Mon 5 Oct").
+    /// Needs attention ([day] nil), Today, Yesterday, Earlier (undated), then the date in the region's order (``FeedSections/dayTitle(_:today:calendar:locale:)``).
     static func header(_ day: Date?, now: Date = Date(), calendar: Calendar = .current) -> String {
         guard let day else { return NotificationsStrings.needsAttention }
         let today = calendar.startOfDay(for: now)
