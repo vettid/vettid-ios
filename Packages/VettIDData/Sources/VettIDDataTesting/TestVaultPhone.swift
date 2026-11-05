@@ -335,7 +335,7 @@ public final class TestVaultPhone {
     /// (``VaultManager/halt()``): a process death ends what it had on the way, so nothing of it may send or write once the
     /// new one runs.
     public func restart() async throws {
-        await manager.halt()
+        try await haltProcess()
         attester.newProcess()
         var config = try Self.configured(
             service, appKeys, seedWrap, wrapped, phoneKeys, fileKeys, protectedData, directory, gate, clock,

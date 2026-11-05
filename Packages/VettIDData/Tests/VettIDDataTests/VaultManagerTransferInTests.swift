@@ -191,6 +191,28 @@ import VettIDDataTesting
         service.approveTransferIn()
         phone.clockAhead = 700
         try await m.refresh()
+        // Each part on its own, with the state that tells a dropped transfer (nothing collected) from a take-over that
+        // failed (the phase's failure).
+        let state = "phase \(m.phase), paired at the vault \(service.transferPaired), finishMovePending \(m.finishMovePending), "
+            + "transferStartedMs set \(m.record.value.transferStartedMs != nil), deviceID set \(m.session?.device.deviceID != nil)"
+        #expect(service.transferPaired, "the vault paired the transfer: \(state)")
+        #expect(m.finishMovePending, "the transfer was applied: \(state)")
+        #expect(m.record.value.transferStartedMs == nil, "the take-over completed: \(state)")
+        #expect(m.phase == .setup(.finishing), "\(state)")
+    }
+
+    /// The same with the killed app's long poll still waiting at the relay when the vault sends `device.paired`: a dead
+    /// process's requests are gone with it, so the new process's one collect finds it.
+    @Test func aCollectLeftWaitingByTheKilledAppTakesNothingAfterTheRestart() async throws {
+        defer { phone.close() }
+        _ = try await scanned()
+        #expect(await eventually { !service.collectsInFlight.isEmpty }, "the old device is collecting")
+        try await phone.restart()
+        // The run met the race: a collect was held across the halt (else it proves nothing), and it ended in the wait.
+        #expect(service.lastRestartCollects.left > 0 && !service.lastRestartCollects.outlived, "\(service.lastRestartCollects)")
+        service.approveTransferIn()
+        phone.clockAhead = 700
+        try await m.refresh()
         #expect(m.finishMovePending && m.record.value.transferStartedMs == nil && m.phase == .setup(.finishing))
     }
 

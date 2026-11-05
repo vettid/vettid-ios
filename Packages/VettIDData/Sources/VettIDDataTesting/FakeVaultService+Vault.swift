@@ -83,6 +83,10 @@ extension FakeVaultService {
     private func collect() -> FakeHTTPServer.Answer {
         cond.lock()
         defer { cond.unlock() }
+        transfer.collectSeq += 1
+        let id = transfer.collectSeq
+        transfer.collecting.insert(id)
+        defer { transfer.collecting.remove(id) }
         let deadline = Date().addingTimeInterval(Self.collectHold)
         while queued.isEmpty || holdMessagesValue, cond.wait(until: deadline) {}
         if holdMessagesValue { return .json(200, #"{"messages":[]}"#) }
