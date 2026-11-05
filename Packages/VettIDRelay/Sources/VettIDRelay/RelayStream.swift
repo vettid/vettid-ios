@@ -182,9 +182,8 @@ public struct LeaveUnacked: Error, Sendable {
 /// Collects one mailbox until cancelled (RELAY-PROTOCOL §6.3, §6.4): each message goes to the handler, which processes
 /// and persists it, and is acked only after the handler returns (at-least-once; the handler dedupes by msg_id). A
 /// long-poll is re-issued immediately after every response. In ``Mode/webSocket`` the collector streams and falls back
-/// to long-poll: for the refusal pause (5 s or the relay's retry_after, doubled per pause in a row up to [fallback]; up
-/// to ``closeJitter`` more after a normal close that held) after a refused upgrade, a ping end or a normal close, and
-/// for [fallback] after a transport failure.
+/// to long-poll: for the refusal pause (5 s or the relay's retry_after, doubled per pause in a row up to [fallback], plus
+/// a jitter) after a refused upgrade, a ping end or a normal close, and for [fallback] after a transport failure.
 ///
 /// Transport errors, `429 rate_limited`, 5xx and a stale or replayed signature back off with jitter (0.25 s × 2ⁿ,
 /// capped at 30 s). Terminal relay errors end ``run(_:)``: `mailbox_unknown` and every other client error. The owner
@@ -202,8 +201,9 @@ public struct MailboxCollector: Sendable {
     /// one adds to them, so that a relay that closes every few seconds backs off too. (Normal closes only: a failed
     /// session resets them after ``minSession``, a ping end after the fallback period.)
     static let heldSession: TimeInterval = 2 * RelayStream.pingInterval
-    /// The most the pause after a normal close is lengthened at random, so that phones don't reopen together.
-    static let closeJitter: TimeInterval = 5
+    /// The most a socket pause is lengthened at random (and never more than a quarter of it), so that the phones a relay
+    /// refused or closed don't all come back at the same moment (RELAY-PROTOCOL §7.2: backoff with jitter).
+    static let pauseJitter: TimeInterval = 5
 
     let source: MailboxSource
     let mode: Mode
@@ -267,7 +267,8 @@ public struct MailboxCollector: Sendable {
                 if useSocket {
                     // RELAY-PROTOCOL §7.2: a client whose upgrade is answered 429 collects by long-poll and tries the
                     // WebSocket again no sooner than retry_after, with backoff (chosen; not in the spec: 5 s, the
-                    // relay's own retry_after, doubled per refusal up to the fallback period, when the answer names none).
+                    // relay's own retry_after, doubled per refusal up to the fallback period, when the answer names none), plus a jitter
+                    // (``socketPause(_:_:)``).
                     // A socket that held for a while before it ended is not another refusal in a row, unless this side ended
                     // it for an unanswered ping (chosen; not in the spec; ``refusalsForPause(_:lasted:keepsCount:)``).
                     let lasted = now().timeIntervalSince(started)
@@ -292,17 +293,13 @@ public struct MailboxCollector: Sendable {
     /// pauses in a row (chosen; not in the spec):
     /// - closed at once (under ``minSession``): no connection, so a refusal pause, so that a relay that accepts and closes
     ///   doesn't draw a reconnect loop;
-    /// - after it held (a relay restart, a deploy): a refusal pause plus up to ``closeJitter`` at random, so that the phones
-    ///   of a restarting relay don't all reopen together. After ``heldSession`` or more it is the first pause (5 s; a
-    ///   refusal next pauses 10 s); a shorter session adds to the pauses in a row, so a relay that keeps closing backs off.
+    /// - after it held (a relay restart, a deploy): a refusal pause, whose jitter keeps the phones of a restarting relay
+    ///   from all reopening together. After ``heldSession`` or more it is the first pause (5 s; a refusal next pauses
+    ///   10 s); a shorter session adds to the pauses in a row, so a relay that keeps closing backs off.
     func closedNormally(lasted: TimeInterval, refusals: inout Int) -> Date {
-        if lasted < Self.minSession {
-            defer { refusals += 1 }
-            return now().addingTimeInterval(socketPause(Self.normalClose, refusals))
-        }
         if lasted >= Self.heldSession { refusals = 0 }
         defer { refusals += 1 }
-        return now().addingTimeInterval(socketPause(Self.normalClose, refusals) + random(0...Self.closeJitter))
+        return now().addingTimeInterval(socketPause(Self.normalClose, refusals))
     }
 
     /// The refusals in a row that count towards the pause: none after a session that lasted ``minSession`` or more and
@@ -310,7 +307,8 @@ public struct MailboxCollector: Sendable {
     /// upgrade the relay refused (the time is the handshake's, not a session's), or a socket this side ended for an
     /// unanswered ping (`http_ping`), so that a network that keeps dropping the socket backs off to the fallback period
     /// instead of reconnecting every few seconds. A ping end after a session longer than the fallback period does reset
-    /// them, so that an occasional one in a long run doesn't add up.
+    /// them, so that an occasional one in a long run doesn't add up; so would an upgrade refusal that took that long,
+    /// which is harmless (the next refusal pauses 5 s again).
     static func refusalsForPause(_ refusals: Int, lasted: TimeInterval, keepsCount: Bool = false) -> Int {
         !keepsCount && lasted >= minSession ? 0 : refusals
     }
@@ -318,11 +316,14 @@ public struct MailboxCollector: Sendable {
     /// The pause of a session the relay closed normally: a refusal's without a retry_after (5 s, doubled per refusal).
     static let normalClose = RelayError(status: 503, code: "closed")
 
-    /// How long the long-poll stands in for a WebSocket that a retryable relay answer ended.
+    /// How long the long-poll stands in for a WebSocket that a retryable relay answer ended: the backoff, plus a jitter of
+    /// up to a quarter of it (at most ``pauseJitter``).
     func socketPause(_ e: RelayError, _ refusals: Int) -> TimeInterval {
         let base = TimeInterval(e.retryAfterSeconds > 0 ? min(e.retryAfterSeconds, RelayError.maxRetryAfterSeconds) : 5)
-        // Never shorter than the relay's own retry_after (RELAY-PROTOCOL §7.2), whatever the fallback period.
-        return max(base, min(base * Double(1 << min(refusals, Self.maxShift)), fallback))
+        // Never shorter than the relay's own retry_after (RELAY-PROTOCOL §7.2), whatever the fallback period; the jitter
+        // only lengthens it.
+        let pause = max(base, min(base * Double(1 << min(refusals, Self.maxShift)), fallback))
+        return pause + random(0...min(Self.pauseJitter, pause / 4))
     }
 
     private func round(useSocket: Bool, _ handle: @Sendable (RelayMessage) async throws -> Void) async throws {

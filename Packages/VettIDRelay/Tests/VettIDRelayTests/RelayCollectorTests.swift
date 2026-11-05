@@ -20,7 +20,10 @@ extension MailboxCollectorTests {
         let src = FakeSource([.messages([Self.msg("01P")]), .messages([Self.msg("01Q")])], stream: FakeStream([], end: ended))
         let got = Recorder<String>()
         await #expect(throws: RelayError.self) {
-            try await MailboxCollector(source: src, mode: .webSocket, now: { clock.value }, sleep: { clock.advance($0) }).run {
+            let collector = MailboxCollector(
+                source: src, mode: .webSocket, now: { clock.value }, sleep: { clock.advance($0) }, random: { $0.lowerBound }
+            )
+            try await collector.run {
                 got.add($0.msgID)
                 if $0.msgID == "01P" { clock.advance(6) } // the long-poll round takes longer than the refusal pause
             }
@@ -28,7 +31,7 @@ extension MailboxCollectorTests {
         // The socket is tried again after the 5 s pause (a second open); under the fallback's 300 s it would not be.
         #expect(got.all == ["01P", "01Q"] && src.streamOpens == 2)
         // The pause is the refusal's: the socket is tried again after 5 s, not 300 s.
-        #expect(MailboxCollector(source: src).socketPause(ended ?? RelayError(status: 503, code: "x"), 0) == 5)
+        #expect(MailboxCollector(source: src, random: { $0.lowerBound }).socketPause(ended ?? RelayError(status: 503, code: "x"), 0) == 5)
     }
 
     /// A session that held for a while before it failed does not count as another refusal in a row.
@@ -36,7 +39,7 @@ extension MailboxCollectorTests {
         #expect(MailboxCollector.refusalsForPause(5, lasted: 0.1) == 5)
         #expect(MailboxCollector.refusalsForPause(5, lasted: MailboxCollector.minSession) == 0)
         #expect(MailboxCollector.refusalsForPause(5, lasted: 60) == 0)
-        let c = MailboxCollector(source: FakeSource([]))
+        let c = MailboxCollector(source: FakeSource([]), random: { $0.lowerBound })
         let lost = RelayError(status: 503, code: "http_503")
         #expect(c.socketPause(lost, MailboxCollector.refusalsForPause(6, lasted: 3_600)) == 5, "after hours on the socket: 5 s, not 300 s")
         #expect(c.socketPause(lost, 6) == 300)
@@ -46,7 +49,7 @@ extension MailboxCollectorTests {
     /// fallback period: a ping end never resets the refusals in a row, however long the session held.
     @Test func aPingEndKeepsTheRefusalsInARow() {
         #expect(MailboxCollector.refusalsForPause(6, lasted: 3_600, keepsCount: true) == 6)
-        let c = MailboxCollector(source: FakeSource([]))
+        let c = MailboxCollector(source: FakeSource([]), random: { $0.lowerBound })
         let ping = RelayError(status: 503, code: "http_ping")
         var refusals = 0
         var pauses: [TimeInterval] = []
@@ -66,16 +69,18 @@ extension MailboxCollectorTests {
     }
 
     /// The times the sockets' messages were handled, with [sessions] sockets that each hold [held] seconds (their message's
-    /// handling) and then end with [end] (nil: closed normally); every long-poll round takes 1 s, and the pause's jitter is
-    /// [jitter]. Gaps between them less [held] are the pauses, rounded up to the next whole round.
-    func socketGaps(sessions: Int, held: TimeInterval, end: Error?, jitter: TimeInterval = 0) async -> [TimeInterval] {
+    /// handling) and then end with [end] (nil: closed normally); every long-poll round takes 1 s, and each pause's jitter
+    /// is its largest with [fullJitter], else none. Gaps between them less [held] are the pauses, rounded up to the next
+    /// whole round.
+    func socketGaps(sessions: Int, held: TimeInterval, end: Error?, fullJitter: Bool = false) async -> [TimeInterval] {
         let clock = PauseClock()
         let sockets = (1...sessions).map { FakeStream([Self.msg("01S\($0)")], end: end) }
         let polls = (0..<2_000).map { SourceStep.messages([Self.msg("01P\($0)")]) }
         let src = FakeSource(polls, stream: sockets[0], later: Array(sockets.dropFirst()))
         let opened = Recorder<Date>()
         let collector = MailboxCollector(
-            source: src, mode: .webSocket, now: { clock.value }, sleep: { clock.advance($0) }, random: { _ in jitter }
+            source: src, mode: .webSocket, now: { clock.value }, sleep: { clock.advance($0) },
+            random: { fullJitter ? $0.upperBound : $0.lowerBound }
         )
         await #expect(throws: RelayError.self) {
             try await collector.run {
@@ -91,11 +96,11 @@ extension MailboxCollectorTests {
     }
 
     /// A session that held a minute and then closed normally (a relay restart) is collected by long-poll for the first
-    /// refusal pause (5 s) and the jitter before the socket is tried again: not reopened at once, and reopened after it.
+    /// refusal pause (5 s) and its jitter before the socket is tried again: not reopened at once, and reopened after it.
     @Test func aSessionClosedNormallyAfterItHeldPausesTheSocket() async throws {
-        let gaps = await socketGaps(sessions: 3, held: 60, end: nil, jitter: 3)
-        #expect(gaps.count == 2 && gaps.allSatisfy { $0 > 8 && $0 <= 9 }, "5 s and 3 s of jitter each time: \(gaps)")
-        #expect(MailboxCollector(source: FakeSource([])).socketPause(MailboxCollector.normalClose, 0) == 5)
+        let gaps = await socketGaps(sessions: 3, held: 60, end: nil, fullJitter: true)
+        #expect(gaps.count == 2 && gaps.allSatisfy { $0 > 6.25 && $0 <= 7.25 }, "5 s and 1.25 s of jitter each time: \(gaps)")
+        #expect(MailboxCollector(source: FakeSource([]), random: { $0.lowerBound }).socketPause(MailboxCollector.normalClose, 0) == 5)
     }
 
     /// A relay that closes normally every few seconds backs off: a session shorter than ``MailboxCollector/heldSession``
@@ -129,7 +134,7 @@ extension MailboxCollectorTests {
 
     /// A slow upgrade refusal (3 s each, a late 429) is no session that held: repeated, the pause still backs off to 300 s.
     @Test func aSlowUpgradeRefusalStillBacksOff() {
-        let c = MailboxCollector(source: FakeSource([]))
+        let c = MailboxCollector(source: FakeSource([]), random: { $0.lowerBound })
         let refusal = RelayError(status: 429, code: "http_429")
         var refusals = 0
         var pause: TimeInterval = 0
@@ -157,5 +162,18 @@ extension MailboxCollectorTests {
         }
         #expect(ackedWhenHandled.all == [0, 0], "no ack while the handler runs")
         #expect(stream.acked == ["01K"], "acked once it returned")
+    }
+
+    /// RELAY-PROTOCOL §7.2's backoff with jitter: every socket pause is lengthened at random by up to a quarter of it (at
+    /// most 5 s), never shortened, so the relay's retry_after stays the floor.
+    @Test func everySocketPauseIsJitteredAboveItsFloor() {
+        let low = MailboxCollector(source: FakeSource([]), random: { $0.lowerBound })
+        let high = MailboxCollector(source: FakeSource([]), random: { $0.upperBound })
+        let told = RelayError(status: 429, code: "http_429", retryAfterSeconds: 7)
+        #expect(low.socketPause(told, 0) == 7 && high.socketPause(told, 0) == 8.75)
+        let shed = RelayError(status: 503, code: "http_503")
+        #expect(low.socketPause(shed, 0) == 5 && high.socketPause(shed, 0) == 6.25)
+        #expect(low.socketPause(shed, 20) == 300 && high.socketPause(shed, 20) == 305, "at most 5 s more")
+        #expect(high.socketPause(MailboxCollector.normalClose, 1) == 12.5)
     }
 }

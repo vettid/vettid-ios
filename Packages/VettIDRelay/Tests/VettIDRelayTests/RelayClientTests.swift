@@ -517,12 +517,12 @@ enum SourceStep { case messages([RelayMessage]), error(Error) }
         let got = Recorder<String>()
         await #expect(throws: RelayError.self) {
             try await MailboxCollector(
-                source: src, mode: .webSocket, now: { clock.value }, sleep: { clock.advance($0) }
+                source: src, mode: .webSocket, now: { clock.value }, sleep: { clock.advance($0) }, random: { $0.lowerBound }
             ).run { got.add($0.msgID) }
         }
         // The refused upgrade, then long-polls while the 7 s pause lasts (no sleep: the poll is the wait).
         #expect(src.streamOpens == 1 && got.all == ["01A", "01B"])
-        let c = MailboxCollector(source: src)
+        let c = MailboxCollector(source: src, random: { $0.lowerBound })
         #expect(c.socketPause(RelayError(status: 429, code: "http_429", retryAfterSeconds: 7), 0) == 7)
         #expect(c.socketPause(RelayError(status: 429, code: "http_429"), 0) == 5)
         #expect(c.socketPause(RelayError(status: 429, code: "http_429"), 3) == 40)
