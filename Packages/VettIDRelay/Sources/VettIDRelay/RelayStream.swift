@@ -66,7 +66,7 @@ public final class RelayStream: CollectStream, @unchecked Sendable {
     }
 
     /// The ping every ``pingInterval``; a ping still unanswered at the next tick, or one that fails, ends the socket, so that
-    /// `receive()` fails and the collector falls back. (After the app resumes from the background an overdue tick can end a
+    /// `receive()` fails and the collector falls back. (After the app resumes from the background a late tick can end a
     /// live socket whose ping was never sent or answered in time; the only cost is a reconnect.)
     private static func keepalive(_ task: URLSessionWebSocketTask, _ pings: PingState) -> Task<Void, Never> {
         Task {
@@ -109,13 +109,14 @@ public final class RelayStream: CollectStream, @unchecked Sendable {
     static func closeError(
         code: Int, upgradeStatus: Int = 0, upgradeHeaders: [String: String] = [:], endedByPing: Bool = false, error: Error
     ) -> Error? {
+        // The relay's own end of the mailbox wins over ours (a 4404 racing a failed ping still ends the collection).
+        if code == closeMailboxUnknown { return RelayError(status: 404, code: RelayError.mailboxUnknown) }
         // A socket this side ended for an unanswered ping is no transport failure of the path to hold against the socket for
-        // minutes: it is collected by long-poll for the pause of a refusal, as a resume that merely overdue the tick is (chosen;
-        // not in the spec).
+        // minutes: it is collected by long-poll for the pause of a refusal, as when a resume made a tick late (chosen; not in
+        // the spec).
         if endedByPing { return RelayError(status: 503, code: "http_ping", message: "ping unanswered") }
         switch code {
         case normalClosure: return nil
-        case closeMailboxUnknown: return RelayError(status: 404, code: RelayError.mailboxUnknown)
         default:
             if upgradeStatus >= 400 { return RelayClient.error(HTTPAnswer(status: upgradeStatus, headers: upgradeHeaders, body: [])) }
             return code == 0 ? (error as? URLError) ?? URLError(.networkConnectionLost) : URLError(.networkConnectionLost)
@@ -264,6 +265,10 @@ public struct MailboxCollector: Sendable {
                     // RELAY-PROTOCOL §7.2: a client whose upgrade is answered 429 collects by long-poll and tries the
                     // WebSocket again no sooner than retry_after, with backoff (chosen; not in the spec: 5 s, the
                     // relay's own retry_after, doubled per refusal up to the fallback period, when the answer names none).
+                    // A socket that held for a while before it ended is not another refusal in a row (chosen; not in the spec).
+                    socketRefusals = Self.refusalsForPause(
+                        socketRefusals, lasted: now().timeIntervalSince(started), upgradeRefused: refused && e.code != "http_ping"
+                    )
                     pollUntil = now().addingTimeInterval(socketPause(e, socketRefusals))
                     socketRefusals += 1
                     // The long-poll that follows at once is the wait; it backs off itself if it fails too.
@@ -278,6 +283,12 @@ public struct MailboxCollector: Sendable {
                 try await sleep(retryDelay(failures, 0))
             }
         }
+    }
+
+    /// The refusals in a row that count towards the pause: none after a session that lasted ``minSession`` or more.
+    /// An upgrade the relay refused never resets them, however long it took (the time is the handshake's, not a session's).
+    static func refusalsForPause(_ refusals: Int, lasted: TimeInterval, upgradeRefused: Bool = false) -> Int {
+        !upgradeRefused && lasted >= minSession ? 0 : refusals
     }
 
     /// How long the long-poll stands in for a WebSocket that a retryable relay answer ended.
