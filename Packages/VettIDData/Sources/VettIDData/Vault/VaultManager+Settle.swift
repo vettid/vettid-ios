@@ -274,9 +274,12 @@ extension VaultManager {
     /// device is halted first, and [s]'s after the reload; when the reload fails, [s] goes on as it is.
     func settlingSession(_ s: VaultSession) async -> VaultSession {
         guard let current = session, current.device !== s.device else { return s }
+        let sessionEnds = moveFlags.book.sessionEnds
         guard s.device.deviceID != nil, current.device.deviceID == nil else {
             await s.device.halt()
-            if moveFlags.book.transferSession?.device === s.device { moveFlags.book.transferSession = current }
+            if moveFlags.book.transferSession?.device === s.device, moveFlags.book.sessionEnds == sessionEnds {
+                moveFlags.book.transferSession = current
+            }
             return current
         }
         // Neither device writes the stored state while the current session is loaded again from it: the newer one stops
@@ -286,11 +289,12 @@ extension VaultManager {
         stopCollecting()
         moveFlags.book.transferSession = nil
         guard let fresh = try? await openSession(), fresh.device !== s.device else {
-            moveFlags.book.transferSession = s
+            if moveFlags.book.sessionEnds == sessionEnds { moveFlags.book.transferSession = s }
             return s
         }
         await s.device.halt()
-        moveFlags.book.transferSession = fresh
+        // A wipe or a sign-out meanwhile ended the transfer's session: none is held for it any more.
+        if moveFlags.book.sessionEnds == sessionEnds { moveFlags.book.transferSession = fresh }
         return fresh
     }
 

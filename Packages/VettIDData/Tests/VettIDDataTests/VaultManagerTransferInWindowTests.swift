@@ -454,4 +454,14 @@ extension VaultManagerTransferInTests {
         #expect(m.phase == .signedOut && !m.finishMovePending)
         phone.windowPauses.release()
     }
+
+    /// A scan in this process does not use up its one resume: a later refresh still resumes the transfer it left (it is
+    /// then waited for in the background).
+    @Test func aRefreshAfterAScanStillResumes() async throws {
+        defer { phone.close() }
+        _ = try await scanned()
+        #expect(m.moveFlags.book.transferWaiter == nil, "nothing waits for it yet (no screen here)")
+        try await m.refresh()
+        #expect(m.moveFlags.book.transferWaiter != nil, "the refresh resumed it")
+    }
 }

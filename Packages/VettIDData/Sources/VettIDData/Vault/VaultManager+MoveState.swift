@@ -55,6 +55,9 @@ final class MoveBook {
     var transferSession: VaultSession?
     /// The ``VaultManager/awaitTransferIn()`` calls under way (the screen's, the background's).
     var waitingIn = 0
+    /// The ``VaultManager/transferIn(code:)`` calls under way: a start's resume waits for none to run (its start may be
+    /// written before its handshake is saved).
+    var startingIn = 0
     /// How many day-7 checks ended (any result): what a test awaits instead of a fixed time.
     var keptChecksFinished = 0
     /// The timer to the end of a kept transfer, and whether its end is being decided now.

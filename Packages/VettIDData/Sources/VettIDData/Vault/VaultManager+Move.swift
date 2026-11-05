@@ -46,7 +46,15 @@ extension VaultManager: MoveRepository {
     public func transferIn(code: String) async throws -> String {
         // A new move: the notice of how the last one ended goes, whatever this one does.
         transferEnd = nil
-        return try await guarded {
+        // A refresh while this runs resumes nothing: the start may be written before its handshake is saved, and a start
+        // that nothing pinned is cleared at a resume (``resumeTransferIn(_:)``).
+        moveFlags.book.startingIn += 1
+        defer { moveFlags.book.startingIn -= 1 }
+        return try await startTransferIn(code)
+    }
+
+    private func startTransferIn(_ code: String) async throws -> String {
+        try await guarded {
             // One window at a time, and no new code from the end of the vault's 10 minutes (§11.14.10 rule 5): said before the
             // code is looked at.
             try refuseWhileClosed()
@@ -120,9 +128,6 @@ extension VaultManager: MoveRepository {
         // One vault per phone: no transfer onto a phone that holds one, or may hold a provisional one.
         if d.deviceID != nil || d.vaultID != nil || d.recovering { throw VaultFailure(.vaultExists) }
         if let refusal = startOverRefusal(nil) { throw refusal }
-        // This process's start of a transfer is no transfer to resume: a refresh while it is being made (its claim is
-        // fetched, its handshake not saved yet) must not take it for one that nothing pinned (``resumeTransferIn(_:)``).
-        moveFlags.book.transferResumed = true
     }
 
     /// The epoch-1 record of the transfer is stored with it, before anything is sent: a drop deletes this one (§11.14.10).
@@ -266,6 +271,10 @@ extension VaultManager: MoveRepository {
                 return .dropped
             }
             let end = await collectBeforeDrop(s.device)
+            // A wipe or a sign-out during the window: nothing more is done for this transfer (the wipe or sign-out has it).
+            if record.closed || moveFlags.book.sessionEnds != sessionEnds {
+                return .failed(VaultFailure(.other, code: Self.codeTransferSessionEnded))
+            }
             // A background may have ended the session meanwhile: what follows goes through the current one, or this one taken
             // back (one device per transfer).
             if !halted { s = await settlingSession(s) }
@@ -361,7 +370,7 @@ extension VaultManager: MoveRepository {
     /// shows the welcome screen and does not wait.
     @discardableResult
     func resumeTransferIn(_ s: VaultSession) async -> TransferSettled? {
-        guard !moveFlags.book.transferResumed else { return nil }
+        guard moveFlags.book.startingIn == 0, !moveFlags.book.transferResumed else { return nil }
         moveFlags.book.transferResumed = true
         guard record.value.transferStartedMs != nil else { return nil }
         let d = s.device
