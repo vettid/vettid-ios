@@ -52,6 +52,9 @@ struct FakeTransferStore {
     var restartOutlived = false
     /// RELAY-PROTOCOL §6.3's lease, when a test asks for it: a collected message not acked within it is collected again.
     var leaseFor: TimeInterval?
+    var claimGate: FakeHTTPServer.Gate?
+    var collectGate: FakeHTTPServer.Gate?
+    var opensAtDelete = false
     var leased: [(message: RelayMessage, until: Date)] = []
 }
 
@@ -163,6 +166,7 @@ extension FakeVaultService {
             return .json(404, #"{"code":"claim_unknown","message":""}"#)
         }
         transfer.claimBlob = nil
+        if let gate = transfer.claimGate { return .held(gate, .bytes(200, blob)) }
         return .bytes(200, blob)
     }
 
@@ -275,6 +279,25 @@ extension FakeVaultService {
 
     /// The messages queued for the device's mailbox, and those leased to a collect and not acked.
     public var mailboxCounts: (queued: Int, leased: Int) { locked { (queued.count, transfer.leased.count) } }
+
+    /// While set, the claim of the transfer's QR is answered only when the gate opens (the scan held at its fetch).
+    public var holdsClaim: FakeHTTPServer.Gate? {
+        get { locked { transfer.claimGate } }
+        set { locked { transfer.claimGate = newValue } }
+    }
+
+    /// While set, a collect that takes messages answers only when the gate opens: a long poll held out at the relay with
+    /// what it was handed.
+    public var holdsCollectAnswers: FakeHTTPServer.Gate? {
+        get { locked { transfer.collectGate } }
+        set { locked { transfer.collectGate = newValue } }
+    }
+
+    /// The long polls held out (``holdsCollectAnswers``) answer when the mailbox is deleted (a wipe), before its answer.
+    public var opensHeldCollectsAtMailboxDelete: Bool {
+        get { locked { transfer.opensAtDelete } }
+        set { locked { transfer.opensAtDelete = newValue } }
+    }
 
     /// The collect failures asked for (``failNextCollects(_:)``) not yet used.
     public var collectFailuresLeft: Int { locked { transfer.collectFailures } }

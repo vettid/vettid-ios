@@ -120,6 +120,9 @@ extension VaultManager: MoveRepository {
         // One vault per phone: no transfer onto a phone that holds one, or may hold a provisional one.
         if d.deviceID != nil || d.vaultID != nil || d.recovering { throw VaultFailure(.vaultExists) }
         if let refusal = startOverRefusal(nil) { throw refusal }
+        // This process's start of a transfer is no transfer to resume: a refresh while it is being made (its claim is
+        // fetched, its handshake not saved yet) must not take it for one that nothing pinned (``resumeTransferIn(_:)``).
+        moveFlags.book.transferResumed = true
     }
 
     /// The epoch-1 record of the transfer is stored with it, before anything is sent: a drop deletes this one (§11.14.10).
@@ -245,6 +248,8 @@ extension VaultManager: MoveRepository {
         let task = Task { @MainActor [self] in
             let result = await runSettle(s, collect: collect, guid: guid)
             moveFlags.book.settling = nil
+            // Its session is held no longer than its transfer is waited for.
+            if moveFlags.book.waitingIn == 0 { moveFlags.book.transferSession = nil }
             return result
         }
         moveFlags.book.settling = task
@@ -254,6 +259,7 @@ extension VaultManager: MoveRepository {
     private func runSettle(_ s: VaultSession, collect: Bool, guid: String?) async -> TransferSettled {
         var s = s
         var guid = guid
+        let sessionEnds = moveFlags.book.sessionEnds
         if s.device.deviceID == nil {
             guard collect else {
                 await dropTransfer(s.device)
@@ -270,6 +276,10 @@ extension VaultManager: MoveRepository {
                 return await windowEndedUnpaired(end, s.device)
             }
             // Else paired all the same (its event was taken elsewhere): the move completed, and is reported so.
+        }
+        // A wipe or a sign-out meanwhile: no take-over (nothing is confirmed, sent or written for a phone being erased).
+        if record.closed || moveFlags.book.sessionEnds != sessionEnds {
+            return .failed(VaultFailure(.other, code: Self.codeTransferSessionEnded))
         }
         let d = s.device
         guid = guid ?? d.transferUserGuid
@@ -356,8 +366,8 @@ extension VaultManager: MoveRepository {
         guard record.value.transferStartedMs != nil else { return nil }
         let d = s.device
         if d.deviceID == nil, !d.hasVault {
-            // A start that no transfer pinned (the app killed before the handshake was saved, or a drop whose save failed):
-            // nothing waits; the start goes, so that a new code is not refused for it.
+            // A start that no transfer pinned (the app killed before the handshake was saved, or a drop whose record could
+            // not be saved after the device's): nothing waits; the start goes, so that a new code is not refused for it.
             await clearTransferStart(d)
             return nil
         }

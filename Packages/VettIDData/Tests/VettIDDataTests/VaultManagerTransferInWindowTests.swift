@@ -3,6 +3,7 @@ import Testing
 import VettIDRelay
 @testable import VettIDData
 import VettIDDataTesting
+import VettIDTesting
 @testable import VettIDVault
 
 /// The settlement window of a transfer to this phone (VAULT-MESSAGING 0.85.2 §11.14.10 rule 5, owner decisions a and a/a
@@ -350,17 +351,23 @@ extension VaultManagerTransferInTests {
         phone.clockAhead = 700
         try await m.refresh()
         #expect(await eventually { !phone.windowPauses.lengths.isEmpty }, "the window runs")
-        // A newer session beside the window's: its device does not collect. The window's collector stops with its long
-        // poll perhaps held at the relay: what that takes is leased, as a relay does, and reappears.
+        // A newer session beside the window's, the transfer's own still held: its device does not collect. The window's
+        // collector stops with its long poll perhaps held at the relay: what that takes is leased, as a relay does, and
+        // reappears.
         service.leasesCollected = 0.3
+        let windowDevice = try #require(m.session?.device)
         m.stopCollecting()
+        let held = m.moveFlags.book.transferSession
         m.moveFlags.book.transferSession = nil
         let newer = try await m.openSession().device
+        m.moveFlags.book.transferSession = held
         newer.stop()
         service.approveTransferIn()
         #expect(await eventually(within: .seconds(30)) { m.finishMovePending && m.record.value.transferStartedMs == nil })
-        #expect((try? newer.refuseHalted()) == nil, "the newer device is halted")
-        #expect(m.session?.device !== newer && m.session?.device.deviceID != nil, "the session loaded again knows the pairing")
+        #expect(newer.ended, "the newer device is halted")
+        // Loaded again: a device of its own (neither the newer one nor the window's, which is halted), knowing the pairing.
+        let now = try #require(m.session?.device)
+        #expect(now !== newer && now !== windowDevice && !now.ended && now.deviceID != nil)
         phone.windowPauses.release()
     }
 
@@ -397,5 +404,54 @@ extension VaultManagerTransferInTests {
     @MainActor
     final class Attempt {
         var failure: VaultFailure?
+    }
+
+    /// A refresh while a scan is being made (its claim fetched, its handshake not saved yet) is no restart: the start and,
+    /// once the scan goes on, its epoch-1 record stay.
+    @Test func aRefreshWhileTheScanIsMadeKeepsItsStart() async throws {
+        defer { phone.close() }
+        let gate = FakeHTTPServer.Gate()
+        service.holdsClaim = gate
+        service.holdsTransferApproval = true
+        let link = try code()
+        let scan = Task { try await m.transferIn(code: link) }
+        #expect(await eventually { gate.waiting > 0 && m.record.value.transferStartedMs != nil }, "held at the claim")
+        try await m.refresh()
+        #expect(m.record.value.transferStartedMs != nil, "the start is kept")
+        gate.open()
+        let sas = try await scan.value
+        #expect(!sas.isEmpty && m.record.value.transferStartedMs != nil && pendingRecord)
+    }
+
+    /// A pairing that a long poll holds out at the relay when the phone is wiped is not acted on: nothing is confirmed or
+    /// taken over, and the transfer ends as its session did.
+    @Test func aPairingHeldOutAtTheWipeIsNotApplied() async throws {
+        defer { phone.close() }
+        _ = try await scanned()
+        phone.clockAhead = 600
+        m.session?.device.stop()
+        phone.windowPauses.holding = true
+        let waiting = Task { try await m.awaitTransferIn() }
+        #expect(await deadlineWaiting())
+        phone.clockAhead = 700
+        phone.deadlinePauses.release()
+        #expect(await eventually { !phone.windowPauses.lengths.isEmpty }, "the window runs")
+        let gate = FakeHTTPServer.Gate()
+        service.holdsCollectAnswers = gate
+        // It answers after the wipe began and before the device is forgotten: when the wipe deletes the mailbox.
+        service.opensHeldCollectsAtMailboxDelete = true
+        service.approveTransferIn()
+        #expect(await eventually { gate.waiting > 0 }, "a long poll holds the pairing")
+        let confirmed = phone.attester.confirmed
+        try await m.eraseThisPhone()
+        gate.open()
+        let attempt = Attempt()
+        let task = Task { @MainActor in attempt.failure = await vaultFailure { _ = try await waiting.value } }
+        #expect(await eventually(within: .seconds(10)) { attempt.failure != nil }, "the window ended")
+        task.cancel()
+        #expect(attempt.failure?.code == VaultManager.codeTransferSessionEnded, "\(String(describing: attempt.failure))")
+        #expect(phone.attester.confirmed == confirmed && !service.requestsSeen.contains("credential.get"))
+        #expect(m.phase == .signedOut && !m.finishMovePending)
+        phone.windowPauses.release()
     }
 }

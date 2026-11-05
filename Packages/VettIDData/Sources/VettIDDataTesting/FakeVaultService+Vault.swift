@@ -47,6 +47,12 @@ extension FakeVaultService {
             if let gate = locked({ registerGateValue }) { return .held(gate, registerAnswer) }
             return registerAnswer
         }
+        if r.path == "/v1/mailbox", r.method == "DELETE", let gate = locked({ transfer.collectGate }), locked({ transfer.opensAtDelete }) {
+            // The mailbox goes (a wipe): the long poll held out answers now, and is handled before the delete's answer.
+            gate.open()
+            Thread.sleep(forTimeInterval: 0.3)
+            return .empty(204)
+        }
         if r.path == "/v1/mailbox", r.method == "GET" {
             if locked({ transfer.collectRefused }) { return .json(403, #"{"code":"mailbox_unknown","message":""}"#) }
             let fails: Bool = locked {
@@ -95,7 +101,9 @@ extension FakeVaultService {
         while queued.isEmpty || holdMessagesValue, cond.wait(until: deadline) {}
         if holdMessagesValue { return .json(200, #"{"messages":[]}"#) }
         let msgs = takeQueued().map { JsonBuilder().string("msg_id", $0.msgID).string("sender", $0.sender).base64("payload", $0.payload).build() }
-        return .json(200, #"{"messages":\#(JsonBuilder.array(msgs))}"#)
+        let answer = FakeHTTPServer.Answer.json(200, #"{"messages":\#(JsonBuilder.array(msgs))}"#)
+        if !msgs.isEmpty, let gate = transfer.collectGate { return .held(gate, answer) }
+        return answer
     }
 
     // MARK: - The vault's relay: the vault itself

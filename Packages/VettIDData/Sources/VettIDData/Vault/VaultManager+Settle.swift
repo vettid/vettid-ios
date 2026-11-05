@@ -75,56 +75,98 @@ extension VaultManager {
     }
 
     private func collectWindow(_ d: VaultDevice) async -> WindowEnd {
-        let length = await windowLength(d)
-        var ended = Flag()
-        var timer = windowTimer(length, ended)
-        defer { timer.cancel() }
-        var until = config.now().addingTimeInterval(length)
+        let clock = WindowClock(length: await windowLength(d), backgrounds: moveFlags.book.backgrounds, background: backgrounded)
+        clock.start(self)
+        defer { clock.stop() }
         let sessionEnds = moveFlags.book.sessionEnds
-        var backgrounds = moveFlags.book.backgrounds
-        // A window that saw the app in the background (it may have been suspended: its collects were cut, its timer ran on),
-        // also one that started there, decides nothing until it is back in the foreground, and then runs a full window again
-        // (chosen; rule 5 says so of an app stopped during the window; not in the spec: no cap; nothing is decided until the
-        // app stays in the foreground for one window).
-        var sawBackground = backgrounded
         var failures = 0
         while !Task.isCancelled {
             // Signed out or wiped meanwhile (every device forgotten): the session this window collects for is gone. A
             // background ends the session too, and the foreground takes it back: that is no end of the transfer's.
             if moveFlags.book.sessionEnds != sessionEnds { return .ended(drop: false) }
-            if backgrounded || moveFlags.book.backgrounds != backgrounds {
-                sawBackground = true
-                backgrounds = moveFlags.book.backgrounds
-            }
-            if sawBackground, !backgrounded {
-                sawBackground = false
-                timer.cancel()
-                ended = Flag()
-                timer = windowTimer(length, ended)
-                until = config.now().addingTimeInterval(length)
-            }
-            let last = ended.value && !sawBackground
-            let left = until.timeIntervalSince(config.now()) - Self.handlingMargin
+            clock.follow(self)
+            let last = clock.over
+            let left = clock.until.timeIntervalSince(config.now()) - Self.handlingMargin
             let wait = last || collectorRuns(d) ? 0 : min(Self.windowPoll, max(left, 0)).rounded(.down)
-            do {
-                // On `d`, whatever the session: its relay client works on after a background stopped its collector.
-                try await d.collectOnce(timeout: wait + Self.collectSlack, wait: wait, sleep: config.transferCollectSleep)
-                failures = 0
-            } catch let e as RelayError where e.code == RelayError.mailboxUnknown {
-                return .ended(drop: true)
-            } catch {
-                failures += 1
+            switch await windowCollect(d, wait: wait) {
+            case .collected: failures = 0
+            case .failed: failures += 1
+            case .gone: return .ended(drop: true)
             }
+            // A wipe or a sign-out while the collect was out: what it brought is not acted on.
+            if moveFlags.book.sessionEnds != sessionEnds { return .ended(drop: false) }
             if last { await collectorRound(session?.device ?? d) }
             let found = await pairedOrRejected(d)
             if case .nothing = found {} else { return found }
             if last { return .nothing }
-            // Between collects: a pause after a failure (1 s, doubled, at most 8 s), or while the collector long-polls.
-            if failures > 0 || wait == 0 {
-                try? await config.transferRetrySleep(.seconds(failures > 0 ? min(Double(1 << min(failures - 1, 3)), 8) : 1))
-            }
+            await pauseBetweenCollects(failures: failures, wait: wait)
         }
         return await pairedOrRejected(d)
+    }
+
+    /// Between collects: a pause after a failure (1 s, doubled, at most 8 s), or while the collector long-polls.
+    private func pauseBetweenCollects(failures: Int, wait: TimeInterval) async {
+        guard failures > 0 || wait == 0 else { return }
+        try? await config.transferRetrySleep(.seconds(failures > 0 ? min(Double(1 << min(failures - 1, 3)), 8) : 1))
+    }
+
+    /// The window's timer, its end by the clock, and what it saw of the background. A window that saw the app in the
+    /// background (it may have been suspended: its collects were cut, its timer ran on), also one that started there,
+    /// decides nothing until it is back in the foreground, and then runs a full window again (chosen; rule 5 says so of an
+    /// app stopped during the window; not in the spec: no cap; nothing is decided until the app stays in the foreground for
+    /// one window).
+    @MainActor
+    private final class WindowClock {
+        let length: TimeInterval
+        private var ended = Flag()
+        private var timer: Task<Void, Never>?
+        private(set) var until = Date()
+        private var backgrounds: Int
+        private var sawBackground: Bool
+
+        init(length: TimeInterval, backgrounds: Int, background: Bool) {
+            self.length = length
+            self.backgrounds = backgrounds
+            sawBackground = background
+        }
+
+        /// The window is over, and may be decided.
+        var over: Bool { ended.value && !sawBackground }
+
+        func start(_ m: VaultManager) {
+            timer?.cancel()
+            ended = Flag()
+            timer = m.windowTimer(length, ended)
+            until = m.config.now().addingTimeInterval(length)
+        }
+
+        func stop() { timer?.cancel() }
+
+        /// Notes a background, and starts a full window again at the first look back in the foreground after one.
+        func follow(_ m: VaultManager) {
+            if m.backgrounded || m.moveFlags.book.backgrounds != backgrounds {
+                sawBackground = true
+                backgrounds = m.moveFlags.book.backgrounds
+            }
+            guard sawBackground, !m.backgrounded else { return }
+            sawBackground = false
+            start(m)
+        }
+    }
+
+    private enum Collected { case collected, failed, gone }
+
+    /// One collect of the window, on [d] whatever the session: its relay client works on after a background stopped its
+    /// collector. `gone` on `mailbox_unknown`.
+    private func windowCollect(_ d: VaultDevice, wait: TimeInterval) async -> Collected {
+        do {
+            try await d.collectOnce(timeout: wait + Self.collectSlack, wait: wait, sleep: config.transferCollectSleep)
+            return .collected
+        } catch let e as RelayError where e.code == RelayError.mailboxUnknown {
+            return .gone
+        } catch {
+            return .failed
+        }
     }
 
     /// Whether a collector long-polls the mailbox now: [d]'s, or the device of a session opened since (the foreground).
@@ -144,7 +186,7 @@ extension VaultManager {
         return Self.settleWindow(visibility: visibility)
     }
 
-    private func windowTimer(_ length: TimeInterval, _ ended: Flag) -> Task<Void, Never> {
+    func windowTimer(_ length: TimeInterval, _ ended: Flag) -> Task<Void, Never> {
         let windowSleep = config.transferWindowSleep
         return Task {
             try? await windowSleep(.seconds(length))
@@ -227,27 +269,36 @@ extension VaultManager {
 
 extension VaultManager {
     /// The session the end of a window is settled through: [s], unless a background ended it and the foreground opened
-    /// another, whose device is the one that writes the stored state now. When only [s]'s device applied the pairing (it
-    /// saved it), the current session is reloaded so that its device knows it. [s]'s device is stopped either way.
+    /// another, whose device is the one that writes the stored state now ([s]'s device is then halted). When only [s]'s
+    /// device applied the pairing (it saved it), the current session is loaded again so that its device knows it: the newer
+    /// device is halted first, and [s]'s after the reload; when the reload fails, [s] goes on as it is.
     func settlingSession(_ s: VaultSession) async -> VaultSession {
         guard let current = session, current.device !== s.device else { return s }
         guard s.device.deviceID != nil, current.device.deviceID == nil else {
             await s.device.halt()
+            if moveFlags.book.transferSession?.device === s.device { moveFlags.book.transferSession = current }
             return current
         }
         // Neither device writes the stored state while the current session is loaded again from it: the newer one stops
-        // for good (it would save its stale state back), and the window's, which saved the pairing, after the reload.
+        // for good (it would save its stale state back), and the window's, which saved the pairing, after the reload. The
+        // reload loads a device of its own (not [s] taken back).
         await current.device.halt()
         stopCollecting()
-        guard let fresh = try? await openSession() else { return s }
+        moveFlags.book.transferSession = nil
+        guard let fresh = try? await openSession(), fresh.device !== s.device else {
+            moveFlags.book.transferSession = s
+            return s
+        }
         await s.device.halt()
+        moveFlags.book.transferSession = fresh
         return fresh
     }
 
     /// The transfer's own session taken back by an opening (the foreground after a background) while the transfer is
     /// waited for: its device, stopped by the background, collects again. Nil when there is none to take back.
     func takeBackTransferSession() -> VaultSession? {
-        guard !halted, session == nil, let held = moveFlags.book.transferSession, held.identity == record.value.activeIdentity,
+        guard !halted, session == nil, let held = moveFlags.book.transferSession, !held.device.ended,
+              held.identity == record.value.activeIdentity,
               moveFlags.book.transferWaiter != nil || moveFlags.book.settling != nil || moveFlags.book.waitingIn > 0
         else { return nil }
         session = held

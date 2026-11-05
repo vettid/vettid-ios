@@ -184,7 +184,7 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
     /// Bumped by every return to the foreground: a background task that began before one does not stop the collection.
     @ObservationIgnored var foregrounds = 0
     /// The app left the foreground and its background work stopped the collection.
-    @ObservationIgnored var backgrounded = false
+    @ObservationIgnored var backgrounded = false // false at launch: matters once the app launches in the background (phase P)
 
     public init(config: VaultManagerConfig) {
         self.config = config
