@@ -64,6 +64,9 @@ extension VaultManager {
     /// too if the app is back in the foreground when that collect is answered; if it is still in the background then, the
     /// window goes to its look, and on the return to the foreground the end moves out (within the cap) and the window
     /// collects on to it, its hold within the budget (``endMovedAfterExtra(_:_:)``); nothing is decided in the background.
+    /// The same holds for a cut, a freeze or a background noted after the one more was answered (during the wait for its
+    /// hold or during the look) while the end is under the cap: the end moves out within the cap and the window collects
+    /// on to it, one more last collect at most per move (bounded: the end only moves out, and the cap stops it).
     ///
     /// After the last collect, in the foreground, the window takes a last look
     /// (``VaultManager/lastLook(_:clock:sessionEnds:)``: a `wait=0` collect after a background); a cut or a refusal of the
@@ -76,7 +79,10 @@ extension VaultManager {
     /// ``holdMargin`` + V: V + 40 s); the first last collect (70 s) and the collector's round after it (``windowPoll`` +
     /// ``handlingMargin``, 30 s); the look after a background (70 s), whose cut or refusal gives the one more; the extra's
     /// hold (V + 40 s); the one more (70 s) and the collector's round (30 s); its look (70 s); and the retry pause (at most
-    /// 8 s) after each of the two failed collects that go back to collecting. Time in the background or frozen comes on
+    /// 8 s) after each of the two failed collects that go back to collecting. Collecting on after the one more (the end
+    /// moved out under the cap) is within it: that needs the one more given by a refusal alone (its hold at most V), and
+    /// the end at the cap after it, so the chain is shorter (70 + 70 + V + 70 + V + 40 + 100 + 70 s, 2 × V + 420 s); the
+    /// end can move so only once past the cap. Time in the background or frozen comes on
     /// top (chosen; the shared rule with Android #307, the erratum to follow).
     @MainActor
     final class WindowClock {
@@ -407,8 +413,8 @@ extension VaultManager {
             return true
         }
 
-        /// After the one more last collect, on the return to the foreground from a background that began during it: whether
-        /// the cut or the freeze noted meanwhile moved the end out (within the cap) past the end at that collect. Then the
+        /// After the one more last collect, on the return to the foreground from a background (during that collect, or
+        /// after it was answered): whether a cut, a freeze or the background noted meanwhile moved the end out (within the cap) past the end at that collect. Then the
         /// window collects on to it, and its last collect is held as the budget allows. Bounded: the end at the last collect
         /// is reset at each one, and the end is capped.
         func endMovedAfterExtra(_ m: VaultManager, _ d: VaultDevice) -> Bool {

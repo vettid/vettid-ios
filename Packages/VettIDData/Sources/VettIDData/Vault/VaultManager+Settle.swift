@@ -133,7 +133,8 @@ extension VaultManager {
     /// with Android #307, the erratum to follow), except that a look's collect that is cut or refused while the one more last
     /// collect is unused uses it: nil is returned, and the window goes back for that collect (held) before the drop. After
     /// the one more, a cut or a freeze noted in the background moves the end out on the return to the foreground (within
-    /// the cap): nil is returned too, and the window collects on to that end. Then
+    /// the cap; so too for one noted after the one more was answered, while the end is under the cap): nil is returned
+    /// too, and the window collects on to that end. Then
     /// the drop, unless a `device.paired` or a refusal came, or the session ended meanwhile (a wipe or a sign-out since
     /// [sessionEnds], or `mailbox_unknown`).
     private func lastLook(_ d: VaultDevice, clock: WindowClock, sessionEnds: Int) async -> WindowEnd? {

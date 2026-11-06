@@ -54,6 +54,7 @@ extension VaultManagerTransferInTests {
         service.endLeases()
         phone.windowPauses.release()
         #expect(await eventually(within: .seconds(30)) { m.finishMovePending }, "the pairing applied")
+        #expect(m.moveFlags.book.finalCollects == finals + 2, "exactly one last collect after the return")
     }
 
     /// A 4xx that is neither a throttle nor a stale signature (403) on the last collect is no cut and no refusal: there is
