@@ -346,7 +346,7 @@ public final class VotesManager: VotesRepository {
         try await task.value
     }
 
-    private func readNow(quietly: Bool) async throws {
+    private func readNow(quietly: Bool) async throws { // swiftlint:disable:this cyclomatic_complexity
         // A vault without the feature is asked again only after the next opening (§10.19.8); held or due: nothing is read.
         guard availability != .unsupported, !gated() else { return }
         let g = generation
@@ -386,10 +386,7 @@ public final class VotesManager: VotesRepository {
             load = .loaded
             hints = hintsFor(shown, hints)
             // The kept attempts go with their record: a vote no longer listed, or whose check is final. Only from a whole list.
-            if whole {
-                let live = Set(shown.filter { $0.check.map { Self.finalCheck($0.state) } != true }.map { ResultsAttempts.id($0.key) })
-                attempts.forget(epoch: epoch) { !live.contains($0.key) }
-            }
+            if whole { attempts.forgetUnlisted(shown, epoch: epoch) }
         } catch {
             let f = VaultFailures.map(error)
             if g == generation {

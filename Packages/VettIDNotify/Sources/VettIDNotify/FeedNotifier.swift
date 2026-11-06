@@ -57,8 +57,8 @@ public final class FeedNotifier {
         allowed: @escaping @MainActor () -> Bool,
         names: @escaping @MainActor () -> FeedNames,
         messageText: @escaping @MainActor (_ connectionID: String, _ messageID: String) -> String?,
-        refreshVotes: @escaping @MainActor () async -> Bool = { true },
-        voteListWait: Duration = FeedNotifier.defaultVoteListWait
+        refreshVotes: @escaping @MainActor () async -> Bool,
+        voteListWait: Duration
     ) {
         self.refreshVotes = refreshVotes
         self.voteListWait = voteListWait
@@ -81,7 +81,7 @@ public final class FeedNotifier {
 
     /// How long a `vote.result` waits for the votes list read before it is titled generically (VAULT-MESSAGING 0.83.6
     /// §10.19.6 step 4: the item carries no check state, the list does).
-    public static let defaultVoteListWait: Duration = .seconds(3)
+    public nonisolated static let defaultVoteListWait: Duration = .seconds(3)
 
     /// A new or changed unread item (``FeedManager/onArrival``). A `vote.result` is the give-up item only by its vote's state
     /// in the list, and that list may be older than the item (a re-check's verdict, or the vault giving up on its own

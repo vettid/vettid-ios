@@ -96,6 +96,18 @@ import VettIDVault
         _ = host(FeedDetailSheet(item: rollback, names: FeedNames(), gone: false))
     }
 
+    /// The give-up vote item (VAULT-MESSAGING 0.83.6 §10.19.6 step 4; owner decision a, 2026-11-06): its sheet has the title
+    /// of its own and a line that asks nothing of the member.
+    @Test func theGiveUpVoteItemHasItsOwnTitleAndDetailInTheSheet() {
+        let vote = VoteSummary(proposalID: "p1", connectionID: "c1", title: "Budget", state: .closed, check: VoteCheck(state: .gaveUp))
+        let names = FeedNames(connections: [], approvals: [], votes: [vote])
+        let result = Self.item("v", "vote.result", connection: "c1", ref: "p1")
+        #expect(FeedKinds.title(result, names) == "Vote results not checked yet")
+        #expect(FeedKinds.sheetDetail(result, names)?.hasSuffix("You don't need to do anything.") == true)
+        #expect(FeedKinds.sheetDetail(result, FeedNames()) == nil)
+        _ = host(FeedDetailSheet(item: result, names: names, gone: false))
+    }
+
     @Test func deletingABatchSaysLaterRequestsStartANewOne() {
         var sam = ConnectionInfo(id: "c1", name: "", state: .active)
         sam.firstName = "Sam"

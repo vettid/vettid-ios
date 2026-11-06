@@ -49,7 +49,8 @@ struct VoteResultsChoiceTests {
         let sizes = try ["a", "yes", "abstain", String(repeating: "x", count: 32)].map { try #require(try body(choice: $0)).count }
         #expect(Set(sizes).count == 1)
         // The members of an empty row are as before.
-        let empty = try object(build(SubmittedRows(own: OwnRow(ballot: nil, index: 0, treeSize: 1, path: []), others: []))).obj("row")
+        let none = SubmittedRows(own: OwnRow(ballot: nil, index: 0, treeSize: 1, path: []), others: [])
+        let empty = try object(build(none)).obj("row")
         if case .null? = empty["ballot"] {} else { Issue.record("an empty row's ballot is null") }
     }
 
@@ -60,7 +61,8 @@ struct VoteResultsChoiceTests {
         let sent = try object(build(SubmittedRows(own: try row(choice: "yes"), others: [try row(choice: "no", index: 3), odd])))
         let others = try sent.array("other_rows").map { try $0.asObject() }
         #expect(others.count == 2)
-        #expect(try others[0].obj("proof").uint("index", min: 0, max: 10) == 3 && others[1].obj("proof").uint("index", min: 0, max: 10) == 5)
+        let indexes = try others.map { try $0.obj("proof").uint("index", min: 0, max: 10) }
+        #expect(indexes == [3, 5])
         #expect(try others[0].obj("row").obj("ballot").string("pad") == String(repeating: "0", count: 30))
         #expect(try others[1].obj("row").obj("ballot").string("choice_id") == "Yes")
         #expect(!sent.has("rows_unavailable"))

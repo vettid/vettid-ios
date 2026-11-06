@@ -60,7 +60,8 @@ final class AppNotifications: NSObject, UNUserNotificationCenterDelegate {
                 return NotificationContent.messageText(m.text, photo: m.attachment != nil)
             },
             // A `vote.result` is the give-up item only by its vote's state in the list: read afresh, within 3 s.
-            refreshVotes: { [weak vault] in await vault?.votes.readQuietly() ?? false }
+            refreshVotes: { [weak vault] in await vault?.votes.readQuietly() ?? false },
+            voteListWait: FeedNotifier.defaultVoteListWait
         )
         self.notifier = notifier
         previews.onSet = { [weak notifier] in notifier?.previewsChanged($0) }

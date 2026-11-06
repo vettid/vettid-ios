@@ -166,6 +166,12 @@ final class ResultsAttempts {
         if list != all { write(list) }
     }
 
+    /// Forgets the attempts of votes that [list] (the whole list the vault gave) no longer has, or whose check is final.
+    func forgetUnlisted(_ list: [VoteSummary], epoch taken: Int) {
+        let live = Set(list.filter { $0.check.map { !VotesManager.finalCheck($0.state) } ?? true }.map { Self.id($0.key) })
+        forget(epoch: taken) { !live.contains($0.key) }
+    }
+
     /// The vault's data goes from this phone (a wipe, a sign-out, a deletion): forgotten in memory and on disk, and a
     /// write still on its way is dropped. Not at a lock.
     func forgetAll() {

@@ -510,7 +510,10 @@ extension DataStrings {
     static var feedVoteResultGaveUpDetail: String {
         String(
             localized: "data_feed_vote_result_gave_up_detail",
-            defaultValue: "VettID couldn't check the published results of this vote yet. It will check them again by itself when it can. You don't need to do anything.",
+            defaultValue: """
+                VettID couldn't check the published results of this vote yet. It will check them again by itself when it can. \
+                You don't need to do anything.
+                """,
             bundle: .module
         )
     }

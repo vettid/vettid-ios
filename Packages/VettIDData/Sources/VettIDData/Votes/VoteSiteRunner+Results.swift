@@ -183,7 +183,9 @@ extension VoteSiteRunner {
         }
         if !examined.others.isEmpty, let full = body {
             let rowsNow = examined
-            let (sent, fitted) = await Task.detached { Self.fitted(key, doc, sig, bundle, rowsNow, full) }.value
+            let (sent, fitted) = await Task.detached {
+                Self.fitted(rowsNow, full) { ResultsBody.build(key, doc: doc, sig: sig, bundle: bundle, rows: $0) }
+            }.value
             (examined, body) = (sent, fitted)
         }
         try Task.checkCancellation()
@@ -202,11 +204,10 @@ extension VoteSiteRunner {
     /// [body] when the request fits; else fewer extra rows, the largest dropped first, down to one; else none of them
     /// (`rows_unavailable` is a body that cannot be too large for a row). The rows the request goes with are returned too.
     private nonisolated static func fitted(
-        _ key: VoteKey, _ doc: [UInt8], _ sig: [UInt8], _ bundle: String, _ rows: SubmittedRows, _ full: [UInt8]
+        _ rows: SubmittedRows, _ full: [UInt8], build: (SubmittedRows) -> [UInt8]?
     ) -> (SubmittedRows, [UInt8]?) {
         func fits(_ b: [UInt8]) -> Bool { VoteSync.fitsInline(b, type: VaultApi.typeVoteResultsSubmit) }
         if fits(full) { return (rows, full) }
-        let build: (SubmittedRows) -> [UInt8]? = { ResultsBody.build(key, doc: doc, sig: sig, bundle: bundle, rows: $0) }
         if let fewer = ResultsBody.fewer(rows, fits: fits, body: build), let b = build(fewer) { return (fewer, b) }
         // One verifying extra row did not fit either: the row alone, or `rows_unavailable` when even that is over.
         let alone = rows.with(others: [])

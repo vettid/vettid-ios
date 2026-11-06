@@ -123,26 +123,6 @@ struct VoteSiteReader: Sendable {
         }
     }
 
-    /// A vote's results as the site serves them.
-    struct ResultsFiles: Sendable {
-        let doc: [UInt8]
-        let sig: [UInt8]
-        let bundle: [UInt8]
-        let rows: [UInt8]
-    }
-
-    enum ResultsFetch: Sendable {
-        case files(ResultsFiles)
-        /// A document is over the limit the vault takes: a problem with the results, not a site that is down.
-        case tooLarge
-        /// `rows.json` is larger than the rows of these results can be: refused before it is read in full.
-        case rowsTooLarge
-        /// The site could not be reached for one of them.
-        case siteDown
-        /// The site answered, and the results are not (all) there.
-        case notPublished
-    }
-
     /// `results.json`, its signature and its bundle: the small documents of a vote's results, which are read at every
     /// attempt (VAULT-MESSAGING 0.83.6 §10.19.6: a `gave_up` re-check compares their hashes before `rows.json`).
     enum SmallFetch: Sendable {
@@ -195,28 +175,6 @@ struct VoteSiteReader: Sendable {
         case .absent: .absent
         case .tooLarge: .tooLarge
         case .unreachable: .down
-        }
-    }
-
-    /// The four documents of a vote's results from the site, or why there are not. `rows.json` is read up to
-    /// [rowsCap] of the results read first (their `counts.eligible`), and never over ``VoteSiteLimits/rowsMax``.
-    func fetchResults(
-        _ proposalID: String, rowsCap: @Sendable ([UInt8]) -> Int = { VoteRows.rowsCap(results: $0) }
-    ) async throws -> ResultsFetch {
-        let doc: [UInt8]
-        let sig: [UInt8]
-        let bundle: [UInt8]
-        switch try await fetchSmall(proposalID) {
-        case .tooLarge: return .tooLarge
-        case .siteDown: return .siteDown
-        case .notPublished: return .notPublished
-        case let .files(d, s, b): (doc, sig, bundle) = (d, s, b)
-        }
-        switch try await fetchRows(proposalID, cap: rowsCap(doc)) {
-        case .rows(let rows): return .files(ResultsFiles(doc: doc, sig: sig, bundle: bundle, rows: rows))
-        case .tooLarge: return .rowsTooLarge
-        case .absent: return .notPublished
-        case .down: return .siteDown
         }
     }
 }
