@@ -109,6 +109,51 @@ import VettIDVault
         try await m.rotate(password: password)
         #expect(!m.relayRefused)
     }
+
+    /// The unlock's post-open read comes before the vault's relay attempt: a refusal after it is shown when its
+    /// `identity.rotation_failed` item arrives, with no manual read.
+    @Test func aRotationFailedItemReadsTheStatusAgain() async throws {
+        defer { phone.close() }
+        try await setUp()
+        try await m.ownerChecks.refreshOwnerCheck()
+        #expect(!m.relayRefused)
+        service.relayStatus = "refused"
+        _ = try service.feedItemArrives("identity.rotation_failed", priority: "high")
+        #expect(await eventually { m.relayRefused }, "the item made the app read the status")
+    }
+
+    private func status(_ relay: String?) throws -> VaultStatusInfo {
+        let member = relay.map { #","relay":"\#($0)""# } ?? ""
+        return try VaultJSON.decode(VaultStatusInfo.self, Array(#"{"vault_id":"v"\#(member)}"#.utf8))
+    }
+
+    /// The latest answer decides, not the last to arrive: a read sent before the rotation's whose refused answer arrives
+    /// after the rotation's own read is dropped.
+    @Test func anOlderReadArrivingLateIsDropped() async throws {
+        defer { phone.close() }
+        try await setUp()
+        let rec = m.record.generation
+        let sentBeforeRotation = m.beginStatusRead()
+        let sentAfter = m.beginStatusRead()
+        m.heard(status: try status(nil), since: rec, stamp: sentAfter)
+        m.heard(status: try status("refused"), since: rec, stamp: sentBeforeRotation)
+        #expect(!m.relayRefused, "the older answer does not bring the notice back")
+        m.heard(status: try status("refused"), since: rec, stamp: m.beginStatusRead())
+        #expect(m.relayRefused)
+    }
+
+    /// A read in flight at a lock lands after a quick re-unlock: it is dropped.
+    @Test func aReadInFlightAtALockIsDropped() async throws {
+        defer { phone.close() }
+        try await setUp()
+        let rec = m.record.generation
+        let inFlight = m.beginStatusRead()
+        try await m.lock()
+        try await m.unlock(pin: pin)
+        #expect(m.phase == .unlocked)
+        m.heard(status: try status("refused"), since: rec, stamp: inFlight)
+        #expect(!m.relayRefused)
+    }
 }
 
 extension VaultManagerRelayTests {

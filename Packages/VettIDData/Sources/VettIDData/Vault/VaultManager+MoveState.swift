@@ -64,6 +64,13 @@ final class MoveBook {
     /// for this unlock.
     var relayRecheck: Task<Void, Never>?
     var relayRechecked = false
+    /// The status reads begun (``VaultManager/beginStatusRead()``), the newest one applied to the notice, and the count of
+    /// clears (a lock, a sign-out, a wipe) a read must not span.
+    var statusSeq = 0
+    var relayAppliedSeq = 0
+    var relayEpoch = 0
+    /// The ids of the active `identity.rotation_failed` feed items already acted on.
+    var rotationFailedSeen = Set<String>()
     /// (IOS-PLAN 0.1.40 §4.9) The PIN the recovered phone's unlock just used, kept in memory only while the pairing runs on the
     /// screen in front, for the lost-ok unlock that may be sent again; forgotten when the app leaves the foreground (§6.3).
     var pairingPin: String?
