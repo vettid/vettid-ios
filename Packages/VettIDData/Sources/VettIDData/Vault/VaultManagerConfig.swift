@@ -50,6 +50,9 @@ public enum VaultFiles {
     /// a proof (``ResultsAttempts``). Not one of ``all(in:)`` for the same reason as the canary's; a wipe erases it with the
     /// data directory and ``VotesManager/forgetStored()`` empties it.
     public static let voteAttempts = "vote-attempts"
+    /// When the recheck on open (or a results check) last downloaded `rows.json` per vote (vettid-android #321): a key and a
+    /// time, no choice and no verdict. Same standing as ``voteAttempts``.
+    public static let voteRechecks = "vote-rechecks"
     /// Retired: what only this phone learnt of connection requests (``ConnectionsManager``), written by earlier builds.
     /// The requests, their names and the declines now live in memory only; the file is deleted at the start.
     public static let connections = "connections"

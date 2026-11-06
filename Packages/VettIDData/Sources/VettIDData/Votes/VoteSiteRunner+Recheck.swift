@@ -25,10 +25,11 @@ extension VoteSiteRunner {
         if let hint = votes?.hints[key], hint.verdictKept, let verdict = hint.observerVerdict {
             return verdict ? .consistent : .dontAddUp
         }
-        return try await serially(.attempts, followCancel: true) { [self] in try await recheck(key) }
+        let epoch = votes?.attempts.rechecks.epoch ?? 0
+        return try await serially(.attempts, followCancel: true) { [self] in try await recheck(key, epoch: epoch) }
     }
 
-    private func recheck(_ key: VoteKey) async throws -> RecheckOutcome {
+    private func recheck(_ key: VoteKey, epoch: Int) async throws -> RecheckOutcome {
         guard let detail = try await detailForRecheck(key) else { return .notChecked }
         // Nothing checked (no tag to look for, results.json over the limit or not reading): not a failed observer check but
         // one that could not run, so "not rechecked" and no number, not "don't add up" (#317 item 2).
@@ -40,8 +41,20 @@ extension VoteSiteRunner {
         }
         // A cap that does not read (`counts.eligible` missing or outside 1 to 100,000) checks nothing either.
         guard case .cap(let cap) = VoteRows.rowsBound(results: doc) else { return .notChecked }
+        // On a network not known unmetered, rows.json at most daily per vote until a week after the vote's close (as
+        // extended), then at most weekly (VAULT-MESSAGING §10.19.6; vettid-android #319 item 2, #321): the verdict is memory
+        // only and a lock forgets it, so without a cap every open would download it again. Until then "not rechecked" and no
+        // number; Wi-Fi is never capped.
+        guard let votes else { throw CancellationError() }
+        let id = ResultsAttempts.id(key)
+        let at = Int64(votes.now().timeIntervalSince1970 * 1000)
+        let closesAt = votes.votes.first { $0.key == key }?.closesAt.map { Int64($0.timeIntervalSince1970 * 1000) }
+        if votes.attempts.rechecks.waits(id, at: at, closesAt: closesAt, unmetered: votes.unmetered()) { return .notChecked }
+        // The first bytes stamp the cap whatever the job's state by then (a lock partway still spent them), once per
+        // download, and only under the epoch the recheck began in (a wipe since drops the stamp).
+        let report = RowsReport(votes.attempts.rechecks, key: id, at: at, epoch: epoch)
         let rows: [UInt8]
-        switch try await reader.fetchRows(key.proposalID, cap: cap) {
+        switch try await reader.fetchRows(key.proposalID, cap: cap, received: report.receive) {
         case .absent, .down: return .notChecked
         // An over-cap rows.json is still a failed check: its cap comes from a results.json that parsed.
         case .tooLarge:

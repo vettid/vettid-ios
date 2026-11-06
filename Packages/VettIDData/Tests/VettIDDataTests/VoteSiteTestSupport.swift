@@ -34,6 +34,30 @@ final class FakeVoteSite: VoteSite, @unchecked Sendable {
     /// The most bytes the last read of [path] would take.
     func limit(_ path: String) -> Int? { lock.withLock { limits[path] } }
 
+    /// Bytes a read reports before its answer (a download cut off partway: `unreachable` after some bytes).
+    var partial: [String: Int] {
+        get { lock.withLock { partialBytes } }
+        set { lock.withLock { partialBytes = newValue } }
+    }
+
+    private var partialBytes: [String: Int] = [:]
+    /// Runs before a read's bytes are reported (a lock or a wipe while the download is still arriving); not under the lock.
+    nonisolated(unsafe) var beforeReceived: (@Sendable () async -> Void)?
+    /// The chunks a read reports its bytes in (a download arriving in pieces).
+    nonisolated(unsafe) var chunks = 1
+
+    func getCounted(_ path: String, maxBytes: Int, received: @escaping @Sendable (Int) -> Void) async -> SiteAnswer {
+        let answer = await get(path, maxBytes: maxBytes)
+        await beforeReceived?()
+        for _ in 1 ..< max(chunks, 1) { received(1) }
+        if let n = lock.withLock({ partialBytes[path] }) {
+            received(n)
+        } else if case .found(let b) = answer {
+            received(b.count)
+        }
+        return answer
+    }
+
     func get(_ path: String, maxBytes: Int) async -> SiteAnswer {
         // As the real site: a read of cancelled work is not made.
         if Task.isCancelled { return .unreachable }

@@ -29,6 +29,7 @@ extension VaultManager {
             // (0.83.3) `other_rows` and `rows_unavailable` only to a vault that lists `vote_rows`.
             voteRows: { ReleasePath.voteRows(ref.manager?.record.value.capabilities ?? []) },
             attempts: FileResultsAttemptStore(file: manager.config.file(VaultFiles.voteAttempts)),
+            rechecks: FileRecheckStampStore(file: manager.config.file(VaultFiles.voteRechecks)),
             unmetered: manager.config.networkMeter.unmetered
         )
     }
