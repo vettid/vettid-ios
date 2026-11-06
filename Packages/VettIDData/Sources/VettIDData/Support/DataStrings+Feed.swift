@@ -502,6 +502,22 @@ extension DataStrings {
         String(localized: "data_feed_vote_result", defaultValue: "Vote results are out", bundle: .module)
     }
 
+    // Owner-approved 2026-11-06 (decision a): the give-up `vote.result` item.
+    static var feedVoteResultGaveUp: String {
+        String(localized: "data_feed_vote_result_gave_up", defaultValue: "Vote results not checked yet", bundle: .module)
+    }
+
+    static var feedVoteResultGaveUpDetail: String {
+        String(
+            localized: "data_feed_vote_result_gave_up_detail",
+            defaultValue: """
+                VettID couldn't check the published results of this vote yet. It will check them again by itself when it can. \
+                You don't need to do anything.
+                """,
+            bundle: .module
+        )
+    }
+
     static var feedVoteProblem: String {
         String(localized: "data_feed_vote_problem", defaultValue: "Check your vote", bundle: .module)
     }

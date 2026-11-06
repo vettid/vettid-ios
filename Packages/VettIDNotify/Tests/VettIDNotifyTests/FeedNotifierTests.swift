@@ -42,6 +42,10 @@ import VettIDVault
             return FeedNames(connections: ["c1": sam], items: ["i1": "Passport"])
         }()
         var text: String? = "See you at 6"
+        /// The votes list read before a `vote.result` is titled: how often, whether it went through, and how long it takes.
+        var votesRead = 0
+        var votesFresh = true
+        var votesSlow: Duration?
         lazy var notifier = FeedNotifier(
             poster: poster, previews: { [unowned self] in previews }, open: { [unowned self] in open },
             active: { [unowned self] in active }, visible: { [unowned self] in visible }, allowed: { [unowned self] in allowed },
@@ -49,8 +53,24 @@ import VettIDVault
                 namesRead += 1
                 return names
             },
-            messageText: { [unowned self] _, _ in text }
+            messageText: { [unowned self] _, _ in text },
+            refreshVotes: { [unowned self] in await refreshVotes() },
+            voteListWait: .milliseconds(150)
         )
+
+        func refreshVotes() async -> Bool {
+            votesRead += 1
+            // A read that ignores cancellation (queued behind earlier reads): only the race can hold the cap.
+            if let slow = votesSlow {
+                await withCheckedContinuation { (c: CheckedContinuation<Void, Never>) in
+                    Task {
+                        try? await Task.sleep(for: slow)
+                        c.resume()
+                    }
+                }
+            }
+            return votesFresh
+        }
         var items: [FeedItem] = []
 
         func arrive(_ i: FeedItem) {
@@ -82,6 +102,54 @@ import VettIDVault
         w.arrive(item("f2"))
         w.notifier.itemsChanged([])
         #expect(w.poster.shown.isEmpty)
+    }
+
+    /// The give-up item (VAULT-MESSAGING 0.83.6 §10.19.6 step 4, owner decision a): a `vote.result` is it only by its vote's
+    /// state in the list, read again first (at most 3 s; 150 ms here); a list that cannot be read in time, or under "Nothing",
+    /// reads as the generic "Vote results are out" (the review's M3).
+    @Test func aVoteResultIsTheGiveUpItemOnlyWhenTheListWasReadAgain() async {
+        func settled(_ w: World, _ id: String) async -> LocalNotification? {
+            for _ in 0..<100 where w.poster.shown[id] == nil { try? await Task.sleep(for: .milliseconds(10)) }
+            return w.poster.shown[id]
+        }
+        let result = item("v1", kind: "vote.result", ref: "p1")
+        // Fresh: the give-up title, the list read once.
+        let w = World()
+        w.names.votesGaveUp = ["c1/p1"]
+        w.arrive(result)
+        #expect(await settled(w, "v1")?.title == "Vote results not checked yet" && w.votesRead == 1)
+        // The read did not go through: the list may be older than the item, so the generic title.
+        let failed = World()
+        failed.names.votesGaveUp = ["c1/p1"]
+        failed.votesFresh = false
+        failed.arrive(result)
+        #expect(await settled(failed, "v1")?.title == "Vote results are out")
+        // Too slow: the same, within the wait.
+        let slow = World()
+        slow.names.votesGaveUp = ["c1/p1"]
+        slow.votesSlow = .seconds(5)
+        slow.arrive(result)
+        #expect(await settled(slow, "v1")?.title == "Vote results are out")
+        // A vote that is not `gave_up`, and "Nothing" (no names read, no list read).
+        let plain = World()
+        plain.arrive(result)
+        #expect(await settled(plain, "v1")?.title == "Vote results are out")
+        let hidden = World()
+        hidden.previews = .nothing
+        hidden.names.votesGaveUp = ["c1/p1"]
+        hidden.arrive(result)
+        #expect(hidden.poster.shown["v1"]?.title == "New activity in VettID" && hidden.votesRead == 0)
+        // Other kinds are posted at once and read nothing.
+        let other = World()
+        other.arrive(item("v2", kind: "vote.open", ref: "p1"))
+        #expect(other.poster.shown["v2"] != nil && other.votesRead == 0)
+        // Read meanwhile: not posted.
+        let read = World()
+        read.votesSlow = .milliseconds(50)
+        read.arrive(result)
+        read.notifier.cleared()
+        read.active = false
+        #expect(await settled(read, "v1") == nil)
     }
 
     @Test func aBatchIsOneNotificationUpdatedInPlaceWithoutAlertingAgain() {

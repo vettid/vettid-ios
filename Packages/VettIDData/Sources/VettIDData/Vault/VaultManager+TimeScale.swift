@@ -9,6 +9,13 @@ import VettIDVault
 // too: the transfer to this phone (I3) stores ``InviteBundle/timeScaleOrReal`` with the vault it brings, after
 // ``TimeScalePolicy/check(_:)``. The app's own waits (``TimeScales``) divide by it when each starts.
 extension VaultManager {
+    /// Every `vault.status` the app reads is heard: its `time_scale` for the record of [rec], its `relay` for the notice
+    /// (VAULT-MESSAGING 0.84.0 §3.4), by [stamp] (``beginStatusRead()``).
+    func heard(status st: VaultStatusInfo, since rec: Int, stamp: StatusStamp) {
+        learnTimeScale(status: st, since: rec)
+        noteRelay(status: st, stamp: stamp)
+    }
+
     /// The scale of the verified instance this phone sealed to, for the record of [rec] (a reset since drops it). The
     /// alternate channel already refused a scale this build does not accept (``TimeScalePolicy``).
     func learnTimeScale(_ scale: UInt64, since rec: Int) {

@@ -22,6 +22,26 @@ public struct VaultStatusInfo: Decodable, Equatable, Sendable {
     /// (0.43.0) The release's time scale (§11.10.8; STAGING-TIME-SCALE §5.2), to the app and desktops; nil from a release
     /// before it (1).
     public let timeScale: Int64?
+    /// (0.84.0, §3.4, §10.2) The relay key's state: `"refused"` while the relay refuses the key the vault rotated to (the new
+    /// relay address could not be taken up); absent otherwise. Any other value, or a member of another type, counts as
+    /// absent. Read through ``relayRefused``.
+    public let relay: RelayState?
+
+    /// Whether `relay` is `"refused"`: the lasting notice of §3.4 "What the member sees".
+    public var relayRefused: Bool { relay?.value == RelayState.refused }
+}
+
+/// `vault.status`'s `relay` (VAULT-MESSAGING 0.84.0 §10.2): the string, or nil for a member of another type (so that the
+/// status still decodes).
+public struct RelayState: Decodable, Equatable, Sendable {
+    public static let refused = "refused"
+    public let value: String?
+
+    public init(_ value: String?) { self.value = value }
+
+    public init(from decoder: any Decoder) throws {
+        value = try? decoder.singleValueContainer().decode(String.self)
+    }
 }
 
 /// `vault.status`'s `owner_check` (§3.6, §3.6.7): `state` is `ok`, `due` or `held`.

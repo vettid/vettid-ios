@@ -164,6 +164,22 @@ struct VotesManagerTests: VotesTestCase {
         #expect(await failure { try await m.evidence(key) }?.code == "unreadable")
     }
 
+    /// A reader never checks `pad` (VAULT-MESSAGING 0.83.6 §10.19.5): the vault's `vote.get` with a `pad` of any type, length
+    /// or value, or none, reads as the same vote.
+    @Test func theDetailIsTheSameWhateverItsPad() async throws {
+        func read(_ pad: String) async throws -> VoteDetail {
+            let ops = FakeVoteOps()
+            ops.detail = obj(#"{"proposal_id":"\#(pid)","connection_id":"\#(conn)","title":"T","state":"open","can_cast":true,"text":"t","choices":[{"id":"yes","label":"Yes"}],"record_tag":"AAAA","choice_id":"yes"\#(pad)}"#)
+            return try await manager(ops).get(key)
+        }
+        let none = try await read("")
+        let pads = ["\"\(String(repeating: "0", count: 29))\"", "\"\"", "\"x\"", "123", "null", "[1]"]
+        for pad in pads {
+            #expect(try await read(",\"pad\":\(pad)") == none, "\(pad)")
+        }
+        #expect(none.choiceID == "yes")
+    }
+
     @Test func theDetailKeepsTheChoicesInTheOrderSentAndTheMembersOwnChoice() async throws {
         let ops = FakeVoteOps()
         ops.detail = obj(#"{"proposal_id":"\#(pid)","connection_id":"\#(conn)","title":"T","state":"open","can_cast":true,"text":"Line one\n\nLine two <b>x</b> http://example.test","choices":[{"id":"no","label":"No"},{"id":"abstain","label":"Yes, really"},{"id":"yes","label":"Yes"}],"quorum":{"text":"Half","min_ballots":2},"binding":true,"record_tag":"AAAA","choice_id":"yes","extensions":1}"#)

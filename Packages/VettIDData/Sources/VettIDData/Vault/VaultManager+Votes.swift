@@ -25,7 +25,11 @@ extension VaultManager {
             // A run nobody asked for never opens a session; the member's own (Check again, a vote's screen) may.
             siteOps: { quietly in quietly ? try quietApi(ref) : try await memberApi(ref) },
             sleep: manager.config.votesSleep,
-            backgroundTasks: manager.config.backgroundTasks
+            backgroundTasks: manager.config.backgroundTasks,
+            // (0.83.3) `other_rows` and `rows_unavailable` only to a vault that lists `vote_rows`.
+            voteRows: { ReleasePath.voteRows(ref.manager?.record.value.capabilities ?? []) },
+            attempts: FileResultsAttemptStore(file: manager.config.file(VaultFiles.voteAttempts)),
+            unmetered: manager.config.networkMeter.unmetered
         )
     }
 

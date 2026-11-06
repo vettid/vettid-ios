@@ -123,31 +123,17 @@ struct VoteSiteReader: Sendable {
         }
     }
 
-    /// A vote's results as the site serves them.
-    struct ResultsFiles: Sendable {
-        let doc: [UInt8]
-        let sig: [UInt8]
-        let bundle: [UInt8]
-        let rows: [UInt8]
-    }
-
-    enum ResultsFetch: Sendable {
-        case files(ResultsFiles)
-        /// A document is over the limit the vault takes: a problem with the results, not a site that is down.
+    /// `results.json`, its signature and its bundle: the small documents of a vote's results, which are read at every
+    /// attempt (VAULT-MESSAGING 0.83.6 §10.19.6: a `gave_up` re-check compares their hashes before `rows.json`).
+    enum SmallFetch: Sendable {
+        case files(doc: [UInt8], sig: [UInt8], bundle: [UInt8])
+        /// A document is over the limit the vault takes.
         case tooLarge
-        /// `rows.json` is larger than the rows of these results can be: refused before it is read in full.
-        case rowsTooLarge
-        /// The site could not be reached for one of them.
         case siteDown
-        /// The site answered, and the results are not (all) there.
         case notPublished
     }
 
-    /// The four documents of a vote's results from the site, or why there are not. `rows.json` is read up to
-    /// [rowsCap] of the results read first (their `counts.eligible`), and never over ``VoteSiteLimits/rowsMax``.
-    func fetchResults(
-        _ proposalID: String, rowsCap: @Sendable ([UInt8]) -> Int = { VoteRows.rowsCap(results: $0) }
-    ) async throws -> ResultsFetch {
+    func fetchSmall(_ proposalID: String) async throws -> SmallFetch {
         var siteDown = false
         var tooLarge = false
         func fetch(_ name: String, _ max: Int) async throws -> [UInt8]? {
@@ -168,9 +154,27 @@ struct VoteSiteReader: Sendable {
         let sig = try await fetch("results.json.sig", VoteSiteLimits.sigMax)
         let bundle = try await fetch("results.json.sigstore.json", VoteSiteLimits.bundleMax)
         if tooLarge { return .tooLarge }
-        let rows = try await fetch("rows.json", min(VoteSiteLimits.rowsMax, rowsCap(doc)))
-        if tooLarge { return .rowsTooLarge }
-        guard let sig, let bundle, let rows else { return siteDown ? .siteDown : .notPublished }
-        return .files(ResultsFiles(doc: doc, sig: sig, bundle: bundle, rows: rows))
+        guard let sig, let bundle else { return siteDown ? .siteDown : .notPublished }
+        return .files(doc: doc, sig: sig, bundle: bundle)
+    }
+
+    enum RowsFetch: Sendable {
+        case rows([UInt8])
+        /// Larger than the cap: not the rows of these results (read up to the cap only).
+        case tooLarge
+        /// A definite 404: not published (yet), or never.
+        case absent
+        /// No answer, a timeout or a 5xx.
+        case down
+    }
+
+    /// `rows.json` up to [cap] bytes, and never over ``VoteSiteLimits/rowsMax``.
+    func fetchRows(_ proposalID: String, cap: Int) async throws -> RowsFetch {
+        switch try await get("p/\(proposalID)/rows.json", min(VoteSiteLimits.rowsMax, cap)) {
+        case .found(let b): .rows(b)
+        case .absent: .absent
+        case .tooLarge: .tooLarge
+        case .unreachable: .down
+        }
     }
 }

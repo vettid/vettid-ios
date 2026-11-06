@@ -119,6 +119,16 @@ struct VoteRulesTests {
         #expect(VoteRules.notes(v).contains(.checkGaveUp))
     }
 
+    /// A row the app could not get (VAULT-MESSAGING 0.83.3 §10.19.6 step 3): the vault's `rows_unavailable`, `pending` or
+    /// `gave_up`, reads as a problem with the published results, not as "the site could not be reached".
+    @Test func aRowTheAppCouldNotGetIsAProblemWithThePublishedResults() {
+        for state in [CheckState.pending, .gaveUp] {
+            let v = vote(.closed, ballot(.recorded), check(state, "rows_unavailable"))
+            #expect(VoteRules.notes(v, gaveUp: .site).contains(.checkResultsProblem), "\(state)")
+            #expect(!VoteRules.notes(v, gaveUp: .site).contains(.checkGaveUpSite) && !VoteRules.notes(v).contains(.checkPending))
+        }
+    }
+
     @Test func theAppsOwnFindInTheResultsIsShownWhileTheVaultHasNotJudged() {
         let v = vote(.closed, ballot(.recorded))
         #expect(VoteRules.notes(v, resultsProblem: true).contains(.checkResultsProblem))

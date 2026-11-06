@@ -2511,7 +2511,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Your connections still know your old keys. VettID will offer the update again."
+            "value": "Your vault couldn't finish updating its keys. It will try again the next time you unlock it."
           }
         }
       }
@@ -2754,6 +2754,28 @@
           "stringUnit": {
             "state": "translated",
             "value": "Vote results are out"
+          }
+        }
+      }
+    },
+    "data_feed_vote_result_gave_up": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vote results not checked yet"
+          }
+        }
+      }
+    },
+    "data_feed_vote_result_gave_up_detail": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "VettID couldn't check the published results of this vote yet. It will check them again by itself when it can. You don't need to do anything."
           }
         }
       }

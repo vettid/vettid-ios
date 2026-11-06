@@ -215,6 +215,14 @@ public final class VotesManager: VotesRepository {
     @ObservationIgnored private(set) var siteRunner: VoteSiteRunner?
     /// The background time the lock of a cast's window asks iOS for; nil where there is none (tests, other builds).
     @ObservationIgnored private let backgroundTasks: (any BackgroundTasks)?
+    /// Whether the vault lists the release capability `vote_rows` (VAULT-MESSAGING 0.83.3 §11.10.9, §10.19.6 step 3): only
+    /// then are `other_rows` and `rows_unavailable` sent; without it the app keeps 0.83.2's behavior.
+    @ObservationIgnored let voteRows: @MainActor () -> Bool
+    /// The last attempt at each vote's results (no choice, row or proof): the daily re-check of a `gave_up` one and the
+    /// weekly cap on `rows.json` survive a lock and a restart.
+    @ObservationIgnored let attempts: ResultsAttempts
+    /// Whether the phone's network is unmetered now (true, false, or nil when it cannot be told, which counts as metered).
+    @ObservationIgnored let unmetered: @Sendable () -> Bool?
 
     public init(
         ops: @escaping @MainActor () async throws -> any VoteOps,
@@ -229,8 +237,14 @@ public final class VotesManager: VotesRepository {
         siteOps: (@MainActor (_ quietly: Bool) async throws -> any VoteSiteOps)? = nil,
         syncEvery: Duration = .seconds(3600),
         sleep: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) },
-        backgroundTasks: (any BackgroundTasks)? = nil
+        backgroundTasks: (any BackgroundTasks)? = nil,
+        voteRows: @escaping @MainActor () -> Bool = { false },
+        attempts: any ResultsAttemptStore = MemoryResultsAttemptStore(),
+        unmetered: @escaping @Sendable () -> Bool? = { nil }
     ) {
+        self.voteRows = voteRows
+        self.attempts = ResultsAttempts(store: attempts)
+        self.unmetered = unmetered
         self.ops = ops
         self.quietOps = quietOps ?? ops
         self.gated = gated
@@ -263,6 +277,10 @@ public final class VotesManager: VotesRepository {
         listSha256 = nil
     }
 
+    /// The vault's data goes from this phone (a wipe, a sign-out, a deletion): the kept attempts at the results are forgotten
+    /// in memory and on disk, and a write still on its way is dropped. Not at a lock (``clear()``), which they outlive.
+    public func forgetStored() { attempts.forgetAll() }
+
     /// `vote.event` (§10.19.8, the app only): a change of any vote re-reads the list; a due check (`check_due`) is run
     /// after it. The event carries no choice.
     public func onEvent(_ m: VaultMessage) {
@@ -294,6 +312,18 @@ public final class VotesManager: VotesRepository {
     /// The vault opened or a check passed: the list is read in the background, over the session already open.
     public func openNow() async { try? await read(quietly: true) }
 
+    /// The list read now, over the session already open (a notification's read, nobody asked for): true when it went through.
+    public func readQuietly() async -> Bool {
+        // A vault held or without the feature reads nothing: the list is not fresher than it was.
+        guard availability != .unsupported, !gated() else { return false }
+        do {
+            try await read(quietly: true)
+            return true
+        } catch {
+            return false
+        }
+    }
+
     public func refreshQuietly() {
         guard !queued, availability != .unsupported else { return }
         queued = true
@@ -318,10 +348,11 @@ public final class VotesManager: VotesRepository {
         try await task.value
     }
 
-    private func readNow(quietly: Bool) async throws {
+    private func readNow(quietly: Bool) async throws { // swiftlint:disable:this cyclomatic_complexity
         // A vault without the feature is asked again only after the next opening (§10.19.8); held or due: nothing is read.
         guard availability != .unsupported, !gated() else { return }
         let g = generation
+        let epoch = attempts.epoch
         if votes.isEmpty { load = .loading }
         let acks = Array(pendingAck.prefix(Self.maxAcks))
         do {
@@ -329,11 +360,15 @@ public final class VotesManager: VotesRepository {
             var all: [VoteSummary] = []
             var head: VoteListing?
             var after: String?
+            var whole = false
             for n in 0..<Self.maxPages {
                 let page = VoteWire.listing(try await o().voteList(after: after, ack: n == 0 ? acks : []))
                 if head == nil { head = page }
                 all += page.votes
-                guard let next = page.next else { break }
+                guard let next = page.next else {
+                    whole = true
+                    break
+                }
                 after = next
             }
             guard g == generation, let head else { return }
@@ -352,6 +387,8 @@ public final class VotesManager: VotesRepository {
             availability = .available
             load = .loaded
             hints = hintsFor(shown, hints)
+            // The kept attempts go with their record: a vote no longer listed, or whose check is final. Only from a whole list.
+            if whole { attempts.forgetUnlisted(shown, epoch: epoch) }
         } catch {
             let f = VaultFailures.map(error)
             if g == generation {
@@ -365,6 +402,9 @@ public final class VotesManager: VotesRepository {
             throw f
         }
     }
+
+    /// A check the vault judged for good: its kept attempt is forgotten (a `gave_up` one is not final).
+    nonisolated static func finalCheck(_ state: CheckState) -> Bool { state == .verified || state == .unconfirmed || state == .failed }
 
     /// The hints of the votes now held: those of a vote that is gone go; a vote seen missing from the site is stamped once.
     private func hintsFor(_ list: [VoteSummary], _ old: [VoteKey: VoteHint]) -> [VoteKey: VoteHint] {

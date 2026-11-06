@@ -45,6 +45,7 @@ extension VaultManager {
             },
             held: { ref.manager?.ownerChecks.ownerCheck?.state == .held }
         )
+        feed.onChanged = { ref.manager?.feedSeen($0) }
         approvals.onDecided = { [weak feed] kinds, ref in feed?.markReadWhere(kinds: kinds, ref: ref) }
         approvals.onAskRead = { [weak feed] ref, onlySingle in feed?.markAskRead(ref: ref, onlySingle: onlySingle) }
         followHold(checks, ref)
@@ -142,5 +143,7 @@ extension VaultManager {
         approvals.clear()
         history.clear()
         votes.clear()
+        // The kept attempts at the results too (a lock keeps them; a wipe does not).
+        votes.forgetStored()
     }
 }

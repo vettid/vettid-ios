@@ -84,6 +84,8 @@ public enum Capabilities {
     public static let recoveryR = "recovery_r"
     /// The release offers recovery (listed only then).
     public static let recoveryOffered = "recovery_offered"
+    /// (0.83.3) `other_rows` and `rows_unavailable` of `vote.results.submit` (§10.19.6 step 3): sent only to a vault with it.
+    public static let voteRows = "vote_rows"
 
     public static let member = "capabilities"
     private static let maxNames = 32

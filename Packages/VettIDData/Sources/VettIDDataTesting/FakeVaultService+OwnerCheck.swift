@@ -151,6 +151,13 @@ extension FakeVaultService {
 
     // MARK: - vault.status and the settings
 
+    /// `vault.status`'s `relay` (VAULT-MESSAGING 0.84.0 §10.2): `"refused"` while the relay refuses the vault's new key; nil:
+    /// the field is absent. Another value is sent as it is.
+    public var relayStatus: String? {
+        get { locked { relayValue } }
+        set { locked { relayValue = newValue } }
+    }
+
     /// `vault.status` (§10.2) with `owner_check` (§3.6) and `recovery` (§11.14.11). Callers hold ``cond``.
     func status(_ m: Inner) throws {
         let state = checkState()
@@ -163,7 +170,7 @@ extension FakeVaultService {
             oc += #","waiting":{"messages":\#(w[0]),"requests":\#(w[1]),"calls":\#(w[2]),"other":\#(w[3])}"#
         }
         oc += idleMember() + "}"
-        let scale = timeScaleValue.map { ",\"time_scale\":\($0)" } ?? ""
+        let scale = (timeScaleValue.map { ",\"time_scale\":\($0)" } ?? "") + (relayValue.map { ",\"relay\":\"\($0)\"" } ?? "")
         try reply(m.type, #"{"vault_id":"\#(vaultID)","state_seq":\#(stateSeq),"header_seq":\#(headerSeq),"provisional":\#(!confirmedValue),"devices":1,"connections":0,"owner_check":\#(oc),"recovery":{"state":"armed","attempts":{"used":0,"of":10},"counter":"\#(recoveryCounterValue)"}\#(scale)\#(unlockMember)}"#, re: m.id)
     }
 

@@ -46,6 +46,10 @@ public enum VaultFiles {
     /// The canary manifest installed out of band (``CanaryManifestManager``). Not one of ``all(in:)``: it holds nothing
     /// of a vault, so its presence alone does not refuse the first-run cleanup (chosen; not in the spec).
     public static let canary = "canary-manifest"
+    /// The last attempt at each vote's results (VAULT-MESSAGING 0.83.6 §10.19.6): times and hashes, never a choice, a row or
+    /// a proof (``ResultsAttempts``). Not one of ``all(in:)`` for the same reason as the canary's; a wipe erases it with the
+    /// data directory and ``VotesManager/forgetStored()`` empties it.
+    public static let voteAttempts = "vote-attempts"
     /// Retired: what only this phone learnt of connection requests (``ConnectionsManager``), written by earlier builds.
     /// The requests, their names and the declines now live in memory only; the file is deleted at the start.
     public static let connections = "connections"
@@ -164,6 +168,8 @@ public struct VaultManagerConfig: Sendable {
     public var releaseUpdateSleep: LockSleep = realLockSleep
     /// (IOS-PLAN §4.2) The waits between the re-reads of a vault being deleted (a virtual clock in the tests).
     public var deletionSleep: LockSleep = realLockSleep
+    /// How the one re-read of a refused relay waits (``VaultManager/relayRecheckSeconds``).
+    public var relaySleep: LockSleep = realLockSleep
     /// The pause before a change whose answer was lost is checked again (VAULT-MESSAGING §11.14.9 "A lost answer": 30 s,
     /// doubling up to 5 minutes), in seconds.
     public var changeCheckSleep: @Sendable (TimeInterval) async throws -> Void
@@ -205,6 +211,10 @@ public struct VaultManagerConfig: Sendable {
     /// The public votes site the app reads for the vault (IOS-PLAN §4.16 "The site"); nil where the build has none (the
     /// dev stack, the tests that do not set one): nothing is fetched or sent.
     public var votesSite: (any VoteSite)?
+    /// Whether the network is unmetered (``PathNetworkMeter`` on the iPhone): after 7 days a `gave_up` vote's `rows.json` is
+    /// downloaded on an unmetered network, and at most weekly on any other (owner decision a, 2026-11-06). The default
+    /// cannot tell, which counts as metered.
+    public var networkMeter: any NetworkMeter = UnknownNetworkMeter()
     /// The waits of the hourly work with the votes site (a sleep the tests release).
     public var votesSleep: @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) }
 

@@ -487,16 +487,17 @@ struct VoteSiteSafetyTests: VotesTestCase {
         let (gate, reached) = holding("p/\(pid)/results.json")
         let first = Task { try await m.checkResults(key) }
         #expect(await eventually { reached.isCompleted })
-        // The hourly run and a `check_due` event meet it: neither starts another.
-        let hourly = Task { try? await m.syncOnce() }
-        m.onEvent(event("vote.event", #"{"proposal_id":"\#(pid)","connection_id":"\#(VoteFixture.conn)","event":"check_due","state":"closed"}"#))
-        let joined = Task { try await m.checkResults(key) }
-        try await Task.sleep(for: .milliseconds(50))
-        gate.complete(())
+        // The hourly run and a `check_due` event meet it: neither starts another. Both are awaited here, while the check is
+        // still held (they skip a check on its way; they do not wait for it), so that they surely met it in flight.
+        try await m.syncOnce()
+        let runner = try #require(m.siteRunner)
+        await runner.submitDueNow(ifGeneration: runner.haltGeneration)
+        #expect(vault.submits.isEmpty)
+        // A second **Check again** joins it: the gate is released by a task that can only run once this call has suspended
+        // on the check in flight (the main actor is serial), so the join is certain, with no wait to race.
+        Task { gate.complete(()) }
+        _ = try await m.checkResults(key)
         _ = try await first.value
-        _ = try await joined.value
-        await hourly.value
-        try await Task.sleep(for: .milliseconds(100))
         #expect(vault.submits.count == 1)
     }
 

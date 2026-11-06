@@ -46,10 +46,16 @@ extension VaultApi {
         try await voteOp(Self.typeVoteGet, Self.pair(connectionID, proposalID))
     }
 
-    /// `vote.cast{connection_id, proposal_id, choice_id}`: `{proposal_id, ballot: {state}}`. `credential_locked` means the
-    /// unlock window is closed. The app never repeats it after an answer (§10.19.8).
+    /// `vote.cast{connection_id, proposal_id, choice_id, pad}`: `{proposal_id, ballot: {state}}`. `credential_locked` means
+    /// the unlock window is closed. The app never repeats it after an answer (§10.19.8).
     public func voteCast(connectionID: String, proposalID: String, choiceID: String) async throws -> JsonObject {
-        try await voteOp(Self.typeVoteCast, Self.pair(connectionID, proposalID).string("choice_id", choiceID))
+        try await voteOp(Self.typeVoteCast, Self.voteCastBody(connectionID, proposalID, choiceID))
+    }
+
+    /// The body of `vote.cast` (VAULT-MESSAGING 0.83.6 §10.19.8): with `pad` (§10.19.5, ``VotePad``), so that its size is
+    /// the same for every `choice_id` of 1 to 32 bytes.
+    static func voteCastBody(_ connectionID: String, _ proposalID: String, _ choiceID: String) -> JsonBuilder {
+        pair(connectionID, proposalID).string("choice_id", choiceID).string("pad", VotePad.of(choiceID))
     }
 
     /// `vote.check{connection_id, proposal_id}`: asks the service `vote.status` now; `{}`.

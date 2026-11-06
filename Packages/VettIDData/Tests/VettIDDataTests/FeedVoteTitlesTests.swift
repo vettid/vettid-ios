@@ -32,6 +32,28 @@ import VettIDVault
         #expect(FeedKinds.title(Self.item("vote.open"), Self.names, details: false) == "A new vote")
     }
 
+    /// The give-up item (VAULT-MESSAGING 0.83.6 §10.19.6 step 4; owner decision a, 2026-11-06): a `vote.result` whose vote the
+    /// list has `gave_up` has its own title and detail, and the same second line; a vote not in the list reads as a result.
+    @Test func aGaveUpVoteResultIsTheGiveUpItem() {
+        let gaveUp = VoteSummary(proposalID: "p1", connectionID: "c1", title: "Adopt the budget", state: .closed, check: VoteCheck(state: .gaveUp))
+        let verified = VoteSummary(proposalID: "p2", connectionID: "c1", title: "Another", state: .closed, check: VoteCheck(state: .verified))
+        let names = FeedNames(connections: [], approvals: [], votes: [gaveUp, verified])
+        #expect(names.votesGaveUp == ["c1/p1"] && FeedNames.votesGaveUp([gaveUp, verified]) == ["c1/p1"])
+        let item = Self.item("vote.result")
+        #expect(FeedKinds.title(item, names) == "Vote results not checked yet")
+        #expect(FeedKinds.title(item, names, details: false) == "Vote results not checked yet")
+        #expect(FeedKinds.sheetDetail(item, names) == "VettID couldn't check the published results of this vote yet. It will check them again by itself when it can. You don't need to do anything.")
+        #expect(FeedKinds.supporting(item, names)?.hasSuffix(": \u{2068}Adopt the budget\u{2069}") == true)
+        // Another vote of the list, one not in it, other kinds and a list without the state read as before.
+        #expect(FeedKinds.title(Self.item("vote.result", ref: "p2"), names) == "Vote results are out")
+        #expect(FeedKinds.title(Self.item("vote.result", ref: "gone"), names) == "Vote results are out")
+        #expect(FeedKinds.title(Self.item("vote.open"), names) == "A new vote")
+        #expect(FeedKinds.title(item, Self.names) == "Vote results are out")
+        #expect(FeedKinds.sheetDetail(item, Self.names) == nil && FeedKinds.sheetDetail(Self.item("vote.open"), names) == nil)
+        // The same pair from another service is another vote.
+        #expect(FeedKinds.title(Self.item("vote.result", connection: "c2"), names) == "Vote results are out")
+    }
+
     @Test func theSecondLineIsTheServiceAndTheVotesTitle() {
         let service = "\u{2068}Example Cooperative\u{2069}"
         for kind in ["vote.open", "vote.closing", "vote.result"] {

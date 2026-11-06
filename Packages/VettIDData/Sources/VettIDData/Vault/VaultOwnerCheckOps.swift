@@ -15,12 +15,11 @@ struct VaultOwnerCheckOps: OwnerCheckOps {
     /// Runs before the check is sent: refuses it while a change of PIN or password is unresolved (VAULT-MESSAGING
     /// §11.14.9 "A lost answer").
     var gate: @Sendable () async throws -> Void = {}
-    /// Hears each `vault.status` (its `time_scale`, STAGING-TIME-SCALE §5.2).
-    var onStatus: @Sendable (VaultStatusInfo) async -> Void = { _ in }
+    /// Runs each `vault.status` read, which hears it (its `time_scale`, STAGING-TIME-SCALE §5.2; its `relay`, 0.84.0).
+    var around: @Sendable (@Sendable () async throws -> VaultStatusInfo) async throws -> VaultStatusInfo = { try await $0() }
 
     func statusAndRecovery() async throws -> (OwnerCheckStatus?, RecoveryStatus?) {
-        let s = try await api.status()
-        await onStatus(s)
+        let s = try await around { try await api.status() }
         return (s.ownerCheck, s.recovery)
     }
 

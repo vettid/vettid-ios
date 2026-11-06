@@ -291,7 +291,7 @@ public enum HistoryKindTexts {
         "history_detail_recovery_closed_unconfirmed": "The service could not confirm this step.",
         "history_detail_presence_unrecorded": "If this lasts three days, your vault is no longer protected against a recovery started by someone else.",
         "history_detail_presence_unrecorded_scaled": "If this lasts %@, your vault is no longer protected against a recovery started by someone else.",
-        "history_detail_rotation_failed": "Your connections still know your old keys. VettID will offer the update again.",
+        "history_detail_rotation_failed": "Your vault couldn't finish updating its keys. It will try again the next time you unlock it.",
         "history_detail_rotated_transfer": "Replaced when you moved your vault to a new phone.",
         "history_detail_rotate_conflict": "This connection's vault announced two different new keys. That can mean someone holds an old copy of their vault. Nothing is sent or received until you check.",
         "history_detail_push_google": "Through Google.",

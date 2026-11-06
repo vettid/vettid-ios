@@ -139,6 +139,8 @@ public final class FeedManager: FeedRepository {
     /// The items after each change (a read, an event, a status set here or on another device, the clear): the
     /// notifications of items read, archived or deleted anywhere go (IOS-PLAN §6.7).
     @ObservationIgnored public var onItems: @MainActor ([FeedItem]) -> Void = { _ in }
+    /// Every item a read or an event brought, before the History-only kinds are dropped (the relay notice's re-read).
+    @ObservationIgnored var onChanged: @MainActor ([FeedItem]) -> Void = { _ in }
     /// The feed was forgotten (the vault locked, was held or wiped): every item notification goes.
     @ObservationIgnored public var onCleared: @MainActor () -> Void = {}
 
@@ -279,6 +281,7 @@ public final class FeedManager: FeedRepository {
     /// Replaces each item by id, removes the deleted ones, drops what is past retention, and publishes. The History-only
     /// kinds (IOS-PLAN §4.1) are neither listed nor counted.
     private func apply(_ changed: [FeedItem]) {
+        onChanged(changed)
         for item in changed {
             let gone = item.status == Self.statusDeleted || FeedKinds.isHidden(item)
             byID[item.itemID] = gone ? nil : item

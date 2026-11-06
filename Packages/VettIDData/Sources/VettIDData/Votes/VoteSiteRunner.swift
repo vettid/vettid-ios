@@ -13,6 +13,14 @@ public enum ResultsOutcome: Equatable, Sendable {
     case siteUnreachable
     /// The site's results could not be checked (a problem the app found itself, or results larger than the vault takes).
     case problem
+    /// A `gave_up` check run again whose `results.json`, signature and bundle are those of the last attempt, which had
+    /// `rows.json`, was answered and did not end on the vault's side (VAULT-MESSAGING 0.83.6 §10.19.6): `rows.json` is not
+    /// downloaded again and nothing is sent, since the same results, row and proof get the same answer. Shows nothing new.
+    case unchanged
+    /// A `gave_up` re-check whose `rows.json` download waits for an unmetered network, or for the weekly cap on a metered
+    /// one (owner decision a, 2026-11-06): nothing more was done and nothing sent. Shows nothing new: the vote's own state
+    /// line says where it stands.
+    case deferred
 }
 
 /// The vault calls of the work with the public site (VAULT-MESSAGING 0.81.6 §10.19.8): `vote.site.sync` inline or by
@@ -48,7 +56,7 @@ final class VoteSiteRunner {
     let site: any VoteSite
     let reader: VoteSiteReader
     /// The site calls, over the session already open when [quietly] (a run nobody asked for never opens one).
-    private let ops: @MainActor (_ quietly: Bool) async throws -> any VoteSiteOps
+    let ops: @MainActor (_ quietly: Bool) async throws -> any VoteSiteOps
     private let every: Duration
     private let sleep: @Sendable (Duration) async throws -> Void
 
@@ -67,7 +75,7 @@ final class VoteSiteRunner {
     /// Counts the halts: work begun before one and started after it does not run.
     private(set) var haltGeneration = 0
     /// The attempts at a vote's results that are on their way: one at a time for a vote.
-    private var inflight: [VoteKey: Task<ResultsOutcome, any Error>] = [:]
+    var inflight: [VoteKey: Task<ResultsOutcome, any Error>] = [:]
 
     init(
         votes: VotesManager, site: any VoteSite, ops: @escaping @MainActor (Bool) async throws -> any VoteSiteOps,
@@ -321,17 +329,19 @@ final class VoteSiteRunner {
 
     // MARK: The results
 
-    /// The checks that are due: closed, `pending`, and not before the vault's `due_at`; none that is already on its way.
+    /// The checks that are due: closed, `pending`, and not before the vault's `due_at`; and (VAULT-MESSAGING 0.83.6 §10.19.6,
+    /// owner decision a) closed and `gave_up`, which is not final: run again whenever the app opens, as a `pending` one, but
+    /// at most once a day per record, keyed off the state (a `gave_up` check has no `due_at`). None that is already on its way.
     func submitDue() async throws {
         guard let votes else { return }
         let at = votes.now()
         for v in votes.votes {
             try Task.checkCancellation()
-            guard let c = v.check, v.state == .closed, c.state == .pending, c.dueAt.map({ $0 <= at }) ?? true,
-                  inflight[v.key] == nil
-            else { continue }
+            guard let c = v.check, v.state == .closed, inflight[v.key] == nil else { continue }
+            let pending = c.state == .pending && (c.dueAt.map { $0 <= at } ?? true)
+            guard pending || (c.state == .gaveUp && votes.attempts.dailyDue(v.key, at: at)) else { continue }
             do {
-                _ = try await checkResults(v.key, quietly: true)
+                _ = try await checkResults(v.key, quietly: true, due: true)
             } catch is CancellationError {
                 throw CancellationError()
             } catch {
@@ -345,182 +355,6 @@ final class VoteSiteRunner {
     func submitDueNow(ifGeneration generation: Int) async {
         guard site.configured, generation == haltGeneration else { return }
         try? await serially(.runs) { [self] in try await submitDue() }
-    }
-
-    /// The results of a closed vote, fetched, checked as an observer does (BALLOT-PROTOCOL §8.4 items 2 to 4: the rows'
-    /// hash, order and trees, every ballot's signature and choice, the tally and the member's row) and handed to the vault
-    /// (the member's **Check again**, and the run's retry) whenever what the vault itself checks can hold: the results
-    /// parse, their signature is one the vault reads, the bundle is an object, and the member's row has a proof to
-    /// `rows_root` with `tree_size` = `counts.eligible` (VAULT-MESSAGING 0.83.2 §10.19.6 step 1); any other failure of
-    /// the check is ``VoteHint/resultsDontAddUp`` and does not stop the submit. The vault alone judges. An attempt already on its way for the
-    /// vote is joined, not repeated.
-    func checkResults(_ key: VoteKey, quietly: Bool) async throws -> ResultsOutcome {
-        guard site.configured else { return .siteUnreachable }
-        if let running = inflight[key] { return try await running.value }
-        let generation = haltGeneration
-        let task = Task { @MainActor [self] () -> ResultsOutcome in
-            defer { inflight[key] = nil }
-            // A lock or the app leaving between the call and this start: it does not begin.
-            guard generation == haltGeneration else { throw CancellationError() }
-            return try await serially(.attempts) { [self] in try await attempt(key, quietly: quietly) }
-        }
-        inflight[key] = task
-        return try await task.value
-    }
-
-    private func attempt(_ key: VoteKey, quietly: Bool) async throws -> ResultsOutcome {
-        guard let votes else { throw CancellationError() }
-        let detail = try await votes.detail(key, quietly: quietly)
-        try Task.checkCancellation()
-        guard let tag = detail.recordTag.flatMap({ try? Base64s.decodeStd($0, Self.tagSize) }) else { return fail(key, .problem) }
-        let files: VoteSiteReader.ResultsFiles
-        switch try await reader.fetchResults(key.proposalID) {
-        case .tooLarge: return fail(key, .problem, tooLarge: true)
-        // More rows than the results can have: no row with a proof, as when ``VoteRows/ownRow(results:rows:recordTag:)``
-        // refuses them.
-        case .rowsTooLarge: return noRow(key)
-        case .siteDown: return unavailable(key, true)
-        case .notPublished: return unavailable(key, false)
-        case .files(let f): files = f
-        }
-        // The vault refuses a signature of another length, and a bundle that is no object, with the whole call.
-        let level = VoteSync.Level.resultsBundle
-        let bundleBytes = files.bundle
-        let compact = await Task.detached { VoteSync.compactObject(bundleBytes, level: level) }.value
-        try Task.checkCancellation()
-        guard files.sig.count == VoteSiteLimits.sigLength, let bundle = compact else { return fail(key, .problem) }
-        let doc = files.doc
-        let rows = files.rows
-        let sig = files.sig
-        let checked: VoteRows.Checked
-        do {
-            checked = try await Task.detached { try VoteRows.ownRow(results: doc, rows: rows, recordTag: tag) }.value
-        } catch {
-            return noRow(key)
-        }
-        // A member's row whose ballot the vault would not read makes it refuse the whole call: nothing is sent
-        // (VAULT-MESSAGING 0.81.6 §10.19.8, "Choice ids in results").
-        guard let body = Self.submitBody(key, doc: doc, sig: sig, bundle: bundle, own: checked.own) else { return fail(key, .problem) }
-        try Task.checkCancellation()
-        // The site's numbers must also be the ones the vault holds (`vote.get`), as for a check again: a verdict about
-        // another copy says nothing of the numbers the screen shows (chosen; not in the spec).
-        let sameNumbers = await Task.detached { Self.sameNumbers(doc, detail) }.value
-        try Task.checkCancellation()
-        // A failure of the observer's check outside the four inputs does not hold the row back (VAULT-MESSAGING 0.83.2
-        // §10.19.6 step 1): the vault judges it, and the member is told the rest doesn't add up whatever it answers.
-        return try await submit(key, body, dontAddUp: checked.problem != nil || !sameNumbers, quietly: quietly)
-    }
-
-    /// No row with a proof: nothing to submit, and results that don't add up for the screens.
-    private func noRow(_ key: VoteKey) -> ResultsOutcome {
-        let outcome = fail(key, .problem)
-        if !Task.isCancelled {
-            votes?.hint(key) {
-                $0.observerVerdict = false
-                $0.verdictKept = false
-            }
-        }
-        return outcome
-    }
-
-    /// Hands [body] to the vault and keeps what it answered, and whether the rest of the results [dontAddUp], for
-    /// the screens.
-    private func submit(_ key: VoteKey, _ body: [UInt8], dontAddUp: Bool, quietly: Bool) async throws -> ResultsOutcome {
-        guard let votes else { throw CancellationError() }
-        let answer: JsonObject
-        do {
-            answer = try await guarded { try await self.ops(quietly).voteResultsSubmit(body: body) }
-        } catch {
-            // A refused or lost call is kept too: the find is the app's own, whatever the vault made of it (chosen; not in
-            // the spec).
-            if !Task.isCancelled, !(error is CancellationError) {
-                votes.hint(key) {
-                    $0.resultsDontAddUp = dontAddUp
-                    $0.observerVerdict = !dontAddUp
-                    $0.verdictKept = false
-                }
-            }
-            throw error
-        }
-        try Task.checkCancellation()
-        var state = CheckState.unknown
-        var reason: String?
-        if case .object(let check)? = answer["check"] {
-            state = CheckState(rawValue: VaultJSON.string(check, "state") ?? "") ?? .unknown
-            reason = VaultJSON.string(check, "reason")
-        }
-        // A submission the vault leaves pending for its input is the problem the screens say.
-        let input = state == .pending && reason == "input"
-        votes.hint(key) {
-            $0.gaveUp = nil
-            $0.resultsProblem = input
-            $0.resultsTooLarge = false
-            $0.resultsDontAddUp = dontAddUp
-            $0.observerVerdict = !dontAddUp
-            // Kept for the next opening only once the vault judged the results it was handed.
-            $0.verdictKept = state == .verified || state == .unconfirmed
-        }
-        votes.refreshQuietly()
-        return .submitted(state)
-    }
-
-    /// `vote.results.submit`'s body (§10.19.8): the site's results as the standard base64 of their exact bytes, the row as
-    /// the site has it (its choice included: a receipt cannot be checked without it) and its proof. Nil when the row is
-    /// not what the vault reads (a key of other than 32 bytes, a signature of other than 64, a choice id of other than
-    /// `[a-z0-9-]{1,32}`): it would refuse the whole call.
-    static func submitBody(_ key: VoteKey, doc: [UInt8], sig: [UInt8], bundle: String, own: OwnRow) -> [UInt8]? {
-        let row = JsonBuilder()
-        if let b = own.ballot {
-            guard let vk = try? b.string("vk"), let choice = try? b.string("choice_id"), let bs = try? b.string("ballot_sig"),
-                  (try? Base64s.decodeStd(vk, 32)) != nil, (try? Base64s.decodeStd(bs, VoteSiteLimits.sigLength)) != nil,
-                  validChoice(choice)
-            else { return nil }
-            row.raw("ballot", JsonBuilder().string("vk", vk).string("choice_id", choice).string("ballot_sig", bs).build())
-        } else {
-            row.raw("ballot", "null")
-        }
-        let proof = JsonBuilder().uint("index", own.index).uint("tree_size", own.treeSize)
-            .raw("path", JsonBuilder.array(own.path.map { JsonBuilder.quote(Base64s.encodeStd($0)) }))
-        return JsonBuilder().string("connection_id", key.connectionID).string("proposal_id", key.proposalID)
-            .base64("results", doc).base64("results_sig", sig).raw("bundle", bundle)
-            .raw("row", row.build()).raw("row_proof", proof.build()).bytes()
-    }
-
-    private static func validChoice(_ s: String) -> Bool {
-        (1...32).contains(s.utf8.count) && s.utf8.allSatisfy { ($0 >= 0x61 && $0 <= 0x7A) || ($0 >= 0x30 && $0 <= 0x39) || $0 == 0x2D }
-    }
-
-    /// The site could not be reached, or had no results (yet): which of the two is what a `gave_up` check will say.
-    private func unavailable(_ key: VoteKey, _ siteDown: Bool) -> ResultsOutcome {
-        siteDown ? fail(key, .siteUnreachable, .site) : fail(key, .notPublished, .unpublished)
-    }
-
-    private func fail(_ key: VoteKey, _ outcome: ResultsOutcome, _ why: GaveUpWhy? = nil, tooLarge: Bool = false) -> ResultsOutcome {
-        guard !Task.isCancelled else { return outcome }
-        votes?.hint(key) {
-            $0.gaveUp = why ?? $0.gaveUp
-            $0.resultsProblem = outcome == .problem
-            $0.resultsTooLarge = tooLarge
-            // Nothing was submitted this time: what the screens say is this attempt's. The verdict of an earlier check
-            // (``VoteHint/observerVerdict``) stays: the documents are write-once.
-            $0.resultsDontAddUp = false
-        }
-        return outcome
-    }
-
-    /// For a `gave_up` check the app has no reason for: looks at the site once and remembers which of two things.
-    func diagnoseGaveUp(_ key: VoteKey) async {
-        guard site.configured, let votes, votes.hints[key]?.gaveUp == nil else { return }
-        guard let answer = try? await reader.get("p/\(key.proposalID)/results.json", VoteSiteLimits.resultsMax) else { return }
-        switch answer {
-        case .absent: votes.hint(key) { $0.gaveUp = .unpublished }
-        case .unreachable: votes.hint(key) { $0.gaveUp = .site }
-        case .tooLarge: votes.hint(key) {
-            $0.resultsProblem = true
-            $0.resultsTooLarge = true
-        }
-        case .found: break // published: **Check again** hands them to the vault
-        }
     }
 
     // MARK: Helpers
@@ -555,7 +389,7 @@ final class VoteSiteRunner {
         return try await withTaskCancellationHandler { try await task.value.get() } onCancel: { task.cancel() }
     }
 
-    private func guarded<T: Sendable>(_ body: @MainActor () async throws -> T) async throws -> T {
+    func guarded<T: Sendable>(_ body: @MainActor () async throws -> T) async throws -> T {
         do {
             return try await body()
         } catch is CancellationError {

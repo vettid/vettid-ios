@@ -12,15 +12,20 @@ public struct FeedNames: Equatable, Sendable {
     /// Vote titles from the Votes list in memory, by ``VoteTitles/key(_:_:)`` (cleaned, one line); the second line of a vote
     /// item. Never a choice.
     public var votes: [String: String]
+    /// The votes of the list in memory whose check is `gave_up`, by ``VoteTitles/key(_:_:)``: their `vote.result` item is the
+    /// give-up one (VAULT-MESSAGING 0.83.6 §10.19.6 step 4; the item itself carries no check state). A vote not in the list
+    /// reads as a result.
+    public var votesGaveUp: Set<String>
 
     public init(
         connections: [String: ConnectionInfo] = [:], items: [String: String] = [:], approvals: [String: PendingApproval] = [:],
-        votes: [String: String] = [:]
+        votes: [String: String] = [:], votesGaveUp: Set<String> = []
     ) {
         self.connections = connections
         self.items = items
         self.approvals = approvals
         self.votes = votes
+        self.votesGaveUp = votesGaveUp
     }
 
     /// From the lists the repositories hold.
@@ -32,8 +37,14 @@ public struct FeedNames: Equatable, Sendable {
             votes: Dictionary(
                 votes.compactMap { v in AccountNames.isolateOrNull(v.title).map { (VoteTitles.key(v.connectionID, v.proposalID), $0) } },
                 uniquingKeysWith: { a, _ in a }
-            )
+            ),
+            votesGaveUp: Self.votesGaveUp(votes)
         )
+    }
+
+    /// ``votesGaveUp`` from the Votes list in memory: the keys of the votes whose check is `gave_up`.
+    public static func votesGaveUp(_ list: [VoteSummary]) -> Set<String> {
+        Set(list.filter { $0.check?.state == .gaveUp }.map { VoteTitles.key($0.connectionID, $0.proposalID) })
     }
 }
 
@@ -109,6 +120,17 @@ public extension FeedKinds {
         case "vote.open", "vote.closing", "vote.result": return voteLine(item, names)
         default: return eventLine(item) ?? itemName(item, names)
         }
+    }
+
+    /// A `vote.result` item whose vote the list in memory has with its check `gave_up` (§10.19.6 step 4).
+    private static func voteGaveUp(_ item: FeedItem, _ names: FeedNames) -> Bool {
+        item.kind == "vote.result" && names.votesGaveUp.contains(VoteTitles.key(item.connectionID, item.ref))
+    }
+
+    /// The detail sheet's own line under the second line: the give-up item asks nothing of the member (owner decision a,
+    /// 2026-11-06); nil for other items. Mirrors vettid-android `FeedKinds.sheetDetail`.
+    static func sheetDetail(_ item: FeedItem, _ names: FeedNames) -> String? {
+        voteGaveUp(item, names) ? DataStrings.feedVoteResultGaveUpDetail : nil
     }
 
     /// A vote item's second line (ANDROID-PLAN 0.1.102 "Votes"): "<service>: <proposal title>", the title from the Votes list in
@@ -280,7 +302,7 @@ public extension FeedKinds {
         case "identity.rotate_conflict": return DataStrings.feedRotateConflict(connectionName(item, names))
         case "vote.open": return DataStrings.feedVoteOpen
         case "vote.closing": return DataStrings.feedVoteClosing
-        case "vote.result": return DataStrings.feedVoteResult
+        case "vote.result": return voteGaveUp(item, names) ? DataStrings.feedVoteResultGaveUp : DataStrings.feedVoteResult
         case "vote.problem": return DataStrings.feedVoteProblem
         case "leash.item.run", "leash.item.proxy":
             let thing = details ? itemName(item, names) : nil

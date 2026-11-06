@@ -60,6 +60,23 @@ enum ShellStrings {
         String(localized: "credential_alarm_review", defaultValue: "Review", bundle: .module)
     }
 
+    /// (VAULT-MESSAGING 0.84.0 §3.4; NEW, for the owner's approval) The lasting notice while `vault.status` has `relay: "refused"`.
+    static var relayRefusedTitle: String {
+        String(localized: "relay_refused_title", defaultValue: "Your vault couldn't move to its new address", bundle: .module)
+    }
+
+    static var relayRefusedBody: String {
+        String(
+            localized: "relay_refused_body",
+            defaultValue: "Your vault may not receive messages until its keys are replaced.",
+            bundle: .module
+        )
+    }
+
+    static var relayRefusedAction: String {
+        String(localized: "relay_refused_action", defaultValue: "Replace your vault's keys", bundle: .module)
+    }
+
     /// (Release R, ANDROID-PLAN "Transfer") The offer to rotate after a PIN or password change.
     static var rotateOffer: String {
         String(
