@@ -263,4 +263,36 @@ extension VaultManagerTransferInTests {
         clock.stop()
         phone.heartbeatPauses.release()
     }
+
+    /// A request sent before a freeze (at 60 s, wait 25 s; the last tick at 61 s, the wake at 75 s) whose cut is noticed
+    /// long after the wake (at 130 s) is the freeze's, but its lease may start as late as the notice: the last collect
+    /// is held to 130 + V + 15 s = 205 s, not to the freeze's 175 s.
+    @Test func aFreezesCutNoticedLateHoldsFromTheNotice() async throws {
+        defer { phone.close() }
+        _ = try await scanned()
+        let d = try #require(m.session?.device)
+        d.stop()
+        phone.freezeClocks()
+        phone.heartbeatPauses.holding = true
+        let clock = VaultManager.WindowClock(visibility: 60, backgrounds: m.moveFlags.book.backgrounds, background: false)
+        let t0 = m.config.uptime()
+        clock.start(m, d)
+        func step(to seconds: TimeInterval) {
+            while m.config.uptime() < t0 + seconds {
+                phone.uptimeAhead += min(8, t0 + seconds - m.config.uptime())
+                clock.follow(m, d)
+            }
+        }
+        step(to: 60)
+        clock.own.sent(.init(at: m.config.uptime(), wait: 25))
+        step(to: 61)
+        phone.uptimeAhead += 14
+        clock.follow(m, d)
+        #expect(clock.finalNotBefore == t0 + 175, "the freeze's hold: the wake + 25 + V + 15")
+        step(to: 130)
+        clock.cut(m, d, sent: clock.own.out)
+        #expect(clock.finalNotBefore == t0 + 205, "held from the notice: \((clock.finalNotBefore ?? 0) - t0)")
+        clock.stop()
+        phone.heartbeatPauses.release()
+    }
 }

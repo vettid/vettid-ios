@@ -249,7 +249,8 @@ extension VaultManagerTransferInTests {
     }
 
     /// The collector's long poll sent after the last tick fails on the wake, and the collector sends again before the
-    /// window looks: the cut is the freeze's, and the last collect waits to its s + wait + V + 15 s.
+    /// window looks: the cut is the freeze's, and the last collect waits to its lease's end, max(s + wait, the notice on the
+    /// wake) + V + 15 s.
     @Test func aCollectorCutOnTheWakeIsTheFreezes() async throws {
         defer { phone.close() }
         try await windowOnFrozenClocks()
@@ -269,7 +270,7 @@ extension VaultManagerTransferInTests {
         d.collectorRequest(true, of: d.collectRound)
         d.collectorSent(of: d.collectRound, wait: d.collectorWait)
         clock.follow(m, d)
-        #expect(clock.finalNotBefore == sent + d.collectorWait + 75)
+        #expect(clock.finalNotBefore == max(sent + d.collectorWait, m.config.uptime()) + 75)
         clock.stop()
         phone.heartbeatPauses.release()
     }

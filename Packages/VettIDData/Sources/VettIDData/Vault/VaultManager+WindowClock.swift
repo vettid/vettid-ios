@@ -52,23 +52,26 @@ extension VaultManager {
     /// freeze). A cut, a freeze (each counts as a note) while that last collect is out, or during its hold, and a refusal
     /// of it (429, a stale signature), give one more last collect (at most one per window, so held last collects cannot
     /// repeat), no sooner than the lease end of the cut, of a freeze noted meanwhile (the wake + the wait of what was sent
-    /// before it + V + 15 s), the hold raised meanwhile, or the refusal's `retry_after` (at most V). A bare background
-    /// gives nothing, and the same notes during the looks give the one more too, if it is unused.
+    /// before it + V + 15 s), the hold raised meanwhile, or the refusal's `retry_after` (at most V). Before the one more, a
+    /// bare background gives nothing, and the same notes during the looks give the one more too, if it is unused.
     ///
     /// **The hold budget** (the shared rule with Android #307): the first hold past the cap is free, then ONE extra in all,
     /// the one more last collect (with its own hold); no other hold past the cap is taken after it, apart from the first
     /// one if none was raised before. A hold that ends at or below the cap is free (the cap bounds it). After the
     /// one more, a cut or a freeze still moves the end out within the cap, and the window collects on to it; a hold raised
     /// during the one more's collect is waited for once more, with a `wait=0` look before the drop
-    /// (``holdAfterExtra(_:)``), if the budget allows it.
+    /// (``holdAfterExtra(_:)``), if the budget allows it. A background during the one more's collect moves the end out
+    /// too if the app is back in the foreground when that collect is answered; if it is still in the background then, the
+    /// window goes to its look and the drop (nothing is decided in the background, and the look collects after it).
     ///
     /// After the last collect, in the foreground, the window takes a last look
     /// (``VaultManager/lastLook(_:clock:sessionEnds:)``: a `wait=0` collect after a background); a cut or a refusal of the
     /// look's collect, while the one more is still unused, gives it (no sooner than that collect's send + V + 15 s), and
     /// the drop follows that one's look. A freeze leases whatever was sent before it from the wake + that request's `wait`
     /// (the relay may be handed it only then). So the drop comes at most cap + 2 × V + 648 s of foreground time (a
-    /// collect out at the end, two holds past the cap, three last collects and the looks, the collector's round after each
-    /// last collect, the pauses); time in the background or frozen comes on top (chosen; the shared rule with Android
+    /// collect out at the end, two holds past the cap, the last collects past the cap (the first, the one more, and the
+    /// look after the hold waited for after it; those that a note after the one more gives end by the cap), the looks,
+    /// the collector's round after each last collect, the pauses); time in the background or frozen comes on top (chosen; the shared rule with Android
     /// #307, the erratum to follow).
     @MainActor
     final class WindowClock {
@@ -120,7 +123,7 @@ extension VaultManager {
         /// The latest start of a cut's lease noted: max(send + wait, when the cut was noticed) + 15 s.
         private var lastCutLease: TimeInterval?
         /// The earliest uptime of the last collect, after a freeze while a request was out, or a cut past the cap or whose
-        /// s + wait + V is past it.
+        /// lease (max(s + wait, notice) + 15 s + V) ends past it.
         private(set) var finalNotBefore: TimeInterval?
         private var backgrounds: Int
 
@@ -208,7 +211,10 @@ extension VaultManager {
         /// follow).
         private func noteCut(_ sent: WindowSent?, noticed: TimeInterval) {
             if let sent, let began = freezeBegan, sent.at <= began + 1 {
-                holdFinal(sent.answered)
+                // Its lease may start as late as the cut is noticed, as for any cut; and it counts as a note, so that a
+                // hold it raises while the last collect is out gives the one more.
+                notes += 1
+                holdFinal(max(sent.answered, noticed))
                 return
             }
             notes += 1
@@ -257,7 +263,9 @@ extension VaultManager {
         }
 
         /// The hold of the one more last collect being given now for a cut: the end of the cut's lease, and of any
-        /// freeze's lease noted since. It is the extra's own hold: not counted before it is waited for.
+        /// freeze's lease noted since. It is the extra's own hold: set here, not through ``raiseHold(to:)``, so it does
+        /// not use the first hold past the cap (one more may still be raised after it: the two holds past the cap of the
+        /// bound).
         private func holdForRedo(_ lease: TimeInterval) {
             finalNotBefore = max(finalNotBefore ?? 0, lease + visibility, freezeHoldAt ?? 0)
         }
@@ -337,7 +345,8 @@ extension VaultManager {
         }
 
         /// Before the last collect (the window over), after a freeze while a request was out, or a cut past the cap or whose
-        /// s + wait + V is past it: until s + wait + V + 15 s of the request in flight then. A hold at or below the cap
+        /// lease ends past it: until the end of that lease (a cut's: max(s + wait, notice) + 15 s + V; a freeze's: the
+        /// wake + the wait of the request in flight then + V + 15 s). A hold at or below the cap
         /// is waited for each time it moves (bounded by the cap); a hold past it is waited for as the budget allows
         /// (``raiseHold(to:)``), so that cuts cannot chain it (chosen; the shared rule with Android #307, the erratum to
         /// follow). A cut or a freeze during the wait counts as one while the last collect is out.
