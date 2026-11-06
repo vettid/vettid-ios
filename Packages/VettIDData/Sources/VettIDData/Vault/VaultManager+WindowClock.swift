@@ -337,9 +337,9 @@ extension VaultManager {
 
         /// Before the last collect (the window over), after a freeze while a request was out, or a cut past the cap or whose
         /// s + wait + V is past it: until s + wait + V + 15 s of the request in flight then. A cut or a freeze during the
-        /// hold counts as one while the last collect is out (the one more last collect waits for the hold it raised); the
-        /// hold is read once, not waited on again, so that cuts cannot chain it (chosen; the shared rule with Android #307,
-        /// the erratum to follow).
+        /// hold counts as one while the last collect is out (the one more last collect waits for the hold it raised). A
+        /// hold at or below the cap is waited for each time it moves (bounded by the cap); a hold past it is waited for
+        /// once, so that cuts cannot chain it (chosen; the shared rule with Android #307, the erratum to follow).
         func waitForFinalCollect(_ m: VaultManager) async {
             guard over else { return }
             notesAtFinal = notes
