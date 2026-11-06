@@ -25,10 +25,13 @@ extension VaultManager {
         private let lock = NSLock()
         private var now: WindowSent?
         private var latest: WindowSent?
+        private var latestEnd: TimeInterval?
         var out: WindowSent? { lock.withLock { now } }
         var last: WindowSent? { lock.withLock { latest } }
-        func sent(_ s: WindowSent) { lock.withLock { (now, latest) = (s, s) } }
-        func ended() { lock.withLock { now = nil } }
+        /// When the last request ended (uptime); nil while it is out.
+        var lastEnded: TimeInterval? { lock.withLock { latestEnd } }
+        func sent(_ s: WindowSent) { lock.withLock { (now, latest, latestEnd) = (s, s, nil) } }
+        func ended(at up: TimeInterval) { lock.withLock { if now != nil { latestEnd = up }; now = nil } }
     }
 
     /// The window's timer and end, counted on the monotonic uptime (it runs through a sleep of the phone), and what it saw
@@ -43,12 +46,14 @@ extension VaultManager {
     /// A window that is over makes one last `wait=0` collect, then drops. After a freeze while a request was out (the
     /// wake before the cap or after it), or a cut past the cap or whose s + V is past it, that collect goes out no sooner
     /// than s + V + 15 s (``holdMargin``), s being the latest request sent at or before the freeze or cut. A cut, a
-    /// freeze or a background while that last collect is out, or during its hold, and a refusal of it (429, a stale
-    /// signature), give one more last collect (at most one per window), no sooner than its own s + V + 15 s, the hold a
-    /// cut raised meanwhile, or the refusal's `retry_after` (at most V); then the drop, in the foreground, whatever else
-    /// comes. So the drop comes at most 25 s + 3 × ``collectSlack`` + 2 × 30 s + 2 × (V + 40 s) of foreground time past the
-    /// cap (a collect out at the end, two holds, two last collects and the collector's round after each); time in the
-    /// background or frozen comes on top (chosen; the shared rule with Android #307, the erratum to follow).
+    /// freeze or a background (each counts as a note) while that last collect is out, or during its hold, and a refusal of
+    /// it (429, a stale signature), give one more last collect (at most one per window, so held last collects cannot
+    /// repeat), no sooner than its own s + V + 15 s, the hold a cut raised meanwhile, or the refusal's `retry_after` (at
+    /// most V). So does a cut of the collect of the last look that follows, if the one more is still unused (no sooner than
+    /// that collect's send + V + 15 s). Then the drop, in the foreground, whatever else comes. So the drop comes at most
+    /// 25 s + 4 × ``collectSlack`` + 2 × 30 s + 2 × (V + 40 s) of foreground time past the cap (a collect out at the end,
+    /// two holds, two last collects, the collector's round after each, and the look's collect); time in the background or
+    /// frozen comes on top (chosen; the shared rule with Android #307, the erratum to follow).
     @MainActor
     final class WindowClock {
         let length: TimeInterval
@@ -199,12 +204,19 @@ extension VaultManager {
         /// first on a resume) and a background, and moves the end out after one, in the foreground.
         func follow(_ m: VaultManager, _ d: VaultDevice) {
             let up = m.config.uptime()
-            for x in Self.devices(m, d) { watch(x, from: 0) }
+            // A device first seen now counts the cuts from now (those before are not the window's).
+            for x in Self.devices(m, d) { watch(x, from: x.collectorCuts.count) }
             if up - lastTick > VaultManager.freezeGap {
                 // The requests in flight when it began: those out at the last tick, and the latest sent before the next tick
                 // was due, kept after it ended (one that failed on the wake, before this ran), not one sent since the wake.
-                let sends = ([own.last] + collectors.map { $0.lastCollectorSent.map(WindowSent.init) }).compactMap { $0 }
-                let then = sends.filter { $0.at <= lastTick + 1 }.map(\.answered)
+                // Only a request still out when the freeze began (or ended after the last tick) holds the last collect.
+                var sends: [WindowSent] = []
+                if let s = own.last, sentAtFreeze(s, still: own.out != nil, ended: own.lastEnded) { sends.append(s) }
+                for x in collectors {
+                    if let s = x.lastCollectorSent.map(WindowSent.init),
+                       sentAtFreeze(s, still: x.collectRequestSent != nil, ended: x.lastCollectorEnded) { sends.append(s) }
+                }
+                let then = sends.map(\.answered)
                 noteFreeze(began: lastTick, sent: ([lastOut, streamWasOpen ? up : nil] + then).compactMap { $0 }.max())
             }
             lastTick = up
@@ -217,6 +229,8 @@ extension VaultManager {
             }
             if m.backgrounded || m.moveFlags.book.backgrounds != backgrounds {
                 (pending, widen) = (true, true)
+                // A background counts as a note: one while the last collect is out uses up the one more.
+                if m.moveFlags.book.backgrounds != backgrounds { notes += 1 }
                 backgrounds = m.moveFlags.book.backgrounds
             }
             lastOut = outNow().map(\.answered).max()
@@ -224,6 +238,11 @@ extension VaultManager {
             guard pending, !m.backgrounded else { return }
             pending = false
             extend(m, now: up)
+        }
+
+        /// Whether the request [s] was out when the freeze began (the last tick): sent by then, and not ended before it.
+        private func sentAtFreeze(_ s: WindowSent, still: Bool, ended: TimeInterval?) -> Bool {
+            s.at <= lastTick + 1 && (still || ended.map { $0 >= lastTick } ?? true)
         }
 
         /// The requests out now: the window's own and the collectors'.
@@ -273,9 +292,25 @@ extension VaultManager {
             m.backgrounded || m.moveFlags.book.backgrounds != backgroundsAtFinal
         }
 
+        /// The notes so far, to compare after a look's collect (``redoneAfterLook(_:_:notesBefore:)``).
+        func notesNow(_ m: VaultManager, _ d: VaultDevice) -> Int {
+            follow(m, d)
+            return notes
+        }
+
+        /// After a collect of the last look: whether it was cut (or a freeze or background came meanwhile) while the one
+        /// more last collect is unused: then that one is given, no sooner than the look's send + wait + V + 15 s.
+        func redoneAfterLook(_ m: VaultManager, _ d: VaultDevice, notesBefore: Int) -> Bool {
+            follow(m, d)
+            guard !finalRedone, notes != notesBefore else { return false }
+            if let s = own.last?.answered { holdFinal(s) }
+            finalRedone = true
+            return true
+        }
+
         /// After the last collect: whether the window drops now. Not while a cut or a freeze moved the end out first; and a
         /// cut, a freeze or a background while that collect was out, or a refusal of it, gives one more last collect, once.
-        /// After that one, the window drops (``VaultManager/lastLook(_:clock:)``: in the foreground, after a last look).
+        /// After that one, the window drops (``VaultManager/lastLook(_:clock:sessionEnds:)``: in the foreground, after a last look).
         func dropsAfterFinalCollect(_ m: VaultManager, _ d: VaultDevice) -> Bool {
             follow(m, d)
             if finalRedone, finalsGone >= 2 { return true }

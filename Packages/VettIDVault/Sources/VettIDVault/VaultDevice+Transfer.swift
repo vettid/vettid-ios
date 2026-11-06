@@ -221,6 +221,7 @@ extension VaultDevice {
         mem.withLock {
             guard round == collectRound else { return }
             let none: CollectSent? = nil
+            if !out, collectSince != nil { collectLastEnded = cfg.uptime() }
             collectSince = out ? (at: Date(), sent: none) : nil
             collectStreaming = false
         }
@@ -234,6 +235,10 @@ extension VaultDevice {
     /// The collector's last send (``collectLastSentUptime``) and the time after it the relay may still hand out what it
     /// leases (a long poll's `wait`; 0 for a push over the stream).
     public var lastCollectorSent: CollectSent? { mem.withLock { collectLastSent } }
+
+    /// When the collector's last request ended (uptime; a stop counts), nil if none has: with ``lastCollectorSent`` it tells
+    /// whether that request was still out at a given time.
+    public var lastCollectorEnded: TimeInterval? { mem.withLock { collectLastEnded } }
 
     /// The `wait` of the collector's long polls: the relay may answer one, and lease what it hands out, that long after
     /// it went (each send carries its own: ``lastCollectorSent``).

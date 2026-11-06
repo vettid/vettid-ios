@@ -183,7 +183,7 @@ extension VaultManagerTransferInTests {
             let sent = m.config.uptime()
             if own {
                 clock.own.sent(.init(at: sent, wait: 0))
-                clock.own.ended()
+                clock.own.ended(at: m.config.uptime())
             } else {
                 d.collectorRequest(true, of: d.collectRound)
                 d.collectorSent(of: d.collectRound, wait: d.collectorWait)

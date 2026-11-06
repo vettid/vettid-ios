@@ -214,6 +214,8 @@ public final class VaultDevice: @unchecked Sendable {
     var collector: Task<Void, Never>?
     var collectEnded: String?
     var collectSince: (at: Date, sent: CollectSent?)?, collectLastSent: CollectSent?, collectRound = 0, collectFresh = false
+    /// When the collector's last request ended (uptime).
+    var collectLastEnded: TimeInterval?
     var stopped = true
     /// Set by ``forget()``: nothing is written to the store any more.
     var forgotten = false
@@ -482,7 +484,10 @@ public final class VaultDevice: @unchecked Sendable {
         let task: Task<Void, Never>? = mem.withLock {
             stopped = true
             // A request out is cut: what the relay handed it may stay leased (``collectorCuts``).
-            if let out = collectSince { collectCuts = (collectCuts.count + 1, collectStreaming ? (cfg.uptime(), 0) : out.sent) }
+            if let out = collectSince {
+                collectCuts = (collectCuts.count + 1, collectStreaming ? (cfg.uptime(), 0) : out.sent)
+                collectLastEnded = cfg.uptime()
+            }
             defer { (collector, collectSince, collectRound, collectStreaming) = (nil, nil, collectRound + 1, false) }
             return collector
         }
