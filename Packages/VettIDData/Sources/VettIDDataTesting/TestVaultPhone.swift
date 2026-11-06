@@ -233,15 +233,9 @@ public final class TestVaultPhone {
         get { uptime.ahead }
         set { uptime.ahead = newValue }
     }
-    /// Stops this phone's clock and its monotonic clock at now, as ``FakeVaultService/freezeVaultClock()`` stops the
-    /// vault's: a test of a window of seconds then depends on the clocks it moves, not on how long the machine takes.
-    public func freezeClocks() {
-        clock.freeze()
-        uptime.freeze()
-    }
     private let gate = PrepareSwitch()
-    private let clock = TestPhoneClock()
-    private let uptime = TestPhoneClock()
+    let clock = TestPhoneClock()
+    let uptime = TestPhoneClock()
     /// The pauses between the checks of a change whose answer was lost: each waits until the test releases it.
     public let changePauses = TestPauses()
     /// A change's wait for the credential operations before it (§11.14.9 step 1): ends when the test releases it while
@@ -266,6 +260,8 @@ public final class TestVaultPhone {
     public let windowPauses = { let p = TestPauses(); p.holding = false; return p }()
     /// The ticks of a window's heartbeat (1 s): 10 ms, unless a test holds them (``TestPauses/holding``).
     public let heartbeatPauses = { let p = TestPauses(); p.holding = false; return p }()
+    /// The pauses of a window kept alive in the background (15 s): 10 ms, unless a test holds them.
+    public let backgroundPauses = { let p = TestPauses(); p.holding = false; return p }()
     var waitsForOldCollects = true
     /// Whether a change's wait lasts until the test releases it (``changeWaits``).
     public var holdsChangeWaits: Bool {
@@ -318,7 +314,8 @@ public final class TestVaultPhone {
         let waits = Waits(
             requestTimeout: requestTimeout, pauses: changePauses, changeWaits: changeWaits, deletion: deletionPauses,
             transfer: transferPauses, keep: keepPauses, keptEnd: keptEndPauses, deadline: deadlinePauses,
-            collect: collectPauses, window: windowPauses, heartbeat: heartbeatPauses, lockStatusWait: lockStatusWait
+            collect: collectPauses, window: windowPauses, heartbeat: heartbeatPauses, background: backgroundPauses,
+            lockStatusWait: lockStatusWait
         )
         var config = try Self.configured(
             service, appKeys, seedWrap, wrapped, phoneKeys, fileKeys, protectedData, directory, gate, clock,
@@ -355,14 +352,15 @@ public final class TestVaultPhone {
         Waits(
             requestTimeout: requestTimeout, pauses: changePauses, changeWaits: changeWaits, deletion: deletionPauses,
             transfer: transferPauses, keep: keepPauses, keptEnd: keptEndPauses, deadline: deadlinePauses,
-            collect: collectPauses, window: windowPauses, heartbeat: heartbeatPauses, lockStatusWait: lockStatusWait
+            collect: collectPauses, window: windowPauses, heartbeat: heartbeatPauses, background: backgroundPauses,
+            lockStatusWait: lockStatusWait
         )
     }
 
     /// A test phone's waits: how long a request waits for its answer, and the pauses the test releases.
     private struct Waits {
         let requestTimeout: TimeInterval
-        let pauses, changeWaits, deletion, transfer, keep, keptEnd, deadline, collect, window, heartbeat: TestPauses
+        let pauses, changeWaits, deletion, transfer, keep, keptEnd, deadline, collect, window, heartbeat, background: TestPauses
         let lockStatusWait: TimeInterval
     }
     // swiftlint:disable:next function_parameter_count
@@ -407,6 +405,7 @@ public final class TestVaultPhone {
         c.transferWindowSleep = { d in if window.holding { try await window.sleep((d / .seconds(1)).rounded()) } }
         c.transferRetrySleep = { _ in try await Task.sleep(for: .milliseconds(10)) }
         c.transferHeartbeatSleep = Self.heartbeatSleep(waits.heartbeat)
+        c.transferBackgroundSleep = Self.heldSleep(waits.background)
         c.uptime = { uptime.monotonic }
         return c
     }

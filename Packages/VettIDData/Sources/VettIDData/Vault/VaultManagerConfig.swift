@@ -185,6 +185,8 @@ public struct VaultManagerConfig: Sendable {
     public var transferRetrySleep: LockSleep = realLockSleep
     /// The tick of a settlement window's heartbeat (1 s, ``VaultManager/freezeGap``).
     public var transferHeartbeatSleep: LockSleep = realLockSleep
+    /// The pause between the collects of a settlement window kept alive in the background (15 s).
+    public var transferBackgroundSleep: LockSleep = realLockSleep
     /// The limit of the day-7 check's wait for `device.list` (``keptEndCheck``; a pause the tests release).
     public var keptEndSleep: LockSleep = realLockSleep
     /// The wait to the end of a kept transfer (``VaultManager/checkKeptTransfer()``; a pause the tests release).

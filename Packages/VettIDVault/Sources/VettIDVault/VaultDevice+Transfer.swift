@@ -222,6 +222,7 @@ extension VaultDevice {
             guard round == collectRound else { return }
             let none: CollectSent? = nil
             collectSince = out ? (at: Date(), sent: none) : nil
+            collectStreaming = false
         }
     }
 
@@ -241,8 +242,12 @@ extension VaultDevice {
     /// When the collector's request out now went, on the monotonic uptime (``DeviceConfig/uptime``); nil while none is out.
     public var collectRequestUptime: TimeInterval? { collectRequestSent?.at }
 
-    /// The collector's request out now: its last send, and the time after it the relay may still hand out what it leases.
-    public var collectRequestSent: CollectSent? { mem.withLock { collectSince?.sent } }
+    /// The collector's request out now: its last send, and the time after it the relay may still hand out what it leases;
+    /// for an open stream, now (it may push, and lease, at any time).
+    public var collectRequestSent: CollectSent? {
+        let now = cfg.uptime()
+        return mem.withLock { collectStreaming ? (now, 0) : collectSince?.sent }
+    }
 
     /// The collector's requests that were cut, so that what the relay handed them may stay leased (RELAY-PROTOCOL §6.3),
     /// and when the last of them went out (uptime): a round that failed on a transport loss, a 5xx, or an answer it could
@@ -259,9 +264,11 @@ extension VaultDevice {
         default: true
         }
         guard handed || lost else { return }
+        let now = cfg.uptime()
         mem.withLock {
             guard round == collectRound else { return }
-            collectCuts = (collectCuts.count + 1, collectSince?.sent)
+            // A stream's cut counts from now: it may have pushed, and leased, up to it.
+            collectCuts = (collectCuts.count + 1, collectStreaming ? (now, 0) : collectSince?.sent)
         }
     }
 

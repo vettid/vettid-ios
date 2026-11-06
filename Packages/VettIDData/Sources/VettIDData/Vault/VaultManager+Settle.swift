@@ -117,7 +117,7 @@ extension VaultManager {
             if case .nothing = found {} else { return found }
             // Decided only if nothing cut the last collects: a background (it stops the collector, whose long poll may have
             // been handed the pairing) or a freeze during them moves the end out first, within its cap.
-            if last, clock.dropsAfterFinalCollect(self, d) { return await lastLook(d, clock: clock) }
+            if last, clock.dropsAfterFinalCollect(self, d) { return await lastLook(d, clock: clock, sessionEnds: sessionEnds) }
             await pauseBetweenCollects(failures: failures, wait: wait)
         }
         return await pairedOrRejected(d)
@@ -126,17 +126,26 @@ extension VaultManager {
     /// Before the drop: while the app is in the background (nothing is decided there), a `wait=0` collect every
     /// ``backgroundCollectPause``, and back in the foreground after a background since the last collect went (it stopped
     /// the collector), one more; none of them moves the end or gives another last collect (chosen; the shared rule with
-    /// Android #307, the erratum to follow). Then the drop, unless a `device.paired` or a refusal came.
-    private func lastLook(_ d: VaultDevice, clock: WindowClock) async -> WindowEnd {
+    /// Android #307, the erratum to follow). Then the drop, unless a `device.paired` or a refusal came, or the session
+    /// ended meanwhile (a wipe or a sign-out since [sessionEnds], or `mailbox_unknown`).
+    private func lastLook(_ d: VaultDevice, clock: WindowClock, sessionEnds: Int) async -> WindowEnd {
         let waited = clock.backgroundSinceFinal(self)
         while backgrounded, !Task.isCancelled {
             await backgroundPause()
-            _ = await windowCollect(d, wait: 0, last: false, clock: clock)
-            let found = await pairedOrRejected(d)
-            if case .nothing = found {} else { return found }
+            if let end = await lookOnce(d, clock: clock, sessionEnds: sessionEnds) { return end }
         }
-        if waited { _ = await windowCollect(d, wait: 0, last: false, clock: clock) }
+        if waited, let end = await lookOnce(d, clock: clock, sessionEnds: sessionEnds) { return end }
         return await pairedOrRejected(d)
+    }
+
+    /// One `wait=0` collect of the last look, and what it ends with, if anything.
+    private func lookOnce(_ d: VaultDevice, clock: WindowClock, sessionEnds: Int) async -> WindowEnd? {
+        if moveFlags.book.sessionEnds != sessionEnds { return .ended(drop: false) }
+        if case .gone = await windowCollect(d, wait: 0, last: false, clock: clock) { return .ended(drop: true) }
+        if moveFlags.book.sessionEnds != sessionEnds { return .ended(drop: false) }
+        let found = await pairedOrRejected(d)
+        if case .nothing = found { return nil }
+        return found
     }
 
     /// Between collects: a pause after a failure (1 s, doubled, at most 8 s), or while the collector long-polls; in the

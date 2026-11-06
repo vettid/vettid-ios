@@ -31,4 +31,18 @@ extension TestVaultPhone {
             if beat.holding { try await beat.sleep(1) } else { try await Task.sleep(for: .milliseconds(10)) }
         }
     }
+
+    /// A pause the test releases while it holds [pauses] (its length recorded), else 10 ms.
+    static func heldSleep(_ pauses: TestPauses) -> LockSleep {
+        { d in
+            if pauses.holding { try await pauses.sleep(d / .seconds(1)) } else { try await Task.sleep(for: .milliseconds(10)) }
+        }
+    }
+
+    /// Stops this phone's clock and its monotonic clock at now, as ``FakeVaultService/freezeVaultClock()`` stops the
+    /// vault's: a test of a window of seconds then depends on the clocks it moves, not on how long the machine takes.
+    public func freezeClocks() {
+        clock.freeze()
+        uptime.freeze()
+    }
 }

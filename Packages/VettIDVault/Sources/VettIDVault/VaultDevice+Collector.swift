@@ -33,15 +33,20 @@ extension VaultDevice {
         mem.withLock { if round == collectRound { collectEnded = code } }
     }
 
-    /// The request of the collection [round]'s current round goes out (each attempt, after any wait for the network), or
-    /// its stream opens or pushes a message: its send time (``collectRequestSent``, ``lastCollectorSent``), when a lease
-    /// of what it is handed can begin, and [wait], how long after it the relay may still hand something out.
-    func collectorSent(of round: Int, wait: TimeInterval? = nil) {
-        let sent = (at: cfg.uptime(), wait: wait ?? cfg.pollWait)
+    /// The request of the collection [round]'s current round goes out (each attempt, after any wait for the network),
+    /// with [wait], how long after it the relay may still hand something out; or, with nil, its stream opens or pushes a
+    /// message. Its send time (``collectRequestSent``, ``lastCollectorSent``) is when a lease of what it is handed can
+    /// begin; a stream may push, and lease, at any time while it is open (``streamOpen``).
+    func collectorSent(of round: Int, wait: TimeInterval?) {
+        let sent = (at: cfg.uptime(), wait: wait ?? 0)
         mem.withLock {
             guard round == collectRound else { return }
             if let since = collectSince { collectSince = (since.at, sent) }
             collectLastSent = sent
+            collectStreaming = wait == nil
         }
     }
+
+    /// Whether the collector's stream is open: what it was handed may have been pushed, and leased, as late as now.
+    public var streamOpen: Bool { mem.withLock { collectStreaming } }
 }

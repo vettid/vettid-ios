@@ -73,6 +73,11 @@ extension VaultManager {
         private var lastTick: TimeInterval = 0
         private var lastOut: TimeInterval?
         private var freezeBegan: TimeInterval?
+        /// Whether a collector's stream was open at the last tick: one open through a freeze may have pushed, and leased,
+        /// up to the wake.
+        private var streamWasOpen = false
+        /// Set by ``stop()``: no device is followed any more.
+        private var stopped = false
         /// Every collector seen during the window, and the cuts seen of each: a session's device whose session went (a
         /// background) is still followed.
         private var collectors: [VaultDevice] = []
@@ -109,6 +114,8 @@ extension VaultManager {
             heartbeat = Task { [weak self] in
                 while !Task.isCancelled {
                     try? await sleep(.seconds(1))
+                    // A heartbeat stopped during its sleep looks no more (it would follow, and mark, devices again).
+                    guard !Task.isCancelled else { return }
                     self?.follow(m, d)
                     m.moveFlags.book.windowBeats += 1
                 }
@@ -116,6 +123,7 @@ extension VaultManager {
         }
 
         func stop() {
+            stopped = true
             timer?.cancel()
             heartbeat?.cancel()
             for x in collectors { x.setCollectsFresh(false) }
@@ -128,7 +136,7 @@ extension VaultManager {
         }
 
         private func watch(_ x: VaultDevice, from count: Int) {
-            guard cuts[ObjectIdentifier(x)] == nil else { return }
+            guard !stopped, cuts[ObjectIdentifier(x)] == nil else { return }
             // Its long polls go on connections of their own while the window follows it.
             x.setCollectsFresh(true)
             collectors.append(x)
@@ -197,7 +205,7 @@ extension VaultManager {
                 // was due, kept after it ended (one that failed on the wake, before this ran), not one sent since the wake.
                 let sends = ([own.last] + collectors.map { $0.lastCollectorSent.map(WindowSent.init) }).compactMap { $0 }
                 let then = sends.filter { $0.at <= lastTick + 1 }.map(\.answered)
-                noteFreeze(began: lastTick, sent: ([lastOut] + then).compactMap { $0 }.max())
+                noteFreeze(began: lastTick, sent: ([lastOut, streamWasOpen ? up : nil] + then).compactMap { $0 }.max())
             }
             lastTick = up
             for x in collectors {
@@ -212,6 +220,7 @@ extension VaultManager {
                 backgrounds = m.moveFlags.book.backgrounds
             }
             lastOut = outNow().map(\.answered).max()
+            streamWasOpen = collectors.contains { $0.streamOpen }
             guard pending, !m.backgrounded else { return }
             pending = false
             extend(m, now: up)
@@ -284,6 +293,6 @@ extension VaultManager {
     /// While the app is in the background, a kept-alive window collects about every 15 s (``backgroundCollectPause``).
     func backgroundPause() async {
         moveFlags.book.windowPauseSeconds = Self.backgroundCollectPause
-        try? await config.transferRetrySleep(.seconds(Self.backgroundCollectPause))
+        try? await config.transferBackgroundSleep(.seconds(Self.backgroundCollectPause))
     }
 }

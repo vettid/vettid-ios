@@ -186,7 +186,7 @@ extension VaultManagerTransferInTests {
                 clock.own.ended()
             } else {
                 d.collectorRequest(true, of: d.collectRound)
-                d.collectorSent(of: d.collectRound)
+                d.collectorSent(of: d.collectRound, wait: d.collectorWait)
                 d.collectorRequest(false, of: d.collectRound)
             }
             phone.uptimeAhead += 20
@@ -263,12 +263,12 @@ extension VaultManagerTransferInTests {
         phone.uptimeAhead += 0.5
         let sent = m.config.uptime()
         d.collectorRequest(true, of: d.collectRound)
-        d.collectorSent(of: d.collectRound)
+        d.collectorSent(of: d.collectRound, wait: d.collectorWait)
         phone.uptimeAhead += 20
         d.collectorFailed(URLError(.networkConnectionLost), of: d.collectRound)
         d.collectorRequest(false, of: d.collectRound)
         d.collectorRequest(true, of: d.collectRound)
-        d.collectorSent(of: d.collectRound)
+        d.collectorSent(of: d.collectRound, wait: d.collectorWait)
         clock.follow(m, d)
         #expect(clock.finalNotBefore == sent + d.collectorWait + 75)
         clock.stop()
@@ -333,8 +333,8 @@ extension VaultManagerTransferInTests {
             return d.collectRound
         }
         d.collectorRequest(true, of: new)
-        d.collectorSent(of: new)
-        d.collectorSent(of: new - 1)
+        d.collectorSent(of: new, wait: d.collectorWait)
+        d.collectorSent(of: new - 1, wait: d.collectorWait)
         d.collectorRequest(false, of: new - 1)
         #expect(d.collectRequestUptime != nil, "the newer round's request is still out")
         let cuts = d.collectorCuts.count

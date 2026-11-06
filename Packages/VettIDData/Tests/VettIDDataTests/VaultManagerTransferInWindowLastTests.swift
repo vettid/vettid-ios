@@ -96,7 +96,7 @@ extension VaultManagerTransferInTests {
         }
         let until = clock.until
         new.collectorRequest(true, of: new.collectRound)
-        new.collectorSent(of: new.collectRound)
+        new.collectorSent(of: new.collectRound, wait: new.collectorWait)
         new.collectorFailed(URLError(.networkConnectionLost), of: new.collectRound)
         m.session = nil
         clock.follow(m, old)
@@ -175,9 +175,9 @@ extension VaultManagerTransferInTests {
         #expect(m.moveFlags.book.finalCollects == finals + 1, "no last collect more")
     }
 
-    /// Over the stream, the collector's send time follows the latest push: a cut 45 s after the stream opened, just after
-    /// it pushed a message, moves the end to the push + V + 15 s (a pushed message is leased as it is pushed).
-    @Test func aCutOfAStreamCountsFromItsLatestPush() async throws {
+    /// A stream that pushed at the window's start, then nothing for 40 s, cut: what it may have pushed since is leased
+    /// from its push, as late as the cut, so the end moves to the cut + V + 15 s (not to the last push + V + 15 s).
+    @Test func aStreamsCutCountsFromTheCut() async throws {
         defer { phone.close() }
         try await windowOnFrozenClocks()
         let d = try #require(m.session?.device)
@@ -185,20 +185,155 @@ extension VaultManagerTransferInTests {
         phone.heartbeatPauses.holding = true
         let clock = VaultManager.WindowClock(visibility: 60, backgrounds: m.moveFlags.book.backgrounds, background: false)
         clock.start(m, d)
-        let opened = m.config.uptime()
         d.collectorRequest(true, of: d.collectRound)
-        d.collectorSent(of: d.collectRound, wait: 0)
-        // 45 s on, in steps the clock sees as no freeze, then a push.
+        d.collectorSent(of: d.collectRound, wait: nil)
+        // 40 s on, in steps the clock sees as no freeze, with no push.
         for _ in 0..<5 {
-            phone.uptimeAhead += 9
+            phone.uptimeAhead += 8
             clock.follow(m, d)
         }
-        d.collectorSent(of: d.collectRound, wait: 0)
+        let cut = m.config.uptime()
         d.collectorFailed(URLError(.networkConnectionLost), of: d.collectRound)
         clock.follow(m, d)
-        #expect(clock.until == opened + 45 + 75, "from the push: \(clock.until - opened)")
+        #expect(clock.until == cut + 75, "from the cut")
         clock.stop()
         phone.heartbeatPauses.release()
+    }
+
+    /// A freeze with the collector's stream open: it may have pushed, and leased, up to the wake, so the last collect
+    /// waits to the wake + V + 15 s.
+    @Test func aFreezeWithAStreamOpenHoldsFromTheWake() async throws {
+        defer { phone.close() }
+        try await windowOnFrozenClocks()
+        let d = try #require(m.session?.device)
+        d.stop()
+        phone.heartbeatPauses.holding = true
+        let clock = VaultManager.WindowClock(visibility: 60, backgrounds: m.moveFlags.book.backgrounds, background: false)
+        clock.start(m, d)
+        d.collectorRequest(true, of: d.collectRound)
+        d.collectorSent(of: d.collectRound, wait: nil)
+        clock.follow(m, d)
+        phone.uptimeAhead += 20
+        clock.follow(m, d)
+        #expect(clock.finalNotBefore == m.config.uptime() + 75, "from the wake")
+        clock.stop()
+        phone.heartbeatPauses.release()
+    }
+
+    /// A stop with the collector's stream open is a cut from the stop.
+    @Test func aStopWithAStreamOpenIsACutFromTheStop() async throws {
+        defer { phone.close() }
+        _ = try await scanned()
+        let d = try #require(m.session?.device)
+        d.stop()
+        d.start()
+        let round = d.collectRound
+        d.collectorRequest(true, of: round)
+        d.collectorSent(of: round, wait: nil)
+        #expect(d.streamOpen)
+        let cuts = d.collectorCuts.count
+        d.stop()
+        #expect(d.collectorCuts.count == cuts + 1 && d.collectorCuts.sent?.wait == 0, "a cut")
+        #expect((d.collectorCuts.sent?.at ?? 0) > (d.lastCollectorSent?.at ?? .infinity), "from the stop, not the open")
+    }
+
+    /// The collector the device makes passes a send's `wait` on: nil for its stream (0 after it, the stream open), a
+    /// long poll's own.
+    @Test func theDevicesCollectorPassesTheWaitThrough() async throws {
+        defer { phone.close() }
+        _ = try await scanned()
+        let d = try #require(m.session?.device)
+        d.stop()
+        let c = d.collector(of: d.collectRound)
+        d.collectorRequest(true, of: d.collectRound)
+        c.onSent(nil)
+        #expect(d.lastCollectorSent?.wait == 0 && d.streamOpen, "a stream's")
+        c.onSent(25)
+        #expect(d.lastCollectorSent?.wait == 25 && !d.streamOpen, "a long poll's")
+    }
+
+    /// A wipe (the mailbox gone) during the last look in the background ends the window as ended, not dropped.
+    @Test func aWipeDuringTheLastLookEndsTheWindow() async throws {
+        defer { phone.close() }
+        try await oneMoreLastCollectInTheBackground()
+        service.refusesCollect = true
+        #expect(await eventually(within: .seconds(30)) { m.transferEnd == .stopped }, "ended")
+        m.onForeground()
+    }
+
+    /// A sign-out or a wipe of the app (the session's end) during the last look in the background ends it.
+    @Test func aSessionEndDuringTheLastLookEndsTheWindow() async throws {
+        defer { phone.close() }
+        try await oneMoreLastCollectInTheBackground()
+        try await Task.sleep(for: .milliseconds(200))
+        #expect(m.moveFlags.book.settleWindow != nil, "the last look runs")
+        m.moveFlags.book.sessionEnds += 1
+        #expect(await eventually(within: .seconds(30)) { m.moveFlags.book.settleWindow == nil }, "the window ended")
+        #expect(m.transferEnd != .timedOut, "not dropped: \(String(describing: m.transferEnd))")
+        m.onForeground()
+    }
+
+    /// In the background, the last look makes a `wait=0` collect after each of its pauses, and no last collect more.
+    @Test func theLastLookCollectsAfterEachPause() async throws {
+        defer { phone.close() }
+        phone.backgroundPauses.holding = true
+        let finals = try await oneMoreLastCollectInTheBackground()
+        #expect(await eventually { !phone.backgroundPauses.lengths.isEmpty }, "the last look pauses")
+        let from = service.relay.requests.count
+        phone.backgroundPauses.release()
+        #expect(await eventually { collectWaits(from: from).contains(0) }, "a wait=0 collect after the pause")
+        #expect(m.moveFlags.book.finalCollects == finals + 1, "no last collect more")
+        phone.backgroundPauses.holding = false
+        phone.backgroundPauses.release()
+        m.onForeground()
+    }
+
+    /// A window's heartbeat stopped during its sleep follows nothing more: a session's device it had not seen is not
+    /// marked to collect on connections of its own.
+    @Test func aStoppedHeartbeatFollowsNothingMore() async throws {
+        defer { phone.close() }
+        _ = try await scanned()
+        let old = try #require(m.session?.device)
+        try await phone.restart()
+        try await m.refresh()
+        #expect(await eventually { m.session != nil }, "a session of the new process")
+        let held = m.session
+        let new = try #require(held?.device)
+        phone.heartbeatPauses.holding = true
+        phone.windowPauses.holding = true
+        m.session = nil
+        let clock = VaultManager.WindowClock(visibility: 60, backgrounds: m.moveFlags.book.backgrounds, background: false)
+        clock.start(m, old)
+        #expect(await eventually { !phone.heartbeatPauses.lengths.isEmpty }, "the heartbeat sleeps")
+        m.session = held
+        clock.stop()
+        phone.heartbeatPauses.release()
+        try await Task.sleep(for: .milliseconds(200))
+        #expect(!new.collectsFresh, "not followed after the stop")
+        phone.windowPauses.release()
+    }
+
+    /// The one more last collect gone, its answer lost, the app in the background: the window's last look runs. Returns
+    /// the last collects counted before the one more.
+    @discardableResult
+    func oneMoreLastCollectInTheBackground() async throws -> Int {
+        try await lastCollectAfterAFreeze()
+        service.refuseNextCollects(1)
+        phone.windowPauses.release()
+        #expect(await eventually { phone.windowPauses.lengths == [90, 15, 40, 7] }, "\(phone.windowPauses.lengths)")
+        try await advance(7)
+        let gate = FakeHTTPServer.Gate()
+        service.holdsCollectAnswersOfWait = 0
+        service.holdsCollectAnswers = gate
+        service.losesCollectAnswers = 1
+        service.endLeases()
+        let finals = m.moveFlags.book.finalCollects
+        phone.windowPauses.release()
+        #expect(await eventually { gate.waiting > 0 && m.moveFlags.book.finalCollects == finals + 1 }, "the one more goes")
+        await m.onBackground(budget: .seconds(1))
+        service.holdsCollectAnswers = nil
+        gate.open()
+        return finals
     }
 
     /// While a settlement window follows the transfer's device, its collector's long polls go on connections of their

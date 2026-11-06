@@ -228,10 +228,11 @@ public struct MailboxCollector: Sendable {
     /// Called with the error of a collect round that failed (not one cancelled), before ``onRequest`` is called with false,
     /// and whether the round had been handed messages (some of them may stay leased, whatever the error).
     let onFailed: @Sendable (Error, Bool) -> Void
-    /// Called when the relay may begin a lease of what it hands out, with how long after it the relay may still hand it
-    /// out: right before a long-poll round's request goes out (each attempt; its `wait`), and when a stream opens and as
-    /// each frame is pushed (0: pushed messages are leased as they are pushed, RELAY-PROTOCOL §6.4).
-    let onSent: @Sendable (TimeInterval) -> Void
+    /// Called when the relay may begin a lease of what it hands out: right before a long-poll round's request goes out
+    /// (each attempt), with its `wait`, how long after it the relay may still hand something out; and with nil when a
+    /// stream opens and as each frame is pushed (a stream may push, and lease, at any time while it is open, RELAY-PROTOCOL
+    /// §6.4).
+    let onSent: @Sendable (TimeInterval?) -> Void
 
     public init(
         source: MailboxSource,
@@ -244,7 +245,7 @@ public struct MailboxCollector: Sendable {
         onRequest: @escaping @Sendable (Bool) -> Void = { _ in },
         onRecovered: @escaping @Sendable () -> Void = {},
         onFailed: @escaping @Sendable (Error, Bool) -> Void = { _, _ in },
-        onSent: @escaping @Sendable (TimeInterval) -> Void = { _ in }
+        onSent: @escaping @Sendable (TimeInterval?) -> Void = { _ in }
     ) {
         self.source = source
         self.mode = mode
@@ -350,11 +351,11 @@ public struct MailboxCollector: Sendable {
     }
 
     private func stream(_ handle: @Sendable (RelayMessage) async throws -> Void, _ handed: Handed) async throws {
-        onSent(0)
+        onSent(nil)
         let s = try source.openStream()
         defer { s.close() }
         for try await m in s.messages {
-            onSent(0)
+            onSent(nil)
             handed.set()
             guard try await handled(m, handle) else { continue }
             if !(await s.ack(m.msgID)) { try await source.ack(m.msgID) }
