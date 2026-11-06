@@ -376,11 +376,14 @@ enum SourceStep { case messages([RelayMessage]), error(Error) }
         var steps: [SourceStep]
         var acks: [String] = []
         var stream: CollectStream?
+        /// The streams the opens after [stream] get, in order.
+        var later: [CollectStream]
         var streamOpens = 0
 
-        init(_ steps: [SourceStep], stream: CollectStream? = nil) {
+        init(_ steps: [SourceStep], stream: CollectStream? = nil, later: [CollectStream] = []) {
             self.steps = steps
             self.stream = stream
+            self.later = later
         }
 
         func collect(wait: TimeInterval, max: Int) async throws -> [RelayMessage] {
@@ -397,7 +400,7 @@ enum SourceStep { case messages([RelayMessage]), error(Error) }
             try lock.withLock {
                 streamOpens += 1
                 guard let s = stream else { throw URLError(.cannotConnectToHost) }
-                stream = nil
+                stream = later.isEmpty ? nil : later.removeFirst()
                 return s
             }
         }
@@ -514,12 +517,12 @@ enum SourceStep { case messages([RelayMessage]), error(Error) }
         let got = Recorder<String>()
         await #expect(throws: RelayError.self) {
             try await MailboxCollector(
-                source: src, mode: .webSocket, now: { clock.value }, sleep: { clock.advance($0) }
+                source: src, mode: .webSocket, now: { clock.value }, sleep: { clock.advance($0) }, random: { $0.lowerBound }
             ).run { got.add($0.msgID) }
         }
         // The refused upgrade, then long-polls while the 7 s pause lasts (no sleep: the poll is the wait).
         #expect(src.streamOpens == 1 && got.all == ["01A", "01B"])
-        let c = MailboxCollector(source: src)
+        let c = MailboxCollector(source: src, random: { $0.lowerBound })
         #expect(c.socketPause(RelayError(status: 429, code: "http_429", retryAfterSeconds: 7), 0) == 7)
         #expect(c.socketPause(RelayError(status: 429, code: "http_429"), 0) == 5)
         #expect(c.socketPause(RelayError(status: 429, code: "http_429"), 3) == 40)
