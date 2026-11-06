@@ -224,7 +224,7 @@ check_store_files() {
 
 # The document types the shipping Info.plist declares, whole (normalised JSON), and the exported types it declares (none):
 # one place for both. A canary manifest is opened with VettID as JSON, at rank Alternate, a viewer (VAULT-RELEASES §10.1
-# step 9); narrowing it to a type of VettID's own waits for the release tooling to write one (audit S8). A second entry, a
+# step 9); narrowing it to a type of VettID's own waits for the release tooling to write one. A second entry, a
 # wider type, another rank or an exported type of the app's own (one claiming the json extension, say) is refused.
 EXPECTED_DOCUMENT_TYPES='[{"CFBundleTypeName":"VettID release manifest","CFBundleTypeRole":"Viewer","LSHandlerRank":"Alternate","LSItemContentTypes":["public.json"]}]'
 EXPECTED_EXPORTED_TYPES='none'

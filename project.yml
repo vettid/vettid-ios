@@ -87,7 +87,7 @@ targets:
         # share sheet or AirDrop, in every configuration (the canary phone runs the release build). JSON is declared at
         # rank Alternate (VettID is never the default app for JSON) as a viewer; an opened file is copied in (not opened
         # in place), only verified and shown, and installed only after the member confirms (App/CanaryManifestFiles.swift).
-        # Narrowing this to a type of VettID's own waits for the release tooling to write one (audit S8).
+        # Narrowing this to a type of VettID's own waits for the release tooling to write one.
         CFBundleDocumentTypes:
           - CFBundleTypeName: VettID release manifest
             CFBundleTypeRole: Viewer
