@@ -391,12 +391,12 @@ public final class TestVaultPhone {
             let silent = service?.unanswered("vault.status") ?? true
             try await Task.sleep(for: silent ? d : d * Self.roomyStatusWaitFactor)
         }
-        let pauses = waits.pauses
-        c.changeCheckSleep = { try await pauses.sleep($0) }
+        c.changeCheckSleep = { [pauses = waits.pauses] in try await pauses.sleep($0) }
         let changeWaits = waits.changeWaits
         changeWaits.holding = false
         c.changeWaitSleep = { try await changeWaits.sleep($0) }
         c.releaseUpdateSleep = { _ in try await Task.sleep(for: .milliseconds(5)) }
+        c.relaySleep = c.releaseUpdateSleep // the one re-read of a refused relay (VAULT-MESSAGING 0.84.0 §3.4)
         let deletion = waits.deletion
         c.deletionSleep = { d in try await deletion.sleep(Double(d.components.seconds) + Double(d.components.attoseconds) / 1e18) }
         let transfer = waits.transfer, keep = waits.keep

@@ -88,6 +88,7 @@ extension VaultManager {
         renewSecretSuggested = false
         refusedByVault = false
         alarm = nil
+        forgetRelay()
         unlockWindow = nil
         pinChangeOperation = nil
         renewOperation = nil

@@ -19,6 +19,12 @@ extension VaultManager {
     /// `vault.status`'s `time_scale` (absent: a release before it, 1), for the record of [rec] (the one the session was
     /// opened for). A value this build does not accept is not stored (chosen; not in the spec: the descriptor's check
     /// already refuses such an instance before any unlock).
+    func heard(status st: VaultStatusInfo, since rec: Int) {
+        learnTimeScale(status: st, since: rec)
+        noteRelay(status: st)
+    }
+
+    /// `vault.status`'s `time_scale` alone.
     func learnTimeScale(status st: VaultStatusInfo, since rec: Int) {
         let scale = UInt64(clamping: st.timeScale ?? Int64(TimeScale.real))
         guard config.trust.timeScales.accepts(scale) else { return }

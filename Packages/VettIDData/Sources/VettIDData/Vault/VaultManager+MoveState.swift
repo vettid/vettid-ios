@@ -12,6 +12,7 @@ final class MoveFlags {
     @ObservationIgnored let book = MoveBook()
     @ObservationIgnored var runner: FinishMoveRunner?
     var changeCheck: ChangeCheck?
+    var relayRefused = false // (0.84.0) the latest `vault.status` had `relay: "refused"`
     var rotateOffered = false // (release R) ``LocalAccount/rotateOffer``
     var movedIn = false
     var finishMovePending = false
@@ -59,6 +60,10 @@ final class MoveBook {
     var lifecycle = 0
     /// The wipe that runs now is an old phone's at the end of a kept transfer (it says so on the welcome screen).
     var wipeMovedAway = false
+    /// The one re-read after a status found the relay refused (``VaultManager/noteRelay(status:)``), and whether it was made
+    /// for this unlock.
+    var relayRecheck: Task<Void, Never>?
+    var relayRechecked = false
     /// (IOS-PLAN 0.1.40 §4.9) The PIN the recovered phone's unlock just used, kept in memory only while the pairing runs on the
     /// screen in front, for the lost-ok unlock that may be sent again; forgotten when the app leaves the foreground (§6.3).
     var pairingPin: String?

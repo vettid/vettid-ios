@@ -253,7 +253,7 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
                 let since = rec.generation
                 return VaultOwnerCheckOps(
                     api: try m.openApi(try await m.openSession()), gate: Self.pinGate(ref),
-                    onStatus: { st in await ref.manager?.learnTimeScale(status: st, since: since) }
+                    onStatus: { st in await ref.manager?.heard(status: st, since: since) }
                 )
             },
             load: { try checkFile.load() },

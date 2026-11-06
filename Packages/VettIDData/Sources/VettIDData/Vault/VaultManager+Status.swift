@@ -75,7 +75,7 @@ extension VaultManager {
     private func openStatus(_ s: VaultSession, since rec: Int) async throws -> VaultStatusInfo? {
         do {
             let st = try await openApi(s).status()
-            learnTimeScale(status: st, since: rec)
+            heard(status: st, since: rec)
             return st
         } catch {
             let mapped = VaultFailures.map(error)

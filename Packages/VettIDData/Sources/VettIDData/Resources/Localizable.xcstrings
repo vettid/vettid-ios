@@ -2511,7 +2511,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Your connections still know your old keys. VettID will offer the update again."
+            "value": "Your vault couldn't finish updating its keys. It will try again the next time you unlock it."
           }
         }
       }

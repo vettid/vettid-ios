@@ -164,6 +164,8 @@ public struct VaultManagerConfig: Sendable {
     public var releaseUpdateSleep: LockSleep = realLockSleep
     /// (IOS-PLAN §4.2) The waits between the re-reads of a vault being deleted (a virtual clock in the tests).
     public var deletionSleep: LockSleep = realLockSleep
+    /// How the one re-read of a refused relay waits (``VaultManager/relayRecheckSeconds``).
+    public var relaySleep: LockSleep = realLockSleep
     /// The pause before a change whose answer was lost is checked again (VAULT-MESSAGING §11.14.9 "A lost answer": 30 s,
     /// doubling up to 5 minutes), in seconds.
     public var changeCheckSleep: @Sendable (TimeInterval) async throws -> Void
