@@ -148,9 +148,17 @@ final class PingState: @unchecked Sendable {
 
 /// What a ``MailboxCollector`` collects from: a relay client, or a fake in tests.
 public protocol MailboxSource: Sendable {
-    func collect(wait: TimeInterval, max: Int) async throws -> [RelayMessage]
+    /// [sent]: called right before each attempt goes out.
+    func collect(wait: TimeInterval, max: Int, sent: @escaping @Sendable () -> Void) async throws -> [RelayMessage]
     func ack(_ msgID: String) async throws
     func openStream() throws -> CollectStream
+}
+
+extension MailboxSource {
+    /// A collect with no use for its send time.
+    public func collect(wait: TimeInterval, max: Int) async throws -> [RelayMessage] {
+        try await collect(wait: wait, max: max, sent: {})
+    }
 }
 
 /// The relay client as a ``MailboxSource``, streaming over [transport]'s session with its origin map.
@@ -165,8 +173,8 @@ public struct RelayMailbox: MailboxSource {
 
     /// One attempt: the collector retries its rounds itself, and a request whose answer was lost after the relay handed it
     /// messages must fail as such, not be retried into an empty answer while what it was handed stays leased.
-    public func collect(wait: TimeInterval, max: Int) async throws -> [RelayMessage] {
-        try await client.collect(wait: wait, max: max, attempts: 1)
+    public func collect(wait: TimeInterval, max: Int, sent: @escaping @Sendable () -> Void) async throws -> [RelayMessage] {
+        try await client.collect(wait: wait, max: max, attempts: 1, sent: sent)
     }
     public func ack(_ msgID: String) async throws { try await client.ack(msgID) }
     public func openStream() throws -> CollectStream {
@@ -213,8 +221,11 @@ public struct MailboxCollector: Sendable {
     let onRequest: @Sendable (Bool) -> Void
     /// Called when a collect round succeeded after failed ones: the relay connection is back.
     let onRecovered: @Sendable () -> Void
-    /// Called with the error of a collect round that failed (not one cancelled), before ``onRequest`` is called with false.
-    let onFailed: @Sendable (Error) -> Void
+    /// Called with the error of a collect round that failed (not one cancelled), before ``onRequest`` is called with false,
+    /// and whether the round had been handed messages (some of them may stay leased, whatever the error).
+    let onFailed: @Sendable (Error, Bool) -> Void
+    /// Called right before a long-poll round's request goes out (each attempt), or a stream opens.
+    let onSent: @Sendable () -> Void
 
     public init(
         source: MailboxSource,
@@ -226,7 +237,8 @@ public struct MailboxCollector: Sendable {
         random: @escaping @Sendable (ClosedRange<TimeInterval>) -> TimeInterval = { TimeInterval.random(in: $0) },
         onRequest: @escaping @Sendable (Bool) -> Void = { _ in },
         onRecovered: @escaping @Sendable () -> Void = {},
-        onFailed: @escaping @Sendable (Error) -> Void = { _ in }
+        onFailed: @escaping @Sendable (Error, Bool) -> Void = { _, _ in },
+        onSent: @escaping @Sendable () -> Void = {}
     ) {
         self.source = source
         self.mode = mode
@@ -238,6 +250,7 @@ public struct MailboxCollector: Sendable {
         self.onRequest = onRequest
         self.onRecovered = onRecovered
         self.onFailed = onFailed
+        self.onSent = onSent
     }
 
     /// Runs until cancelled or a terminal relay error.
@@ -309,25 +322,34 @@ public struct MailboxCollector: Sendable {
     private func round(useSocket: Bool, _ handle: @Sendable (RelayMessage) async throws -> Void) async throws {
         onRequest(true)
         defer { onRequest(false) }
+        let handed = Handed()
         do {
-            if useSocket { try await stream(handle) } else { _ = try await pollOnce(handle) }
+            if useSocket { try await stream(handle, handed) } else { _ = try await poll(handle, handed) }
         } catch {
-            if !Task.isCancelled { onFailed(error) }
+            if !Task.isCancelled { onFailed(error, handed.value) }
             throw error
         }
     }
 
     /// One long-poll round: collects, handles and acks each message. Returns how many arrived.
     public func pollOnce(_ handle: @Sendable (RelayMessage) async throws -> Void) async throws -> Int {
-        let msgs = try await source.collect(wait: wait, max: RelayClient.defaultMax)
+        try await poll(handle, Handed())
+    }
+
+    private func poll(_ handle: @Sendable (RelayMessage) async throws -> Void, _ handed: Handed) async throws -> Int {
+        let msgs = try await source.collect(wait: wait, max: RelayClient.defaultMax, sent: onSent)
+        if !msgs.isEmpty { handed.set() }
         for m in msgs where try await handled(m, handle) { try await source.ack(m.msgID) }
         return msgs.count
     }
 
-    private func stream(_ handle: @Sendable (RelayMessage) async throws -> Void) async throws {
+    private func stream(_ handle: @Sendable (RelayMessage) async throws -> Void, _ handed: Handed) async throws {
+        onSent()
         let s = try source.openStream()
         defer { s.close() }
-        for try await m in s.messages where try await handled(m, handle) {
+        for try await m in s.messages {
+            handed.set()
+            guard try await handled(m, handle) else { continue }
             if !(await s.ack(m.msgID)) { try await source.ack(m.msgID) }
         }
     }
@@ -347,4 +369,12 @@ public struct MailboxCollector: Sendable {
         let cap = min(Self.base * Double(1 << min(failures, Self.maxShift)), Self.maxDelay)
         return random((cap / 2)...cap)
     }
+}
+
+/// Whether a collect round was handed messages (``MailboxCollector``).
+final class Handed: @unchecked Sendable {
+    private let lock = NSLock()
+    private var on = false
+    var value: Bool { lock.withLock { on } }
+    func set() { lock.withLock { on = true } }
 }

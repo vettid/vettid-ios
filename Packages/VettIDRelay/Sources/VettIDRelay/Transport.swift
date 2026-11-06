@@ -78,6 +78,8 @@ public struct HTTPTransport: Sendable {
     /// Development only: origin → origin, keeping path and query (the local dev stack's relay and API addresses).
     /// Signatures cover method, path and body, not the host, so they are unaffected.
     let originMap: [String: String]
+    /// Makes the session of a request that must not reuse a connection (``freshSession()``).
+    let makeSession: @Sendable (URLSessionConfiguration) -> URLSession
 
     public init(
         session: URLSession,
@@ -86,7 +88,8 @@ public struct HTTPTransport: Sendable {
         networkWait: TimeInterval = defaultNetworkWait,
         backoff: [TimeInterval] = defaultBackoff,
         originMap: [String: String] = [:],
-        sleep: @escaping @Sendable (TimeInterval) async throws -> Void = { try await Task.sleep(nanoseconds: UInt64($0 * 1e9)) }
+        sleep: @escaping @Sendable (TimeInterval) async throws -> Void = { try await Task.sleep(nanoseconds: UInt64($0 * 1e9)) },
+        makeSession: @escaping @Sendable (URLSessionConfiguration) -> URLSession = { URLSession(configuration: $0) }
     ) {
         self.session = session
         self.gate = gate
@@ -95,15 +98,18 @@ public struct HTTPTransport: Sendable {
         self.backoff = backoff
         self.originMap = originMap.reduce(into: [:]) { $0[Self.trimSlash($1.key)] = Self.trimSlash($1.value) }
         self.sleep = sleep
+        self.makeSession = makeSession
     }
 
     /// Sends the request [build] makes (called again for every attempt), reading at most [maxBody] body bytes. [readsBody]
     /// says for a status whether its body is read at all: for one that is not, the answer has an empty body and the cap
-    /// is not applied (an error page over the cap is then no "too large").
+    /// is not applied (an error page over the cap is then no "too large"). [fresh]: each attempt on a connection of its
+    /// own (``freshSession()``), not one an earlier request used.
     public func send(
         policy: Policy,
         maxBody: Int,
         timeout: TimeInterval? = nil,
+        fresh: Bool = false,
         readsBody: @Sendable (Int) -> Bool = { _ in true },
         _ build: () throws -> URLRequest
     ) async throws -> HTTPAnswer {
@@ -113,8 +119,10 @@ public struct HTTPTransport: Sendable {
             budget -= try await awaitNetwork(budget)
             var r = try build()
             if let timeout { r.timeoutInterval = timeout }
+            let s = fresh ? freshSession() : session
+            defer { if fresh { s.finishTasksAndInvalidate() } }
             do {
-                return try await once(prepared(r), maxBody: maxBody, readsBody: readsBody)
+                return try await once(s, prepared(r), maxBody: maxBody, readsBody: readsBody)
             } catch let e as URLError {
                 try Task.checkCancellation()
                 guard attempt < maxRetries, Self.retryable(e, policy) else { throw e }
@@ -124,8 +132,14 @@ public struct HTTPTransport: Sendable {
         }
     }
 
-    private func once(_ r: URLRequest, maxBody: Int, readsBody: @Sendable (Int) -> Bool) async throws -> HTTPAnswer {
-        let (bytes, response) = try await session.bytes(for: r)
+    /// A session of the transport's configuration with no connection in it. A long poll goes on one (chosen; not in the
+    /// spec): on a connection an earlier request used and the server or the path closed, the system may send an
+    /// idempotent request again on its own, unseen, and an answer that was handed messages and lost would then come back
+    /// empty (a lease nothing knows of); on a connection of its own, the loss fails the request.
+    public func freshSession() -> URLSession { makeSession(session.configuration) }
+
+    private func once(_ s: URLSession, _ r: URLRequest, maxBody: Int, readsBody: @Sendable (Int) -> Bool) async throws -> HTTPAnswer {
+        let (bytes, response) = try await s.bytes(for: r)
         guard let http = response as? HTTPURLResponse else { throw URLError(.badServerResponse) }
         guard readsBody(http.statusCode) else {
             bytes.task.cancel()

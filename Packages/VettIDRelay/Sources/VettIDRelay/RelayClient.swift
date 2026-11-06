@@ -201,6 +201,8 @@ public final class RelayClient: Sendable {
         var maxBody = RelayClient.maxJSONRead
         /// The attempts of this call; nil: the client's.
         var attempts: Int?
+        /// Called right before each attempt goes out (after any wait for the network).
+        var onSend: (@Sendable () -> Void)?
     }
 
     private func backoff(_ attempt: Int) -> TimeInterval {
@@ -240,8 +242,9 @@ public final class RelayClient: Sendable {
         let a: HTTPAnswer
         do {
             let timeout = c.longPoll ? Self.pollTimeout : Self.requestTimeout
-            a = try await transport.send(policy: c.policy, maxBody: c.maxBody, timeout: timeout) {
-                try request(c)
+            a = try await transport.send(policy: c.policy, maxBody: c.maxBody, timeout: timeout, fresh: c.longPoll) {
+                c.onSend?()
+                return try request(c)
             }
         } catch let e as BodyTooLarge {
             throw RelayError(status: e.status, code: RelayError.responseTooLarge, message: "response")
@@ -345,12 +348,16 @@ public final class RelayClient: Sendable {
     }
 
     /// Long-polls this mailbox (§6.3): [wait] ≤ 25 s, [max] ≤ 100. [attempts]: how many times it is tried (nil: the
-    /// client's; 1 for a caller that retries itself and bounds the call).
-    public func collect(wait: TimeInterval = defaultWait, max: Int = defaultMax, attempts: Int? = nil) async throws -> [RelayMessage] {
+    /// client's; 1 for a caller that retries itself and bounds the call). [sent]: called right before each attempt goes
+    /// out, when a lease of what it is handed can begin.
+    public func collect(
+        wait: TimeInterval = defaultWait, max: Int = defaultMax, attempts: Int? = nil, sent: (@Sendable () -> Void)? = nil
+    ) async throws -> [RelayMessage] {
         let w = Swift.min(Swift.max(Int(wait), 0), Self.maxWait)
         let m = Swift.min(Swift.max(max, 1), Self.maxCollect)
         var c = Call(method: "GET", path: "/v1/mailbox", query: "wait=\(w)&max=\(m)", longPoll: true)
         c.attempts = attempts
+        c.onSend = sent
         guard let o = try await json(c) else { return [] }
         return try o.array("messages").map { try RelayMessage.parse(try $0.asObject()) }
     }

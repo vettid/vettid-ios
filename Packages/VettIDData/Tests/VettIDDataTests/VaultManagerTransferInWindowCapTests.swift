@@ -16,6 +16,7 @@ extension VaultManagerTransferInTests {
         try await windowOnFrozenClocks()
         try await advance(90)
         #expect(m.session?.device.collecting == true, "the collector runs")
+        await freshCollectorRequest()
         let gate = try await pairingHeldOut(lease: 600, lost: lost)
         let rounds = m.moveFlags.book.collectorRounds
         phone.windowPauses.release()
@@ -44,7 +45,8 @@ extension VaultManagerTransferInTests {
         let gate = try await windowAtItsEndWithThePairingOut(lost: true)
         service.holdsCollectAnswers = nil
         gate.open()
-        #expect(await eventually { phone.windowPauses.lengths == [90, 60] }, "the end moved out: \(phone.windowPauses.lengths)")
+        // To the lease of the cut request (sent at 90 s, `wait=1`): 91 s + V + 15 s.
+        #expect(await eventually { phone.windowPauses.lengths == [90, 76] }, "the end moved out: \(phone.windowPauses.lengths)")
         service.endLeases()
         #expect(await eventually(within: .seconds(30)) { m.finishMovePending && m.record.value.transferStartedMs == nil })
         phone.windowPauses.release()
@@ -180,10 +182,11 @@ extension VaultManagerTransferInTests {
             phone.uptimeAhead += 0.5
             let sent = m.config.uptime()
             if own {
-                clock.ownOut = .init(at: sent, wait: 0)
-                clock.ownOut = nil
+                clock.own.sent(.init(at: sent, wait: 0))
+                clock.own.ended()
             } else {
                 d.collectorRequest(true, of: d.collectRound)
+                d.collectorSent(of: d.collectRound)
                 d.collectorRequest(false, of: d.collectRound)
             }
             phone.uptimeAhead += 20
@@ -260,24 +263,30 @@ extension VaultManagerTransferInTests {
         phone.uptimeAhead += 0.5
         let sent = m.config.uptime()
         d.collectorRequest(true, of: d.collectRound)
+        d.collectorSent(of: d.collectRound)
         phone.uptimeAhead += 20
         d.collectorFailed(URLError(.networkConnectionLost), of: d.collectRound)
         d.collectorRequest(false, of: d.collectRound)
         d.collectorRequest(true, of: d.collectRound)
+        d.collectorSent(of: d.collectRound)
         clock.follow(m, d)
         #expect(clock.finalNotBefore == sent + d.collectorWait + 75)
         clock.stop()
         phone.heartbeatPauses.release()
     }
 
-    /// The window's own collect answered 503 is a cut, as the collector's is: 40 s in, the end moves to now + 60 s.
+    /// The window's own collect answered 503 is a cut, as the collector's is: its long poll (sent at 40 s, `wait=25`) may
+    /// have been answered as late as 65 s, so the end moves to 65 s + V + 15 s (100 s left).
     @Test func aWindowCollectAnswered5xxIsACut() async throws {
         defer { phone.close() }
         try await windowOnFrozenClocks()
         m.session?.device.stop()
         try await advance(40)
+        // The window's collects go one at a time: once one went at 40 s, none sent earlier is still out.
+        let now = m.config.uptime()
+        #expect(await eventually { m.moveFlags.book.windowCollectSent == now }, "a window collect went out at 40 s")
         service.failNextCollects(1)
-        #expect(await eventually { phone.windowPauses.lengths == [90, 60] }, "\(phone.windowPauses.lengths)")
+        #expect(await eventually { phone.windowPauses.lengths == [90, 100] }, "\(phone.windowPauses.lengths)")
         phone.windowPauses.release()
     }
 
@@ -291,7 +300,10 @@ extension VaultManagerTransferInTests {
         let sent = m.config.uptime()
         #expect(await eventually { m.moveFlags.book.windowCollectSent == sent }, "a window collect went out at 59 s")
         let gate = try await pairingHeldOut(lease: 600, lost: true, wait: 25)
+        let beats = m.moveFlags.book.windowBeats
         phone.uptimeAhead += 20
+        // The heartbeat sees the freeze first: the collect it cut, sent before it began, is the freeze's.
+        #expect(await eventually { m.moveFlags.book.windowBeats >= beats + 2 }, "the heartbeat ticks")
         service.holdsCollectAnswers = nil
         gate.open()
         #expect(await eventually { phone.windowPauses.lengths == [90, 60] }, "to now + V: \(phone.windowPauses.lengths)")
@@ -321,6 +333,8 @@ extension VaultManagerTransferInTests {
             return d.collectRound
         }
         d.collectorRequest(true, of: new)
+        d.collectorSent(of: new)
+        d.collectorSent(of: new - 1)
         d.collectorRequest(false, of: new - 1)
         #expect(d.collectRequestUptime != nil, "the newer round's request is still out")
         let cuts = d.collectorCuts.count

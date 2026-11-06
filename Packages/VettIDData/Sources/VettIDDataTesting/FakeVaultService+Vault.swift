@@ -55,14 +55,7 @@ extension FakeVaultService {
             return .empty(204)
         }
         if r.path == "/v1/mailbox", r.method == "GET" {
-            if locked({ transfer.collectRefused }) { return .json(403, #"{"code":"mailbox_unknown","message":""}"#) }
-            let fails: Bool = locked {
-                guard transfer.collectFailures > 0 else { return false }
-                transfer.collectFailures -= 1
-                return true
-            }
-            if fails { return .json(503, #"{"code":"unavailable","message":""}"#) }
-            return collect(r)
+            return collectFault() ?? collect(r)
         }
         if r.path.hasPrefix("/v1/blob/") { return deviceBlob(r) }
         if r.path.hasPrefix("/v1/mailbox/"), r.method == "DELETE" {
@@ -87,6 +80,22 @@ extension FakeVaultService {
 
     private var registerAnswer: FakeHTTPServer.Answer {
         .json(201, #"{"mailbox_id":"x","limits":{"max_payload_bytes":262144,"message_ttl_seconds":1,"visibility_timeout_seconds":\#(locked { transfer.visibility }),"max_token_lifetime_seconds":1,"open_token_max_lifetime_seconds":\#(Self.relayInviteLimit),"max_claim_bytes":65536,"claim_ttl_seconds":\#(Self.relayInviteLimit)}}"#)
+    }
+
+    /// The answer a test asked for in place of the next collect's: the mailbox gone, a failure (503), a refusal (429).
+    private func collectFault() -> FakeHTTPServer.Answer? {
+        if locked({ transfer.collectRefused }) { return .json(403, #"{"code":"mailbox_unknown","message":""}"#) }
+        return locked {
+            if transfer.collectFailures > 0 {
+                transfer.collectFailures -= 1
+                return .json(503, #"{"code":"unavailable","message":""}"#)
+            }
+            if transfer.collectRefusals > 0 {
+                transfer.collectRefusals -= 1
+                return .json(429, #"{"code":"rate_limited","message":""}"#, headers: ["Retry-After": "7"])
+            }
+            return nil
+        }
     }
 
     /// One collect: the queued messages, waiting briefly while there are none.

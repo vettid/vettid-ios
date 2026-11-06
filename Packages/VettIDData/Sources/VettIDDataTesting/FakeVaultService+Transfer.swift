@@ -43,6 +43,7 @@ struct FakeTransferStore {
     var revokedDeposits = 0
     var collectRefused = false
     var collectFailures = 0
+    var collectRefusals = 0
     /// The collects of the device's mailbox being answered now (a long poll held while nothing waits), by number. (Kept
     /// here for the file's length; they count every collect of the device's mailbox.)
     var collecting: Set<Int> = []
@@ -270,6 +271,9 @@ extension FakeVaultService {
     /// The next [n] collects of this phone's own relay fail with a 503, which the collection tries again: then the relay
     /// connection comes back.
     public func failNextCollects(_ n: Int) { locked { transfer.collectFailures = n } }
+
+    /// The next [n] collects of the device's mailbox are refused `429 rate_limited`, with `Retry-After: 7`.
+    public func refuseNextCollects(_ n: Int) { locked { transfer.collectRefusals = n } }
 
     /// The collects of the device's mailbox the fake is answering now, by number: a long poll it holds while nothing
     /// waits, which takes the next message queued.

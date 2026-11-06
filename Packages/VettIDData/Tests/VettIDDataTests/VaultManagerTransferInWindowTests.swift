@@ -133,7 +133,8 @@ extension VaultManagerTransferInTests {
     }
 
     /// Back in the foreground during the window, its end moves out to now + V (within the cap): a suspended app's collects
-    /// were cut, and their leases may still run. 50 s in, 60 s are left.
+    /// were cut, and their leases may still run. 50 s in, the collector's long poll (`wait=1`) cut: to 51 s + V + 15 s,
+    /// 76 s left.
     @Test func aReturnToTheForegroundMovesTheEndOut() async throws {
         defer { phone.close() }
         try await windowOnFrozenClocks()
@@ -142,9 +143,10 @@ extension VaultManagerTransferInTests {
         m.onForeground()
         try await Task.sleep(for: .milliseconds(300))
         #expect(phone.windowPauses.lengths == [90])
+        await freshCollectorRequest()
         await m.onBackground(budget: .seconds(1))
         m.onForeground()
-        #expect(await eventually { phone.windowPauses.lengths == [90, 60] }, "\(phone.windowPauses.lengths)")
+        #expect(await eventually { phone.windowPauses.lengths == [90, 76] }, "\(phone.windowPauses.lengths)")
         phone.windowPauses.release()
     }
 

@@ -85,9 +85,20 @@ extension MailboxCollectorTests {
         await #expect(throws: RelayError.self) {
             try await MailboxCollector(
                 source: src, sleep: { _ in }, onRequest: { ended.add($0) },
-                onFailed: { e in told.add((e as? RelayError)?.code ?? "transport \(ended.all.last == true)") }
+                onFailed: { e, _ in told.add((e as? RelayError)?.code ?? "transport \(ended.all.last == true)") }
             ).run { _ in }
         }
         #expect(told.all == ["transport true", "internal", RelayError.mailboxUnknown], "\(told.all)")
+    }
+
+    /// A round handed messages whose ack is refused (a 4xx) mid-batch tells it was handed them: the rest stays leased.
+    @Test func aRoundHandedMessagesTellsSoWhenItFails() async throws {
+        let src = FakeSource([.messages([Self.msg("01A"), Self.msg("01B")])])
+        src.ackError = RelayError(status: 403, code: "forbidden")
+        let told = Recorder<Bool>()
+        await #expect(throws: RelayError.self) {
+            try await MailboxCollector(source: src, sleep: { _ in }, onFailed: { _, handed in told.add(handed) }).run { _ in }
+        }
+        #expect(told.all == [true], "\(told.all)")
     }
 }

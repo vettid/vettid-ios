@@ -213,7 +213,7 @@ public final class VaultDevice: @unchecked Sendable {
     var refusals = 0
     var collector: Task<Void, Never>?
     var collectEnded: String?
-    var collectSince: (at: Date, uptime: TimeInterval)?, collectLastSent: TimeInterval?, collectRound = 0
+    var collectSince: (at: Date, uptime: TimeInterval?)?, collectLastSent: TimeInterval?, collectRound = 0
     var stopped = true
     /// Set by ``forget()``: nothing is written to the store any more.
     var forgotten = false
@@ -441,22 +441,13 @@ public final class VaultDevice: @unchecked Sendable {
             guard let self else { return }
             let flush = Task { await self.flushOutbox() }
             defer { flush.cancel() }
-            let source = RelayMailbox(client: own, transport: cfg.transport)
-            let c = MailboxCollector(
-                source: source, mode: cfg.collectMode, wait: cfg.pollWait, now: cfg.now,
-                onRequest: { [weak self] out in self?.collectorRequest(out, of: round) },
-                onRecovered: { [weak self] in self?.relayCameBack() }, onFailed: { [weak self] in self?.collectorFailed($0, of: round) }
-            )
             do {
-                try await c.run { m in try await self.handle(m) }
-            } catch let e as RelayError {
-                // A terminal relay error ends the collection; the next start() collects again.
-                mem.withLock { collectEnded = e.code }
+                try await collector(of: round).run { m in try await self.handle(m) }
             } catch is CancellationError {
                 return
             } catch {
-                // Anything else that ends it is reported the same way, so that the collection is started again.
-                mem.withLock { collectEnded = String(describing: type(of: error)) }
+                // A terminal relay error, or anything else, ends the collection; the next start() collects again.
+                collectionEnded(error, of: round)
             }
         }
         // A stop() since the start above wins: the collection it would have stopped is cancelled at once.

@@ -64,6 +64,8 @@ final class MoveBook {
     var finalCollects = 0
     /// When the last collect of a settlement window went out (uptime; what a test reads).
     var windowCollectSent: TimeInterval?
+    /// The last pause a settlement window asked for between its collects (seconds; what a test reads).
+    var windowPauseSeconds: TimeInterval?
     /// The ticks of settlement windows' heartbeats (what a test that moves the clock awaits).
     var windowBeats = 0
     /// How many day-7 checks ended (any result): what a test awaits instead of a fixed time.

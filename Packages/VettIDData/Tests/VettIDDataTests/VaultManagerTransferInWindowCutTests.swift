@@ -38,6 +38,14 @@ extension VaultManagerTransferInTests {
         }
     }
 
+    /// Waits until the collector's request out now went at the frozen uptime: none sent earlier is still out (the
+    /// collector has one at a time), so a lease of what it is handed counts from now. Nothing when no collector runs.
+    func freshCollectorRequest() async {
+        guard m.session?.device.collecting == true else { return }
+        let now = m.config.uptime()
+        #expect(await eventually { m.session?.device.collectRequestUptime == now }, "a collector request went out now")
+    }
+
     /// The window running on frozen clocks, its first pause (90 s) held.
     func windowOnFrozenClocks() async throws {
         _ = try await scanned()
@@ -92,6 +100,7 @@ extension VaultManagerTransferInTests {
         try await windowOnFrozenClocks()
         try await advance(90)
         #expect(m.session?.device.collecting == true, "the collector runs")
+        await freshCollectorRequest()
         service.leasesCollected = 600
         let gate = FakeHTTPServer.Gate()
         service.holdsCollectAnswersOfWait = 1
@@ -106,7 +115,8 @@ extension VaultManagerTransferInTests {
         service.holdsCollectAnswers = nil
         gate.open()
         m.onForeground()
-        #expect(await eventually { phone.windowPauses.lengths == [90, 60] }, "the end moved out: \(phone.windowPauses.lengths)")
+        // The collector's long poll (sent at 90 s, `wait=1`) cut: to 91 s + V + 15 s.
+        #expect(await eventually { phone.windowPauses.lengths == [90, 76] }, "the end moved out: \(phone.windowPauses.lengths)")
         service.endLeases()
         #expect(await eventually(within: .seconds(30)) { m.finishMovePending && m.record.value.transferStartedMs == nil })
         phone.windowPauses.release()
@@ -164,18 +174,20 @@ extension VaultManagerTransferInTests {
         phone.windowPauses.release()
     }
 
-    /// Backgrounds again and again cannot move the end past the cap (the first end + V + 35 s, 185 s in): at 70 s the end
-    /// moves to 130 s, at 150 s to the cap (35 s left), and at 170 s no more.
+    /// Backgrounds again and again cannot move the end past the cap (the first end + V + 35 s, 185 s in): each cuts the
+    /// collector's long poll (`wait=1`), so at 70 s the end moves to 71 s + V + 15 s (146 s), at 150 s to the cap (35 s
+    /// left), and at 170 s no more.
     @Test func repeatedBackgroundsStopAtTheCap() async throws {
         defer { phone.close() }
         try await windowOnFrozenClocks()
         for to in [70.0, 150, 170] {
             try await advance(to - phone.uptimeAhead)
+            await freshCollectorRequest()
             await m.onBackground(budget: .seconds(1))
             m.onForeground()
             try await Task.sleep(for: .milliseconds(150))
         }
-        #expect(phone.windowPauses.lengths == [90, 60, 35], "\(phone.windowPauses.lengths)")
+        #expect(phone.windowPauses.lengths == [90, 76, 35], "\(phone.windowPauses.lengths)")
         phone.windowPauses.release()
     }
 

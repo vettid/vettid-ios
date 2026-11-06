@@ -214,14 +214,13 @@ extension VaultDevice {
     /// The visibility timeout the mailbox's last registration gave, if one was kept (seconds).
     public var storedRelayVisibility: TimeInterval? { mem.withLock { st.relayVisibilitySeconds.map { TimeInterval($0) } } }
 
-    /// A round of the collector went out ([out]) or ended: when, on this device's clocks (``collectRequestSince``).
-    /// [round]: the collection's (``start()``); a stopped one's last request ending late leaves a newer one's alone.
+    /// A round of the collector began ([out]) or ended (``collectRequestSince``); its request's send time comes when it
+    /// goes out (``collectorSent(of:)``). [round]: the collection's (``start()``); a stopped one's last request ending
+    /// late leaves a newer one's alone.
     func collectorRequest(_ out: Bool, of round: Int) {
-        let up = cfg.uptime()
         mem.withLock {
             guard round == collectRound else { return }
-            collectSince = out ? (Date(), up) : nil
-            if out { collectLastSent = up }
+            collectSince = out ? (Date(), nil) : nil
         }
     }
 
@@ -242,15 +241,16 @@ extension VaultDevice {
     /// not read or handle, and a request out when the collection stopped. A relay's 4xx handed nothing out.
     public var collectorCuts: (count: Int, sent: TimeInterval?) { mem.withLock { collectCuts } }
 
-    /// A round of the collector failed with [e] (``collectorCuts``); [round]: the collection's. A stopped one's late failure
-    /// counts nothing: ``stop()`` counted its request out.
-    func collectorFailed(_ e: Error, of round: Int) {
-        let cut: Bool = switch e {
+    /// A round of the collector failed with [e] (``collectorCuts``); [handed]: it had been handed messages, which may stay
+    /// leased whatever the error (an ack refused mid-batch leaves the rest unhandled); [round]: the collection's. A stopped
+    /// one's late failure counts nothing: ``stop()`` counted its request out.
+    func collectorFailed(_ e: Error, handed: Bool = false, of round: Int) {
+        let lost: Bool = switch e {
         case let r as RelayError: r.status >= 500 || r.status < 400
         case is CancellationError: false
         default: true
         }
-        guard cut else { return }
+        guard handed || lost else { return }
         mem.withLock {
             guard round == collectRound else { return }
             collectCuts = (collectCuts.count + 1, collectSince?.uptime)
@@ -266,11 +266,12 @@ extension VaultDevice {
     /// ``awaitTransfer(timeout:)``. Throws when the collect fails or times out; a task that is cancelled stops it.
     public func collectOnce(
         timeout: TimeInterval = 30, wait: TimeInterval = 0, attempts: Int? = nil,
-        sleep: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) }
+        sleep: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) },
+        sent: (@Sendable () -> Void)? = nil
     ) async throws {
         let own = own
         let messages: [RelayMessage] = try await withThrowingTaskGroup(of: [RelayMessage]?.self) { group in
-            group.addTask { try await own.collect(wait: wait, max: RelayClient.maxCollect, attempts: attempts) }
+            group.addTask { try await own.collect(wait: wait, max: RelayClient.maxCollect, attempts: attempts, sent: sent) }
             group.addTask {
                 try await sleep(.seconds(timeout))
                 return nil
