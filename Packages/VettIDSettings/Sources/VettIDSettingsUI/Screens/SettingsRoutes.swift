@@ -6,6 +6,11 @@ import VettIDData
 import VettIDSettings
 import VettIDUI
 
+extension EnvironmentValues {
+    /// The environment's account site's deletion page (``AccountDeletion/url(origin:)``); nil hides "Delete your VettID account".
+    @Entry public var accountDeletionURL: URL?
+}
+
 /// What Settings needs from the app shell. Mirrors vettid-android `SettingsHost`.
 public struct SettingsHost {
     public var onBack: @MainActor () -> Void = {}
@@ -43,6 +48,8 @@ public struct SettingsRoute: View {
     private let updates: (any ReleaseUpdateRepository)?
     private let promptReason: String
     private let host: SettingsHost
+    /// The account site's deletion page, set at the app's root (``AccountDeletion``); nil hides "Delete your VettID account".
+    @Environment(\.accountDeletionURL) private var accountDeletionURL
     /// The member's own profile photo on the account card (decoded by the shell, which shows it in the top bar too).
     private let accountPhoto: UIImage?
     /// The app's "Allow screenshots" (IOS-PLAN §4), from the environment; absent in a preview or a test.
@@ -83,7 +90,8 @@ public struct SettingsRoute: View {
             if let model, let ownerCheck {
                 SettingsContent(
                     state: model.state, ownerCheck: ownerCheck.state, actions: actions(model),
-                    ownerCheckActions: ownerCheckActions(ownerCheck), accountPhoto: accountPhoto
+                    ownerCheckActions: ownerCheckActions(ownerCheck), accountPhoto: accountPhoto,
+                    accountDeletionURL: accountDeletionURL
                 )
             } else {
                 // Until the view models are made (the first appearance): the same screen from the repositories, no blank frame.
@@ -94,7 +102,8 @@ public struct SettingsRoute: View {
                         screenshotsStayOn: screenshots?.staysOn ?? false, phoneSecret: vault.usesPhoneSecret, update: updates?.offer,
                         theme: theme?.theme ?? .system, notificationPreviews: previews?.previews
                     ),
-                    ownerCheck: OwnerCheckSettingsState(view: ownerChecks.ownerCheck), accountPhoto: accountPhoto
+                    ownerCheck: OwnerCheckSettingsState(view: ownerChecks.ownerCheck), accountPhoto: accountPhoto,
+                    accountDeletionURL: accountDeletionURL
                 )
             }
         }

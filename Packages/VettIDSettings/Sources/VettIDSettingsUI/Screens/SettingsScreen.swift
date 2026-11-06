@@ -54,6 +54,7 @@ public struct SettingsContent: View {
     static let screenshotsRowShown = false
 
     @Environment(\.vettIDColors) private var colors
+    @Environment(\.openURL) private var openURL
     let state: SettingsState
     let ownerCheck: OwnerCheckSettingsState
     let actions: SettingsActions
@@ -61,6 +62,9 @@ public struct SettingsContent: View {
     let now: Date
     /// The member's own profile photo (VAULT-MESSAGING §10.8) on the account card, decoded by the caller.
     let accountPhoto: UIImage?
+    /// The account site's deletion page (``AccountDeletion``): "Delete your VettID account" is hidden while it is nil.
+    let accountDeletionURL: URL?
+    @State private var confirmAccountDeletion = false
     @State private var confirmLock = false
     @State private var confirmScreenshots: Bool
     @State private var picker: SettingsPicker?
@@ -73,9 +77,11 @@ public struct SettingsContent: View {
         ownerCheckActions: OwnerCheckSettingsActions = OwnerCheckSettingsActions(),
         now: Date = Date(),
         askScreenshots: Bool = false,
-        accountPhoto: UIImage? = nil
+        accountPhoto: UIImage? = nil,
+        accountDeletionURL: URL? = nil
     ) {
         self.accountPhoto = accountPhoto
+        self.accountDeletionURL = accountDeletionURL
         self.state = state
         self.ownerCheck = ownerCheck
         self.actions = actions
@@ -142,11 +148,24 @@ public struct SettingsContent: View {
                             action: actions.deleteVault
                         )
                         .accessibilityIdentifier("delete_vault")
+                        if accountDeletionShown {
+                            SettingsDivider()
+                            SettingsRow(
+                                SecurityStrings.deleteAccount, icon: .delete, iconTint: colors.error,
+                                supporting: SecurityStrings.deleteAccountBody
+                            ) { confirmAccountDeletion = true }
+                            .accessibilityIdentifier("delete_account")
+                        }
                     }
                     Spacer().frame(height: Spacing.xxl)
                 }
             }
         }
+        .confirmDialog(
+            isPresented: $confirmAccountDeletion, title: SecurityStrings.deleteAccount, message: SecurityStrings.deleteAccountExplain,
+            confirmLabel: SecurityStrings.deleteAccountOpen, dismissLabel: SettingsStrings.cancel,
+            onConfirm: { if let url = accountDeletionURL { openURL(url) } }
+        )
         .confirmDialog(
             isPresented: $confirmLock, title: SettingsStrings.vaultLock, message: SettingsStrings.vaultLockBody,
             confirmLabel: SettingsStrings.vaultLock, dismissLabel: SettingsStrings.cancel, onConfirm: actions.lockVault
@@ -160,6 +179,9 @@ public struct SettingsContent: View {
             SettingsPickerSheet(picker: p, state: state, actions: actions) { picker = nil }
         }
     }
+
+    /// "Delete your VettID account" is offered once the account site has a deletion page to open.
+    var accountDeletionShown: Bool { accountDeletionURL != nil }
 
     /// App: Theme (a choice of three, as vettid-android's `ChoiceDialog`), then Allow screenshots once it is shown.
     private var appSection: some View {

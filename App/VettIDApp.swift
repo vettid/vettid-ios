@@ -333,6 +333,7 @@ struct AppRoot: View {
                     history: vault.history, historyExport: vault.historyExport, items: vault.items, sharing: vault.sharing,
                     votes: vault.votes, move: move
                 ) { openPortal() }
+                .environment(\.accountDeletionURL, AccountDeletion.url(origin: environment.apiOrigin))
                 .modifier(OptionalNotificationsHook(
                     notifications: notifications, model: shell, feed: vault.feed, checks: vault.ownerChecks
                 ))

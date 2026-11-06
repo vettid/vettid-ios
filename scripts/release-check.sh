@@ -222,6 +222,67 @@ check_store_files() {
   echo "${app}: icon ${icon} and the privacy manifest present"
 }
 
+# The document types the shipping Info.plist declares, whole (normalised JSON), and the exported types it declares (none):
+# one place for both. A canary manifest is opened with VettID as JSON, at rank Alternate, a viewer (VAULT-RELEASES §10.1
+# step 9); narrowing it to a type of VettID's own waits for the release tooling to write one. A second entry, a
+# wider type, another rank or an exported type of the app's own (one claiming the json extension, say) is refused.
+EXPECTED_DOCUMENT_TYPES='[{"CFBundleTypeName":"VettID release manifest","CFBundleTypeRole":"Viewer","LSHandlerRank":"Alternate","LSItemContentTypes":["public.json"]}]'
+EXPECTED_EXPORTED_TYPES='none'
+
+# The Xcode run destinations of Mac, Mac Catalyst and Apple Vision Pro are off in <config>'s build settings (<settings> is
+# `xcodebuild -showBuildSettings`). These settings do not set the store's availability: that is opted out in App Store Connect
+# (Pricing and Availability, for Mac and for Apple Vision Pro separately), a step of the owner's release checklist.
+check_run_destinations() {
+  local settings=$1 config=$2 k problems=0
+  for k in SUPPORTS_MACCATALYST SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD; do
+    grep -qE "^ *${k} = NO\$" <<<"${settings}" || { echo "${k} is not NO in ${config}" >&2; problems=1; }
+  done
+  return ${problems}
+}
+
+# The shipping Info.plist and binary (App Store readiness): the export compliance answer (the app implements its own
+# end-to-end encryption and qualifies for the mass-market exemption, Category 5 Part 2 note 3, which the owner confirms in
+# App Store Connect), an iPhone-only app (the device family, the iOS platform of the executable, no Mac key; this does not
+# show the store's Mac and Vision Pro availability, which is set in App Store Connect), the privacy manifest, the document
+# types as declared above, and the configuration's Xcode run destinations.
+check_shipping_plist() {
+  local app=$1 config=$2 problems=() v settings exe
+  local info="${app}/Info.plist"
+  v=$(/usr/libexec/PlistBuddy -c 'Print :ITSAppUsesNonExemptEncryption' "${info}" 2>/dev/null || true)
+  [[ "${v}" == "true" ]] || problems+=("ITSAppUsesNonExemptEncryption '${v}', expected true")
+  v=$(plutil -extract UIDeviceFamily json -o - "${info}" 2>/dev/null | tr -d ' ' || true)
+  [[ "${v}" == "[1]" ]] || problems+=("UIDeviceFamily ${v}, expected [1] (iPhone)")
+  for key in LSMinimumSystemVersion LSMinimumSystemVersionByArchitecture; do
+    [[ -z "$(/usr/libexec/PlistBuddy -c "Print :${key}" "${info}" 2>/dev/null || true)" ]] || problems+=("Info.plist has ${key} (a Mac key)")
+  done
+  v=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleSupportedPlatforms' "${info}" 2>/dev/null | tr -d ' \n' || true)
+  [[ "${v}" == "Array{iPhoneOS}" ]] || problems+=("CFBundleSupportedPlatforms ${v}, expected iPhoneOS alone")
+  [[ -f "${app}/PrivacyInfo.xcprivacy" ]] || problems+=("no PrivacyInfo.xcprivacy")
+  # The executable is built for iOS alone (no Mac Catalyst or visionOS slice).
+  exe="${app}/$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "${info}" 2>/dev/null || true)"
+  if [[ -f "${exe}" ]]; then
+    v=$(xcrun vtool -show-build "${exe}" 2>/dev/null | sed -n 's/^ *platform //p' | sort -u | tr '\n' ' ')
+    [[ "${v}" == "IOS " ]] || problems+=("the executable's platforms '${v}', expected IOS alone")
+  else
+    problems+=("no executable")
+  fi
+  # The document types and the exported types, whole.
+  v=$(plutil -extract CFBundleDocumentTypes json -o - "${info}" 2>/dev/null | jq -S -c . 2>/dev/null || true)
+  [[ "${v}" == "$(jq -S -c . <<<"${EXPECTED_DOCUMENT_TYPES}")" ]] || problems+=("CFBundleDocumentTypes ${v}, expected ${EXPECTED_DOCUMENT_TYPES}")
+  v=$(plutil -extract UTExportedTypeDeclarations json -o - "${info}" 2>/dev/null | jq -S -c . 2>/dev/null || echo none)
+  [[ "${v}" == "${EXPECTED_EXPORTED_TYPES}" ]] || problems+=("UTExportedTypeDeclarations ${v}, expected ${EXPECTED_EXPORTED_TYPES}")
+  # The configuration's own Xcode run destinations.
+  if [[ -n "${config}" ]]; then
+    settings=$(xcodebuild -showBuildSettings -project VettID.xcodeproj -target VettID -configuration "${config}" 2>/dev/null)
+    check_run_destinations "${settings}" "${config}" 2>/dev/null || problems+=("a Mac, Mac Catalyst or Vision Pro run destination is on in ${config}")
+  fi
+  if [[ ${#problems[@]} -gt 0 ]]; then
+    for p in "${problems[@]}"; do echo "${app}: ${p}" >&2; done
+    return 1
+  fi
+  echo "${app}: export compliance declared, iPhone only (the store's Mac and Vision Pro availability is set in App Store Connect), privacy manifest present, document types as expected"
+}
+
 # An archive holds the VettID app alone: never the VettIDDevStack app (SKIP_INSTALL, and not in the VettID scheme).
 check_archive_products() {
   local config=$1 products
@@ -300,6 +361,8 @@ check_schemes() {
   echo "schemes ${SHIPPING_SCHEMES[*]}: no VettIDDevStack target"
 }
 
+EXPECTED_ENTITLEMENTS='{"com.apple.developer.associated-domains":["applinks:relay.vettid.org"],"com.apple.developer.devicecheck.appattest-environment":"production"}'
+
 # The archives are unsigned, so their entitlements are checked at the source: Release and Staging sign with the
 # production App Attest environment (IOS-PLAN §6.2; the vault accepts only it).
 check_entitlements_file() {
@@ -307,7 +370,14 @@ check_entitlements_file() {
   [[ -n "${file}" && -f "${file}" ]] || { echo "${what}: no entitlements file" >&2; return 1; }
   env=$(/usr/libexec/PlistBuddy -c 'Print :com.apple.developer.devicecheck.appattest-environment' "${file}" 2>/dev/null || true)
   [[ "${env}" == "production" ]] || { echo "${what}: App Attest environment '${env}', expected production" >&2; return 1; }
-  echo "${what}: App Attest environment production (${file})"
+  # Exactly the expected set, nothing added (a keychain group, a capability): App Attest's production environment and the
+  # Universal Link domain of invitations. The keychain access group is not an entitlement of this file: it is the signing
+  # team's (the app's own, with no shared group), added when Xcode signs (IOS-PLAN §6.1: nothing is shared or synchronizable).
+  local actual
+  actual=$(plutil -convert json -o - "${file}" 2>/dev/null | jq -S -c . 2>/dev/null || true)
+  [[ "${actual}" == "${EXPECTED_ENTITLEMENTS}" ]] ||
+    { echo "${what}: entitlements ${actual}, expected exactly ${EXPECTED_ENTITLEMENTS}" >&2; return 1; }
+  echo "${what}: App Attest environment production, the entitlements are exactly the expected set (${file})"
 }
 
 check_entitlements() {
@@ -369,6 +439,9 @@ check_release "$(app_of Release)"
 check_staging "$(app_of Staging)"
 check_store_files "$(app_of Release)" AppIcon
 check_store_files "$(app_of Staging)" AppIcon-NonProduction
+check_shipping_plist "$(app_of Release)" Release
+check_shipping_plist "$(app_of Staging)" Staging
+scripts/licences.sh --verify
 
 # Every object file the two archives compiled (the app's and every package's, before the linker strips unused code)
 # is free of the TEST markers too.
@@ -551,6 +624,71 @@ if [[ ${SELF_TEST} -eq 1 ]]; then
     unstore "${config}" "${icon}" "with a collected type used for tracking" \
       "plutil -replace NSPrivacyCollectedDataTypes.1.NSPrivacyCollectedDataTypeTracking -bool true PrivacyInfo.xcprivacy"
   done
+  # The shipping Info.plist: each change below must fail check_shipping_plist (a copy of each app, changed by <command>).
+  unship() {
+    local config=$1 what=$2 command=$3
+    local copy="${OUT}/planted/${config}-ship/VettID.app"
+    rm -rf "${OUT}/planted/${config}-ship"
+    mkdir -p "$(dirname "${copy}")"
+    cp -R "$(app_of "${config}")" "${copy}"
+    (cd "${copy}" && eval "${command}")
+    if check_shipping_plist "${copy}" "" 2>/dev/null; then
+      echo "self-test FAILED: ${config} accepted an app ${what}" >&2
+      exit 1
+    fi
+    echo "self-test: ${config} refuses an app ${what}"
+  }
+  for config in Release Staging; do
+    unship "${config}" "with ITSAppUsesNonExemptEncryption false" "plutil -replace ITSAppUsesNonExemptEncryption -bool false Info.plist"
+    unship "${config}" "without ITSAppUsesNonExemptEncryption" "plutil -remove ITSAppUsesNonExemptEncryption Info.plist"
+    unship "${config}" "that also runs on an iPad" "plutil -replace UIDeviceFamily -json '[1,2]' Info.plist"
+    unship "${config}" "with a Mac key" "plutil -insert LSMinimumSystemVersion -string 14.0 Info.plist"
+    unship "${config}" "with a second document type for JSON" \
+      "plutil -insert CFBundleDocumentTypes.1 -json '{\"CFBundleTypeName\":\"JSON\",\"CFBundleTypeRole\":\"Viewer\",\"LSHandlerRank\":\"Alternate\",\"LSItemContentTypes\":[\"public.json\"]}' Info.plist"
+    unship "${config}" "with a wider document type" \
+      "plutil -replace CFBundleDocumentTypes.0.LSItemContentTypes -json '[\"public.json\",\"public.data\"]' Info.plist"
+    unship "${config}" "that is the default app for JSON" "plutil -replace CFBundleDocumentTypes.0.LSHandlerRank -string Owner Info.plist"
+    unship "${config}" "with an exported type claiming the json extension" \
+      "plutil -insert UTExportedTypeDeclarations -json '[{\"UTTypeIdentifier\":\"org.vettid.any\",\"UTTypeConformsTo\":[\"public.json\"],\"UTTypeTagSpecification\":{\"public.filename-extension\":[\"json\"]}}]' Info.plist"
+    unship "${config}" "without its privacy manifest" "rm PrivacyInfo.xcprivacy"
+  done
+  # Mac, Mac Catalyst and Vision Pro run destinations on must be refused (the settings text of a configuration).
+  for k in SUPPORTS_MACCATALYST SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD; do
+    on=$(xcodebuild -showBuildSettings -project VettID.xcodeproj -target VettID -configuration Release 2>/dev/null | sed "s/^ *${k} = NO\$/    ${k} = YES/")
+    if check_run_destinations "${on}" Release >/dev/null 2>&1; then
+      echo "self-test FAILED: the run destination check accepted ${k} = YES" >&2
+      exit 1
+    fi
+  done
+  echo "self-test: the run destination check refuses each of the three on"
+  # An entitlements file with another capability, or without the associated domain, must be refused.
+  extra="${OUT}/planted/extra.entitlements"
+  cp Config/VettID-production.entitlements "${extra}"
+  /usr/libexec/PlistBuddy -c 'Add :com.apple.security.application-groups array' -c 'Add :com.apple.security.application-groups:0 string group.org.vettid.shared' "${extra}"
+  nodomain="${OUT}/planted/nodomain.entitlements"
+  cp Config/VettID-production.entitlements "${nodomain}"
+  /usr/libexec/PlistBuddy -c 'Delete :com.apple.developer.associated-domains' "${nodomain}"
+  for f in "${extra}" "${nodomain}"; do
+    if check_entitlements_file planted "${f}" >/dev/null 2>&1; then
+      echo "self-test FAILED: the entitlement check accepted ${f}" >&2
+      exit 1
+    fi
+  done
+  echo "self-test: the entitlement check refuses an added capability and a missing associated domain"
+  # The licenses list must name every dependency: a resource without one is refused.
+  cp Packages/VettIDSettings/Sources/VettIDSettingsUI/Resources/Licences.json "${OUT}/planted/Licences.json"
+  jq 'map(select(.id != "swift-sodium"))' "${OUT}/planted/Licences.json" >"${OUT}/planted/Licences-without.json"
+  if LICENCES_RESOURCE="${OUT}/planted/Licences-without.json" scripts/licences.sh --verify >/dev/null 2>&1; then
+    echo "self-test FAILED: the licenses check accepted a list without swift-sodium" >&2
+    exit 1
+  fi
+  echo "self-test: the licenses check refuses a list that lacks a dependency"
+  jq 'map(if .id == "swift-crypto" then .version = "0.0.0" else . end)' "${OUT}/planted/Licences.json" >"${OUT}/planted/Licences-version.json"
+  if LICENCES_RESOURCE="${OUT}/planted/Licences-version.json" scripts/licences.sh --verify >/dev/null 2>&1; then
+    echo "self-test FAILED: the licenses check accepted a list naming another version of swift-crypto" >&2
+    exit 1
+  fi
+  echo "self-test: the licenses check refuses a list naming another version"
   unstore Release AppIcon "with the non-production icon name" \
     "plutil -replace CFBundleIcons.CFBundlePrimaryIcon.CFBundleIconName -string AppIcon-NonProduction Info.plist"
   unstore Staging AppIcon-NonProduction "with the production icon name" \
