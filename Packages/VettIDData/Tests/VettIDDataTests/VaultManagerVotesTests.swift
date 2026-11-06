@@ -74,7 +74,7 @@ import VettIDVault
             #expect(try body.string("connection_id") == "conn-7", "\(type)")
             #expect(try body.string("proposal_id") == Self.pid, "\(type)")
         }
-        #expect(try sent[1].body.string("choice_id") == "yes")
+        #expect(try sent[1].body.string("choice_id") == "yes" && sent[1].body.string("pad") == String(repeating: "0", count: 29))
         #expect(try sent[3].body.bool("mine") == true)
         let release = sent[5].body
         #expect(release.has("utk_id") && release.has("sealed") && !release.has("pin"))
@@ -94,6 +94,32 @@ import VettIDVault
         #expect(try lists[1].array("ack_dropped").map { try $0.asString() } == ["c1", "c2"])
         #expect(try lists[2].string("state") == "open" && lists[2].uint("limit", min: 0, max: 1_000) == 100)
         #expect(try lists[3].uint("limit", min: 0, max: 1_000) == 1)
+    }
+
+    /// `pad` (VAULT-MESSAGING 0.83.6 §10.19.5): the `vote.cast` request has one size, and one padded size, for every
+    /// `choice_id` of 1 to 32 bytes, so that a longer choice id cannot move it into the next bucket.
+    @Test func theCastRequestHasOneSizeForEveryChoiceId() async throws {
+        defer { phone.close() }
+        service.setVotes([])
+        try await open()
+        #expect(await eventually { m.votes.availability == .available })
+        let api = try m.openApi(try await m.openSession())
+        let key = VoteKey(connectionID: "conn-7", proposalID: Self.pid)
+        let start = service.voteBodies.count
+        let ids = ["a", "yes", "abstain", String(repeating: "x", count: 31), String(repeating: "-", count: 32)]
+        for id in ids { _ = try? await api.voteCast(key, choiceID: id) }
+        let bodies = Array(service.voteBodies.dropFirst(start)).map(\.body)
+        #expect(bodies.count == ids.count)
+        for (id, body) in zip(ids, bodies) {
+            #expect(try body.string("pad").utf8.count == 32 - id.utf8.count && body.string("choice_id") == id)
+            // The body and its padded inner plaintext (the encoder's, with the longest `seq`) are the same size.
+            #expect(body.raw.utf8.count == bodies[0].raw.utf8.count, "\(id)")
+        }
+        let padded = try bodies.map { b -> Int in
+            let inner = Inner(id: Ulid.new(), type: "vote.cast", ts: Date(), seq: StrictJson.maxSafeInteger, body: Array(b.raw.utf8))
+            return try Padding.paddedLen(try inner.marshal(.session).count)
+        }
+        #expect(Set(padded).count == 1)
     }
 
     /// Leaving the foreground while the lock of a vote's unlock window is on its way (IOS-PLAN §6.6): the collection runs

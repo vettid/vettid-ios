@@ -2758,6 +2758,28 @@
         }
       }
     },
+    "data_feed_vote_result_gave_up": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vote results not checked yet"
+          }
+        }
+      }
+    },
+    "data_feed_vote_result_gave_up_detail": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "VettID couldn't check the published results of this vote yet. It will check them again by itself when it can. You don't need to do anything."
+          }
+        }
+      }
+    },
     "data_feed_vote_problem": {
       "extractionState": "manual",
       "localizations": {

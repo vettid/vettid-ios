@@ -40,24 +40,40 @@ extension VoteSiteRunner {
             return .notChecked
         }
         try Task.checkCancellation()
+        // Nothing checked (no tag to look for, results.json over the limit or not reading): not a failed observer check but
+        // one that could not run, so "not rechecked" and no number, not "don't add up" (#317 item 2).
         guard let tag = detail.recordTag.flatMap({ try? Base64s.decodeStd($0, Self.tagSize) }) else { return .notChecked }
-        let files: VoteSiteReader.ResultsFiles
-        switch try await reader.fetchResults(key.proposalID) {
-        case .tooLarge, .rowsTooLarge: return keepRecheck(key, consistent: false)
-        case .siteDown, .notPublished: return .notChecked
-        case .files(let f): files = f
+        let doc: [UInt8]
+        switch try await reader.fetchSmall(key.proposalID) {
+        case .tooLarge, .siteDown, .notPublished: return .notChecked
+        case let .files(d, _, _): doc = d
         }
-        let doc = files.doc
-        let rows = files.rows
+        // A cap that does not read (`counts.eligible` missing or outside 1 to 100,000) checks nothing either.
+        guard case .cap(let cap) = VoteRows.rowsBound(results: doc) else { return .notChecked }
+        let rows: [UInt8]
+        switch try await reader.fetchRows(key.proposalID, cap: cap) {
+        case .absent, .down: return .notChecked
+        // An over-cap rows.json is still a failed check: its cap comes from a results.json that parsed.
+        case .tooLarge: return keepRecheck(key, consistent: false)
+        case .rows(let b): rows = b
+        }
         // A failure that leaves no row with a proof is a problem as well: the results no longer hold what was checked.
         // The site's numbers must also be the ones the vault verified (`vote.get`): the site's copy is what is checked
         // here, not the vault's (chosen; not in the spec).
-        let consistent = await Task.detached {
+        let verdict = await Task.detached { () -> Bool? in
             guard Self.sameNumbers(doc, detail) else { return false }
-            return (try? VoteRows.ownRow(results: doc, rows: rows, recordTag: tag)).map { $0.problem == nil } ?? false
+            do {
+                return try VoteRows.ownRow(results: doc, rows: rows, recordTag: tag).problem == nil
+            } catch let p as ResultsProblem {
+                // Results that do not read at all: nothing was checked.
+                return p.reason == "results" ? nil : false
+            } catch {
+                return false
+            }
         }.value
         try Task.checkCancellation()
-        return keepRecheck(key, consistent: consistent)
+        guard let verdict else { return .notChecked }
+        return keepRecheck(key, consistent: verdict)
     }
 
     private func keepRecheck(_ key: VoteKey, consistent: Bool) -> RecheckOutcome {

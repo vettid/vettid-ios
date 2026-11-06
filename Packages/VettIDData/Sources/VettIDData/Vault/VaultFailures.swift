@@ -260,6 +260,9 @@ enum ReleasePath {
         guard capabilities.contains(Capabilities.recoveryR) else { throw VaultFailure(.releaseTooOld, code: codeReleaseTooOld) }
     }
 
+    /// (0.83.3) Whether the vault lists `vote_rows`: only then are `other_rows` and `rows_unavailable` sent (§10.19.6 step 3).
+    static func voteRows(_ capabilities: [String]) -> Bool { capabilities.contains(Capabilities.voteRows) }
+
     /// Whether recovery is offered: always for a release before R, else only with `recovery_offered`.
     static func recoveryOffered(_ capabilities: [String]) -> Bool {
         !capabilities.contains(Capabilities.recoveryR) || capabilities.contains(Capabilities.recoveryOffered)
