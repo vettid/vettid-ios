@@ -98,17 +98,29 @@ public final class FeedNotifier {
         }
     }
 
-    /// [work]'s answer, or false when it takes longer than [wait].
+    /// [work]'s answer, or false when it takes longer than [wait]. The first of the two wins and the caller does not wait
+    /// for the other: a read queued behind earlier reads (or one that ignores cancellation) cannot hold the cap past [wait].
     private static func within(_ wait: Duration, _ work: @escaping @MainActor () async -> Bool) async -> Bool {
-        await withTaskGroup(of: Bool.self) { group in
-            group.addTask { await work() }
-            group.addTask {
+        await withCheckedContinuation { (continuation: CheckedContinuation<Bool, Never>) in
+            let race = Race(continuation)
+            Task { @MainActor in race.finish(await work()) }
+            Task { @MainActor in
                 try? await Task.sleep(for: wait)
-                return false
+                race.finish(false)
             }
-            let first = await group.next() ?? false
-            group.cancelAll()
-            return first
+        }
+    }
+
+    /// A continuation resumed once, by whichever answer comes first.
+    @MainActor
+    private final class Race {
+        private var continuation: CheckedContinuation<Bool, Never>?
+
+        init(_ continuation: CheckedContinuation<Bool, Never>) { self.continuation = continuation }
+
+        func finish(_ answer: Bool) {
+            continuation?.resume(returning: answer)
+            continuation = nil
         }
     }
 

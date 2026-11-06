@@ -39,7 +39,14 @@ extension VoteSiteRunner {
     /// the member's **Check again**.
     func checkResults(_ key: VoteKey, quietly: Bool, due: Bool = false) async throws -> ResultsOutcome {
         guard site.configured else { return .siteUnreachable }
-        if let running = inflight[key] { return try await running.value }
+        if let running = inflight[key] {
+            let epoch = votes?.attempts.epoch ?? 0
+            let joined = try await running.value
+            // The daily run joined a **Check again** on its way (which keeps its own time unchanged): the day's attempt is
+            // this one, or an unchanged result would run the daily check again an hour later.
+            if due, let votes { votes.attempts.stamp(key, at: votes.now(), epoch: epoch) }
+            return joined
+        }
         let generation = haltGeneration
         let task = Task { @MainActor [self] () -> ResultsOutcome in
             defer { inflight[key] = nil }
@@ -72,7 +79,7 @@ extension VoteSiteRunner {
             }
         }
         do {
-            out = try await run(key, quietly: quietly, &trace)
+            out = try await run(key, quietly: quietly, due: due, &trace)
         } catch {
             cancelled = error is CancellationError || Task.isCancelled
             throw error
@@ -81,7 +88,7 @@ extension VoteSiteRunner {
     }
 
     // swiftlint:disable cyclomatic_complexity function_body_length
-    private func run(_ key: VoteKey, quietly: Bool, _ trace: inout AttemptTrace) async throws -> ResultsOutcome {
+    private func run(_ key: VoteKey, quietly: Bool, due: Bool, _ trace: inout AttemptTrace) async throws -> ResultsOutcome {
         guard let votes else { throw CancellationError() }
         // `other_rows` and `rows_unavailable` only to a vault that lists `vote_rows` (§10.19.6 step 3, "Version gating").
         let rowsOK = votes.voteRows()
@@ -129,8 +136,10 @@ extension VoteSiteRunner {
         case .cap(let cap):
             // A `gave_up` record past the 7 days from its first re-check downloads rows.json (up to 51 MB) on a metered
             // network at most weekly (owner decision a, 2026-11-06): otherwise nothing more is done now and nothing is sent;
-            // the vote's own state line says where it stands. The daily rule still governs the small fetches.
-            if trace.gaveUp, votes.attempts.rowsDeferred(key, at: votes.now(), unmetered: votes.unmetered) {
+            // the vote's own state line says where it stands. The daily rule still governs the small fetches. Only the
+            // automatic run is held back: the member's **Check again** downloads on any network, and that download counts as
+            // the last one for the weekly cap (vettid-android #317).
+            if due, trace.gaveUp, votes.attempts.rowsDeferred(key, at: votes.now(), unmetered: votes.unmetered) {
                 trace.deferred = true
                 return .deferred
             }
@@ -174,22 +183,24 @@ extension VoteSiteRunner {
             (examined, dontAddUp) = result
         }
         // Over the request limit, or a row the vault would refuse as a whole: with `vote_rows`, `rows_unavailable`.
-        var body = ResultsBody.build(key, doc: doc, sig: sig, bundle: bundle, rows: examined)
-        if body == nil {
+        var first = ResultsBody.build(key, doc: doc, sig: sig, bundle: bundle, rows: examined)
+        if first == nil {
             guard rowsOK else { return fail(key, .problem) }
             examined = .unavailable
             dontAddUp = true
-            body = ResultsBody.build(key, doc: doc, sig: sig, bundle: bundle, rows: examined)
+            first = ResultsBody.build(key, doc: doc, sig: sig, bundle: bundle, rows: examined)
         }
-        if !examined.others.isEmpty, let full = body {
-            let rowsNow = examined
-            let (sent, fitted) = await Task.detached {
-                Self.fitted(rowsNow, full) { ResultsBody.build(key, doc: doc, sig: sig, bundle: bundle, rows: $0) }
-            }.value
-            (examined, body) = (sent, fitted)
-        }
+        guard let full = first else { return fail(key, .problem) }
+        // Over the request limit (§5.5): fewer extra rows, the largest dropped first, down to one; then `rows_unavailable`;
+        // a request that is too large even then (or without `vote_rows`) is the "too large" problem.
+        let rowsNow = examined
+        let sized = await Task.detached {
+            Self.fitted(rowsNow, full, rowsOK: rowsOK) { ResultsBody.build(key, doc: doc, sig: sig, bundle: bundle, rows: $0) }
+        }.value
         try Task.checkCancellation()
-        guard let body else { return fail(key, .problem) }
+        guard let (sent, body) = sized else { return fail(key, .problem, tooLarge: true) }
+        if sent.isUnavailable && !examined.isUnavailable { dontAddUp = true }
+        examined = sent
         // The site's numbers must also be the ones the vault holds (`vote.get`), as for a check again: a verdict about
         // another copy says nothing of the numbers the screen shows (chosen; not in the spec).
         let sameNumbers = await Task.detached { Self.sameNumbers(doc, detail) }.value
@@ -201,18 +212,19 @@ extension VoteSiteRunner {
     }
     // swiftlint:enable cyclomatic_complexity function_body_length
 
-    /// [body] when the request fits; else fewer extra rows, the largest dropped first, down to one; else none of them
-    /// (`rows_unavailable` is a body that cannot be too large for a row). The rows the request goes with are returned too.
-    private nonisolated static func fitted(
-        _ rows: SubmittedRows, _ full: [UInt8], build: (SubmittedRows) -> [UInt8]?
-    ) -> (SubmittedRows, [UInt8]?) {
-        func fits(_ b: [UInt8]) -> Bool { VoteSync.fitsInline(b, type: VaultApi.typeVoteResultsSubmit) }
+    /// [full] when the request fits; else (with `vote_rows`, for a row) fewer extra rows, the largest dropped first, down to
+    /// one, else `rows_unavailable`, as vettid-android does; nil when it is too large even then, or cannot be reduced. The
+    /// rows the request goes with are returned too.
+    nonisolated static func fitted(
+        _ rows: SubmittedRows, _ full: [UInt8], rowsOK: Bool,
+        fits: ([UInt8]) -> Bool = { VoteSync.fitsInline($0, type: VaultApi.typeVoteResultsSubmit) },
+        build: (SubmittedRows) -> [UInt8]?
+    ) -> (SubmittedRows, [UInt8])? {
         if fits(full) { return (rows, full) }
-        if let fewer = ResultsBody.fewer(rows, fits: fits, body: build), let b = build(fewer) { return (fewer, b) }
-        // One verifying extra row did not fit either: the row alone, or `rows_unavailable` when even that is over.
-        let alone = rows.with(others: [])
-        if let b = build(alone), fits(b) { return (alone, b) }
-        return (.unavailable, build(.unavailable))
+        if !rowsOK || rows.isUnavailable { return nil }
+        let next = ResultsBody.fewer(rows, fits: fits, body: build) ?? .unavailable
+        guard let b = build(next), fits(b) else { return nil }
+        return (next, b)
     }
 
     /// No row with a proof: nothing to submit, and results that don't add up for the screens.

@@ -67,7 +67,9 @@ public struct ResultsAttempt: Codable, Equatable, Sendable, CustomStringConverti
 
 /// Where ``ResultsAttempt``s are kept.
 public protocol ResultsAttemptStore: Sendable {
-    func load() -> [ResultsAttempt]
+    /// The kept attempts; nil when they cannot be read now (the protected data is unavailable): nothing is written until a
+    /// load succeeds, so that the other votes' stamps are not overwritten.
+    func load() -> [ResultsAttempt]?
     func save(_ attempts: [ResultsAttempt])
 }
 
@@ -78,7 +80,7 @@ public final class MemoryResultsAttemptStore: ResultsAttemptStore, @unchecked Se
 
     public init() {}
 
-    public func load() -> [ResultsAttempt] { lock.withLock { held } }
+    public func load() -> [ResultsAttempt]? { lock.withLock { held } }
     public func save(_ attempts: [ResultsAttempt]) { lock.withLock { held = attempts } }
 }
 
@@ -89,8 +91,15 @@ public final class FileResultsAttemptStore: ResultsAttemptStore, @unchecked Send
 
     public init(file: EncryptedFileStore) { self.file = file }
 
-    public func load() -> [ResultsAttempt] {
-        guard let bytes = (try? file.load()) ?? nil else { return [] }
+    public func load() -> [ResultsAttempt]? {
+        let bytes: [UInt8]?
+        do {
+            bytes = try file.load()
+        } catch {
+            // Cannot be read now (the protected data is unavailable, a key is not readable): not "empty".
+            return nil
+        }
+        guard let bytes else { return [] }
         return (try? JSONDecoder().decode([ResultsAttempt].self, from: Data(bytes))) ?? []
     }
 
@@ -124,12 +133,15 @@ final class ResultsAttempts {
 
     static func id(_ key: VoteKey) -> String { key.connectionID + "/" + key.proposalID }
 
-    private var all: [ResultsAttempt] {
+    /// The kept attempts; nil while they cannot be read (a failed load is not kept, and is tried again at the next step).
+    private var loaded: [ResultsAttempt]? {
         if let held { return held }
-        let loaded = store.load()
-        held = loaded
-        return loaded
+        held = store.load()
+        return held
     }
+
+    /// For reading: an unreadable store reads as empty.
+    private var all: [ResultsAttempt] { loaded ?? [] }
 
     func attempt(_ key: VoteKey) -> ResultsAttempt? { all.first { $0.key == Self.id(key) } }
 
@@ -152,18 +164,25 @@ final class ResultsAttempts {
 
     /// Writes [next] for [key] (nil: forgets it), only while no wipe happened since [epoch] was taken.
     func put(_ key: VoteKey, _ next: ResultsAttempt?, epoch taken: Int) {
-        guard taken == epoch else { return }
+        guard taken == epoch, let current = loaded else { return }
         let id = Self.id(key)
-        var list = all.filter { $0.key != id }
+        var list = current.filter { $0.key != id }
         if let next { list.append(next) }
         write(list)
     }
 
+    /// Stamps the time of the daily re-check on [key]'s kept attempt (a daily run that joined a Check again on its way).
+    func stamp(_ key: VoteKey, at: Date, epoch taken: Int) {
+        guard var last = attempt(key) else { return }
+        last.atMs = Int64(at.timeIntervalSince1970 * 1000)
+        put(key, last, epoch: taken)
+    }
+
     /// Forgets the attempts for which [gone] holds (a vote no longer listed, or whose check is final).
     func forget(epoch taken: Int, where gone: (ResultsAttempt) -> Bool) {
-        guard taken == epoch else { return }
-        let list = all.filter { !gone($0) }
-        if list != all { write(list) }
+        guard taken == epoch, let current = loaded else { return }
+        let list = current.filter { !gone($0) }
+        if list != current { write(list) }
     }
 
     /// Forgets the attempts of votes that [list] (the whole list the vault gave) no longer has, or whose check is final.

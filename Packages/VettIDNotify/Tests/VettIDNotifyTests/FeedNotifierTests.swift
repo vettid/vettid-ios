@@ -60,7 +60,15 @@ import VettIDVault
 
         func refreshVotes() async -> Bool {
             votesRead += 1
-            if let slow = votesSlow { try? await Task.sleep(for: slow) }
+            // A read that ignores cancellation (queued behind earlier reads): only the race can hold the cap.
+            if let slow = votesSlow {
+                await withCheckedContinuation { (c: CheckedContinuation<Void, Never>) in
+                    Task {
+                        try? await Task.sleep(for: slow)
+                        c.resume()
+                    }
+                }
+            }
             return votesFresh
         }
         var items: [FeedItem] = []

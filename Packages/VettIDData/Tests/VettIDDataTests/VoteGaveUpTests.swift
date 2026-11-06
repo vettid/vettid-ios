@@ -172,7 +172,7 @@ struct VoteGaveUpTests: VotesTestCase {
         let epoch = m.attempts.epoch
         m.forgetStored()
         m.attempts.put(key, ResultsAttempt(key: ResultsAttempts.id(key), atMs: 1), epoch: epoch)
-        #expect(m.attempts.attempt(key) == nil && store.load().isEmpty)
+        #expect(m.attempts.attempt(key) == nil && store.load()?.isEmpty == true)
     }
 
     // MARK: The rows the app cannot have
@@ -321,11 +321,102 @@ struct VoteGaveUpTests: VotesTestCase {
         try await m.syncOnce()
         let daily = try #require(m.attempts.attempt(key)).atMs
         #expect(daily > stamped && vault.submits.count == 2)
-        // Check again, deferred: no new text (an outcome of its own), the time kept.
+        #expect(m.attempts.attempt(key)?.answered == true)
+        // The member's Check again does not follow the cap (vettid-android #317): on this metered network, after the 7 days,
+        // it downloads and sends, and that download is the last one for the weekly cap.
         advance(0.3)
-        #expect(try await m.checkResults(key) == .deferred)
-        #expect(m.attempts.attempt(key)?.atMs == daily && m.attempts.attempt(key)?.answered == true)
-        #expect(vault.submits.count == 2)
+        site.clearReads()
+        #expect(try await m.checkResults(key) == .submitted(.gaveUp))
+        #expect(rowsReads == 1 && vault.submits.count == 3)
+        #expect(m.attempts.attempt(key)?.lastRowsMs == Int64(clock.date.timeIntervalSince1970 * 1000))
+        // So the daily run a day later, with the results changed again, is held back by the weekly cap.
+        site["p/\(pid)/results.json.sig"] = .found([UInt8](repeating: 12, count: 64))
+        advance(1.1)
+        site.clearReads()
+        try await m.syncOnce()
+        #expect(rowsReads == 0 && vault.submits.count == 3)
+    }
+
+    /// A Check again that ends unchanged keeps the last attempt's time; a daily run that joined a Check again on its way
+    /// stamps its own, or an unchanged result would run the daily check again an hour later.
+    @Test func aDailyRunThatJoinsACheckAgainStampsItsTime() async throws {
+        let (m, _) = try await setUp()
+        try await m.syncOnce()
+        advance(1.1)
+        let gate = TestDeferred<Void>()
+        site.hold = { path in if path.hasSuffix("results.json.sig") { try? await gate.value() } }
+        let runner = try #require(m.siteRunner)
+        let checkAgain = Task { try await m.checkResults(key) }
+        for _ in 0..<200 where runner.inflight[key] == nil { await Task.yield() }
+        #expect(runner.inflight[key] != nil)
+        let daily = Task { try await runner.checkResults(key, quietly: true, due: true) }
+        for _ in 0..<20 { await Task.yield() }
+        gate.complete(())
+        let again = try await checkAgain.value
+        let joined = try await daily.value
+        #expect(again == .unchanged && joined == .unchanged)
+        #expect(m.attempts.attempt(key)?.atMs == Int64(clock.date.timeIntervalSince1970 * 1000))
+        #expect(!m.attempts.dailyDue(key, at: clock.date.addingTimeInterval(3600)))
+    }
+
+    /// A request too large to send (§5.5): with `vote_rows` fewer extra rows, the largest first, then `rows_unavailable`
+    /// (also when only one extra row is left, as Android does); without it, the "too large" problem and nothing sent.
+    @Test func aTooLargeRequestDropsRowsThenIsRowsUnavailableOrTheTooLargeProblem() async throws {
+        func row(_ i: UInt64) -> OwnRow {
+            let b = try? StrictJson.parseObject(#"{"vk":"\#(Base64s.encodeStd([UInt8](repeating: 3, count: 32)))","choice_id":"yes","ballot_sig":"\#(Base64s.encodeStd([UInt8](repeating: 4, count: 64)))"}"#)
+            return OwnRow(ballot: b, index: i, treeSize: 9, path: [[UInt8](repeating: 9, count: 32)])
+        }
+        func build(_ r: SubmittedRows) -> [UInt8]? { ResultsBody.build(key, doc: [1], sig: [UInt8](repeating: 5, count: 64), bundle: "{}", rows: r) }
+        let oneOther = SubmittedRows(own: row(0), others: [row(1)])
+        let twoOthers = SubmittedRows(own: row(0), others: [row(1), row(2)])
+        let none = try #require(build(.unavailable)).count
+        let ownOnly = try #require(build(SubmittedRows(own: row(0), others: []))).count
+        let full1 = try #require(build(oneOther))
+        // One extra row that does not fit: rows_unavailable, not the row alone.
+        let a = VoteSiteRunner.fitted(oneOther, full1, rowsOK: true, fits: { $0.count < ownOnly }, build: build)
+        #expect(a?.0.isUnavailable == true)
+        // Two extra rows, room for one: one is kept.
+        let full2 = try #require(build(twoOthers))
+        let b = VoteSiteRunner.fitted(twoOthers, full2, rowsOK: true, fits: { $0.count < full2.count }, build: build)
+        #expect(b?.0.others.count == 1 && b?.0.isUnavailable == false)
+        // Without the capability, or with even rows_unavailable too large: none.
+        #expect(VoteSiteRunner.fitted(oneOther, full1, rowsOK: false, fits: { _ in false }, build: build) == nil)
+        #expect(VoteSiteRunner.fitted(oneOther, full1, rowsOK: true, fits: { $0.count < none }, build: build) == nil)
+        #expect(VoteSiteRunner.fitted(.unavailable, try #require(build(.unavailable)), rowsOK: true, fits: { _ in false }, build: build) == nil)
+    }
+
+    /// End to end: results whose request cannot be sent even as `rows_unavailable` are the "too large" problem, nothing is
+    /// sent, and a smaller one goes (a request over the limit is no longer sent anyway).
+    @Test func resultsTooLargeForTheRequestAreTheTooLargeProblemAndNothingIsSent() async throws {
+        let (m, _) = try await setUp()
+        let filler = String(repeating: "a", count: 190_000)
+        site.put("p/\(pid)/results.json", #"{"counts":{"eligible":0},"x":"\#(filler)"}"#)
+        #expect(try await m.checkResults(key) == .problem)
+        #expect(vault.submits.isEmpty && m.hints[key]?.resultsTooLarge == true)
+        site.put("p/\(pid)/results.json", #"{"counts":{"eligible":0}}"#)
+        #expect(try await m.checkResults(key) == .submitted(.gaveUp))
+        #expect(vault.submits.count == 1)
+    }
+
+    /// Attempts that cannot be read now are not read as empty and written over: nothing is written until a load works.
+    @Test func anUnreadableStoreIsNotOverwritten() async throws {
+        final class Flaky: ResultsAttemptStore, @unchecked Sendable {
+            private let lock = NSLock()
+            var readable = false
+            var saved: [[ResultsAttempt]] = []
+            let kept = [ResultsAttempt(key: "c/other", atMs: 5)]
+            func load() -> [ResultsAttempt]? { lock.withLock { readable ? kept : nil } }
+            func save(_ a: [ResultsAttempt]) { lock.withLock { saved.append(a) } }
+        }
+        let flaky = Flaky()
+        let attempts = ResultsAttempts(store: flaky)
+        let mine = ResultsAttempt(key: ResultsAttempts.id(key), atMs: 9)
+        attempts.put(key, mine, epoch: attempts.epoch)
+        attempts.forget(epoch: attempts.epoch) { _ in true }
+        #expect(flaky.saved.isEmpty && attempts.attempt(key) == nil)
+        flaky.readable = true
+        attempts.put(key, mine, epoch: attempts.epoch)
+        #expect(flaky.saved.last?.map(\.key).sorted() == ["c/other", ResultsAttempts.id(key)].sorted())
     }
 
     @Test func theNetworkRuleCountsExpensiveConstrainedAndUnknownPathsAsMetered() {
