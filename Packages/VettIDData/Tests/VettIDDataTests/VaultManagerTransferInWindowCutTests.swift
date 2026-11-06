@@ -210,4 +210,57 @@ extension VaultManagerTransferInTests {
         #expect(phone.windowPauses.lengths == [150], "120 s + 25 s + 5 s: \(phone.windowPauses.lengths)")
         phone.windowPauses.release()
     }
+
+    /// The budget: the one more is given early (the last collect at 90 s refused, `retry_after` 60 s), its collect at 150 s
+    /// is slow (answered at 190 s), and the collector's long poll (sent at 155 s, wait 25 s) is cut at 180 s, its lease to
+    /// 180 + 15 + V = 255 s, past the cap (185 s): the window does not drop when that collect is answered, but holds its
+    /// last collect to 255 s, then drops, with no further look.
+    @Test func aCutPastTheCapDuringAnEarlyOneMoresSlowCollectIsHeldFor() async throws {
+        defer { phone.close() }
+        _ = try await scanned()
+        let d = try #require(m.session?.device)
+        d.stop()
+        phone.freezeClocks()
+        phone.heartbeatPauses.holding = true
+        let clock = VaultManager.WindowClock(visibility: 60, backgrounds: m.moveFlags.book.backgrounds, background: false)
+        let t0 = m.config.uptime()
+        clock.start(m, d)
+        func step(to seconds: TimeInterval) {
+            while m.config.uptime() < t0 + seconds {
+                phone.uptimeAhead += min(8, t0 + seconds - m.config.uptime())
+                clock.follow(m, d)
+            }
+        }
+        step(to: 90)
+        #expect(await eventually { clock.over }, "the window is over")
+        await clock.waitForFinalCollect(m)
+        clock.own.sent(.init(at: m.config.uptime(), wait: 0))
+        clock.refused(m, retryAfter: 60)
+        #expect(!clock.dropsAfterFinalCollect(m, d), "the one more last collect")
+        #expect(clock.finalNotBefore == t0 + 150, "after the refusal's retry_after")
+        step(to: 150)
+        await clock.waitForFinalCollect(m)
+        clock.own.sent(.init(at: m.config.uptime(), wait: 0))
+        step(to: 180)
+        clock.cut(m, d, sent: .init(at: t0 + 155, wait: 25))
+        #expect(clock.until == t0 + 185, "the end moves out to the cap: \(clock.until - t0)")
+        #expect(clock.finalNotBefore == t0 + 255, "the first hold past the cap")
+        step(to: 190)
+        clock.own.ended(at: m.config.uptime())
+        #expect(!clock.dropsAfterFinalCollect(m, d), "no drop at 190 s, with the lease running to 255 s")
+        #expect(await eventually { clock.over }, "the window is over at the cap")
+        let before = phone.windowPauses.lengths.count
+        phone.windowPauses.holding = true
+        let waiting = Task { @MainActor in await clock.waitForFinalCollect(m) }
+        #expect(await eventually { phone.windowPauses.lengths.count == before + 1 }, "the hold")
+        #expect(phone.windowPauses.lengths.last == 65, "held to 255 s: \(phone.windowPauses.lengths)")
+        phone.windowPauses.holding = false
+        phone.windowPauses.release()
+        await waiting.value
+        clock.own.sent(.init(at: m.config.uptime(), wait: 0))
+        #expect(clock.dropsAfterFinalCollect(m, d), "the last collect after the lease: the drop")
+        #expect(await !clock.holdAfterExtra(m), "no further hold or look")
+        clock.stop()
+        phone.heartbeatPauses.release()
+    }
 }
