@@ -58,8 +58,35 @@ enum HelpStrings {
         )
     }
 
+    // The iPhone's own texts for the store: a privacy policy link in the app (App Review 5.1.1) and the licenses of what is
+    // bundled (vettid-android has neither; chosen; not in the spec).
+    static var sectionLegal: String {
+        String(localized: "ios_help_section_legal", defaultValue: "Legal", bundle: .module)
+    }
+
+    static var privacyPolicy: String {
+        String(localized: "ios_help_privacy_policy", defaultValue: "Privacy policy", bundle: .module)
+    }
+
+    static var licenses: String {
+        String(localized: "ios_help_licenses", defaultValue: "Licenses", bundle: .module)
+    }
+
+    static var licensesBody: String {
+        String(localized: "ios_help_licenses_body", defaultValue: "The software VettID is built with", bundle: .module)
+    }
+
+    static var licensesIntro: String {
+        String(
+            localized: "ios_help_licenses_intro",
+            defaultValue: "VettID is open-source software. It includes the components below, each used under its own license.",
+            bundle: .module
+        )
+    }
+
     // The pages (vettid-android `help_url_about`, `help_url_security`, `help_url_contact`; not translated).
     static let urlAbout = "https://vettid.org/about"
     static let urlSecurity = "https://vettid.org/security"
     static let urlContact = "https://vettid.org/contact"
+    static let urlPrivacyPolicy = "https://vettid.org/privacy/"
 }

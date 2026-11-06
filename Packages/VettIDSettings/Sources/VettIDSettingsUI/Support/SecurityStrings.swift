@@ -115,6 +115,31 @@ enum SecurityStrings {
         String(localized: "settings_delete_vault_body", defaultValue: "Erase your vault and everything in it", bundle: .module)
     }
 
+    // The VettID account (email and membership) is not the vault: its deletion is on the account site (App Review 5.1.1(v);
+    // vettid-android has no such text; chosen; not in the spec).
+    static var deleteAccount: String {
+        String(localized: "ios_settings_delete_account", defaultValue: "Delete your VettID account", bundle: .module)
+    }
+
+    static var deleteAccountBody: String {
+        String(localized: "ios_settings_delete_account_body", defaultValue: "Your email and membership, on the account site", bundle: .module)
+    }
+
+    static var deleteAccountExplain: String {
+        String(
+            localized: "ios_settings_delete_account_explain",
+            defaultValue: """
+                Your vault and your VettID account are separate. Delete vault erases your vault and everything in it. Your VettID \
+                account, your email and membership, is deleted on the account site.
+                """,
+            bundle: .module
+        )
+    }
+
+    static var deleteAccountOpen: String {
+        String(localized: "ios_settings_delete_account_open", defaultValue: "Open the account site", bundle: .module)
+    }
+
     static var deleteTitle: String {
         String(localized: "settings_delete_title", defaultValue: "Delete your vault", bundle: .module)
     }

@@ -43,7 +43,8 @@ let package = Package(
                 .product(name: "VettIDOnboarding", package: "VettIDOnboarding"),
                 .product(name: "VettIDUI", package: "VettIDUI", condition: .when(platforms: [.iOS])),
             ],
-            resources: [.process("Resources/Localizable.xcstrings")]
+            // The licenses of the bundled components (Help > Licenses), written by scripts/licences.sh.
+            resources: [.process("Resources/Localizable.xcstrings"), .copy("Resources/Licences.json")]
         ),
         .testTarget(
             name: "VettIDSettingsTests",
