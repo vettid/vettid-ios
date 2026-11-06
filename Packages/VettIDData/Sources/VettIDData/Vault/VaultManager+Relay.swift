@@ -81,9 +81,11 @@ extension VaultManager {
     /// (0.84.0) The vault tries the relay once per unlock, after the unlock's own read: a newly seen active
     /// `identity.rotation_failed` item says it did, so the status is read once more (as vettid-android's `onFeed`).
     func feedSeen(_ items: [FeedItem]) {
+        // Not before the vault is open: an item seen then is taken up by the first apply after it opens.
+        guard phase == .unlocked else { return }
         let fresh = items.filter { $0.kind == "identity.rotation_failed" && $0.status == FeedManager.statusActive }
             .filter { moveFlags.book.rotationFailedSeen.insert($0.itemID).inserted }
-        guard !fresh.isEmpty, phase == .unlocked else { return }
+        guard !fresh.isEmpty else { return }
         Task { [weak self] in try? await self?.ownerChecks.refreshOwnerCheck() }
     }
 
