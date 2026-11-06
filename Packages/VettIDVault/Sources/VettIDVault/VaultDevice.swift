@@ -207,13 +207,17 @@ public final class VaultDevice: @unchecked Sendable {
     let countedBroadcast = Broadcast<String>()
     let reconnectBroadcast = Broadcast<Int>()
     /// How many times the collection came back (``relayReconnects()``).
-    var reconnects = 0
+    var reconnects = 0, collectCuts: (count: Int, sent: CollectSent?) = (0, nil), collectStreaming = false
+    /// When the latest cut was noticed (uptime).
+    var collectCutNoticed: TimeInterval?
     var isPaired: Bool
     var sas: String?
     var refusals = 0
     var collector: Task<Void, Never>?
     var collectEnded: String?
-    var collectSince: Date?
+    var collectSince: (at: Date, sent: CollectSent?)?, collectLastSent: CollectSent?, collectRound = 0, collectFresh = false
+    /// When the collector's last request ended (uptime).
+    var collectLastEnded: TimeInterval?
     var stopped = true
     /// Set by ``forget()``: nothing is written to the store any more.
     var forgotten = false
@@ -250,7 +254,8 @@ public final class VaultDevice: @unchecked Sendable {
     /// A new device with fresh state; registers its mailbox on its relay.
     public static func create(_ cfg: DeviceConfig, secrets: DeviceSecrets) async throws -> VaultDevice {
         let d = try VaultDevice(cfg: cfg, secrets: secrets, st: DeviceState(role: cfg.role, name: cfg.name, relayURL: cfg.relayURL))
-        _ = try await d.own.register()
+        let limits = try await d.own.register().limits
+        d.mem.withLock { d.st.relayVisibilitySeconds = limits.visibilityTimeoutSeconds }
         try d.save()
         return d
     }
@@ -322,7 +327,7 @@ public final class VaultDevice: @unchecked Sendable {
     /// Whether the mailbox collector runs.
     public var collecting: Bool { mem.withLock { collector != nil && collectEnded == nil && !stopped } }
     /// When the collection's current relay request went out, nil while none is out.
-    public var collectRequestSince: Date? { mem.withLock { collectSince } }
+    public var collectRequestSince: Date? { mem.withLock { collectSince?.at } }
     /// This device's relay address (§6.2).
     public var relayAddr: RelayAddr {
         RelayAddr(url: cfg.relayURL, mailbox: RelayAuth.mailboxID(secrets.relay.publicKey), pk: secrets.relay.publicKey)
@@ -426,35 +431,27 @@ public final class VaultDevice: @unchecked Sendable {
     /// Starts collecting from the device's mailbox and flushes the outbox; does nothing while a collection runs. A
     /// terminal relay error ends the collection (``collectionEnded``); start it again to go on.
     public func start() {
-        let begin: Bool = mem.withLock {
+        let begin: Int? = mem.withLock {
             // A quieted device collects nothing again (``quiet()``): its answers could not be sent.
-            if quieted { return false }
+            if quieted { return nil }
             stopped = false
-            if collector != nil, collectEnded == nil { return false }
+            if collector != nil, collectEnded == nil { return nil }
             collectEnded = nil
-            return true
+            collectRound += 1
+            return collectRound
         }
-        guard begin else { return }
+        guard let round = begin else { return }
         let task = Task { [weak self] in
             guard let self else { return }
             let flush = Task { await self.flushOutbox() }
             defer { flush.cancel() }
-            let source = RelayMailbox(client: own, transport: cfg.transport)
-            let c = MailboxCollector(
-                source: source, mode: cfg.collectMode, wait: cfg.pollWait, now: cfg.now,
-                onRequest: { [weak self] out in self?.mem.withLock { self?.collectSince = out ? Date() : nil } },
-                onRecovered: { [weak self] in self?.relayCameBack() }
-            )
             do {
-                try await c.run { m in try await self.handle(m) }
-            } catch let e as RelayError {
-                // A terminal relay error ends the collection; the next start() collects again.
-                mem.withLock { collectEnded = e.code }
+                try await collector(of: round).run { m in try await self.handle(m) }
             } catch is CancellationError {
                 return
             } catch {
-                // Anything else that ends it is reported the same way, so that the collection is started again.
-                mem.withLock { collectEnded = String(describing: type(of: error)) }
+                // A terminal relay error, or anything else, ends the collection; the next start() collects again.
+                collectionEnded(error, of: round)
             }
         }
         // A stop() since the start above wins: the collection it would have stopped is cancelled at once.
@@ -488,10 +485,13 @@ public final class VaultDevice: @unchecked Sendable {
     public func stop() {
         let task: Task<Void, Never>? = mem.withLock {
             stopped = true
-            defer {
-                collector = nil
-                collectSince = nil
+            // A request out is cut: what the relay handed it may stay leased (``collectorCuts``).
+            if let out = collectSince {
+                collectCuts = (collectCuts.count + 1, collectStreaming ? (cfg.uptime(), 0) : out.sent)
+                collectCutNoticed = cfg.uptime()
+                collectLastEnded = cfg.uptime()
             }
+            defer { (collector, collectSince, collectRound, collectStreaming) = (nil, nil, collectRound + 1, false) }
             return collector
         }
         task?.cancel()
@@ -504,7 +504,7 @@ public final class VaultDevice: @unchecked Sendable {
     }
 
     /// The limits this device's relay advertises (RELAY-PROTOCOL §6.1; register is idempotent).
-    public func relayLimits() async throws -> RelayLimits { try await own.register().limits }
+    public func relayLimits() async throws -> RelayLimits { try await registered() }
 
     /// A fresh inner id (a ULID by this device's clock), for a request the member may retry as the same one.
     public func newRequestID() -> String { Ulid.new(now()) }

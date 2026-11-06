@@ -73,4 +73,44 @@ extension MailboxCollectorTests {
         #expect(ackedWhenHandled.all == [0, 0], "no ack while the handler runs")
         #expect(stream.acked == ["01K"], "acked once it returned")
     }
+
+    /// Every failed round is told (`onFailed`) before the request is marked ended, the terminal one too; the rounds that
+    /// succeed are not.
+    @Test func everyFailedRoundIsTold() async throws {
+        let src = FakeSource([
+            .error(URLError(.networkConnectionLost)), .messages([]), .error(RelayError(status: 503, code: "internal")),
+        ])
+        let told = Recorder<String>()
+        let ended = Recorder<Bool>()
+        await #expect(throws: RelayError.self) {
+            try await MailboxCollector(
+                source: src, sleep: { _ in }, onRequest: { ended.add($0) },
+                onFailed: { e, _ in told.add((e as? RelayError)?.code ?? "transport \(ended.all.last == true)") }
+            ).run { _ in }
+        }
+        #expect(told.all == ["transport true", "internal", RelayError.mailboxUnknown], "\(told.all)")
+    }
+
+    /// A round handed messages whose ack is refused (a 4xx) mid-batch tells it was handed them: the rest stays leased.
+    @Test func aRoundHandedMessagesTellsSoWhenItFails() async throws {
+        let src = FakeSource([.messages([Self.msg("01A"), Self.msg("01B")])])
+        src.ackError = RelayError(status: 403, code: "forbidden")
+        let told = Recorder<Bool>()
+        await #expect(throws: RelayError.self) {
+            try await MailboxCollector(source: src, sleep: { _ in }, onFailed: { _, handed in told.add(handed) }).run { _ in }
+        }
+        #expect(told.all == [true], "\(told.all)")
+    }
+
+    /// Over the stream, a send time is taken when it opens and as each message is pushed, marked as the stream's (it may
+    /// push, and lease, at any time while open).
+    @Test func aStreamTellsASendTimeForEachPush() async throws {
+        let end = RelayError(status: 404, code: RelayError.mailboxUnknown)
+        let src = FakeSource([], stream: FakeStream([Self.msg("01A"), Self.msg("01B")], end: end))
+        let sent = Recorder<TimeInterval?>()
+        await #expect(throws: RelayError.self) {
+            try await MailboxCollector(source: src, mode: .webSocket, sleep: { _ in }, onSent: { sent.add($0) }).run { _ in }
+        }
+        #expect(sent.all == [nil, nil, nil], "the open and two pushes: \(sent.all)")
+    }
 }

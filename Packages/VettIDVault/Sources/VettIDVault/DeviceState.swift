@@ -38,6 +38,10 @@ final class DeviceState: Codable, @unchecked Sendable {
     /// (IOS-PLAN 0.1.39 §4.9) The `ctx` of the recovered phone's first handshake that the vault answered (`hs.resp`), kept after the
     /// recovery record goes: the vault's binding is the attested key of the registration it names. Optional: older states have none.
     var recoveryPairedCtx: String?
+    /// (RELAY-PROTOCOL §6.1) The mailbox's `visibility_timeout_seconds` as its last registration gave it: a transfer's
+    /// settlement window falls back on it when the relay cannot be asked (VAULT-MESSAGING §11.14.10 rule 5). Optional:
+    /// older states have none.
+    var relayVisibilitySeconds: UInt64?
 
     init(role: String, name: String, relayURL: String) {
         self.role = role

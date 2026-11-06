@@ -43,6 +43,9 @@ struct FakeTransferStore {
     var revokedDeposits = 0
     var collectRefused = false
     var collectFailures = 0
+    var collectRefusals = 0
+    var collectForbids = 0
+    var onlyWait: Int?
     /// The collects of the device's mailbox being answered now (a long poll held while nothing waits), by number. (Kept
     /// here for the file's length; they count every collect of the device's mailbox.)
     var collecting: Set<Int> = []
@@ -50,6 +53,16 @@ struct FakeTransferStore {
     /// At the last restart of a test phone: the collects its old process left in flight, and whether one outlived the wait.
     var restartLeft = 0
     var restartOutlived = false
+    /// RELAY-PROTOCOL §6.3's lease, when a test asks for it: a collected message not acked within it is collected again.
+    var leaseFor: TimeInterval?
+    var claimGate: FakeHTTPServer.Gate?
+    var collectGate: FakeHTTPServer.Gate?
+    var opensAtDelete = false
+    var collectGateWait: Int?
+    var collectAnswersLost = 0
+    var visibility = 60
+    var registerRefused = false
+    var leased: [(message: RelayMessage, until: Date)] = []
 }
 
 // TEST ONLY. A direct transfer in both directions, as vettid-vault answers it: as the new phone's target
@@ -160,6 +173,7 @@ extension FakeVaultService {
             return .json(404, #"{"code":"claim_unknown","message":""}"#)
         }
         transfer.claimBlob = nil
+        if let gate = transfer.claimGate { return .held(gate, .bytes(200, blob)) }
         return .bytes(200, blob)
     }
 
@@ -260,6 +274,19 @@ extension FakeVaultService {
     /// connection comes back.
     public func failNextCollects(_ n: Int) { locked { transfer.collectFailures = n } }
 
+    /// While set, only the collects of this `wait` take messages (the others find none): a settlement window's `wait=0`
+    /// collects, say, and not the test phone's collector (`wait=1`).
+    public var handsMessagesOnlyToWait: Int? {
+        get { locked { transfer.onlyWait } }
+        set { locked { transfer.onlyWait = newValue } }
+    }
+
+    /// The next [n] collects of the device's mailbox are refused `429 rate_limited`, with `Retry-After: 7`.
+    public func refuseNextCollects(_ n: Int) { locked { transfer.collectRefusals = n } }
+
+    /// The next [n] collects of the device's mailbox are refused `403 forbidden`: a 4xx that is no throttle or stale signature.
+    public func forbidNextCollects(_ n: Int) { locked { transfer.collectForbids = n } }
+
     /// The collects of the device's mailbox the fake is answering now, by number: a long poll it holds while nothing
     /// waits, which takes the next message queued.
     public var collectsInFlight: Set<Int> { locked { transfer.collecting } }
@@ -269,6 +296,87 @@ extension FakeVaultService {
     public var lastRestartCollects: (left: Int, outlived: Bool) { locked { (transfer.restartLeft, transfer.restartOutlived) } }
 
     func noteRestart(left: Int, outlived: Bool) { locked { (transfer.restartLeft, transfer.restartOutlived) = (left, outlived) } }
+
+    /// The messages queued for the device's mailbox, and those leased to a collect and not acked.
+    public var mailboxCounts: (queued: Int, leased: Int) { locked { (queued.count, transfer.leased.count) } }
+
+    /// While set, the claim of the transfer's QR is answered only when the gate opens (the scan held at its fetch).
+    public var holdsClaim: FakeHTTPServer.Gate? {
+        get { locked { transfer.claimGate } }
+        set { locked { transfer.claimGate = newValue } }
+    }
+
+    /// While set, a collect that takes messages answers only when the gate opens: a long poll held out at the relay with
+    /// what it was handed.
+    public var holdsCollectAnswers: FakeHTTPServer.Gate? {
+        get { locked { transfer.collectGate } }
+        set { locked { transfer.collectGate = newValue } }
+    }
+
+    /// The `visibility_timeout_seconds` the device's relay registers with (60).
+    public var relayVisibility: Int {
+        get { locked { transfer.visibility } }
+        set { locked { transfer.visibility = newValue } }
+    }
+
+    /// The device's relay refuses a registration (503): the limits cannot be read.
+    public var refusesRegistration: Bool {
+        get { locked { transfer.registerRefused } }
+        set { locked { transfer.registerRefused = newValue } }
+    }
+
+    /// Only the collects of this `wait` are held (``holdsCollectAnswers``), and only they take messages meanwhile (the others
+    /// find none): the test phone's collector long-polls with `wait=1`, a settlement window's collects with 0 or more.
+    public var holdsCollectAnswersOfWait: Int? {
+        get { locked { transfer.collectGateWait } }
+        set { locked { transfer.collectGateWait = newValue } }
+    }
+
+    /// The long polls held out (``holdsCollectAnswers``) answer when the mailbox is deleted (a wipe), before its answer.
+    public var opensHeldCollectsAtMailboxDelete: Bool {
+        get { locked { transfer.opensAtDelete } }
+        set { locked { transfer.opensAtDelete = newValue } }
+    }
+
+    /// How many of the next collects that take messages lose their answer in transport, the messages leased all the same
+    /// (``leasesCollected``), as when the network drops a long poll's answer (with ``holdsCollectAnswers``, once the gate
+    /// opens).
+    public var losesCollectAnswers: Int {
+        get { locked { transfer.collectAnswersLost } }
+        set { locked { transfer.collectAnswersLost = newValue } }
+    }
+
+    /// The collect failures asked for (``failNextCollects(_:)``) not yet used.
+    public var collectFailuresLeft: Int { locked { transfer.collectFailures } }
+
+    /// The relay's lease of a collected message (RELAY-PROTOCOL §6.3: a message not acked within it reappears); nil, the
+    /// default: a collected message is gone, acked or not.
+    public var leasesCollected: TimeInterval? {
+        get { locked { transfer.leaseFor } }
+        set { locked { transfer.leaseFor = newValue } }
+    }
+
+    /// Every lease runs out now: the messages leased are collected again (the time of their lease passed).
+    public func endLeases() { locked { transfer.leased = transfer.leased.map { ($0.message, Date.distantPast) } } }
+
+    /// The messages whose lease ended, queued again (first). Callers hold ``cond``.
+    func requeueEndedLeases() {
+        let now = Date()
+        queued = transfer.leased.filter { $0.until <= now }.map(\.message) + queued
+        transfer.leased.removeAll { $0.until <= now }
+    }
+
+    /// The queued messages, taken by a collect: leased, when the test asks for leases. Callers hold ``cond``.
+    func takeQueued() -> [RelayMessage] {
+        requeueEndedLeases()
+        let taken = queued
+        queued.removeAll()
+        if let lease = transfer.leaseFor { transfer.leased += taken.map { ($0, Date().addingTimeInterval(lease)) } }
+        return taken
+    }
+
+    /// An ack ends a message's lease. Callers hold ``cond``.
+    func acked(_ msgID: String) { transfer.leased.removeAll { $0.message.msgID == msgID } }
 
     /// An answer to a `device.list` this phone did not ask just now: sealed under the session, with the `re` of another
     /// request, and a list that does not hold this phone. It is no answer to the check's own request (§11.14.10).
