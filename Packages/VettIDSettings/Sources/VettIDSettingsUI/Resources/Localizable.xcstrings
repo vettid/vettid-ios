@@ -947,6 +947,54 @@
         }
       }
     },
+    "ios_settings_delete_account": {
+      "comment": "iPhone only: no Android text; for the owner to approve.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete your VettID account"
+          }
+        }
+      }
+    },
+    "ios_settings_delete_account_body": {
+      "comment": "iPhone only: no Android text; for the owner to approve.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your email and membership, on the account site"
+          }
+        }
+      }
+    },
+    "ios_settings_delete_account_explain": {
+      "comment": "iPhone only: no Android text; for the owner to approve.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your vault and your VettID account are separate. Delete vault erases your vault and everything in it. Your VettID account, your email and membership, is deleted on the account site."
+          }
+        }
+      }
+    },
+    "ios_settings_delete_account_open": {
+      "comment": "iPhone only: no Android text; for the owner to approve.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open the account site"
+          }
+        }
+      }
+    },
     "ios_settings_delete_not_deleted": {
       "extractionState": "manual",
       "localizations": {
@@ -3708,6 +3756,66 @@
           "stringUnit": {
             "state": "translated",
             "value": "When you set up, move or recover a vault, your iPhone asks Apple to vouch for the VettID app. Apple learns that VettID was set up on an iPhone, nothing about your vault."
+          }
+        }
+      }
+    },
+    "ios_help_section_legal": {
+      "comment": "iPhone only: no Android text; for the owner to approve.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Legal"
+          }
+        }
+      }
+    },
+    "ios_help_privacy_policy": {
+      "comment": "iPhone only: no Android text; for the owner to approve.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Privacy policy"
+          }
+        }
+      }
+    },
+    "ios_help_licenses": {
+      "comment": "iPhone only: no Android text; for the owner to approve.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Licenses"
+          }
+        }
+      }
+    },
+    "ios_help_licenses_body": {
+      "comment": "iPhone only: no Android text; for the owner to approve.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The software VettID is built with"
+          }
+        }
+      }
+    },
+    "ios_help_licenses_intro": {
+      "comment": "iPhone only: no Android text; for the owner to approve.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "VettID is open-source software. It includes the components below, each used under its own license."
           }
         }
       }

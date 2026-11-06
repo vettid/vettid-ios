@@ -87,6 +87,7 @@ targets:
         # share sheet or AirDrop, in every configuration (the canary phone runs the release build). JSON is declared at
         # rank Alternate (VettID is never the default app for JSON) as a viewer; an opened file is copied in (not opened
         # in place), only verified and shown, and installed only after the member confirms (App/CanaryManifestFiles.swift).
+        # Narrowing this to a type of VettID's own waits for the release tooling to write one.
         CFBundleDocumentTypes:
           - CFBundleTypeName: VettID release manifest
             CFBundleTypeRole: Viewer
@@ -119,8 +120,15 @@ targets:
         INFOPLIST_KEY_CFBundleDisplayName: $(VETTID_DISPLAY_NAME)
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait
-        # No ITSAppUsesNonExemptEncryption: the export compliance answer for this app (its own encryption beyond the
-        # system's) is the owner's to give, in App Store Connect for each build until it is settled here.
+        # Export compliance: the app uses encryption beyond the system's (its own end-to-end encryption) and qualifies for
+        # the mass-market exemption (Category 5 Part 2, note 3); the owner gives that answer in App Store Connect.
+        INFOPLIST_KEY_ITSAppUsesNonExemptEncryption: YES
+        # iPhone only (TARGETED_DEVICE_FAMILY 1). These three settings only turn off Xcode's Mac, Mac Catalyst and Vision Pro
+        # run destinations; they do not set the store's availability. That is opted out in App Store Connect (Pricing and
+        # Availability, separately for Mac and for Apple Vision Pro), a step of the owner's release checklist.
+        SUPPORTS_MACCATALYST: NO
+        SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: NO
+        SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD: NO
         # The app icon: AppIcon (the owner-supplied VettID app icon, used as is) in Release; AppIcon-NonProduction (the
         # same with vettid-android's white band) in every other configuration (Config/*.xcconfig, scripts/app-icon.sh).
         ASSETCATALOG_COMPILER_APPICON_NAME: $(VETTID_APP_ICON)
@@ -199,7 +207,8 @@ targets:
         INFOPLIST_KEY_CFBundleDisplayName: $(VETTID_DISPLAY_NAME)
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait
-        INFOPLIST_KEY_ITSAppUsesNonExemptEncryption: NO
+        # The same answer as the VettID app's (this target never ships; the simulator only).
+        INFOPLIST_KEY_ITSAppUsesNonExemptEncryption: YES
         # The non-production icon in its DevStack configuration (Config/DevStack.xcconfig).
         ASSETCATALOG_COMPILER_APPICON_NAME: $(VETTID_APP_ICON)
         INFOPLIST_KEY_NSCameraUsageDescription: "VettID uses the camera to scan QR codes, such as your setup code or an invitation, and to take photos you send. Nothing is recorded, and a photo stays in memory until you send it."

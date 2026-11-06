@@ -21,7 +21,7 @@ import VettIDUI
             .appendingPathComponent("Sources/VettIDSettingsUI/Resources/Localizable.xcstrings")
         let doc = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
         let keys = try #require((doc["strings"] as? [String: Any])?.keys)
-        #expect(keys.count == 459)
+        #expect(keys.count == 468)
         let missing = "\u{0}missing"
         for key in keys {
             let text = Bundle.module.localizedString(forKey: key, value: missing, table: nil)
@@ -101,6 +101,46 @@ import VettIDUI
         #expect(HelpStrings.keyboardsBody
             == "VettID uses only Apple's keyboard, so that other keyboards never see your PIN, password or codes.")
         #expect(height(HelpScreen {}) > 0)
+    }
+
+    /// "Delete your VettID account" (the account, not the vault) is hidden while the account site has no deletion page, and
+    /// shown once the one constant is set (chosen; not in the spec).
+    @Test func deleteYourAccountShowsOnceTheAccountSiteHasAPage() throws {
+        // The page is the environment's account site's: Release's and Staging's own.
+        #expect(AccountDeletion.url(origin: "https://account.vettid.org")?.absoluteString == "https://account.vettid.org/account/delete/")
+        #expect(AccountDeletion.url(origin: "https://account.staging.vettid.org")?.host == "account.staging.vettid.org")
+        #expect(EnvironmentValues().accountDeletionURL == nil)
+        #expect(!SettingsContent(state: SettingsState()).accountDeletionShown)
+        // Without a page the row is hidden; with one it is shown.
+        #expect(!SettingsContent(state: SettingsState(), accountDeletionURL: nil).accountDeletionShown)
+        let page = try #require(AccountDeletion.url(origin: "https://account.vettid.org"))
+        let shown = SettingsContent(state: SettingsState(), accountDeletionURL: page)
+        #expect(shown.accountDeletionShown && height(shown) > 0)
+        #expect(SecurityStrings.deleteAccount == "Delete your VettID account")
+        #expect(SecurityStrings.deleteAccountBody == "Your email and membership, on the account site")
+        #expect(SecurityStrings.deleteAccountExplain == """
+            Your vault and your VettID account are separate. Delete vault erases your vault and everything in it. Your VettID \
+            account, your email and membership, is deleted on the account site.
+            """)
+        #expect(SecurityStrings.deleteAccountOpen == "Open the account site")
+    }
+
+    /// Help's Legal section: the privacy policy opens the website's page (in Safari, like the other links), and Licenses is a
+    /// screen of the app's own license and the bundled components' (the iPhone's own texts; chosen; not in the spec).
+    @Test func helpHasThePrivacyPolicyAndTheLicenses() throws {
+        #expect(HelpStrings.sectionLegal == "Legal")
+        #expect(HelpScreen.legal.map(\.label) == ["Privacy policy"])
+        #expect(HelpScreen.legal.map(\.url) == ["https://vettid.org/privacy/"])
+        #expect(HelpScreen.legal.map(\.identifier) == ["help_privacy_policy"])
+        #expect(HelpStrings.licenses == "Licenses" && HelpStrings.licensesBody == "The software VettID is built with")
+        #expect(HelpStrings.licensesIntro
+            == "VettID is open-source software. It includes the components below, each used under its own license.")
+        let entries = Licences.all()
+        #expect(entries.first?.id == "vettid")
+        #expect(height(LicensesScreen(entries: entries) {}) > 0)
+        #expect(LicensesScreen.title(entries[0]) == "VettID")
+        let crypto = try #require(entries.first { $0.id == "swift-crypto" })
+        #expect(LicensesScreen.title(crypto).hasPrefix("swift-crypto 5."))
     }
 
     /// The canary manifest's texts are vettid-android's, word for word (VAULT-RELEASES §10.1 step 9).
