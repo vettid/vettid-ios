@@ -130,12 +130,17 @@ final class ResultsAttempts {
     static let meteredRowsEvery: TimeInterval = 7 * 24 * 3600
 
     private let store: any ResultsAttemptStore
+    /// The recheck's last rows downloads (vettid-android #321): kept beside the attempts, wiped with them.
+    let rechecks: RecheckStamps
     private var held: [ResultsAttempt]?
     /// Bumped by ``forgetAll()`` (a wipe, a sign-out, a deletion). A write taken under an older epoch is dropped. A lock
     /// does not bump it: the kept attempts outlive a lock and a restart on purpose (the daily limit).
     private(set) var epoch = 0
 
-    init(store: any ResultsAttemptStore) { self.store = store }
+    init(store: any ResultsAttemptStore, rechecks: any RecheckStampStore = MemoryRecheckStampStore()) {
+        self.store = store
+        self.rechecks = RecheckStamps(store: rechecks)
+    }
 
     static func id(_ key: VoteKey) -> String { key.connectionID + "/" + key.proposalID }
 
@@ -195,6 +200,13 @@ final class ResultsAttempts {
         if list != current { write(list) }
     }
 
+    /// The recheck stamps of votes no longer listed go too (they are for `verified` and `unconfirmed` votes, so a final check
+    /// does not take one away); under their own epoch, [rechecksEpoch].
+    func forgetUnlisted(_ list: [VoteSummary], epoch taken: Int, rechecksEpoch: Int) {
+        rechecks.prune(listed: Set(list.map { Self.id($0.key) }), epoch: rechecksEpoch)
+        forgetUnlisted(list, epoch: taken)
+    }
+
     /// Forgets the attempts of votes that [list] (the whole list the vault gave) no longer has, or whose check is final.
     func forgetUnlisted(_ list: [VoteSummary], epoch taken: Int) {
         let live = Set(list.filter { $0.check.map { !VotesManager.finalCheck($0.state) } ?? true }.map { Self.id($0.key) })
@@ -207,6 +219,7 @@ final class ResultsAttempts {
         epoch += 1
         held = []
         store.save([])
+        rechecks.forgetAll()
     }
 
     private func write(_ list: [ResultsAttempt]) {

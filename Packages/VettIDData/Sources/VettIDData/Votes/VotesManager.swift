@@ -240,10 +240,11 @@ public final class VotesManager: VotesRepository {
         backgroundTasks: (any BackgroundTasks)? = nil,
         voteRows: @escaping @MainActor () -> Bool = { false },
         attempts: any ResultsAttemptStore = MemoryResultsAttemptStore(),
+        rechecks: any RecheckStampStore = MemoryRecheckStampStore(),
         unmetered: @escaping @Sendable () -> Bool? = { nil }
     ) {
         self.voteRows = voteRows
-        self.attempts = ResultsAttempts(store: attempts)
+        self.attempts = ResultsAttempts(store: attempts, rechecks: rechecks)
         self.unmetered = unmetered
         self.ops = ops
         self.quietOps = quietOps ?? ops
@@ -353,6 +354,7 @@ public final class VotesManager: VotesRepository {
         guard availability != .unsupported, !gated() else { return }
         let g = generation
         let epoch = attempts.epoch
+        let recheckEpoch = attempts.rechecks.epoch
         if votes.isEmpty { load = .loading }
         let acks = Array(pendingAck.prefix(Self.maxAcks))
         do {
@@ -388,7 +390,7 @@ public final class VotesManager: VotesRepository {
             load = .loaded
             hints = hintsFor(shown, hints)
             // The kept attempts go with their record: a vote no longer listed, or whose check is final. Only from a whole list.
-            if whole { attempts.forgetUnlisted(shown, epoch: epoch) }
+            if whole { attempts.forgetUnlisted(shown, epoch: epoch, rechecksEpoch: recheckEpoch) }
         } catch {
             let f = VaultFailures.map(error)
             if g == generation {

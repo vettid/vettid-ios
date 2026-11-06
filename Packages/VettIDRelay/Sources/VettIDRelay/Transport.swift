@@ -104,13 +104,16 @@ public struct HTTPTransport: Sendable {
     /// Sends the request [build] makes (called again for every attempt), reading at most [maxBody] body bytes. [readsBody]
     /// says for a status whether its body is read at all: for one that is not, the answer has an empty body and the cap
     /// is not applied (an error page over the cap is then no "too large"). [fresh]: each attempt on a connection of its
-    /// own (``freshSession()``), not one an earlier request used.
+    /// own (``freshSession()``), not one an earlier request used. [received] is told the body's bytes as they arrive (the
+    /// first byte at once, then in steps of ``receivedStep``, the rest when the read ends, also when it fails or is
+    /// cancelled partway): a body that is then no answer still cost them. Never called for a status whose body is not read.
     public func send(
         policy: Policy,
         maxBody: Int,
         timeout: TimeInterval? = nil,
         fresh: Bool = false,
         readsBody: @Sendable (Int) -> Bool = { _ in true },
+        received: (@Sendable (Int) -> Void)? = nil,
         _ build: () throws -> URLRequest
     ) async throws -> HTTPAnswer {
         var budget = networkWait
@@ -122,7 +125,7 @@ public struct HTTPTransport: Sendable {
             let s = fresh ? freshSession() : session
             defer { if fresh { s.finishTasksAndInvalidate() } }
             do {
-                return try await once(s, prepared(r), maxBody: maxBody, readsBody: readsBody)
+                return try await once(s, prepared(r), maxBody: maxBody, readsBody: readsBody, received: received)
             } catch let e as URLError {
                 try Task.checkCancellation()
                 guard attempt < maxRetries, Self.retryable(e, policy) else { throw e }
@@ -142,7 +145,12 @@ public struct HTTPTransport: Sendable {
         return makeSession(session.configuration)
     }
 
-    private func once(_ s: URLSession, _ r: URLRequest, maxBody: Int, readsBody: @Sendable (Int) -> Bool) async throws -> HTTPAnswer {
+    /// The most body bytes that arrive between two calls of a `received` closure.
+    static let receivedStep = 4096
+
+    private func once(
+        _ s: URLSession, _ r: URLRequest, maxBody: Int, readsBody: @Sendable (Int) -> Bool, received: (@Sendable (Int) -> Void)?
+    ) async throws -> HTTPAnswer {
         let (bytes, response) = try await s.bytes(for: r)
         guard let http = response as? HTTPURLResponse else { throw URLError(.badServerResponse) }
         guard readsBody(http.statusCode) else {
@@ -151,12 +159,21 @@ public struct HTTPTransport: Sendable {
         }
         if http.expectedContentLength > Int64(maxBody) { throw BodyTooLarge(status: http.statusCode) }
         var body: [UInt8] = []
+        var told = 0
+        func tell() {
+            if let received, body.count > told { received(body.count - told) }
+            told = body.count
+        }
+        defer { tell() }
         for try await b in bytes {
             guard body.count < maxBody else {
+                tell()
                 Bytes.wipe(&body)
+                told = 0
                 throw BodyTooLarge(status: http.statusCode)
             }
             body.append(b)
+            if body.count == 1 || body.count - told >= Self.receivedStep { tell() }
         }
         var headers: [String: String] = [:]
         for (k, v) in http.allHeaderFields {

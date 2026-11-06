@@ -32,7 +32,9 @@ struct VoteSiteTests: VotesTestCase {
                 guard siteOK else { throw VaultFailure(.other, code: "session_dropped") }
                 return vault
             },
-            sleep: { d in try await sleeper.sleep(d) }
+            sleep: { d in try await sleeper.sleep(d) },
+            // Wi-Fi: the recheck on open is not capped (vettid-android #321); VoteRecheckLimitsTests drives the rest.
+            unmetered: { true }
         )
     }
 
