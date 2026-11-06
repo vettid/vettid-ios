@@ -53,9 +53,10 @@ extension VaultManager {
     /// of it (429, a stale signature), give one more last collect (at most one per window, so held last collects cannot
     /// repeat), no sooner than the lease end of the cut, of a freeze noted meanwhile (the wake + the wait of what was sent
     /// before it + V + 15 s), the hold raised meanwhile, or the refusal's `retry_after` (at most V). A bare background
-    /// gives nothing, and the same notes during the looks give the one more too, if it is unused. Once it is given, one
-    /// hold more is allowed (a cut's lease, or a freeze's, noticed during the extra's hold, which is waited for once),
-    /// then none. After the last collect, in the foreground, the window takes a last look
+    /// gives nothing, and the same notes during the looks give the one more too, if it is unused. Once it is given, a
+    /// hold that ends at or below the cap is free (the cap bounds it), and exactly one hold past the cap is allowed (a
+    /// cut's lease, or a freeze's, noticed during the extra's hold; the extra's own hold, if it is past the cap, is that
+    /// one); each hold is waited for, and after that one no hold past the cap is made. After the last collect, in the foreground, the window takes a last look
     /// (``VaultManager/lastLook(_:clock:sessionEnds:)``: a `wait=0` collect after a background); a cut or a refusal of the
     /// look's collect, while the one more is still unused, gives it (no sooner than that collect's send + V + 15 s), and
     /// the drop follows that one's look. A freeze leases whatever was sent before it from the wake + that request's `wait`
@@ -233,11 +234,13 @@ extension VaultManager {
         }
 
         /// Raises the hold of the next last collect. Before the one more is given, a hold only moves out (a last collect
-        /// is made when a note comes after the last one, so it is always used by it). After it is given, one hold more is
-        /// allowed (a lease noticed during the extra's hold), then none (chosen; the shared rule with Android #307, the
+        /// is made when a note comes after the last one, so it is always used by it). After it is given, a hold that ends
+        /// at or below the cap is free, and exactly one past the cap is allowed (the extra's own, if it is past the cap),
+        /// then none past it (chosen; the shared rule with Android #307, the
         /// erratum to follow).
         private func raiseHold(to at: TimeInterval) {
-            if finalRedone {
+            // A hold at or below the cap is free (the cap bounds it); only one past it uses the allowance.
+            if finalRedone, at > cap {
                 guard !leaseHeld else { return }
                 leaseHeld = true
             }
@@ -312,8 +315,9 @@ extension VaultManager {
             // Once the one more last collect is given, nothing moves the end or holds it further: back in the foreground,
             // the window decides (chosen; the shared rule with Android #307, the erratum to follow).
             guard !finalRedone else {
-                // The end stays; but a cut whose lease runs past the cap is still held for.
-                if let lease = pendingSent, now >= cap || lease + visibility > cap { holdForLease(lease) }
+                // The end stays; but a cut's lease is still held for (a hold at or below the cap is free; one past it
+                // is the one allowed).
+                if let lease = pendingSent { holdForLease(lease) }
                 return
             }
             var end = until
@@ -340,14 +344,17 @@ extension VaultManager {
             guard over else { return }
             notesAtFinal = notes
             refusedUntil = nil
-            // The hold is read once; but the one hold raised during it after the one more was given is waited for too.
+            // The hold is read again while it moves at or below the cap (free holds, bounded by the cap), and once more
+            // if a hold past the cap was raised during the wait (the one allowed).
             let held = leaseHeld
-            if let at = finalNotBefore, at > m.config.uptime() {
-                try? await m.config.transferWindowSleep(.seconds(at - m.config.uptime()))
+            var waited: TimeInterval = 0
+            func wait(_ at: TimeInterval) async {
+                waited = at
+                if at > m.config.uptime() { try? await m.config.transferWindowSleep(.seconds(at - m.config.uptime())) }
             }
-            if !held, leaseHeld, let at = finalNotBefore, at > m.config.uptime() {
-                try? await m.config.transferWindowSleep(.seconds(at - m.config.uptime()))
-            }
+            if let at = finalNotBefore { await wait(at) }
+            while let at = finalNotBefore, at > waited, at <= cap { await wait(at) }
+            if !held, leaseHeld, let at = finalNotBefore, at > waited { await wait(at) }
             finalsGone += 1
             backgroundsAtFinal = m.moveFlags.book.backgrounds
             m.moveFlags.book.finalCollects += 1
