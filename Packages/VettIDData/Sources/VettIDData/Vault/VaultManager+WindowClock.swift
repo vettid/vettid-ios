@@ -56,7 +56,8 @@ extension VaultManager {
     /// gives nothing, and the same notes during the looks give the one more too, if it is unused. Once it is given, a
     /// hold that ends at or below the cap is free (the cap bounds it), and exactly one hold past the cap is allowed (a
     /// cut's lease, or a freeze's, noticed during the extra's hold; the extra's own hold, if it is past the cap, is that
-    /// one); each hold is waited for, and after that one no hold past the cap is made. After the last collect, in the foreground, the window takes a last look
+    /// one); each hold raised before the extra's collect goes is waited for, and after that one no hold past the cap is
+    /// made. After the last collect, in the foreground, the window takes a last look
     /// (``VaultManager/lastLook(_:clock:sessionEnds:)``: a `wait=0` collect after a background); a cut or a refusal of the
     /// look's collect, while the one more is still unused, gives it (no sooner than that collect's send + V + 15 s), and
     /// the drop follows that one's look. A freeze leases whatever was sent before it from the wake + that request's `wait`
@@ -312,8 +313,8 @@ extension VaultManager {
 
         private func extend(_ m: VaultManager, now: TimeInterval) {
             defer { (pendingSent, widen) = (nil, false) }
-            // Once the one more last collect is given, nothing moves the end or holds it further: back in the foreground,
-            // the window decides (chosen; the shared rule with Android #307, the erratum to follow).
+            // Once the one more last collect is given, the end no longer moves; a cut's lease is still held for, below:
+            // back in the foreground, the window decides (chosen; the shared rule with Android #307, the erratum to follow).
             guard !finalRedone else {
                 // The end stays; but a cut's lease is still held for (a hold at or below the cap is free; one past it
                 // is the one allowed).
