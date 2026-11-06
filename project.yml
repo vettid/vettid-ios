@@ -84,14 +84,21 @@ targets:
         VettIDManifestKeys: $(VETTID_MANIFEST_KEYS)
         VettIDVotesHost: $(VETTID_VOTES_HOST)
         # A canary manifest (VAULT-RELEASES §10.1 step 9, VAULT-MESSAGING §11.10.1) is opened with VettID from Files, the
-        # share sheet or AirDrop, in every configuration (the canary phone runs the release build). JSON is declared at
-        # rank Alternate (VettID is never the default app for JSON) as a viewer; an opened file is copied in (not opened
-        # in place), only verified and shown, and installed only after the member confirms (App/CanaryManifestFiles.swift).
+        # share sheet or AirDrop, in every configuration (the canary phone runs the release build). VettID is offered only
+        # for its own file type, org.vettid.release-manifest (extension .vettidmanifest, a JSON file), not for every JSON
+        # file; an opened file is copied in (not opened in place), only verified and shown, and installed only after the
+        # member confirms (App/CanaryManifestFiles.swift).
         CFBundleDocumentTypes:
           - CFBundleTypeName: VettID release manifest
             CFBundleTypeRole: Viewer
-            LSHandlerRank: Alternate
-            LSItemContentTypes: [public.json]
+            LSHandlerRank: Owner
+            LSItemContentTypes: [org.vettid.release-manifest]
+        UTExportedTypeDeclarations:
+          - UTTypeIdentifier: org.vettid.release-manifest
+            UTTypeDescription: VettID release manifest
+            UTTypeConformsTo: [public.json]
+            UTTypeTagSpecification:
+              public.filename-extension: [vettidmanifest]
         LSSupportsOpeningDocumentsInPlace: false
         # The relay page's "Open in VettID" link for any relay, self-hosted ones included: vettid://connect#<link>
         # (VAULT-MESSAGING §6.4, IOS-PLAN §6.8), in every configuration as on Android. Nothing is sent before the member
@@ -119,8 +126,13 @@ targets:
         INFOPLIST_KEY_CFBundleDisplayName: $(VETTID_DISPLAY_NAME)
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait
-        # No ITSAppUsesNonExemptEncryption: the export compliance answer for this app (its own encryption beyond the
-        # system's) is the owner's to give, in App Store Connect for each build until it is settled here.
+        # Export compliance: the app uses encryption beyond the system's (its own end-to-end encryption) and qualifies for
+        # the mass-market exemption (Category 5 Part 2, note 3); the owner gives that answer in App Store Connect.
+        INFOPLIST_KEY_ITSAppUsesNonExemptEncryption: YES
+        # iPhone and iPad only: no Mac (Designed for iPhone), Mac Catalyst or Vision Pro availability.
+        SUPPORTS_MACCATALYST: NO
+        SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: NO
+        SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD: NO
         # The app icon: AppIcon (the owner-supplied VettID app icon, used as is) in Release; AppIcon-NonProduction (the
         # same with vettid-android's white band) in every other configuration (Config/*.xcconfig, scripts/app-icon.sh).
         ASSETCATALOG_COMPILER_APPICON_NAME: $(VETTID_APP_ICON)
@@ -199,7 +211,8 @@ targets:
         INFOPLIST_KEY_CFBundleDisplayName: $(VETTID_DISPLAY_NAME)
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait
-        INFOPLIST_KEY_ITSAppUsesNonExemptEncryption: NO
+        # The same answer as the VettID app's (this target never ships; the simulator only).
+        INFOPLIST_KEY_ITSAppUsesNonExemptEncryption: YES
         # The non-production icon in its DevStack configuration (Config/DevStack.xcconfig).
         ASSETCATALOG_COMPILER_APPICON_NAME: $(VETTID_APP_ICON)
         INFOPLIST_KEY_NSCameraUsageDescription: "VettID uses the camera to scan QR codes, such as your setup code or an invitation, and to take photos you send. Nothing is recorded, and a photo stays in memory until you send it."

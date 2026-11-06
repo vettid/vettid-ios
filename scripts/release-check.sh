@@ -65,7 +65,7 @@ STAGING_KEYS=("MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEok8gqeC5VcGx4KL+B5fL7UgENBXf"
 # manifests with it; no build may pin it, or anyone could sign a canary manifest that build accepts.
 TEST_MANIFEST_KEY=("MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAERi26GuT8GpaLTazyDN1tvh" "1edbb48b6669decd")
 # The document type a canary manifest is opened with (VAULT-RELEASES §10.1 step 9): it works in Release and Staging too.
-DOCUMENT_TYPES=("public.json")
+DOCUMENT_TYPES=("org.vettid.release-manifest")
 
 archive() {
   local config=$1
