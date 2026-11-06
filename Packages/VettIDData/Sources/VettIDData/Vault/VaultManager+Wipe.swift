@@ -53,6 +53,9 @@ extension VaultManager {
 
     /// The session, its observers and its collection stop; the device is kept for its forget.
     private func detachForWipe() async {
+        // A settlement window ends here, before anything is erased: a long poll that wakes after it writes nothing.
+        moveFlags.book.sessionEnds += 1
+        moveFlags.book.transferSession = nil
         // A session being opened is stopped and waited for: none outlives the wipe.
         _ = await cancelOpening()
         if let d = session?.device { wipeDevice = d }
@@ -105,6 +108,8 @@ extension VaultManager {
     /// Forgets every device a session of this manager held that is still alive: each waits for what it is sending, and
     /// writes nothing to the store from then on.
     func forgetEveryDevice() async {
+        moveFlags.book.sessionEnds += 1
+        moveFlags.book.transferSession = nil
         // One registered while another is being forgotten is forgotten too: until none is left.
         while let d = devicesMade.alive.first {
             try? await d.forget()
@@ -121,6 +126,7 @@ extension VaultManager {
     package func halt() async {
         halted = true
         moveFlags.book.transferWaiter?.cancel()
+        cutSettleWindow()
         keptTimer?.cancel()
         keptTimer = nil
         changeGeneration += 1

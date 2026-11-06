@@ -53,6 +53,7 @@ public final class OnboardingViewModel: OnboardingActions {
         followers.add(follow(self, read: { $0.inbox.link }, apply: { vm, raw in if let raw { vm.receiveLink(raw) } }))
         followers.add(follow(self, read: { $0.vault.finishMovePending }, apply: { $0.state.finishMovePending = $1 }))
         followers.add(follow(self, read: { $0.account.vaultDeletedNotice }, apply: { $0.state.deletedNotice = $1 }))
+        followers.add(follow(self, read: { $0.vault.transferEnd }, apply: { $0.state.transferEnd = $1 }))
     }
 
     deinit { followers.cancelAll() }
@@ -275,7 +276,8 @@ public final class OnboardingViewModel: OnboardingActions {
     /// The portal's same-device Universal Link: redeemed only while nothing is set up on this phone.
     private func receiveLink(_ raw: String) {
         inbox.consume()
-        guard account.phase == .signedOut, !state.busy else { return }
+        // A setup link is ignored on the transfer screen (§11.14.10 rule 5: no enrollment while a transfer is pinned).
+        guard account.phase == .signedOut, !state.busy, state.step != .transferIn else { return }
         guard let secret = SetupCodes.parseLink(raw, api: account.apiOrigin) else {
             state.step = .setupScan
             state.scanRefusal = .notACode
@@ -546,6 +548,12 @@ public final class OnboardingViewModel: OnboardingActions {
     public func dismissDeletedNotice() {
         state.deletedNotice = false
         account.dismissVaultDeletedNotice()
+    }
+
+    /// Seen once the member leaves the welcome screen.
+    public func dismissTransferEnd() {
+        state.transferEnd = nil
+        vault.acknowledgeTransferEnd()
     }
 
     /// The welcome screen afresh, nothing of before kept but the notice of a deleted vault.

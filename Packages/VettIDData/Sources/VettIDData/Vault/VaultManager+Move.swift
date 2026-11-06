@@ -30,13 +30,12 @@ private final class TransferPath: @unchecked Sendable {
 // `transferCreate`, `awaitTransferPending`, `transferApprove`, `transferReject`). The old phone's keys after the approval:
 // ``VaultManager+Keep``. Recovery (§11.11): ``VaultManager+Recovery``.
 extension VaultManager: MoveRepository {
+    /// The code of a transfer dropped at its deadline (``awaitTransferIn()``'s ``FailureKind/noResponse``).
+    public nonisolated static let codeTransferDeadline = "transfer_deadline"
     /// The code of a scanned or pasted text that is not a transfer code (vettid-android `CODE_NOT_TRANSFER`).
     public nonisolated static let codeNotTransfer = "not_transfer"
     /// How long the new phone waits for the old phone's approval after its `hs.init` (§6.7, 0.10.4).
     nonisolated static let pairingWindow: TimeInterval = 660
-    /// The collect before the drop is bounded by this many seconds in all (VAULT-MESSAGING §11.14.10 rule 5).
-    nonisolated static let collectBound: TimeInterval = 30
-
     // MARK: - The new phone (§6.7.1)
 
     /// Starts the transfer from the old phone's code ([code]: the scanned QR or a pasted link): the code is checked here
@@ -45,14 +44,25 @@ extension VaultManager: MoveRepository {
     /// `hs.resp` within ``MoveCodes/hsRespWait`` the transfer is dropped and fails with ``FailureKind/noResponse`` and
     /// ``MoveCodes/hsUnanswered`` (§6.7.1 step 2). **Honours task cancellation**, also while waiting for the SAS.
     public func transferIn(code: String) async throws -> String {
+        // A new move: the notice of how the last one ended goes, whatever this one does.
+        transferEnd = nil
+        // A refresh while this runs resumes nothing: the start may be written before its handshake is saved, and a start
+        // that nothing pinned is cleared at a resume (``resumeTransferIn(_:)``).
+        moveFlags.book.startingIn += 1
+        defer { moveFlags.book.startingIn -= 1 }
+        return try await startTransferIn(code)
+    }
+
+    private func startTransferIn(_ code: String) async throws -> String {
         try await guarded {
+            // One window at a time, and no new code from the end of the vault's 10 minutes (§11.14.10 rule 5): said before the
+            // code is looked at.
+            try refuseWhileClosed()
             let link = try Self.transferLink(code, now: config.now())
             try prepared()
             let s = try await openSession()
             let d = s.device
-            // One vault per phone: no transfer onto a phone that holds one, or may hold a provisional one.
-            if d.deviceID != nil || d.vaultID != nil || d.recovering { throw VaultFailure(.vaultExists) }
-            if let refusal = startOverRefusal(nil) { throw refusal }
+            try refuseTransferIn(d)
             moveFlags.book.transferWaiter?.cancel()
             moveFlags.book.transferWaiter = nil
             let rec = record.generation
@@ -105,6 +115,21 @@ extension VaultManager: MoveRepository {
         }
     }
 
+    /// A new code is refused while the last transfer cannot be abandoned (§11.14.10 rule 5); it is then waited for, if
+    /// nothing does (the screen went, or nothing pinned it), and its end lets a new code in.
+    private func refuseWhileClosed() throws {
+        guard abandonClosed else { return }
+        waitForTransferInBackground()
+        throw VaultFailure(.enrollmentStarted, code: Self.codeTransferWaiting)
+    }
+
+    /// Why no transfer can start on [d] now, if it cannot.
+    private func refuseTransferIn(_ d: VaultDevice) throws {
+        // One vault per phone: no transfer onto a phone that holds one, or may hold a provisional one.
+        if d.deviceID != nil || d.vaultID != nil || d.recovering { throw VaultFailure(.vaultExists) }
+        if let refusal = startOverRefusal(nil) { throw refusal }
+    }
+
     /// The epoch-1 record of the transfer is stored with it, before anything is sent: a drop deletes this one (§11.14.10).
     func noteTransferEpoch(_ id: String) throws {
         try record.update(since: record.generation) { $0.transferEpochID = id }
@@ -135,13 +160,22 @@ extension VaultManager: MoveRepository {
     /// `credential.utk.get`, §6.7.1 step 5). ``FailureKind/rejected`` when the owner rejected it; ``FailureKind/noResponse``
     /// at the deadline, **11 minutes after the `hs.init` was started** (§11.14.10 rule 5, owner decision 2026-10-23: one
     /// deadline, stored with the transfer, which no user action extends). At the deadline, and not before, the mailbox is
-    /// collected once: a `device.paired{transfer}` it brings is applied and the move completes instead; otherwise the
-    /// transfer is dropped. A fin the relay refused for good at its first deposit (``PairingNotCompleted``) before the deadline drops the transfer too; after
-    /// it the collect runs all the same. Any other failure before the deadline is rethrown and the transfer kept. True when the vault gave
-    /// this phone the member's `user_guid` (§6.7.1, 0.17.0), which its unlocks need.
+    /// collected for the settlement window (``collectBeforeDrop(_:)``, VAULT-MESSAGING 0.85.2): a `device.paired{transfer}`
+    /// the collects bring is applied and the move completes instead; a rejection is ``FailureKind/rejected``; a session that
+    /// ended is ``codeTransferSessionEnded``; otherwise the transfer is dropped. A fin the relay refused for good at its first
+    /// deposit (``PairingNotCompleted``) before the deadline drops the transfer too; after it the window runs all the same.
+    /// Any other failure before the deadline is rethrown and the transfer kept. True when the vault gave this phone the
+    /// member's `user_guid` (§6.7.1, 0.17.0), which its unlocks need.
     public func awaitTransferIn() async throws -> Bool {
         try await guarded {
             let s = try await openSession()
+            // One device per transfer: a foreground after a background takes this session back (``takeBackTransferSession()``).
+            moveFlags.book.transferSession = s
+            moveFlags.book.waitingIn += 1
+            defer {
+                moveFlags.book.waitingIn -= 1
+                if moveFlags.book.waitingIn == 0, moveFlags.book.settling == nil { moveFlags.book.transferSession = nil }
+            }
             let settled: TransferSettled
             do {
                 // Already paired (a take-over that failed is retried here): its `device.paired` is consumed, so nothing is waited for.
@@ -164,7 +198,7 @@ extension VaultManager: MoveRepository {
             }
             switch settled {
             case .completed(let guid): return guid != nil
-            case .dropped: throw VaultFailure(.noResponse, code: "transfer_deadline")
+            case .dropped: throw VaultFailure(.noResponse, code: Self.codeTransferDeadline)
             case .failed(let error): throw error
             }
         }
@@ -211,14 +245,16 @@ extension VaultManager: MoveRepository {
     }
 
     /// The end of a transfer to this phone is settled by **one task** that every caller joins (the screen's wait, a start's
-    /// resume, an abandon): a paired transfer's take-over is done once, and the collect at the deadline is made once.
-    /// [collect]: the deadline is reached, so a transfer not yet paired gets its one collect before the drop. [guid]: the
-    /// `user_guid` the caller has.
+    /// resume, an abandon): a paired transfer's take-over is done once, and the window of collects at the deadline is run
+    /// once. [collect]: the deadline is reached, so a transfer not yet paired gets the window of collects before the drop
+    /// (``collectBeforeDrop(_:)``). [guid]: the `user_guid` the caller has.
     func settleTransfer(_ s: VaultSession, collect: Bool, guid: String?) async -> TransferSettled {
         if let running = moveFlags.book.settling { return await running.value }
         let task = Task { @MainActor [self] in
             let result = await runSettle(s, collect: collect, guid: guid)
             moveFlags.book.settling = nil
+            // Its session is held no longer than its transfer is waited for.
+            if moveFlags.book.waitingIn == 0 { moveFlags.book.transferSession = nil }
             return result
         }
         moveFlags.book.settling = task
@@ -226,15 +262,35 @@ extension VaultManager: MoveRepository {
     }
 
     private func runSettle(_ s: VaultSession, collect: Bool, guid: String?) async -> TransferSettled {
-        let d = s.device
+        var s = s
         var guid = guid
-        if d.deviceID == nil {
-            guard collect, let paired = await collectBeforeDrop(d) else {
-                await dropTransfer(d)
+        let sessionEnds = moveFlags.book.sessionEnds
+        if s.device.deviceID == nil {
+            guard collect else {
+                await dropTransfer(s.device)
                 return .dropped
             }
-            guid = paired.guid
+            let end = await collectBeforeDrop(s.device)
+            // A wipe or a sign-out during the window: nothing more is done for this transfer (the wipe or sign-out has it).
+            if record.closed || moveFlags.book.sessionEnds != sessionEnds {
+                return .failed(VaultFailure(.other, code: Self.codeTransferSessionEnded))
+            }
+            // A background may have ended the session meanwhile: what follows goes through the current one, or this one taken
+            // back (one device per transfer).
+            if !halted { s = await settlingSession(s) }
+            if session == nil, takeBackTransferSession() != nil, let back = session { s = back }
+            if case .paired(let paired) = end {
+                guid = paired
+            } else if s.device.deviceID == nil {
+                return await windowEndedUnpaired(end, s.device)
+            }
+            // Else paired all the same (its event was taken elsewhere): the move completed, and is reported so.
         }
+        // A wipe or a sign-out meanwhile: no take-over (nothing is confirmed, sent or written for a phone being erased).
+        if record.closed || moveFlags.book.sessionEnds != sessionEnds {
+            return .failed(VaultFailure(.other, code: Self.codeTransferSessionEnded))
+        }
+        let d = s.device
         guid = guid ?? d.transferUserGuid
         do {
             try await completeTransferIn(s, guid: guid)
@@ -242,6 +298,25 @@ extension VaultManager: MoveRepository {
         } catch {
             return .failed(error)
         }
+    }
+
+    /// How a window that ended without a pairing settles the transfer on [d].
+    private func windowEndedUnpaired(_ end: WindowEnd, _ d: VaultDevice) async -> TransferSettled {
+        if case .rejected = end {
+            // A rejection in the window ends as a rejection, not as a drop at the deadline.
+            await dropTransfer(d)
+            return .failed(PairingRejected())
+        }
+        // The process is ending (``halt()`` cut the window): nothing is decided; the next process runs its own window.
+        if halted { return .failed(CancellationError()) }
+        if case .ended(let drop) = end {
+            // The session ended: reported as ended, never as dropped. On `mailbox_unknown` its handshake is dead and goes;
+            // after a wipe or a sign-out nothing is written (they have it).
+            if drop { await dropTransfer(d) }
+            return .failed(VaultFailure(.other, code: Self.codeTransferSessionEnded))
+        }
+        await dropTransfer(d)
+        return .dropped
     }
 
     /// The `device.paired{transfer}` has arrived: this phone's key is the one the vault bound, the record keeps the member's
@@ -282,45 +357,37 @@ extension VaultManager: MoveRepository {
         record.value.transferStartedMs.map { Date(timeIntervalSince1970: Double($0) / 1000 + Self.pairingWindow) }
     }
 
-    /// What a collect before the drop found: a `device.paired{transfer}` (its `user_guid` if the vault sent one).
-    private struct PairedTransfer {
-        let guid: String?
-    }
-
-    /// One collect (`wait=0`, bounded by ``collectBound`` seconds in all) of the mailbox, then the `device.paired{transfer}`
-    /// it may have brought, opened under the transfer's session. nil: nothing waits, the collect failed or timed out (the
-    /// relay cannot be reached: that is no reason to keep the keys longer), or the owner rejected it.
-    private func collectBeforeDrop(_ d: VaultDevice) async -> PairedTransfer? {
-        do {
-            try await d.collectOnce(timeout: Self.collectBound, sleep: config.transferCollectSleep)
-            return PairedTransfer(guid: try await d.awaitTransfer(timeout: 0.05))
-        } catch {
-            return nil
-        }
-    }
-
     /// The code of the refusal of an enrollment (or another vault's code) while a move to this phone is under way, in the
     /// kind ``FailureKind/enrollmentStarted``: "a move to this phone is still under way" (the wording is I3.3b's).
     public nonisolated static let codeTransferWaiting = "transfer_waiting"
 
     /// Once per process, at the start (before anything else is decided about this phone; §11.14.10 rule 5): a transfer whose
-    /// `device.paired` arrived is completed whatever its age; one still waiting past its deadline gets one collect, then is
-    /// applied or dropped; one still before its deadline is waited for in the background until it (``awaitTransferIn()``),
-    /// while the welcome screen is shown: a code can be scanned again, and no enrollment can start (the vault is pinned,
-    /// ``startOverRefusal(_:)``). Waiting here is (chosen; not in the spec): Android shows the welcome screen and does not wait.
+    /// `device.paired` arrived is completed whatever its age; one still waiting is waited for in the background
+    /// (``waitForTransferInBackground()``): before its deadline until it, past it for the settlement window (rule 5,
+    /// VAULT-MESSAGING 0.85.2), and then applied or dropped. Meanwhile the welcome screen is shown and no enrollment can
+    /// start (the vault is pinned, ``startOverRefusal(_:)``); a new code can be scanned before the end of the vault's 10
+    /// minutes, not from then on (``abandonClosed``). Waiting before the deadline is (chosen; not in the spec): Android
+    /// shows the welcome screen and does not wait.
     @discardableResult
     func resumeTransferIn(_ s: VaultSession) async -> TransferSettled? {
-        guard !moveFlags.book.transferResumed else { return nil }
+        guard moveFlags.book.startingIn == 0, !moveFlags.book.transferResumed else { return nil }
         moveFlags.book.transferResumed = true
         guard record.value.transferStartedMs != nil else { return nil }
         let d = s.device
+        if d.deviceID == nil, !d.hasVault {
+            // A start that no transfer pinned (the app killed before the handshake was saved, or a drop whose record could
+            // not be saved after the device's): nothing waits; the start goes, so that a new code is not refused for it.
+            await clearTransferStart(d)
+            return nil
+        }
         if d.deviceID != nil {
             return await settleTransfer(s, collect: false, guid: nil)
-        } else if d.hasVault, let deadline = transferDeadline {
-            if config.now() >= deadline {
-                return await settleTransfer(s, collect: true, guid: nil)
-            }
-            moveFlags.book.transferWaiter = Task { @MainActor [weak self] in _ = try? await self?.awaitTransferIn() }
+        } else if d.hasVault, transferDeadline != nil {
+            // Before the deadline or past it, in the background: past it, the window of collects before the drop runs there,
+            // so that the start does not wait for it (§11.14.10 rule 5).
+            moveFlags.book.transferWaiter?.cancel()
+            moveFlags.book.transferWaiter = nil
+            waitForTransferInBackground()
         }
         return nil
     }
@@ -340,20 +407,37 @@ extension VaultManager: MoveRepository {
     /// Drops a transfer this phone started and has not completed: the handshake, the pinned vault, the attested key and the
     /// pending epoch-1 record (the vault holds neither before the approval, §6.7.1: "Aborted. Nothing else changes"). A
     /// **paired** transfer is not dropped: its pending record is this phone's secret; the take-over is completed instead.
+    /// Refused, with ``codeTransferWaiting``, from the end of the vault's 10 minutes on (``abandonClosed``, §11.14.10 rule 5):
+    /// the transfer then waits for its window.
     public func abandonTransferIn() async throws {
         try await guarded {
+            // Refused with or without a session (a background ends it); the transfer is then waited for in the background.
+            if session?.device.deviceID == nil, abandonClosed {
+                waitForTransferInBackground()
+                throw VaultFailure(.enrollmentStarted, code: Self.codeTransferWaiting)
+            }
             moveFlags.book.transferWaiter?.cancel()
             moveFlags.book.transferWaiter = nil
             guard let s = session else { return }
             if s.device.deviceID != nil {
                 _ = await settleTransfer(s, collect: false, guid: nil)
-            } else if let running = moveFlags.book.settling {
-                // The deadline's settlement is running (its collect): it decides, and this joins it instead of dropping beside it.
-                _ = await running.value
             } else {
                 await dropTransfer(s.device)
             }
         }
+    }
+
+    /// The stored start of a transfer that nothing pinned, with what was made for it: its attested key and epoch-1 record.
+    private func clearTransferStart(_ d: VaultDevice) async {
+        let key = d.altState.transferAttestKeyID
+        let id = record.value.transferEpochID
+        _ = try? record.update(since: record.generation) {
+            $0.transferStartedMs = nil
+            $0.transferEpochID = nil
+        }
+        if let key { try? config.attester.discard(keyID: key) }
+        if let id { _ = try? phoneSecrets.dropPending(id: id) }
+        usesPhoneSecret = phoneSecrets.inUse
     }
 
     /// The device's transfer dropped, with the App Attest key it attested discarded and its epoch-1 record deleted: the one

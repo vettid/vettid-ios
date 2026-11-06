@@ -15,6 +15,9 @@ public struct WelcomeScreen: View {
     let deletedNotice: Bool
     let onOpenAccountSite: @MainActor () -> Void
     let onNoticeSeen: @MainActor () -> Void
+    /// (§11.14.10 rule 5) How a move waited for in the background ended without completing; seen when the member leaves.
+    let transferEnd: TransferEnd?
+    let onTransferEndSeen: @MainActor () -> Void
 
     public init(
         onStart: @escaping @MainActor () -> Void,
@@ -22,7 +25,9 @@ public struct WelcomeScreen: View {
         onRecover: @escaping @MainActor () -> Void,
         deletedNotice: Bool = false,
         onOpenAccountSite: @escaping @MainActor () -> Void = {},
-        onNoticeSeen: @escaping @MainActor () -> Void = {}
+        onNoticeSeen: @escaping @MainActor () -> Void = {},
+        transferEnd: TransferEnd? = nil,
+        onTransferEndSeen: @escaping @MainActor () -> Void = {}
     ) {
         self.onStart = onStart
         self.onTransfer = onTransfer
@@ -30,6 +35,8 @@ public struct WelcomeScreen: View {
         self.deletedNotice = deletedNotice
         self.onOpenAccountSite = onOpenAccountSite
         self.onNoticeSeen = onNoticeSeen
+        self.transferEnd = transferEnd
+        self.onTransferEndSeen = onTransferEndSeen
     }
 
     public var body: some View {
@@ -46,6 +53,11 @@ public struct WelcomeScreen: View {
                     .padding(.bottom, Spacing.xl)
             }
         ) {
+            if let end = transferEnd {
+                NoticeCard(.info, title: MoveStrings.transferEndTitle(end), message: MoveStrings.transferEndBody(end), announce: .polite)
+                    .accessibilityIdentifier("transfer_end_notice")
+                    .padding(.bottom, Spacing.l)
+            }
             if deletedNotice {
                 NoticeCard(.info, title: OnboardingStrings.vaultDeletedNotice, message: "") {
                     TextLink(
@@ -59,7 +71,10 @@ public struct WelcomeScreen: View {
             WelcomePoint(symbol: .verifiedUser, text: OnboardingStrings.welcomePointMember).padding(.top, Spacing.l)
             TextLink(OnboardingStrings.welcomeRecover, identifier: "welcome_recover", action: onRecover).padding(.top, Spacing.l)
         }
-        .onDisappear { if deletedNotice { onNoticeSeen() } }
+        .onDisappear {
+            if deletedNotice { onNoticeSeen() }
+            if transferEnd != nil { onTransferEndSeen() }
+        }
     }
 }
 

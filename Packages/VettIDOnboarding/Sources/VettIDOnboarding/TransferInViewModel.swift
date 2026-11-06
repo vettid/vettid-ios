@@ -63,6 +63,9 @@ public final class TransferInViewModel: TransferInActions {
             state.step = .intro
             state.inputProblem = nil
             return true
+        case .compare where closesNow:
+            // No abandon now (§11.14.10 rule 5): Back stays (the screen says the app can be left), as vettid-android does.
+            return true
         case .connecting, .compare:
             cancel()
             return true
@@ -105,9 +108,11 @@ public final class TransferInViewModel: TransferInActions {
         // after every await it stops if it was cancelled: Swift cannot interrupt an await, and a repository that returns
         // normally after `cancel()` must not move the state.
         waiter = Task { @MainActor [weak self, move, vault, now, sleep] in
-            let deadline = now().addingTimeInterval(Self.window)
+            let scanned = now()
             guard let sas = await Self.connect(Weak(self), move, sleep, text, from: from) else { return }
-            await Self.awaitApproval(Weak(self), move, vault, sas: sas, deadline: deadline)
+            // Counted from the stored start of the `hs.init`, as the manager's deadline is (the scan's moment without it).
+            let started = move.transferStartedAt ?? scanned
+            await Self.awaitApproval(Weak(self), move, vault, sas: sas, deadline: started.addingTimeInterval(Self.window))
         }
     }
 
@@ -177,6 +182,10 @@ public final class TransferInViewModel: TransferInActions {
     private func approvalFailed(_ e: VaultFailure) {
         ticker?.cancel()
         state.sas = nil
+        if e.code == VaultManager.codeTransferSessionEnded {
+            state.step = .stopped
+            return
+        }
         switch e.kind {
         case .rejected: state.step = .rejected
         case .noResponse: state.step = .timedOut
@@ -233,15 +242,27 @@ public final class TransferInViewModel: TransferInActions {
     private func tickOnce(_ deadline: Date) -> Bool {
         let left = max(Int64(deadline.timeIntervalSince(now()).rounded(.down)), 0)
         state.secondsLeft = left
+        // From the end of the vault's 10 minutes the old phone can no longer approve: the code goes, and the screen checks
+        // (as vettid-android does). The repository decides the moment, as for Back (``closesNow``): both agree to the second.
+        state.closing = move.abandonClosed
+        state.checking = state.closing
         return left > 0
     }
 
     /// Leaves a transfer in progress: nothing was approved, so nothing changes; the handshake state is dropped.
+    /// No abandon now (§11.14.10 rule 5), as the repository decides it (``TransferInBackground/abandonClosed``): the
+    /// ticker's ``TransferInState/closing`` only hides the button.
+    public var closesNow: Bool { state.step == .compare && move.abandonClosed }
+
     public func cancel() {
+        // No abandon from the end of the vault's 10 minutes (§11.14.10 rule 5): the button is gone then.
+        guard !closesNow else { return }
         waiter?.cancel()
         ticker?.cancel()
         state.step = .intro
         state.busy = false
+        state.checking = false
+        state.closing = false
         state.sas = nil
         state.deadline = nil
         work.launch { [weak self] in await self?.abandon() }

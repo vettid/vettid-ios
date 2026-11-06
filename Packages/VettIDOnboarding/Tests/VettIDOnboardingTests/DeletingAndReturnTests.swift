@@ -135,6 +135,17 @@ import VettIDDataTesting
         #expect(!vm.state.deletedNotice && !account.vaultDeletedNotice)
     }
 
+    /// (§11.14.10 rule 5) A move waited for in the background that ended without completing is told on the welcome screen
+    /// until it is seen.
+    @Test func theTransferEndNoticeShowsUntilSeen() async {
+        let account = FakeVaultRepository(.signedOut)
+        account.transferEnd = .declined
+        let vm = OnboardingViewModel(account: account, vault: account, inbox: SetupLinkInbox())
+        #expect(await eventually { vm.state.transferEnd == .declined })
+        vm.dismissTransferEnd()
+        #expect(vm.state.transferEnd == nil && account.transferEnd == nil)
+    }
+
     /// The keypad's question for the way back has a way out ("Not now"), and a PIN handed over while it may not be sent
     /// (a backoff runs) keeps the question rather than vanishing without a word.
     @Test func theKeypadsQuestionHasAWayOut() async {

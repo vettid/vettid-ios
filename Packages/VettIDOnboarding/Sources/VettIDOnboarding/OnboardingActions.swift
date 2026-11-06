@@ -37,6 +37,8 @@ public protocol OnboardingActions: AnyObject, Sendable {
     func finish()
     /// (IOS-PLAN §4.2) The member has seen "Your vault was deleted…" on the welcome screen.
     func dismissDeletedNotice()
+    /// (§11.14.10 rule 5) The member has seen how a move waited for in the background ended, on the welcome screen.
+    func dismissTransferEnd()
 }
 
 /// Actions that do nothing: the screens rendered with sample states (previews, the screen catalog).
@@ -75,4 +77,5 @@ public final class NoOnboardingActions: OnboardingActions {
     public func editAfterFailure() {}
     public func finish() {}
     public func dismissDeletedNotice() {}
+    public func dismissTransferEnd() {}
 }
