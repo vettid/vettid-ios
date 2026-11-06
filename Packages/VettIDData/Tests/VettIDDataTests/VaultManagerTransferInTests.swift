@@ -191,8 +191,11 @@ import VettIDDataTesting
         service.approveTransferIn()
         phone.clockAhead = 700
         try await m.refresh()
-        // The window of collects runs in the background (§11.14.10 rule 5, chosen): the start does not wait for it.
-        _ = await eventually(within: .seconds(30)) { m.finishMovePending && m.record.value.transferStartedMs == nil }
+        // The window of collects runs in the background (§11.14.10 rule 5, chosen): the start does not wait for it. The
+        // phase follows on the refresh after it.
+        _ = await eventually(within: .seconds(30)) {
+            m.finishMovePending && m.record.value.transferStartedMs == nil && m.phase == .setup(.finishing)
+        }
         // Each part on its own, with the state that tells a dropped transfer (nothing collected) from a take-over that
         // failed (the phase's failure).
         let state = "phase \(m.phase), paired at the vault \(service.transferPaired), finishMovePending \(m.finishMovePending), "
@@ -238,8 +241,11 @@ import VettIDDataTesting
         #expect(await eventually { service.mailboxCounts == (queued: 0, leased: 1) }, "\(service.mailboxCounts)")
         phone.clockAhead = 700
         try await m.refresh()
-        #expect(await eventually(within: .seconds(30)) { m.finishMovePending && m.record.value.transferStartedMs == nil })
-        #expect(m.phase == .setup(.finishing) && phone.attester.discarded.isEmpty, "phase \(m.phase), discarded \(phone.attester.discarded.count)")
+        // The phase follows on the refresh after the window.
+        #expect(await eventually(within: .seconds(30)) {
+            m.finishMovePending && m.record.value.transferStartedMs == nil && m.phase == .setup(.finishing)
+        }, "phase \(m.phase)")
+        #expect(phone.attester.discarded.isEmpty, "discarded \(phone.attester.discarded.count)")
         phone.windowPauses.release()
     }
 

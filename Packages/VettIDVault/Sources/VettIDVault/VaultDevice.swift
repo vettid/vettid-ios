@@ -213,7 +213,7 @@ public final class VaultDevice: @unchecked Sendable {
     var refusals = 0
     var collector: Task<Void, Never>?
     var collectEnded: String?
-    var collectSince: (at: Date, uptime: TimeInterval)?, collectLastSent: TimeInterval?
+    var collectSince: (at: Date, uptime: TimeInterval)?, collectLastSent: TimeInterval?, collectRound = 0
     var stopped = true
     /// Set by ``forget()``: nothing is written to the store any more.
     var forgotten = false
@@ -427,15 +427,16 @@ public final class VaultDevice: @unchecked Sendable {
     /// Starts collecting from the device's mailbox and flushes the outbox; does nothing while a collection runs. A
     /// terminal relay error ends the collection (``collectionEnded``); start it again to go on.
     public func start() {
-        let begin: Bool = mem.withLock {
+        let begin: Int? = mem.withLock {
             // A quieted device collects nothing again (``quiet()``): its answers could not be sent.
-            if quieted { return false }
+            if quieted { return nil }
             stopped = false
-            if collector != nil, collectEnded == nil { return false }
+            if collector != nil, collectEnded == nil { return nil }
             collectEnded = nil
-            return true
+            collectRound += 1
+            return collectRound
         }
-        guard begin else { return }
+        guard let round = begin else { return }
         let task = Task { [weak self] in
             guard let self else { return }
             let flush = Task { await self.flushOutbox() }
@@ -443,7 +444,7 @@ public final class VaultDevice: @unchecked Sendable {
             let source = RelayMailbox(client: own, transport: cfg.transport)
             let c = MailboxCollector(
                 source: source, mode: cfg.collectMode, wait: cfg.pollWait, now: cfg.now,
-                onRequest: { [weak self] out in self?.collectorRequest(out) },
+                onRequest: { [weak self] out in self?.collectorRequest(out, of: round) },
                 onRecovered: { [weak self] in self?.relayCameBack() }, onFailed: { [weak self] in self?.collectorFailed($0) }
             )
             do {

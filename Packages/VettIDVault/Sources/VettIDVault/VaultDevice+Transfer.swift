@@ -215,17 +215,24 @@ extension VaultDevice {
     public var storedRelayVisibility: TimeInterval? { mem.withLock { st.relayVisibilitySeconds.map { TimeInterval($0) } } }
 
     /// A round of the collector went out ([out]) or ended: when, on this device's clocks (``collectRequestSince``).
-    func collectorRequest(_ out: Bool) {
+    /// [round]: the collection's (``start()``); a stopped one's last request ending late leaves a newer one's alone.
+    func collectorRequest(_ out: Bool, of round: Int) {
         let up = cfg.uptime()
         mem.withLock {
+            guard round == collectRound else { return }
             collectSince = out ? (Date(), up) : nil
             if out { collectLastSent = up }
         }
     }
 
     /// When the collector's last request went out (uptime), kept after it ended: a request that ended on a wake, before
-    /// anything saw the freeze, was still in flight when it began.
+    /// anything saw the freeze, was still in flight when it began. Over a WebSocket (``MailboxCollector/Mode/webSocket``)
+    /// it is when the stream opened, not when a message was pushed: an earlier s, a shorter hold (the app long-polls).
     public var collectLastSentUptime: TimeInterval? { mem.withLock { collectLastSent } }
+
+    /// The `wait` of the collector's long polls: the relay may answer one, and lease what it hands out, that long after
+    /// it went (over a WebSocket, messages come while the stream is open: see ``collectLastSentUptime``).
+    public var collectorWait: TimeInterval { cfg.pollWait }
 
     /// When the collector's request out now went, on the monotonic uptime (``DeviceConfig/uptime``); nil while none is out.
     public var collectRequestUptime: TimeInterval? { mem.withLock { collectSince?.uptime } }

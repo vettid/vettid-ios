@@ -33,6 +33,10 @@ extension VaultManager {
     /// A gap of the monotonic clock between two ticks of a window's heartbeat that counts as a freeze (chosen; the shared
     /// rule with Android #307, the erratum to follow).
     nonisolated static let freezeGap: TimeInterval = 10
+    /// How long after a lease's end the last collect it holds goes out: the send time is taken when the collector's round
+    /// begins, before the transport's connection and retries, so the request may reach the relay later (chosen; the shared
+    /// rule with Android #307, the erratum to follow).
+    nonisolated static let holdMargin: TimeInterval = 15
 
     /// How far past its first end a window's end may move, for a visibility timeout of [visibility] (clamped): the lease
     /// of a request cut up to the end of the window's last round (the long-poll cap and both margins) still ends inside
@@ -123,17 +127,30 @@ extension VaultManager {
         try? await config.transferRetrySleep(.seconds(failures > 0 ? min(Double(1 << min(failures - 1, 3)), 8) : 1))
     }
 
+    /// A request of the window or a collector, sent at `at` (uptime) with a long poll of `wait`: the relay may answer it,
+    /// and the lease of what it hands out start, as late as `at + wait` (chosen; the shared rule with Android #307, the
+    /// erratum to follow).
+    struct WindowSent {
+        let at: TimeInterval
+        let wait: TimeInterval
+        var answered: TimeInterval { at + wait }
+    }
+
     /// The window's timer and end, counted on the monotonic uptime (it runs through a sleep of the phone), and what it saw
     /// of cuts, freezes and the background. A collect cut (the collector's round failed or was stopped, or a collect of the
     /// window lost its answer), a freeze or a background may leave a message leased for a visibility timeout V: the end
     /// then moves to min(max(end, now + V), cap), the cap being ``maxEndPastFirst(visibility:)`` past the first end, which
-    /// never moves. While the app is in the background nothing is decided; back in the foreground the end moves out so. A
-    /// window that is over makes one last `wait=0` collect, then drops; after a freeze while a request was out (the wake
-    /// before the cap or after it), or a cut past the cap, that collect goes out no sooner than s + V + 5 s, s being when
-    /// the latest request sent at or before the freeze or cut went. A cut or a freeze while that last collect is out cuts
-    /// it too: one more last collect goes (at most one per window), no sooner than its own s + V + 5 s, then the drop. So
-    /// the drop comes at most 2 × (V + 5 s) + 2 × ``collectSlack`` past the cap, the cap being the first end + V + 35 s
-    /// (chosen; the shared rule with Android #307, the erratum to follow).
+    /// never moves. While the app is in the background nothing is decided; back in the foreground the end moves out so.
+    ///
+    /// A window that is over makes one last `wait=0` collect, then drops. After a freeze while a request was out (the
+    /// wake before the cap or after it), or a cut past the cap or whose s + V is past it, that collect goes out no sooner
+    /// than s + V + 15 s (``holdMargin``), s being when the latest request sent at or before the freeze or cut went; for a
+    /// long poll, its send + its `wait` (the relay may answer it that late). A cut or a freeze while that last collect is
+    /// out, or during its hold, cuts it too: one more last collect goes (at most one per window), no sooner than its own
+    /// s + V + 15 s or the hold a cut raised meanwhile, then the drop. So the drop comes at most 25 s + 3 × ``collectSlack``
+    /// + 2 × 30 s + 2 × (V + 40 s) of foreground time past the cap (a collect out at the end, two holds, two last collects
+    /// and the collector's round after each), the cap being the first end + V + 35 s; time in the background or frozen
+    /// comes on top (chosen; the shared rule with Android #307, the erratum to follow).
     @MainActor
     final class WindowClock {
         let length: TimeInterval
@@ -143,9 +160,9 @@ extension VaultManager {
         private var heartbeat: Task<Void, Never>?
         private(set) var until: TimeInterval = 0
         private var cap: TimeInterval = 0
-        /// When the window's own collect out now went (uptime), nil while none is out; and when the last one went.
-        var ownOut: TimeInterval? { didSet { if let ownOut { ownSent = ownOut } } }
-        private var ownSent: TimeInterval?
+        /// The window's own collect out now, nil while none is out; and the last one.
+        var ownOut: WindowSent? { didSet { if let ownOut { ownSent = ownOut } } }
+        private var ownSent: WindowSent?
         /// The cuts and freezes noted so far, and as many as there were when the last collect went out.
         private var notes = 0
         private var notesAtFinal: Int?
@@ -223,42 +240,50 @@ extension VaultManager {
         }
 
         private func holdFinal(_ sent: TimeInterval) {
-            finalNotBefore = max(finalNotBefore ?? 0, sent + visibility + VaultManager.windowMargin)
+            finalNotBefore = max(finalNotBefore ?? 0, sent + visibility + VaultManager.holdMargin)
         }
 
         /// Notes the cuts, a freeze (a gap of the uptime since the heartbeat's last tick, seen here too in case this runs
         /// first on a resume) and a background, and moves the end out after one, in the foreground.
         func follow(_ m: VaultManager, _ d: VaultDevice) {
             let up = m.config.uptime()
-            if up - lastTick > VaultManager.freezeGap {
+            let froze = up - lastTick > VaultManager.freezeGap
+            if froze {
                 // The requests in flight when it began: those out at the last tick, and the latest sent before the next tick
                 // was due, kept after it ended (one that failed on the wake, before this ran), not one sent since the wake.
-                let sends = ([ownSent] + Self.devices(m, d).map(\.collectLastSentUptime)).compactMap { $0 }
-                noteCut(sent: ([lastOut] + sends.filter { $0 <= lastTick + 1 }).compactMap { $0 }.max(), freeze: true)
+                let collectors = Self.devices(m, d).map { x in x.collectLastSentUptime.map { WindowSent(at: $0, wait: x.collectorWait) } }
+                let sends = ([ownSent] + collectors).compactMap { $0 }
+                let then = sends.filter { $0.at <= lastTick + 1 }.map(\.answered)
+                noteCut(sent: ([lastOut] + then).compactMap { $0 }.max(), freeze: true)
             }
             lastTick = up
             for x in Self.devices(m, d) {
                 let c = x.collectorCuts
-                if c.count > cuts[ObjectIdentifier(x), default: 0] { noteCut(sent: c.sent) }
+                // A cut first seen with a freeze is the freeze's: its request may have been sent after the last tick and
+                // failed on the wake, and the collector's next request since overwrote the last send.
+                if c.count > cuts[ObjectIdentifier(x), default: 0] { noteCut(sent: c.sent.map { $0 + x.collectorWait }, freeze: froze) }
                 cuts[ObjectIdentifier(x)] = c.count
             }
             if m.backgrounded || m.moveFlags.book.backgrounds != backgrounds {
                 pending = true
                 backgrounds = m.moveFlags.book.backgrounds
             }
-            lastOut = outNow(m, d).max()
+            lastOut = outNow(m, d).map(\.answered).max()
             guard pending, !m.backgrounded else { return }
             pending = false
             extend(m, now: up)
         }
 
-        /// When the requests out now went (uptime): the window's own and the collectors'.
-        private func outNow(_ m: VaultManager, _ d: VaultDevice) -> [TimeInterval] {
-            ([ownOut] + Self.devices(m, d).map(\.collectRequestUptime)).compactMap { $0 }
+        /// The requests out now: the window's own and the collectors'.
+        private func outNow(_ m: VaultManager, _ d: VaultDevice) -> [WindowSent] {
+            ([ownOut] + Self.devices(m, d).map { x in x.collectRequestUptime.map { WindowSent(at: $0, wait: x.collectorWait) } })
+                .compactMap { $0 }
         }
 
         private func extend(_ m: VaultManager, now: TimeInterval) {
-            if now >= cap, let s = pendingSent { holdFinal(s) }
+            // A lease the cap cannot cover (s + V past it), the cut or freeze noticed before the cap or after: the last
+            // collect waits for it (chosen; the shared rule with Android #307, the erratum to follow).
+            if let s = pendingSent, now >= cap || s + visibility > cap { holdFinal(s) }
             pendingSent = nil
             let end = min(max(until, now + visibility), cap)
             guard end > until else { return }
@@ -266,23 +291,25 @@ extension VaultManager {
             arm(m, end - now)
         }
 
-        /// Before the last collect (the window over) of a window that woke past the cap: until s + V + 5 s of the request
-        /// cut then.
+        /// Before the last collect (the window over), after a freeze while a request was out or a cut past the cap: until
+        /// s + V + 15 s of the request in flight then. A cut or a freeze during the hold counts as one while the last collect
+        /// is out (the one more last collect waits for the hold it raised); the hold is read once, not waited on again, so
+        /// that cuts cannot chain it (chosen; the shared rule with Android #307, the erratum to follow).
         func waitForFinalCollect(_ m: VaultManager) async {
             guard over else { return }
+            notesAtFinal = notes
             if let at = finalNotBefore, at > m.config.uptime() {
                 try? await m.config.transferWindowSleep(.seconds(at - m.config.uptime()))
             }
-            notesAtFinal = notes
             m.moveFlags.book.finalCollects += 1
         }
 
         /// After the last collect: whether the window drops now. Not while a cut or a freeze moved the end out first; and a
         /// cut or a freeze while that collect was out cuts it: once, one more last collect goes, no sooner than its own
-        /// s + V + 5 s.
+        /// s + V + 15 s.
         func dropsAfterFinalCollect(_ m: VaultManager, _ d: VaultDevice) -> Bool {
             follow(m, d)
-            if let n = notesAtFinal, notes != n, !finalRedone, let s = ownSent {
+            if let n = notesAtFinal, notes != n, !finalRedone, let s = ownSent?.answered {
                 finalRedone = true
                 holdFinal(s)
                 return false
@@ -298,22 +325,27 @@ extension VaultManager {
     /// collector. `gone` on `mailbox_unknown`.
     private func windowCollect(_ d: VaultDevice, wait: TimeInterval, clock: WindowClock) async -> Collected {
         let sent = config.uptime()
-        clock.ownOut = sent
+        clock.ownOut = WindowSent(at: sent, wait: wait)
+        moveFlags.book.windowCollectSent = sent
         defer { clock.ownOut = nil }
         do {
             try await d.collectOnce(timeout: wait + Self.collectSlack, wait: wait, attempts: 1, sleep: config.transferCollectSleep)
             return .collected
         } catch let e as RelayError where e.code == RelayError.mailboxUnknown {
             return .gone
+        } catch let e as RelayError where e.status >= 500 || e.status < 400 {
+            // A 5xx, or an answer that could not be read: what the relay handed it may be leased, as for the collector.
+            clock.cut(self, d, sent: sent + wait)
+            return .failed
         } catch is RelayError {
-            // A relay's answer: nothing was taken up for this request.
+            // A relay's 4xx: nothing was taken up for this request.
             return .failed
         } catch is CancellationError {
             // The window itself ends.
             return .failed
         } catch {
             // No answer (a transport failure, a timeout): what the relay handed it may be leased, so the end moves out.
-            clock.cut(self, d, sent: sent)
+            clock.cut(self, d, sent: sent + wait)
             return .failed
         }
     }
