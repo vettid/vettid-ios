@@ -68,12 +68,22 @@ import VettIDVault
     }
 
     @Test func aDayTitleHasTheYearOnlyWhenNotThisYears() {
-        let en = Locale(identifier: "en_GB")
+        let gb = Locale(identifier: "en_GB")
         let day = Self.utc.date(from: DateComponents(year: 2026, month: 10, day: 5))!
         let today = Self.utc.date(from: DateComponents(year: 2026, month: 10, day: 20))!
-        #expect(FeedSections.dayTitle(day, today: today, calendar: Self.utc, locale: en) == "Mon 5 Oct")
+        #expect(FeedSections.dayTitle(day, today: today, calendar: Self.utc, locale: gb) == "Mon 5 Oct")
         let old = Self.utc.date(from: DateComponents(year: 2025, month: 10, day: 6))!
-        #expect(FeedSections.dayTitle(old, today: today, calendar: Self.utc, locale: en) == "Mon 6 Oct 2025")
+        #expect(FeedSections.dayTitle(old, today: today, calendar: Self.utc, locale: gb) == "Mon, 6 Oct 2025")
+    }
+
+    @Test func aDayTitleFollowsTheRegionsDateOrder() {
+        let us = Locale(identifier: "en_US")
+        let day = Self.utc.date(from: DateComponents(year: 2026, month: 11, day: 2))!
+        let today = Self.utc.date(from: DateComponents(year: 2026, month: 11, day: 20))!
+        #expect(FeedSections.dayTitle(day, today: today, calendar: Self.utc, locale: us) == "Mon, Nov 2")
+        let old = Self.utc.date(from: DateComponents(year: 2025, month: 11, day: 3))!
+        #expect(FeedSections.dayTitle(old, today: today, calendar: Self.utc, locale: us) == "Mon, Nov 3, 2025")
+        #expect(FeedSections.dayTitle(day, today: today, calendar: Self.utc, locale: Locale(identifier: "en_GB")) == "Mon 2 Nov")
     }
 
     @Test func aFeedNotReadIsReadOnceAndAFailureShows() async {

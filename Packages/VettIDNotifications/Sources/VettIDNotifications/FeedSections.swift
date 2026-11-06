@@ -45,14 +45,15 @@ public enum FeedSections {
         return (urgent.isEmpty ? [] : [FeedSection(day: nil, items: urgent.map(\.0))]) + days
     }
 
-    /// An older day group's title: "Mon 5 Oct", with the year when it is not [today]'s.
+    /// An older day group's title in the phone's region's order ("Mon, Oct 5" in the US, "Mon 5 Oct" in the UK), with
+    /// the year when it is not [today]'s.
     public static func dayTitle(_ day: Date, today: Date, calendar: Calendar = .current, locale: Locale = .current) -> String {
         let f = DateFormatter()
+        f.locale = locale
         f.calendar = calendar
         f.timeZone = calendar.timeZone
-        f.locale = locale
         let sameYear = calendar.component(.year, from: day) == calendar.component(.year, from: today)
-        f.dateFormat = sameYear ? "EEE d MMM" : "EEE d MMM yyyy"
+        f.setLocalizedDateFormatFromTemplate(sameYear ? "EEEMMMd" : "EEEMMMdyyyy")
         return f.string(from: day)
     }
 }
