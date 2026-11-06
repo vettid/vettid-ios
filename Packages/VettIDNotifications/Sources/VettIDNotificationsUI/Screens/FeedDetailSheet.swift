@@ -25,6 +25,11 @@ struct FeedDetailSheet: View {
                     Text(line).vettIDFont(.bodyLarge).fixedSize(horizontal: false, vertical: true)
                         .accessibilityIdentifier("feed_sheet_line")
                 }
+                // (0.83.6) The give-up vote item asks nothing of the member (owner decision a, 2026-11-06).
+                if let detail = FeedKinds.sheetDetail(item, names) {
+                    Text(detail).vettIDFont(.bodyLarge).fixedSize(horizontal: false, vertical: true)
+                        .accessibilityIdentifier("feed_sheet_detail")
+                }
                 ForEach(Self.lines(item, names), id: \.label) { l in
                     VStack(alignment: .leading, spacing: 0) {
                         Text(l.label).vettIDFont(.labelMedium).foregroundStyle(colors.onSurfaceVariant)

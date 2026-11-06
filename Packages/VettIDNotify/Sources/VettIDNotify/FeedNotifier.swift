@@ -35,6 +35,10 @@ public final class FeedNotifier {
     private let allowed: @MainActor () -> Bool
     private let names: @MainActor () -> FeedNames
     private let messageText: @MainActor (_ connectionID: String, _ messageID: String) -> String?
+    /// Reads the votes list afresh: true when the read went through, so that ``FeedNames/votesGaveUp`` is the vault's state
+    /// after a `vote.result` item arrived.
+    private let refreshVotes: @MainActor () async -> Bool
+    private let voteListWait: Duration
     /// The item notifications this process posted that may still show.
     private(set) var posted = Set<String>()
     /// The choice the notifications showing were built with (read at start, then each choice told).
@@ -52,8 +56,12 @@ public final class FeedNotifier {
         visible: @escaping @MainActor () -> NotifyVisible?,
         allowed: @escaping @MainActor () -> Bool,
         names: @escaping @MainActor () -> FeedNames,
-        messageText: @escaping @MainActor (_ connectionID: String, _ messageID: String) -> String?
+        messageText: @escaping @MainActor (_ connectionID: String, _ messageID: String) -> String?,
+        refreshVotes: @escaping @MainActor () async -> Bool,
+        voteListWait: Duration
     ) {
+        self.refreshVotes = refreshVotes
+        self.voteListWait = voteListWait
         self.poster = poster
         self.previews = previews
         self.open = open
@@ -71,8 +79,53 @@ public final class FeedNotifier {
         if !open() { poster.removeLeftovers() }
     }
 
-    /// A new or changed unread item (``FeedManager/onArrival``).
+    /// How long a `vote.result` waits for the votes list read before it is titled generically (VAULT-MESSAGING 0.83.6
+    /// §10.19.6 step 4: the item carries no check state, the list does).
+    public nonisolated static let defaultVoteListWait: Duration = .seconds(3)
+
+    /// A new or changed unread item (``FeedManager/onArrival``). A `vote.result` is the give-up item only by its vote's state
+    /// in the list, and that list may be older than the item (a re-check's verdict, or the vault giving up on its own
+    /// clock): the list is read again first, at most ``defaultVoteListWait``; if that does not go through, the generic
+    /// "Vote results are out".
     public func arrived(_ item: FeedItem) {
+        guard NotificationMapping.category(item) != nil, notifiable(item) else { return }
+        guard item.kind == "vote.result", previews() != .nothing else { return deliver(item, votesFresh: true) }
+        let refresh = refreshVotes
+        let wait = voteListWait
+        Task { [weak self] in
+            let fresh = await Self.within(wait, refresh)
+            self?.deliver(item, votesFresh: fresh)
+        }
+    }
+
+    /// [work]'s answer, or false when it takes longer than [wait]. The first of the two wins and the caller does not wait
+    /// for the other: a read queued behind earlier reads (or one that ignores cancellation) cannot hold the cap past [wait].
+    private static func within(_ wait: Duration, _ work: @escaping @MainActor () async -> Bool) async -> Bool {
+        await withCheckedContinuation { (continuation: CheckedContinuation<Bool, Never>) in
+            let race = Race(continuation)
+            Task { @MainActor in race.finish(await work()) }
+            Task { @MainActor in
+                try? await Task.sleep(for: wait)
+                race.finish(false)
+            }
+        }
+    }
+
+    /// A continuation resumed once, by whichever answer comes first.
+    @MainActor
+    private final class Race {
+        private var continuation: CheckedContinuation<Bool, Never>?
+
+        init(_ continuation: CheckedContinuation<Bool, Never>) { self.continuation = continuation }
+
+        func finish(_ answer: Bool) {
+            continuation?.resume(returning: answer)
+            continuation = nil
+        }
+    }
+
+    private func deliver(_ item: FeedItem, votesFresh: Bool) {
+        // Looked at again: the item may have been read, or its screen opened, while the list was read.
         guard let category = NotificationMapping.category(item), notifiable(item) else { return }
         let p = previews()
         let text: String? = if p == .namesAndText, item.kind == "message.received", let c = item.connectionID, let m = item.ref {
@@ -81,7 +134,8 @@ public final class FeedNotifier {
             nil
         }
         // Nothing names anyone with "Nothing": the names are not read.
-        let names = p == .nothing ? FeedNames() : names()
+        var names = p == .nothing ? FeedNames() : names()
+        if !votesFresh { names.votesGaveUp = [] }
         var n = NotificationContent.of(item, category: category, previews: p, names: names, messageText: text)
         n.update = posted.contains(item.itemID)
         posted.insert(item.itemID)

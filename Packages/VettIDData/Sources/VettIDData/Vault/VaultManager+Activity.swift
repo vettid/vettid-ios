@@ -143,5 +143,7 @@ extension VaultManager {
         approvals.clear()
         history.clear()
         votes.clear()
+        // The kept attempts at the results too (a lock keeps them; a wipe does not).
+        votes.forgetStored()
     }
 }

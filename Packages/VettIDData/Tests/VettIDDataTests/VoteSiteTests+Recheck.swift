@@ -77,6 +77,49 @@ extension VoteSiteTests {
         #expect(vault.submits.isEmpty)
     }
 
+    /// A recheck that could not check anything (no tag to look for, results.json over its limit or not reading its
+    /// electorate) is "not rechecked" with no number, not "don't add up"; a rows.json over its cap is still a failed check
+    /// (its cap comes from a results.json that parsed). Nothing is kept (VAULT-MESSAGING 0.83.6; vettid-android #317 item 2).
+    @Test func aRecheckThatCouldCheckNothingIsNotRecheckedAndAnOverCapRowsJsonIsAFailedCheck() async throws {
+        let ops = FakeVoteOps()
+        ops.list = listing(summary(state: "closed", extra: #","ballot":{"state":"recorded"},"check":{"state":"verified"}"#))
+        ops.detail = verifiedDetail()
+        let m = siteManager(ops)
+        try await m.refresh()
+        func fresh() async throws {
+            m.clear()
+            try await m.refresh()
+        }
+        // Results over their limit.
+        VoteResultsFixture.publish(site, pid)
+        site["p/\(pid)/results.json"] = .found([UInt8](repeating: 32, count: VoteSiteLimits.resultsMax + 1))
+        try await fresh()
+        #expect(try await m.recheckResults(key) == .notChecked && m.hints[key]?.observerVerdict == nil)
+        // Results whose electorate does not read, or is out of range.
+        for counts in [#"{"counts":{}}"#, #"{"counts":{"eligible":0}}"#, "nope"] {
+            site.put("p/\(pid)/results.json", counts)
+            try await fresh()
+            #expect(try await m.recheckResults(key) == .notChecked && m.hints[key]?.observerVerdict == nil)
+        }
+        // Results whose electorate reads but that are otherwise unusable (no rows_root) are a failed check, as in
+        // vettid-android: "don't add up" with the verdict kept, not "not rechecked".
+        site.put("p/\(pid)/results.json", #"{"counts":{"eligible":2}}"#)
+        try await fresh()
+        #expect(try await m.recheckResults(key) == .dontAddUp)
+        #expect(m.hints[key]?.observerVerdict == false && m.hints[key]?.resultsDontAddUp == true && m.hints[key]?.verdictKept == true)
+        // No record tag to look for.
+        VoteResultsFixture.publish(site, pid)
+        ops.detail = voteObj(#"{"proposal_id":"\#(pid)","connection_id":"\#(conn)","title":"t","state":"closed","text":"t","choices":[],"extensions":0}"#)
+        try await fresh()
+        #expect(try await m.recheckResults(key) == .notChecked)
+        // rows.json over the cap of the results is a failed check.
+        ops.detail = verifiedDetail()
+        site["p/\(pid)/rows.json"] = .found([UInt8](repeating: 32, count: 2 * VoteRows.rowBytes + VoteRows.rowsOverhead + 1))
+        try await fresh()
+        #expect(try await m.recheckResults(key) == .dontAddUp && m.hints[key]?.observerVerdict == false)
+        #expect(vault.submits.isEmpty)
+    }
+
     /// An unconfirmed vote whose check again failed on numbers other than the vault's: **Check again** fetches a copy
     /// that holds together but has the other numbers, and the vault refuses the submission. The attempt's verdict needs
     /// the vault's numbers too, so the numbers stay hidden.

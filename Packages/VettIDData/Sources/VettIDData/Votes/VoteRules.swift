@@ -238,6 +238,11 @@ public enum VoteRules {
         // Only the failed texts (ANDROID-PLAN 0.1.116 §4 "Votes").
         case .failed?: out.append(.failed)
         case .gaveUp?:
+            // (0.83.3) A row the app could not get: its text for a problem with the published results (§10.19.6 step 3).
+            if check?.reason == "rows_unavailable" {
+                out.append(.checkResultsProblem)
+                break
+            }
             switch gaveUp {
             case .site?: out.append(.checkGaveUpSite)
             case .unpublished?: out.append(.checkGaveUpUnpublished)
@@ -248,7 +253,7 @@ public enum VoteRules {
             // Before the vault's check passed, the results not adding up reads as a problem with the published results,
             // except under a reason of the vault's own, whose text it leaves (chosen; not in the spec).
             let vaultsOwn = reason == "clock" || reason == "trust_root" || reason == "service_list"
-            if reason == "input" || resultsProblem || (dontAddUp && !vaultsOwn) {
+            if reason == "input" || reason == "rows_unavailable" || resultsProblem || (dontAddUp && !vaultsOwn) {
                 out.append(.checkResultsProblem)
             } else {
                 // A `pending` check whose reason is the vault's own (service_list, trust_root, clock) says so.

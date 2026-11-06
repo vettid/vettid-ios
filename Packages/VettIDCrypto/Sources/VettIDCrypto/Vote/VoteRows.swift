@@ -49,8 +49,14 @@ public enum VoteRows {
     /// (nil when they all hold).
     public struct Checked: Sendable {
         public let own: OwnRow
+        /// The next rows under the member's tag, at most ``maxOthers`` (VAULT-MESSAGING 0.83.3 §10.19.6 step 1, sent as
+        /// `other_rows`), each with its proof and its ballot as published, whatever its lengths.
+        public let others: [OwnRow]
         public let problem: ResultsProblem?
     }
+
+    /// The most `other_rows` entries (§10.19.8: at most 4).
+    public static let maxOthers = 4
 
     /// What the app needs of `results.json` for the member's row.
     private struct Published {
@@ -82,12 +88,23 @@ public enum VoteRows {
     /// The largest `rows.json` read at all: ``maxRows`` rows.
     public static let rowsMax = maxRows * rowBytes + rowsOverhead
 
-    /// The most of `rows.json` read for these results: as many rows as their `counts.eligible` (the bound ``ownRow``
-    /// refuses above), and never over ``rowsMax``; ``rowsMax`` when the results do not say.
-    public static func rowsCap(results bytes: [UInt8]) -> Int {
-        guard let eligible = try? StrictJson.parseObject(bytes).obj("counts").uint("eligible", min: 1, max: UInt64(maxRows))
-        else { return rowsMax }
-        return min(rowsMax, Int(eligible) * rowBytes + rowsOverhead)
+    /// What the results say of how much of `rows.json` to read (§10.19.6 step 1).
+    public enum RowsBound: Equatable, Sendable {
+        /// The most bytes of `rows.json` to read.
+        case cap(Int)
+        /// `counts.eligible` is an integer outside 1 to ``maxRows``: `rows.json` cannot be bounded, so the member's row
+        /// cannot be had while the vault still judges the results themselves (§10.19.6 steps 2 and 3).
+        case outOfRange
+        /// `counts.eligible` does not read at all.
+        case unreadable
+    }
+
+    /// ``RowsBound`` of [bytes], the `results.json` read first.
+    public static func rowsBound(results bytes: [UInt8]) -> RowsBound {
+        guard let eligible = try? StrictJson.parseObject(bytes).obj("counts").uint("eligible", min: 0, max: StrictJson.maxSafeInteger)
+        else { return .unreadable }
+        guard (1...UInt64(maxRows)).contains(eligible) else { return .outOfRange }
+        return .cap(min(rowsMax, Int(eligible) * rowBytes + rowsOverhead))
     }
 
     /// One row of `rows.json`: its tag, its ballot (`vk`, `choice_id`, `ballot_sig`) as the site has it or nil, and its
@@ -121,14 +138,20 @@ public enum VoteRows {
         // A tag on more than one row is already a problem with the rows' order: the first of them is submitted, and the
         // vault judges it against the index its `record_proof` fixes (VAULT-MESSAGING §10.19.6 step 3; chosen; not in
         // the spec).
-        guard let found = rows.firstIndex(where: { Bytes.constantTimeEquals($0.tag, recordTag) }) else { throw ResultsProblem("no_row") }
+        let matches = rows.indices.filter { Bytes.constantTimeEquals(rows[$0].tag, recordTag) }
+        guard let found = matches.first else { throw ResultsProblem("no_row") }
         guard let path = VoteMerkle.proof(leaves, found) else { throw ResultsProblem("rows") }
         let own = OwnRow(ballot: rows[found].ballot, index: UInt64(found), treeSize: UInt64(leaves.count), path: path)
+        // The next rows under the member's tag (§10.19.6 step 1), for `other_rows`.
+        let others = try matches.dropFirst().prefix(maxOthers).map { i -> OwnRow in
+            guard let p = VoteMerkle.proof(leaves, i) else { throw ResultsProblem("rows") }
+            return OwnRow(ballot: rows[i].ballot, index: UInt64(i), treeSize: UInt64(leaves.count), path: p)
+        }
         do {
             try observe(results, rowsBytes, read, eligible: published.eligible)
-            return Checked(own: own, problem: nil)
+            return Checked(own: own, others: others, problem: nil)
         } catch let p as ResultsProblem {
-            return Checked(own: own, problem: p)
+            return Checked(own: own, others: others, problem: p)
         }
     }
 

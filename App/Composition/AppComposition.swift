@@ -105,6 +105,9 @@ final class AppComposition {
         config.collectMode = .webSocket
         // The public votes site (IOS-PLAN §4.16): its own ephemeral session, no cookies, no cache, no redirects.
         config.votesSite = URLSessionVoteSite(base: environment.votesURL)
+        // An expensive or constrained path counts as metered (VAULT-MESSAGING 0.83.6 §10.19.6, owner decision a): the download
+        // cap of a `gave_up` vote's rows.json.
+        config.networkMeter = PathNetworkMeter()
         config.backgroundTasks = SystemBackgroundTasks()
         vault = VaultManager(config: config)
         releaseNotes = ReleaseNotesClient(manifestURL: environment.manifestURL)

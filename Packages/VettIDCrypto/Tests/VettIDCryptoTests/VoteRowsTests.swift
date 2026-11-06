@@ -226,11 +226,11 @@ struct VoteRowsTests {
         }
     }
 
-    /// The cap on reading `rows.json` is that of the results' `counts.eligible`, and the global one when they don't say.
+    /// The cap on reading `rows.json` is that of the results' `counts.eligible`; results that do not say have none.
     @Test func theRowsCapIsTheResultsElectorates() throws {
         let results = Array(try docs.str("results").utf8)
-        #expect(VoteRows.rowsCap(results: results) == 3 * VoteRows.rowBytes + VoteRows.rowsOverhead)
-        #expect(VoteRows.rowsCap(results: Array("nope".utf8)) == VoteRows.rowsMax)
+        #expect(VoteRows.rowsBound(results: results) == .cap(3 * VoteRows.rowBytes + VoteRows.rowsOverhead))
+        #expect(VoteRows.rowsBound(results: Array("nope".utf8)) == .unreadable)
     }
 
     /// The member's tag on two rows: the rows' order is the problem, and the first of them is the row, with its proof.
@@ -243,6 +243,35 @@ struct VoteRowsTests {
         #expect(checked.own.index == 1 && checked.own.treeSize == 3)
         let root = try VoteMerkle.root(leaves(changed))
         #expect(VoteMerkle.verify(root: root, leaf: try leaves(changed)[1], index: 1, size: 3, path: checked.own.path))
+        // The others under the tag go as `other_rows`, each with its proof to the same root (VAULT-MESSAGING 0.83.3).
+        #expect(checked.others.map(\.index) == [2] && checked.others.allSatisfy { $0.treeSize == 3 })
+        #expect(VoteMerkle.verify(root: root, leaf: try leaves(changed)[2], index: 2, size: 3, path: checked.others[0].path))
+    }
+
+    /// At most four rows after the first go as `other_rows`, in the order of `rows.json`; none when the tag has one row.
+    @Test func atMostFourOtherRowsUnderTheTagAreReturned() throws {
+        let all = try rows()
+        let single = Array(try docs.str("rows").utf8)
+        let tag = try all[1].base64("record_tag", 32)
+        #expect(try VoteRows.ownRow(results: try results(rows: single), rows: single, recordTag: tag).others.isEmpty)
+        let many = try rowsDoc([all[0]] + Array(repeating: all[1], count: 7))
+        let counts = #"{"ballots":1,"eligible":8,"removed":0,"unhandled":0}"#
+        let checked = try VoteRows.ownRow(results: try results(["counts": counts], rows: many), rows: many, recordTag: tag)
+        #expect(checked.own.index == 1 && checked.others.map(\.index) == [2, 3, 4, 5])
+        #expect(checked.problem == ResultsProblem("rows_order"))
+    }
+
+    /// What the results say of the read of `rows.json`: a cap for 1 to 100,000 rows, no bound for an integer outside
+    /// that, and nothing for results that do not read (VAULT-MESSAGING 0.83.3 §10.19.6 step 1).
+    @Test func theRowsBoundTellsAnOutOfRangeElectorateFromOneThatDoesNotRead() {
+        func bound(_ eligible: String) -> VoteRows.RowsBound {
+            VoteRows.rowsBound(results: Array(#"{"counts":{"eligible":\#(eligible)}}"#.utf8))
+        }
+        #expect(bound("3") == .cap(3 * VoteRows.rowBytes + VoteRows.rowsOverhead))
+        #expect(bound("100000") == .cap(VoteRows.rowsMax))
+        #expect(bound("0") == .outOfRange && bound("100001") == .outOfRange && bound("9007199254740991") == .outOfRange)
+        #expect(bound("-1") == .unreadable && bound("1.5") == .unreadable && bound(#""3""#) == .unreadable)
+        #expect(VoteRows.rowsBound(results: Array("nope".utf8)) == .unreadable)
     }
 
     /// What the member's row needs of `results.json` (`rows_root`, `counts.eligible`): without it there is nothing to
