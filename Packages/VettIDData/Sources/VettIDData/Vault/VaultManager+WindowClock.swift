@@ -62,17 +62,22 @@ extension VaultManager {
     /// during the one more's collect is waited for once more, with a `wait=0` look before the drop
     /// (``holdAfterExtra(_:)``), if the budget allows it. A background during the one more's collect moves the end out
     /// too if the app is back in the foreground when that collect is answered; if it is still in the background then, the
-    /// window goes to its look and the drop (nothing is decided in the background, and the look collects after it).
+    /// window goes to its look, and on the return to the foreground the end moves out (within the cap) and the window
+    /// collects on to it, its hold within the budget (``endMovedAfterExtra(_:_:)``); nothing is decided in the background.
     ///
     /// After the last collect, in the foreground, the window takes a last look
     /// (``VaultManager/lastLook(_:clock:sessionEnds:)``: a `wait=0` collect after a background); a cut or a refusal of the
     /// look's collect, while the one more is still unused, gives it (no sooner than that collect's send + V + 15 s), and
     /// the drop follows that one's look. A freeze leases whatever was sent before it from the wake + that request's `wait`
-    /// (the relay may be handed it only then). So the drop comes at most cap + 2 × V + 648 s of foreground time (a
-    /// collect out at the end, two holds past the cap, the last collects past the cap (the first, the one more, and the
-    /// look after the hold waited for after it; those that a note after the one more gives end by the cap), the looks,
-    /// the collector's round after each last collect, the pauses); time in the background or frozen comes on top (chosen; the shared rule with Android
-    /// #307, the erratum to follow).
+    /// (the relay may be handed it only then). So the drop comes at most 2 × V + 506 s of foreground time past the cap,
+    /// itemised for iOS's own steps: a collect out at the end (``collectSlack``
+    /// 70 s past its `wait`, which is 0 for a collect sent at the end: 70 s); the first hold past the cap (a cut noticed at
+    /// the end of that collect, or a freeze's wake + the 25 s ``windowPoll`` of the request out then, + 15 s
+    /// ``holdMargin`` + V: V + 40 s); the first last collect (70 s) and the collector's round after it (``windowPoll`` +
+    /// ``handlingMargin``, 30 s); the look after a background (70 s), whose cut or refusal gives the one more; the extra's
+    /// hold (V + 40 s); the one more (70 s) and the collector's round (30 s); its look (70 s); and the retry pause (at most
+    /// 8 s) after each of the two failed collects that go back to collecting. Time in the background or frozen comes on
+    /// top (chosen; the shared rule with Android #307, the erratum to follow).
     @MainActor
     final class WindowClock {
         let length: TimeInterval
@@ -400,6 +405,15 @@ extension VaultManager {
             if let r = refusedUntil { finalNotBefore = max(finalNotBefore ?? 0, r) }
             finalRedone = true
             return true
+        }
+
+        /// After the one more last collect, on the return to the foreground from a background that began during it: whether
+        /// the cut or the freeze noted meanwhile moved the end out (within the cap) past the end at that collect. Then the
+        /// window collects on to it, and its last collect is held as the budget allows. Bounded: the end at the last collect
+        /// is reset at each one, and the end is capped.
+        func endMovedAfterExtra(_ m: VaultManager, _ d: VaultDevice) -> Bool {
+            follow(m, d)
+            return finalRedone && finalsGone >= 2 && until > untilAtFinal
         }
 
         /// After the last collect: whether the window drops now. Not while a cut or a freeze moved the end out first; and a

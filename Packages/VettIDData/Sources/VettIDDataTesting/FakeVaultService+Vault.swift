@@ -90,6 +90,10 @@ extension FakeVaultService {
                 transfer.collectFailures -= 1
                 return .json(503, #"{"code":"unavailable","message":""}"#)
             }
+            if transfer.collectForbids > 0 {
+                transfer.collectForbids -= 1
+                return .json(403, #"{"code":"forbidden","message":""}"#)
+            }
             if transfer.collectRefusals > 0 {
                 transfer.collectRefusals -= 1
                 return .json(429, #"{"code":"rate_limited","message":""}"#, headers: ["Retry-After": "7"])

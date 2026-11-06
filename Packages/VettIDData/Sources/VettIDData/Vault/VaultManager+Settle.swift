@@ -129,9 +129,11 @@ extension VaultManager {
 
     /// Before the drop: while the app is in the background (nothing is decided there), a `wait=0` collect every
     /// ``backgroundCollectPause``, and back in the foreground after a background since the last collect went (it stopped
-    /// the collector), one more; none of them moves the end or gives another last collect (chosen; the shared rule with
-    /// Android #307, the erratum to follow), except that a look's collect that is cut or refused while the one more last
-    /// collect is unused uses it: nil is returned, and the window goes back for that collect (held) before the drop. Then
+    /// the collector), one more; none of the looks moves the end or gives another last collect (chosen; the shared rule
+    /// with Android #307, the erratum to follow), except that a look's collect that is cut or refused while the one more last
+    /// collect is unused uses it: nil is returned, and the window goes back for that collect (held) before the drop. After
+    /// the one more, a cut or a freeze noted in the background moves the end out on the return to the foreground (within
+    /// the cap): nil is returned too, and the window collects on to that end. Then
     /// the drop, unless a `device.paired` or a refusal came, or the session ended meanwhile (a wipe or a sign-out since
     /// [sessionEnds], or `mailbox_unknown`).
     private func lastLook(_ d: VaultDevice, clock: WindowClock, sessionEnds: Int) async -> WindowEnd? {
@@ -146,7 +148,10 @@ extension VaultManager {
             case nil: break
             }
         }
-        if waited || held {
+        // The return to the foreground notes what the background could not: the end may move out (after the one more).
+        if clock.endMovedAfterExtra(self, d) { return nil }
+        let heldNow = await clock.holdAfterExtra(self)
+        if waited || held || heldNow {
             switch await lookOnce(d, clock: clock, sessionEnds: sessionEnds) {
             case .ends(let end): return end
             case .again: return nil

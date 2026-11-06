@@ -44,6 +44,7 @@ struct FakeTransferStore {
     var collectRefused = false
     var collectFailures = 0
     var collectRefusals = 0
+    var collectForbids = 0
     var onlyWait: Int?
     /// The collects of the device's mailbox being answered now (a long poll held while nothing waits), by number. (Kept
     /// here for the file's length; they count every collect of the device's mailbox.)
@@ -282,6 +283,9 @@ extension FakeVaultService {
 
     /// The next [n] collects of the device's mailbox are refused `429 rate_limited`, with `Retry-After: 7`.
     public func refuseNextCollects(_ n: Int) { locked { transfer.collectRefusals = n } }
+
+    /// The next [n] collects of the device's mailbox are refused `403 forbidden`: a 4xx that is no throttle or stale signature.
+    public func forbidNextCollects(_ n: Int) { locked { transfer.collectForbids = n } }
 
     /// The collects of the device's mailbox the fake is answering now, by number: a long poll it holds while nothing
     /// waits, which takes the next message queued.
