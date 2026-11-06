@@ -837,6 +837,39 @@
         }
       }
     },
+    "relay_refused_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your vault couldn't move to its new address"
+          }
+        }
+      }
+    },
+    "relay_refused_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your vault may not receive messages until its keys are replaced."
+          }
+        }
+      }
+    },
+    "relay_refused_action": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Replace your vault's keys"
+          }
+        }
+      }
+    },
     "rotate_offer": {
       "extractionState": "manual",
       "localizations": {

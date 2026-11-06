@@ -148,7 +148,7 @@ extension DataStrings {
     static var feedRotationFailedBody: String {
         String(
             localized: "data_feed_rotation_failed_body",
-            defaultValue: "Your connections still know your old keys. VettID will offer the update again.",
+            defaultValue: "Your vault couldn't finish updating its keys. It will try again the next time you unlock it.",
             bundle: .module
         )
     }

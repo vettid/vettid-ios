@@ -79,7 +79,7 @@ public final class FakeVaultService: @unchecked Sendable {
     var timeScalesValue = TimeScalePolicy.production
     var weakPasswordReason: String?
     var statusState = "unlocked"
-    var noVault = false
+    var noVault = false, relayValue: String?
     /// The published manifest's serial; nil: nothing is published (404).
     var publishedSerialValue: UInt64? = 7
     var manifestFetchesValue = 0

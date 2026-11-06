@@ -192,10 +192,8 @@ public struct AppShell: View {
     /// until a rotation succeeds or the member puts it away, and is hidden on the rotation screen.
     @ViewBuilder private var rotateOffer: some View {
         if vault.rotateOffered, model.path.last != .rotate {
-            InfoBanner(
-                ShellStrings.rotateOffer, actionLabel: ShellStrings.rotateOfferAction,
-                onAction: { model.push(.rotate) }, onDismiss: { vault.dismissRotateOffer() }
-            )
+            InfoBanner(ShellStrings.rotateOffer, actionLabel: ShellStrings.rotateOfferAction,
+                       onAction: { model.push(.rotate) }, onDismiss: { vault.dismissRotateOffer() })
             .accessibilityIdentifier("rotate_offer")
         }
     }
@@ -215,6 +213,7 @@ public struct AppShell: View {
                     // Up to eight banners: a third of the screen at most, scrolling beyond that.
                     BannerArea {
                         alarmBanner
+                        RelayRefusedBanner(vault: vault, model: model)
                         OwnerCheckBanners(gate: gate, now: now, onCheckNow: { model.ownerCheck(holdOff: false) },
                             onHoldOn: { Task { await model.turnHoldOn() } }, onDismissNotices: { Task { await model.dismissNotices() } })
                         if let releaseUpdates, model.path.last != .releaseUpdate {

@@ -28,14 +28,14 @@ import VettIDVault
             .appendingPathComponent("Sources/VettIDShellUI/Resources/Localizable.xcstrings")
         let doc = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
         let keys = try #require((doc["strings"] as? [String: Any])?.keys)
-        #expect(keys.count == 85)
+        #expect(keys.count == 88)
         let missing = "\u{0}missing"
         for key in keys {
             let text = Bundle.module.localizedString(forKey: key, value: missing, table: nil)
             #expect(!text.isEmpty && text != key && text != missing, "\(key)")
             let prefixes = [
                 "nav_", "drawer_", "account_", "owner_check_", "ownercheck_", "settings_", "ios_", "release_banner_", "credential_alarm_",
-                "rotate_offer", "root_",
+                "rotate_offer", "relay_refused_", "root_",
             ]
             #expect(prefixes.contains { key.hasPrefix($0) }, "\(key)")
         }
@@ -87,6 +87,43 @@ import VettIDVault
         #expect(ShellStrings.alarmBanner == "Your credential was presented by another device")
         #expect(ShellStrings.rotateOffer == "You can now rotate your vault's keys: every older copy of your credential stops working.")
         #expect(ShellStrings.rotateOfferAction == "Rotate now")
+    }
+
+    /// The lasting notice of a refused relay key (VAULT-MESSAGING 0.84.0 §3.4; NEW texts, for the owner's approval): its
+    /// three texts, shown while `vault.status` has the field and gone without it, not over the screens that replace the
+    /// keys.
+    @Test func theRelayRefusedNoticeFollowsTheVaultStatus() {
+        #expect(ShellStrings.relayRefusedTitle == "Your vault couldn't move to its new address")
+        #expect(ShellStrings.relayRefusedBody == "Your vault may not receive messages until its keys are replaced.")
+        #expect(ShellStrings.relayRefusedAction == "Replace your vault's keys")
+        #expect(height(RelayRefusedNotice.banner {}) > 0)
+        let repo = FakeVaultRepository(.unlocked)
+        #expect(!RelayRefusedNotice.shown(refused: repo.relayRefused, path: nil))
+        repo.relayRefused = true
+        #expect(RelayRefusedNotice.shown(refused: repo.relayRefused, path: nil))
+        #expect(RelayRefusedNotice.shown(refused: repo.relayRefused, path: .credential))
+        for route in [ShellRoute.rotate, .alarm, .newCredential, .changePassword] {
+            #expect(!RelayRefusedNotice.shown(refused: repo.relayRefused, path: route))
+        }
+        repo.relayRefused = false
+        #expect(!RelayRefusedNotice.shown(refused: repo.relayRefused, path: nil))
+        // The shell renders with the notice.
+        repo.relayRefused = true
+        let gate = OwnerCheckGate(gated: false, warning: false, holdOff: false, notices: [], presenceUnrecorded: false)
+        let shell = AppShell(
+            account: repo, vault: repo, ownerChecks: repo, credential: repo, profiles: repo, appLock: StillAppLock(),
+            model: ShellModel(account: repo, vault: repo, ownerChecks: repo), gate: gate, now: now,
+            version: AppVersion(name: "2.0.0", build: 1), installedFrom: .apple, promptReason: "Unlock VettID"
+        ) {}
+        #expect(height(shell) > 0)
+    }
+
+    /// The notice's action starts the existing key rotation (`credential.rotate`), as the rotate offer's does.
+    @Test func theRelayRefusedActionStartsTheRotation() {
+        let repo = FakeVaultRepository(.unlocked)
+        let model = ShellModel(account: repo, vault: repo, ownerChecks: repo)
+        RelayRefusedNotice.replaceKeys(model)
+        #expect(model.path.last == .rotate)
     }
 
     /// The texts that name a scaled wait: in real time the approved words verbatim (ANDROID-PLAN §4 "Recovery and unlock

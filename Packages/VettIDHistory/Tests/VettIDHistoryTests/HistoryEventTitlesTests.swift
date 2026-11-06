@@ -140,7 +140,7 @@ import VettIDVault
         // VAULT-MESSAGING 0.69.2 §11.14.10: the move's line only for a transfer's rotation.
         #expect(lines("identity.rotated", "t-1") == ["Replaced when you moved your vault to a new phone."])
         #expect(lines("identity.rotated", "recovery").isEmpty && lines("identity.rotated", nil).isEmpty && lines("identity.rotated", "").isEmpty)
-        #expect(lines("identity.rotation_failed", "recovery") == ["Your connections still know your old keys. VettID will offer the update again."])
+        #expect(lines("identity.rotation_failed", "recovery") == ["Your vault couldn't finish updating its keys. It will try again the next time you unlock it."])
         #expect(lines("identity.rotate_conflict", nil) == ["This connection's vault announced two different new keys. That can mean someone holds an old copy of their vault. Nothing is sent or received until you check."])
         #expect(lines("push.registered", "fcm") == ["Through Google."])
         #expect(lines("push.registered", "apns") == ["Through Apple."])
