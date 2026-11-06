@@ -37,7 +37,11 @@ public struct HelpScreen: View {
     }
 
     static var legal: [HelpLink] {
-        [HelpLink(label: HelpStrings.privacyPolicy, url: HelpStrings.urlPrivacyPolicy, icon: .privacyTip, identifier: "help_privacy_policy")]
+        [
+            HelpLink(
+                label: HelpStrings.privacyPolicy, url: HelpStrings.urlPrivacyPolicy, icon: .privacyTip, identifier: "help_privacy_policy"
+            ),
+        ]
     }
 
     public var body: some View {

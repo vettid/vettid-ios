@@ -122,7 +122,10 @@ enum SecurityStrings {
     }
 
     static var deleteAccountBody: String {
-        String(localized: "ios_settings_delete_account_body", defaultValue: "Your email and membership, on the account site", bundle: .module)
+        String(
+            localized: "ios_settings_delete_account_body", defaultValue: "Your email and membership, on the account site",
+            bundle: .module
+        )
     }
 
     static var deleteAccountExplain: String {

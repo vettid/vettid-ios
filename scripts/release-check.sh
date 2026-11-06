@@ -636,10 +636,10 @@ if [[ ${SELF_TEST} -eq 1 ]]; then
   # An entitlements file with another capability, or without the associated domain, must be refused.
   extra="${OUT}/planted/extra.entitlements"
   cp Config/VettID-production.entitlements "${extra}"
-  plutil -insert com.apple.security.application-groups -json '["group.org.vettid.shared"]' "${extra}"
+  /usr/libexec/PlistBuddy -c 'Add :com.apple.security.application-groups array' -c 'Add :com.apple.security.application-groups:0 string group.org.vettid.shared' "${extra}"
   nodomain="${OUT}/planted/nodomain.entitlements"
   cp Config/VettID-production.entitlements "${nodomain}"
-  plutil -remove com.apple.developer.associated-domains "${nodomain}"
+  /usr/libexec/PlistBuddy -c 'Delete :com.apple.developer.associated-domains' "${nodomain}"
   for f in "${extra}" "${nodomain}"; do
     if check_entitlements_file planted "${f}" >/dev/null 2>&1; then
       echo "self-test FAILED: the entitlement check accepted ${f}" >&2
