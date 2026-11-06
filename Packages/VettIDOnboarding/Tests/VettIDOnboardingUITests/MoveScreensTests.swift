@@ -148,7 +148,8 @@ import VettIDUI
         model.scan()
         model.scanned(try qr(clock))
         await clock.runCurrent()
-        #expect(model.state.step == .compare)
+        // The handshake runs in a child task on the cooperative pool, which `runCurrent` doesn't wait for.
+        #expect(await eventually { model.state.step == .compare })
         return host(TransferInRoute(move: vault, vault: vault, onLeave: {}, camera: nil, model: model))
     }
 

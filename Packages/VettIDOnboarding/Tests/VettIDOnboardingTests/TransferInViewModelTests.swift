@@ -32,7 +32,7 @@ import VettIDDataTesting
         let code = try qr()
         vm.scanned(code)
         await clock.runCurrent()
-        #expect(vault.lastTransferCode == code && vm.state.step == .compare && vm.state.sas == "042817")
+        #expect(await eventually { vault.lastTransferCode == code && vm.state.step == .compare && vm.state.sas == "042817" })
         #expect((650...660).contains(vm.state.secondsLeft) && !vm.state.busy)
         vault.transferApproval.complete()
         await clock.advance(seconds: 2)
@@ -126,7 +126,7 @@ import VettIDDataTesting
         vm.setInput("  \(try qr())\n")
         vm.submitInput()
         await clock.runCurrent()
-        #expect(vm.state.step == .compare)
+        #expect(await eventually { vm.state.step == .compare })
     }
 
     @Test func cancellingDropsTheHandshake() async throws {
@@ -166,7 +166,7 @@ import VettIDDataTesting
         vm.scan()
         vm.scanned(try qr())
         await clock.runCurrent()
-        #expect(vm.state.step == .notAnswered && !vm.state.busy)
+        #expect(await eventually { vm.state.step == .notAnswered && !vm.state.busy })
     }
 
     @Test func anHsRespWithin60SecondsShowsTheCode() async throws {
@@ -178,7 +178,7 @@ import VettIDDataTesting
         await clock.advance(seconds: 45)
         hs.complete("042817")
         await clock.runCurrent()
-        #expect(vm.state.step == .compare && vm.state.sas == "042817")
+        #expect(await eventually { vm.state.step == .compare && vm.state.sas == "042817" })
         // The window counts from the hs.init's answer, not from the 60 seconds' end.
         await clock.advance(seconds: 30)
         #expect(vm.state.step == .compare)
@@ -190,7 +190,7 @@ import VettIDDataTesting
         vm.scan()
         vm.scanned(try qr())
         await clock.runCurrent()
-        #expect(vm.state.step == .scan && vm.state.error == .noResponse && !vm.state.busy)
+        #expect(await eventually { vm.state.step == .scan && vm.state.error == .noResponse && !vm.state.busy })
     }
 
     /// The vault's own refusal of the code (`invite_invalid` after it parsed here) goes back to the code with the problem.
@@ -201,7 +201,7 @@ import VettIDDataTesting
         vm.setInput(try qr())
         vm.submitInput()
         await clock.runCurrent()
-        #expect(vm.state.step == .paste && vm.state.inputProblem == .inviteExpired && vm.state.error == nil)
+        #expect(await eventually { vm.state.step == .paste && vm.state.inputProblem == .inviteExpired && vm.state.error == nil })
     }
 
     /// Any other failure after the SAS goes back to the start with its kind and code.
@@ -264,7 +264,7 @@ import VettIDDataTesting
         await clock.runCurrent()
         hs.fail(Odd())
         await clock.runCurrent()
-        #expect(vm.state.step == .scan && vm.state.error == .other && !vm.state.busy)
+        #expect(await eventually { vm.state.step == .scan && vm.state.error == .other && !vm.state.busy })
     }
 
     @Test func anotherErrorWhileWaitingForTheApprovalReturnsToTheStart() async throws {
@@ -286,7 +286,7 @@ import VettIDDataTesting
             vm.scan()
             vm.scanned(try qr())
             await clock.runCurrent()
-            #expect(vm.state.step == .compare)
+            #expect(await eventually { vm.state.step == .compare })
         }
         await clock.advance(seconds: 3)
         #expect(weakModel == nil)
