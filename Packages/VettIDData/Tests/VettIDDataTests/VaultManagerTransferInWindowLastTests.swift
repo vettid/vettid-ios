@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-import VettIDRelay
+@testable import VettIDRelay
 @testable import VettIDData
 import VettIDDataTesting
 import VettIDTesting
@@ -140,5 +140,99 @@ extension VaultManagerTransferInTests {
         #expect(d.collectorCuts.count == cuts, "a 4xx of a round handed nothing")
         d.collectorFailed(RelayError(status: 403, code: "forbidden"), handed: true, of: d.collectRound)
         #expect(d.collectorCuts.count == cuts + 1, "a 4xx of a round handed messages")
+    }
+
+    /// Once the one more last collect went, a background while it is out: the pairing, back during the background or on
+    /// the return, is collected (a `wait=0` collect every 15 s in the background, one more back in the foreground) and
+    /// applied, with no last collect more.
+    @Test func thePairingBackAfterTheOneMoreLastCollectIsStillApplied() async throws {
+        defer { phone.close() }
+        try await lastCollectAfterAFreeze()
+        service.refuseNextCollects(1)
+        phone.windowPauses.release()
+        #expect(await eventually { phone.windowPauses.lengths == [90, 15, 40, 7] }, "\(phone.windowPauses.lengths)")
+        try await advance(7)
+        let gate = FakeHTTPServer.Gate()
+        service.holdsCollectAnswersOfWait = 0
+        service.holdsCollectAnswers = gate
+        service.losesCollectAnswers = 1
+        service.endLeases()
+        let finals = m.moveFlags.book.finalCollects
+        phone.windowPauses.release()
+        #expect(await eventually { gate.waiting > 0 && m.moveFlags.book.finalCollects == finals + 1 }, "the one more goes")
+        await m.onBackground(budget: .seconds(1))
+        // Only the window's collects take it: the collector, started again in the foreground, finds nothing.
+        service.handsMessagesOnlyToWait = 0
+        service.holdsCollectAnswers = nil
+        // The pairing is back (its lease ended) before the one more last collect's answer is lost.
+        service.endLeases()
+        gate.open()
+        m.onForeground()
+        #expect(await eventually(within: .seconds(30)) { m.finishMovePending }, "the pairing applied")
+        // The take-over's answers come to the collector.
+        service.handsMessagesOnlyToWait = nil
+        #expect(await eventually(within: .seconds(30)) { m.record.value.transferStartedMs == nil }, "the take-over completed")
+        #expect(m.moveFlags.book.finalCollects == finals + 1, "no last collect more")
+    }
+
+    /// Over the stream, the collector's send time follows the latest push: a cut 45 s after the stream opened, just after
+    /// it pushed a message, moves the end to the push + V + 15 s (a pushed message is leased as it is pushed).
+    @Test func aCutOfAStreamCountsFromItsLatestPush() async throws {
+        defer { phone.close() }
+        try await windowOnFrozenClocks()
+        let d = try #require(m.session?.device)
+        d.stop()
+        phone.heartbeatPauses.holding = true
+        let clock = VaultManager.WindowClock(visibility: 60, backgrounds: m.moveFlags.book.backgrounds, background: false)
+        clock.start(m, d)
+        let opened = m.config.uptime()
+        d.collectorRequest(true, of: d.collectRound)
+        d.collectorSent(of: d.collectRound, wait: 0)
+        // 45 s on, in steps the clock sees as no freeze, then a push.
+        for _ in 0..<5 {
+            phone.uptimeAhead += 9
+            clock.follow(m, d)
+        }
+        d.collectorSent(of: d.collectRound, wait: 0)
+        d.collectorFailed(URLError(.networkConnectionLost), of: d.collectRound)
+        clock.follow(m, d)
+        #expect(clock.until == opened + 45 + 75, "from the push: \(clock.until - opened)")
+        clock.stop()
+        phone.heartbeatPauses.release()
+    }
+
+    /// While a settlement window follows the transfer's device, its collector's long polls go on connections of their
+    /// own; before and after it, on the transport's.
+    @Test func theCollectorGoesFreshOnlyDuringTheWindow() async throws {
+        defer { phone.close() }
+        _ = try await scanned()
+        try await phone.restart()
+        phone.windowPauses.holding = true
+        try await m.refresh()
+        #expect(await eventually { m.session != nil })
+        let d = try #require(m.session?.device)
+        #expect(!d.collectsFresh, "before the window")
+        phone.clockAhead = 700
+        try await m.refresh()
+        #expect(await eventually { phone.windowPauses.lengths == [90] }, "the window runs")
+        #expect(d.collectsFresh, "during the window")
+        phone.windowPauses.release()
+        #expect(await eventually(within: .seconds(30)) { m.record.value.transferStartedMs == nil }, "dropped")
+        #expect(await eventually { !d.collectsFresh }, "after the window")
+    }
+
+    /// The collector the device makes tells a round's failure with whether it had been handed messages: a 4xx after
+    /// messages is a cut.
+    @Test func theDevicesCollectorPassesHandedThrough() async throws {
+        defer { phone.close() }
+        _ = try await scanned()
+        let d = try #require(m.session?.device)
+        d.stop()
+        let cuts = d.collectorCuts.count
+        let c = d.collector(of: d.collectRound)
+        c.onFailed(RelayError(status: 403, code: "forbidden"), false)
+        #expect(d.collectorCuts.count == cuts, "a 4xx handed nothing")
+        c.onFailed(RelayError(status: 403, code: "forbidden"), true)
+        #expect(d.collectorCuts.count == cuts + 1, "a 4xx after messages")
     }
 }

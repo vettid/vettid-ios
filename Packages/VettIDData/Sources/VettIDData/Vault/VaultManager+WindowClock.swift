@@ -11,6 +11,12 @@ extension VaultManager {
         let at: TimeInterval
         let wait: TimeInterval
         var answered: TimeInterval { at + wait }
+
+        init(at: TimeInterval, wait: TimeInterval) {
+            (self.at, self.wait) = (at, wait)
+        }
+
+        init(_ s: VaultDevice.CollectSent) { self.init(at: s.at, wait: s.wait) }
     }
 
     /// The window's own collect: the one out now (from the moment it goes out, each attempt), and the last one. Set off
@@ -61,6 +67,8 @@ extension VaultManager {
         private var finalRedone = false
         private var finalsGone = 0
         private var refusedUntil: TimeInterval?
+        /// The backgrounds counted when the last collect went.
+        private var backgroundsAtFinal = 0
         /// The heartbeat's last tick, the latest send + wait of the requests out then, and the tick before the last freeze.
         private var lastTick: TimeInterval = 0
         private var lastOut: TimeInterval?
@@ -110,6 +118,7 @@ extension VaultManager {
         func stop() {
             timer?.cancel()
             heartbeat?.cancel()
+            for x in collectors { x.setCollectsFresh(false) }
         }
 
         /// [d], and the device of a session opened since (its collector may take the pairing too).
@@ -120,6 +129,8 @@ extension VaultManager {
 
         private func watch(_ x: VaultDevice, from count: Int) {
             guard cuts[ObjectIdentifier(x)] == nil else { return }
+            // Its long polls go on connections of their own while the window follows it.
+            x.setCollectsFresh(true)
             collectors.append(x)
             cuts[ObjectIdentifier(x)] = count
         }
@@ -184,8 +195,7 @@ extension VaultManager {
             if up - lastTick > VaultManager.freezeGap {
                 // The requests in flight when it began: those out at the last tick, and the latest sent before the next tick
                 // was due, kept after it ended (one that failed on the wake, before this ran), not one sent since the wake.
-                let sends = ([own.last] + collectors.map { x in x.collectLastSentUptime.map { WindowSent(at: $0, wait: x.collectorWait) } })
-                    .compactMap { $0 }
+                let sends = ([own.last] + collectors.map { $0.lastCollectorSent.map(WindowSent.init) }).compactMap { $0 }
                 let then = sends.filter { $0.at <= lastTick + 1 }.map(\.answered)
                 noteFreeze(began: lastTick, sent: ([lastOut] + then).compactMap { $0 }.max())
             }
@@ -193,7 +203,7 @@ extension VaultManager {
             for x in collectors {
                 let c = x.collectorCuts
                 if c.count > cuts[ObjectIdentifier(x), default: 0] {
-                    noteCut(c.sent.map { WindowSent(at: $0, wait: x.collectorWait) })
+                    noteCut(c.sent.map(WindowSent.init))
                 }
                 cuts[ObjectIdentifier(x)] = c.count
             }
@@ -209,8 +219,7 @@ extension VaultManager {
 
         /// The requests out now: the window's own and the collectors'.
         private func outNow() -> [WindowSent] {
-            ([own.out] + collectors.map { x in x.collectRequestUptime.map { WindowSent(at: $0, wait: x.collectorWait) } })
-                .compactMap { $0 }
+            ([own.out] + collectors.map { $0.collectRequestSent.map(WindowSent.init) }).compactMap { $0 }
         }
 
         private func extend(_ m: VaultManager, now: TimeInterval) {
@@ -246,18 +255,21 @@ extension VaultManager {
                 try? await m.config.transferWindowSleep(.seconds(at - m.config.uptime()))
             }
             finalsGone += 1
+            backgroundsAtFinal = m.moveFlags.book.backgrounds
             m.moveFlags.book.finalCollects += 1
+        }
+
+        /// Whether the app went to the background since the last collect went (or is there now).
+        func backgroundSinceFinal(_ m: VaultManager) -> Bool {
+            m.backgrounded || m.moveFlags.book.backgrounds != backgroundsAtFinal
         }
 
         /// After the last collect: whether the window drops now. Not while a cut or a freeze moved the end out first; and a
         /// cut, a freeze or a background while that collect was out, or a refusal of it, gives one more last collect, once.
-        /// After that one, the window drops, back in the foreground if it is not.
-        func dropsAfterFinalCollect(_ m: VaultManager, _ d: VaultDevice) async -> Bool {
+        /// After that one, the window drops (``VaultManager/lastLook(_:clock:)``: in the foreground, after a last look).
+        func dropsAfterFinalCollect(_ m: VaultManager, _ d: VaultDevice) -> Bool {
             follow(m, d)
-            if finalRedone, finalsGone >= 2 {
-                while m.backgrounded, !Task.isCancelled { await m.backgroundPause() }
-                return true
-            }
+            if finalRedone, finalsGone >= 2 { return true }
             let cutDuring = notesAtFinal.map { notes != $0 } ?? false
             if cutDuring || refusedUntil != nil, !finalRedone {
                 if cutDuring, let s = own.last?.answered { holdFinal(s) }

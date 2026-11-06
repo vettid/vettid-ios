@@ -33,9 +33,9 @@ extension VaultManager {
     /// A gap of the monotonic clock between two ticks of a window's heartbeat that counts as a freeze (chosen; the shared
     /// rule with Android #307, the erratum to follow).
     nonisolated static let freezeGap: TimeInterval = 10
-    /// How long after a lease's end the last collect it holds goes out: the send time is taken when the collector's round
-    /// begins, before the transport's connection and retries, so the request may reach the relay later (chosen; the shared
-    /// rule with Android #307, the erratum to follow).
+    /// How long after a lease's end the last collect it holds goes out: a send time is taken right before each attempt
+    /// goes out, before its connection's DNS, TCP and TLS, so the request may reach the relay that much later (chosen; the
+    /// shared rule with Android #307, the erratum to follow).
     nonisolated static let holdMargin: TimeInterval = 15
     /// How often a window kept alive in the background (a call, say) collects (chosen; not in the spec).
     nonisolated static let backgroundCollectPause: TimeInterval = 15
@@ -117,9 +117,25 @@ extension VaultManager {
             if case .nothing = found {} else { return found }
             // Decided only if nothing cut the last collects: a background (it stops the collector, whose long poll may have
             // been handed the pairing) or a freeze during them moves the end out first, within its cap.
-            if last, await clock.dropsAfterFinalCollect(self, d) { return await pairedOrRejected(d) }
+            if last, clock.dropsAfterFinalCollect(self, d) { return await lastLook(d, clock: clock) }
             await pauseBetweenCollects(failures: failures, wait: wait)
         }
+        return await pairedOrRejected(d)
+    }
+
+    /// Before the drop: while the app is in the background (nothing is decided there), a `wait=0` collect every
+    /// ``backgroundCollectPause``, and back in the foreground after a background since the last collect went (it stopped
+    /// the collector), one more; none of them moves the end or gives another last collect (chosen; the shared rule with
+    /// Android #307, the erratum to follow). Then the drop, unless a `device.paired` or a refusal came.
+    private func lastLook(_ d: VaultDevice, clock: WindowClock) async -> WindowEnd {
+        let waited = clock.backgroundSinceFinal(self)
+        while backgrounded, !Task.isCancelled {
+            await backgroundPause()
+            _ = await windowCollect(d, wait: 0, last: false, clock: clock)
+            let found = await pairedOrRejected(d)
+            if case .nothing = found {} else { return found }
+        }
+        if waited { _ = await windowCollect(d, wait: 0, last: false, clock: clock) }
         return await pairedOrRejected(d)
     }
 
@@ -145,7 +161,7 @@ extension VaultManager {
         do {
             try await d.collectOnce(
                 timeout: wait + Self.collectSlack, wait: wait, attempts: 1, sleep: config.transferCollectSleep,
-                sent: { own.sent(WindowSent(at: uptime(), wait: wait)) }
+                sent: { own.sent(WindowSent(at: uptime(), wait: wait)) }, fresh: true
             )
             return .collected
         } catch let e as RelayError where e.code == RelayError.mailboxUnknown {

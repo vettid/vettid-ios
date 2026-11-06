@@ -40,20 +40,31 @@ extension RelayClientTests {
         #expect((sentAfter.all.first ?? 0) >= 4, "after the network came: \(sentAfter.all)")
     }
 
-    /// Each attempt of a long poll goes on a session of its own (no connection an earlier request used); other calls on
-    /// the transport's.
-    @Test func aLongPollGoesOnASessionOfItsOwn() async throws {
+    /// A collect asked fresh goes on a session of its own for each attempt, a retried one too (no connection an earlier
+    /// request used); one not asked so, and other calls, on the transport's.
+    @Test func aFreshCollectGoesOnASessionOfItsOwn() async throws {
         let made = Recorder<Bool>()
-        let base = server.session
-        let transport = HTTPTransport(session: base, sleep: { _ in }, makeSession: { c in
+        let transport = HTTPTransport(session: server.session, sleep: { _ in }, makeSession: { c in
             made.add(true)
             return URLSession(configuration: c)
         })
         server.enqueue(.json(200, #"{"messages":[]}"#))
         _ = try await client(transport: transport).collect(wait: 0, attempts: 1)
-        #expect(made.all.count == 1, "the long poll")
+        #expect(made.all.isEmpty, "a collect not asked fresh")
+        server.enqueue(.failure(.cannotConnectToHost))
+        server.enqueue(.json(200, #"{"messages":[]}"#))
+        _ = try await client(transport: transport).collect(wait: 0, attempts: 1, fresh: true)
+        #expect(made.all.count == 2, "each attempt, the retried one too")
         server.enqueue(.empty(204))
         try await client(transport: transport).ack("01A")
-        #expect(made.all.count == 1, "not the ack")
+        #expect(made.all.count == 2, "not the ack")
+        // The collector's source asks for each collect.
+        let fresh = Recorder<Bool>()
+        server.enqueue(.json(200, #"{"messages":[]}"#))
+        _ = try await RelayMailbox(client: client(transport: transport), transport: transport, fresh: {
+            fresh.add(true)
+            return true
+        }).collect(wait: 0, max: 10)
+        #expect(fresh.all.count == 1 && made.all.count == 3, "the mailbox source asked fresh")
     }
 }

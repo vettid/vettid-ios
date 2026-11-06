@@ -148,8 +148,10 @@ extension VaultManagerTransferInTests {
         await m.onBackground(budget: .seconds(1))
         service.approveTransferIn()
         m.onForeground()
-        #expect(await eventually(within: .seconds(30)) { m.finishMovePending && m.record.value.transferStartedMs == nil })
-        #expect(m.phase == .setup(.finishing), "Finish the move is asked")
+        // The phase follows on the refresh after the window.
+        #expect(await eventually(within: .seconds(30)) {
+            m.finishMovePending && m.record.value.transferStartedMs == nil && m.phase == .setup(.finishing)
+        }, "Finish the move is asked")
         phone.windowPauses.release()
     }
 

@@ -101,4 +101,16 @@ extension MailboxCollectorTests {
         }
         #expect(told.all == [true], "\(told.all)")
     }
+
+    /// Over the stream, a send time is taken when it opens and as each message is pushed (each is leased as it is
+    /// pushed), with no `wait` after it.
+    @Test func aStreamTellsASendTimeForEachPush() async throws {
+        let end = RelayError(status: 404, code: RelayError.mailboxUnknown)
+        let src = FakeSource([], stream: FakeStream([Self.msg("01A"), Self.msg("01B")], end: end))
+        let sent = Recorder<TimeInterval>()
+        await #expect(throws: RelayError.self) {
+            try await MailboxCollector(source: src, mode: .webSocket, sleep: { _ in }, onSent: { sent.add($0) }).run { _ in }
+        }
+        #expect(sent.all == [0, 0, 0], "the open and two pushes: \(sent.all)")
+    }
 }

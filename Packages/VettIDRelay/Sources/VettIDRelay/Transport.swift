@@ -132,11 +132,15 @@ public struct HTTPTransport: Sendable {
         }
     }
 
-    /// A session of the transport's configuration with no connection in it. A long poll goes on one (chosen; not in the
-    /// spec): on a connection an earlier request used and the server or the path closed, the system may send an
-    /// idempotent request again on its own, unseen, and an answer that was handed messages and lost would then come back
-    /// empty (a lease nothing knows of); on a connection of its own, the loss fails the request.
-    public func freshSession() -> URLSession { makeSession(session.configuration) }
+    /// A session of the transport's configuration with no connection in it. A settlement window's collects go on one
+    /// (chosen; not in the spec): on a connection an earlier request used and the server or the path closed, the system
+    /// may send an idempotent request again on its own, unseen, and an answer that was handed messages and lost would then
+    /// come back empty (a lease nothing knows of); on a connection of its own, the loss fails the request. The relay's
+    /// session has no delegate (the app's is made from a configuration alone), so the new one loses none.
+    public func freshSession() -> URLSession {
+        assert(session.delegate == nil, "a fresh session would drop the transport session's delegate")
+        return makeSession(session.configuration)
+    }
 
     private func once(_ s: URLSession, _ r: URLRequest, maxBody: Int, readsBody: @Sendable (Int) -> Bool) async throws -> HTTPAnswer {
         let (bytes, response) = try await s.bytes(for: r)

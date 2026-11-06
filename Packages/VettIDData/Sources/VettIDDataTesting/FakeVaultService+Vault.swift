@@ -111,7 +111,8 @@ extension FakeVaultService {
         requeueEndedLeases()
         while queued.isEmpty || holdMessagesValue, cond.wait(until: deadline) {}
         // While answers are held for one `wait` (``holdsCollectAnswersOfWait``), only the collects of that wait take messages.
-        let other = transfer.collectGate != nil && transfer.collectGateWait.map { r.query?.contains("wait=\($0)&") != true } ?? false
+        let only = transfer.collectGate != nil ? transfer.collectGateWait : transfer.onlyWait
+        let other = only.map { r.query?.contains("wait=\($0)&") != true } ?? false
         if holdMessagesValue || other { return .json(200, #"{"messages":[]}"#) }
         let msgs = takeQueued().map { JsonBuilder().string("msg_id", $0.msgID).string("sender", $0.sender).base64("payload", $0.payload).build() }
         var answer = FakeHTTPServer.Answer.json(200, #"{"messages":\#(JsonBuilder.array(msgs))}"#)

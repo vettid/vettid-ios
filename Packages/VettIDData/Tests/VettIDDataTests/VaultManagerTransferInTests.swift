@@ -219,7 +219,10 @@ import VettIDDataTesting
         service.approveTransferIn()
         phone.clockAhead = 700
         try await m.refresh()
-        _ = await eventually(within: .seconds(30)) { m.finishMovePending && m.record.value.transferStartedMs == nil }
+        // The phase follows on the refresh after the window.
+        _ = await eventually(within: .seconds(30)) {
+            m.finishMovePending && m.record.value.transferStartedMs == nil && m.phase == .setup(.finishing)
+        }
         let state = "phase \(m.phase), finishMovePending \(m.finishMovePending), clock set \(m.record.value.transferStartedMs != nil), "
             + "deviceID set \(m.session?.device.deviceID != nil), end \(String(describing: m.transferEnd))"
         #expect(m.finishMovePending && m.record.value.transferStartedMs == nil && m.phase == .setup(.finishing), "\(state)")

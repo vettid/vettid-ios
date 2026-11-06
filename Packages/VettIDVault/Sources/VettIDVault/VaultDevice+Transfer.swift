@@ -220,26 +220,34 @@ extension VaultDevice {
     func collectorRequest(_ out: Bool, of round: Int) {
         mem.withLock {
             guard round == collectRound else { return }
-            collectSince = out ? (Date(), nil) : nil
+            let none: CollectSent? = nil
+            collectSince = out ? (at: Date(), sent: none) : nil
         }
     }
 
     /// When the collector's last request went out (uptime), kept after it ended: a request that ended on a wake, before
     /// anything saw the freeze, was still in flight when it began. Over a WebSocket (``MailboxCollector/Mode/webSocket``)
-    /// it is when the stream opened, not when a message was pushed: an earlier s, a shorter hold (the app long-polls).
-    public var collectLastSentUptime: TimeInterval? { mem.withLock { collectLastSent } }
+    /// it is when the stream opened or last pushed a message, which is leased as it is pushed.
+    public var collectLastSentUptime: TimeInterval? { lastCollectorSent?.at }
+
+    /// The collector's last send (``collectLastSentUptime``) and the time after it the relay may still hand out what it
+    /// leases (a long poll's `wait`; 0 for a push over the stream).
+    public var lastCollectorSent: CollectSent? { mem.withLock { collectLastSent } }
 
     /// The `wait` of the collector's long polls: the relay may answer one, and lease what it hands out, that long after
-    /// it went (over a WebSocket, messages come while the stream is open: see ``collectLastSentUptime``).
+    /// it went (each send carries its own: ``lastCollectorSent``).
     public var collectorWait: TimeInterval { cfg.pollWait }
 
     /// When the collector's request out now went, on the monotonic uptime (``DeviceConfig/uptime``); nil while none is out.
-    public var collectRequestUptime: TimeInterval? { mem.withLock { collectSince?.uptime } }
+    public var collectRequestUptime: TimeInterval? { collectRequestSent?.at }
+
+    /// The collector's request out now: its last send, and the time after it the relay may still hand out what it leases.
+    public var collectRequestSent: CollectSent? { mem.withLock { collectSince?.sent } }
 
     /// The collector's requests that were cut, so that what the relay handed them may stay leased (RELAY-PROTOCOL §6.3),
     /// and when the last of them went out (uptime): a round that failed on a transport loss, a 5xx, or an answer it could
     /// not read or handle, and a request out when the collection stopped. A relay's 4xx handed nothing out.
-    public var collectorCuts: (count: Int, sent: TimeInterval?) { mem.withLock { collectCuts } }
+    public var collectorCuts: (count: Int, sent: CollectSent?) { mem.withLock { collectCuts } }
 
     /// A round of the collector failed with [e] (``collectorCuts``); [handed]: it had been handed messages, which may stay
     /// leased whatever the error (an ack refused mid-batch leaves the rest unhandled); [round]: the collection's. A stopped
@@ -253,7 +261,7 @@ extension VaultDevice {
         guard handed || lost else { return }
         mem.withLock {
             guard round == collectRound else { return }
-            collectCuts = (collectCuts.count + 1, collectSince?.uptime)
+            collectCuts = (collectCuts.count + 1, collectSince?.sent)
         }
     }
 
@@ -267,11 +275,11 @@ extension VaultDevice {
     public func collectOnce(
         timeout: TimeInterval = 30, wait: TimeInterval = 0, attempts: Int? = nil,
         sleep: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) },
-        sent: (@Sendable () -> Void)? = nil
+        sent: (@Sendable () -> Void)? = nil, fresh: Bool = false
     ) async throws {
         let own = own
         let messages: [RelayMessage] = try await withThrowingTaskGroup(of: [RelayMessage]?.self) { group in
-            group.addTask { try await own.collect(wait: wait, max: RelayClient.maxCollect, attempts: attempts, sent: sent) }
+            group.addTask { try await own.collect(wait: wait, max: RelayClient.maxCollect, attempts: attempts, sent: sent, fresh: fresh) }
             group.addTask {
                 try await sleep(.seconds(timeout))
                 return nil

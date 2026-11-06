@@ -44,6 +44,7 @@ struct FakeTransferStore {
     var collectRefused = false
     var collectFailures = 0
     var collectRefusals = 0
+    var onlyWait: Int?
     /// The collects of the device's mailbox being answered now (a long poll held while nothing waits), by number. (Kept
     /// here for the file's length; they count every collect of the device's mailbox.)
     var collecting: Set<Int> = []
@@ -271,6 +272,13 @@ extension FakeVaultService {
     /// The next [n] collects of this phone's own relay fail with a 503, which the collection tries again: then the relay
     /// connection comes back.
     public func failNextCollects(_ n: Int) { locked { transfer.collectFailures = n } }
+
+    /// While set, only the collects of this `wait` take messages (the others find none): a settlement window's `wait=0`
+    /// collects, say, and not the test phone's collector (`wait=1`).
+    public var handsMessagesOnlyToWait: Int? {
+        get { locked { transfer.onlyWait } }
+        set { locked { transfer.onlyWait = newValue } }
+    }
 
     /// The next [n] collects of the device's mailbox are refused `429 rate_limited`, with `Retry-After: 7`.
     public func refuseNextCollects(_ n: Int) { locked { transfer.collectRefusals = n } }

@@ -207,13 +207,13 @@ public final class VaultDevice: @unchecked Sendable {
     let countedBroadcast = Broadcast<String>()
     let reconnectBroadcast = Broadcast<Int>()
     /// How many times the collection came back (``relayReconnects()``).
-    var reconnects = 0, collectCuts: (count: Int, sent: TimeInterval?) = (0, nil)
+    var reconnects = 0, collectCuts: (count: Int, sent: CollectSent?) = (0, nil)
     var isPaired: Bool
     var sas: String?
     var refusals = 0
     var collector: Task<Void, Never>?
     var collectEnded: String?
-    var collectSince: (at: Date, uptime: TimeInterval?)?, collectLastSent: TimeInterval?, collectRound = 0
+    var collectSince: (at: Date, sent: CollectSent?)?, collectLastSent: CollectSent?, collectRound = 0, collectFresh = false
     var stopped = true
     /// Set by ``forget()``: nothing is written to the store any more.
     var forgotten = false
@@ -482,7 +482,7 @@ public final class VaultDevice: @unchecked Sendable {
         let task: Task<Void, Never>? = mem.withLock {
             stopped = true
             // A request out is cut: what the relay handed it may stay leased (``collectorCuts``).
-            if let out = collectSince { collectCuts = (collectCuts.count + 1, out.uptime) }
+            if let out = collectSince { collectCuts = (collectCuts.count + 1, out.sent) }
             defer { (collector, collectSince, collectRound) = (nil, nil, collectRound + 1) }
             return collector
         }
