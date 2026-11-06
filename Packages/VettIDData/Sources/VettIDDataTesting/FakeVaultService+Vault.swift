@@ -44,21 +44,24 @@ extension FakeVaultService {
 
     func answerRelay(_ r: FakeHTTPServer.Request) -> FakeHTTPServer.Answer {
         if r.path == "/v1/register" {
+            if locked({ transfer.registerRefused }) { return .json(503, #"{"code":"unavailable","message":""}"#) }
             if let gate = locked({ registerGateValue }) { return .held(gate, registerAnswer) }
             return registerAnswer
         }
+        if r.path == "/v1/mailbox", r.method == "DELETE", let gate = locked({ transfer.collectGate }), locked({ transfer.opensAtDelete }) {
+            // The mailbox goes (a wipe): the long poll held out answers now, and is handled before the delete's answer.
+            gate.open()
+            Thread.sleep(forTimeInterval: 0.3)
+            return .empty(204)
+        }
         if r.path == "/v1/mailbox", r.method == "GET" {
-            if locked({ transfer.collectRefused }) { return .json(403, #"{"code":"mailbox_unknown","message":""}"#) }
-            let fails: Bool = locked {
-                guard transfer.collectFailures > 0 else { return false }
-                transfer.collectFailures -= 1
-                return true
-            }
-            if fails { return .json(503, #"{"code":"unavailable","message":""}"#) }
-            return collect()
+            return collectFault() ?? collect(r)
         }
         if r.path.hasPrefix("/v1/blob/") { return deviceBlob(r) }
-        if r.path.hasPrefix("/v1/mailbox/"), r.method == "DELETE" { return .empty(204) }
+        if r.path.hasPrefix("/v1/mailbox/"), r.method == "DELETE" {
+            locked { acked(String(r.path.dropFirst("/v1/mailbox/".count))) }
+            return .empty(204)
+        }
         return .json(404, #"{"code":"not_found","message":""}"#)
     }
 
@@ -76,23 +79,55 @@ extension FakeVaultService {
     }
 
     private var registerAnswer: FakeHTTPServer.Answer {
-        .json(201, #"{"mailbox_id":"x","limits":{"max_payload_bytes":262144,"message_ttl_seconds":1,"visibility_timeout_seconds":60,"max_token_lifetime_seconds":1,"open_token_max_lifetime_seconds":\#(Self.relayInviteLimit),"max_claim_bytes":65536,"claim_ttl_seconds":\#(Self.relayInviteLimit)}}"#)
+        .json(201, #"{"mailbox_id":"x","limits":{"max_payload_bytes":262144,"message_ttl_seconds":1,"visibility_timeout_seconds":\#(locked { transfer.visibility }),"max_token_lifetime_seconds":1,"open_token_max_lifetime_seconds":\#(Self.relayInviteLimit),"max_claim_bytes":65536,"claim_ttl_seconds":\#(Self.relayInviteLimit)}}"#)
+    }
+
+    /// The answer a test asked for in place of the next collect's: the mailbox gone, a failure (503), a refusal (429).
+    private func collectFault() -> FakeHTTPServer.Answer? {
+        if locked({ transfer.collectRefused }) { return .json(403, #"{"code":"mailbox_unknown","message":""}"#) }
+        return locked {
+            if transfer.collectFailures > 0 {
+                transfer.collectFailures -= 1
+                return .json(503, #"{"code":"unavailable","message":""}"#)
+            }
+            if transfer.collectForbids > 0 {
+                transfer.collectForbids -= 1
+                return .json(403, #"{"code":"forbidden","message":""}"#)
+            }
+            if transfer.collectRefusals > 0 {
+                transfer.collectRefusals -= 1
+                return .json(429, #"{"code":"rate_limited","message":""}"#, headers: ["Retry-After": "7"])
+            }
+            return nil
+        }
     }
 
     /// One collect: the queued messages, waiting briefly while there are none.
-    private func collect() -> FakeHTTPServer.Answer {
+    private func collect(_ r: FakeHTTPServer.Request) -> FakeHTTPServer.Answer {
         cond.lock()
         defer { cond.unlock() }
         transfer.collectSeq += 1
         let id = transfer.collectSeq
         transfer.collecting.insert(id)
         defer { transfer.collecting.remove(id) }
-        let deadline = Date().addingTimeInterval(Self.collectHold)
+        // A `wait=0` collect answers at once, as the relay does: only a long poll waits for what comes.
+        let deadline = Date().addingTimeInterval(r.query?.hasPrefix("wait=0&") == true ? 0 : Self.collectHold)
+        requeueEndedLeases()
         while queued.isEmpty || holdMessagesValue, cond.wait(until: deadline) {}
-        if holdMessagesValue { return .json(200, #"{"messages":[]}"#) }
-        let msgs = queued.map { JsonBuilder().string("msg_id", $0.msgID).string("sender", $0.sender).base64("payload", $0.payload).build() }
-        queued.removeAll()
-        return .json(200, #"{"messages":\#(JsonBuilder.array(msgs))}"#)
+        // While answers are held for one `wait` (``holdsCollectAnswersOfWait``), only the collects of that wait take messages.
+        let only = transfer.collectGate != nil ? transfer.collectGateWait : transfer.onlyWait
+        let other = only.map { r.query?.contains("wait=\($0)&") != true } ?? false
+        if holdMessagesValue || other { return .json(200, #"{"messages":[]}"#) }
+        let msgs = takeQueued().map { JsonBuilder().string("msg_id", $0.msgID).string("sender", $0.sender).base64("payload", $0.payload).build() }
+        var answer = FakeHTTPServer.Answer.json(200, #"{"messages":\#(JsonBuilder.array(msgs))}"#)
+        if !msgs.isEmpty, transfer.collectAnswersLost > 0 {
+            transfer.collectAnswersLost -= 1
+            answer = .failure(.networkConnectionLost)
+        }
+        if !msgs.isEmpty, let gate = transfer.collectGate, transfer.collectGateWait.map({ r.query?.contains("wait=\($0)&") == true }) ?? true {
+            return .held(gate, answer)
+        }
+        return answer
     }
 
     // MARK: - The vault's relay: the vault itself

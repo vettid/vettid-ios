@@ -18,19 +18,28 @@ public struct TransferInContent: View {
     let onLeave: @MainActor () -> Void
     let camera: AnyView?
     let finishPane: AnyView?
+    /// The recovery, offered when the move stopped on this phone (``TransferInStep/stopped``).
+    let onRecover: @MainActor () -> Void
 
     public init(
         state: TransferInState,
         actions: any TransferInActions = NoTransferInActions(),
         onLeave: @escaping @MainActor () -> Void = {},
         camera: AnyView? = nil,
-        finishPane: AnyView? = nil
+        finishPane: AnyView? = nil,
+        onRecover: @escaping @MainActor () -> Void = {}
     ) {
         self.state = state
         self.actions = actions
         self.onLeave = onLeave
         self.camera = camera
         self.finishPane = finishPane
+        self.onRecover = onRecover
+    }
+
+    /// The note the check shows the whole time it runs (as vettid-android does): Back stays, and the app can be left.
+    static func leaveNote(_ state: TransferInState) -> String? {
+        state.step == .compare && state.checking ? MoveStrings.transferInCheckingLeave : nil
     }
 
     private var back: @MainActor () -> Void {
@@ -92,6 +101,15 @@ public struct TransferInContent: View {
             )
             .accessibilityElement(children: .contain)
             .accessibilityIdentifier("transfer_not_answered")
+        case .stopped:
+            // A new code, or the recovery (the welcome screen's own entry), as the body says.
+            Outcome(
+                title: MoveStrings.transferInStoppedTitle, body: MoveStrings.transferInStoppedBody,
+                primary: MoveStrings.transferInScanNew, onPrimary: actions.again, onBack: onLeave,
+                link: (OnboardingStrings.elsewhereRecover, onRecover)
+            )
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier("transfer_stopped")
         }
     }
 
@@ -151,15 +169,25 @@ public struct TransferInContent: View {
 
     private var compare: some View {
         FormScaffold(
-            title: MoveStrings.transferInCompareTitle, message: MoveStrings.transferInCompareBody, primaryLabel: nil,
-            secondaryLabel: MoveStrings.transferInCancel, onPrimary: {}, onSecondary: actions.cancel
+            title: state.checking ? MoveStrings.transferInCheckingTitle : MoveStrings.transferInCompareTitle,
+            message: state.checking ? nil : MoveStrings.transferInCompareBody, primaryLabel: nil,
+            // No abandon from the end of the vault's 10 minutes (§11.14.10 rule 5): Back only leaves then.
+            secondaryLabel: state.closing ? nil : MoveStrings.transferInCancel, onPrimary: {}, onSecondary: actions.cancel
         ) {
             VStack(alignment: .leading, spacing: Spacing.l) {
-                if let sas = state.sas { SasBox(sas: sas) }
-                WaitingRow(
-                    text: MoveStrings.transferInWaiting(formatWait(state.secondsLeft)), identifier: "waiting_old_phone",
-                    timeLeft: (state.secondsLeft, MoveStrings.transferInWaiting(spokenDuration(state.secondsLeft)))
-                )
+                if state.checking {
+                    // Past the deadline the old phone can no longer approve: no code to compare, and no time left to count.
+                    WaitingRow(text: MoveStrings.transferInChecking, identifier: "checking_old_phone")
+                    if let note = Self.leaveNote(state) {
+                        NoticeCard(.info, title: note, message: "", announce: .polite).accessibilityIdentifier("checking_leave_hint")
+                    }
+                } else {
+                    if let sas = state.sas { SasBox(sas: sas) }
+                    WaitingRow(
+                        text: MoveStrings.transferInWaiting(formatWait(state.secondsLeft)), identifier: "waiting_old_phone",
+                        timeLeft: (state.secondsLeft, MoveStrings.transferInWaiting(spokenDuration(state.secondsLeft)))
+                    )
+                }
             }
         }
         .accessibilityElement(children: .contain)
@@ -206,23 +234,27 @@ private struct Outcome: View {
     let primary: String
     let onPrimary: @MainActor () -> Void
     let onBack: @MainActor () -> Void
+    let link: (text: String, action: @MainActor () -> Void)?
 
     init(
         title: String, body: String, primary: String, onPrimary: @escaping @MainActor () -> Void,
-        onBack: @escaping @MainActor () -> Void
+        onBack: @escaping @MainActor () -> Void, link: (text: String, action: @MainActor () -> Void)? = nil
     ) {
         self.title = title
         self.message = body
         self.primary = primary
         self.onPrimary = onPrimary
         self.onBack = onBack
+        self.link = link
     }
 
     var body: some View {
         FormScaffold(
             title: title, message: message, primaryLabel: primary, secondaryLabel: MoveStrings.moveBack, onPrimary: onPrimary,
             onSecondary: onBack
-        ) { EmptyView() }
+        ) {
+            if let link { TextLink(link.text, identifier: "transfer_outcome_link", action: link.action) }
+        }
     }
 }
 
@@ -260,24 +292,27 @@ public struct TransferInRoute: View {
     private let move: any MoveRepository
     private let vault: any VaultRepository
     private let onLeave: @MainActor () -> Void
+    private let onRecover: @MainActor () -> Void
     private let camera: AnyView?
     @Environment(\.scenePhase) private var scenePhase
     @State private var model: TransferInViewModel?
 
     public init(
-        move: any MoveRepository, vault: any VaultRepository, onLeave: @escaping @MainActor () -> Void, camera: AnyView? = nil
+        move: any MoveRepository, vault: any VaultRepository, onLeave: @escaping @MainActor () -> Void,
+        onRecover: @escaping @MainActor () -> Void = {}, camera: AnyView? = nil
     ) {
-        self.init(move: move, vault: vault, onLeave: onLeave, camera: camera, model: nil)
+        self.init(move: move, vault: vault, onLeave: onLeave, onRecover: onRecover, camera: camera, model: nil)
     }
 
     /// TEST ONLY: [model] is the route's own from the start (a transfer already under way).
     init(
-        move: any MoveRepository, vault: any VaultRepository, onLeave: @escaping @MainActor () -> Void, camera: AnyView?,
-        model: TransferInViewModel?
+        move: any MoveRepository, vault: any VaultRepository, onLeave: @escaping @MainActor () -> Void,
+        onRecover: @escaping @MainActor () -> Void = {}, camera: AnyView?, model: TransferInViewModel?
     ) {
         self.move = move
         self.vault = vault
         self.onLeave = onLeave
+        self.onRecover = onRecover
         self.camera = camera
         _model = State(initialValue: model)
     }
@@ -285,7 +320,7 @@ public struct TransferInRoute: View {
     public var body: some View {
         TransferInContent(
             state: model?.state ?? TransferInState(), actions: model ?? NoTransferInActions(), onLeave: onLeave, camera: camera,
-            finishPane: AnyView(FinishMoveRoute(vault: vault) { model?.finish() })
+            finishPane: AnyView(FinishMoveRoute(vault: vault) { model?.finish() }), onRecover: onRecover
         )
         .onAppear { if model == nil { model = TransferInViewModel(move: move, vault: vault) } }
         .onDisappear { Self.leave(model, move: move, movedIn: vault.movedIn) }
@@ -303,6 +338,12 @@ public struct TransferInRoute: View {
     static func leave(_ model: TransferInViewModel?, move: any MoveRepository, movedIn: Bool) {
         guard let model else { return }
         model.setInput("")
+        // From the end of the vault's 10 minutes the transfer is not abandoned (§11.14.10 rule 5): the manager waits for it
+        // in the background, and how it ended is told on the welcome screen.
+        if model.closesNow, !movedIn {
+            move.waitForTransferInBackground()
+            return
+        }
         guard cancels(model.state.step), !movedIn else { return }
         model.cancel()
         // The model is freed with the screen and takes its own work with it: the handshake is dropped from a task of its own

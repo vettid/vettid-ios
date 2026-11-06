@@ -383,7 +383,11 @@ enum SourceStep { case messages([RelayMessage]), error(Error) }
             self.stream = stream
         }
 
-        func collect(wait: TimeInterval, max: Int) async throws -> [RelayMessage] {
+        /// When set, every ack is refused with it.
+        var ackError: Error?
+
+        func collect(wait: TimeInterval, max: Int, sent: @escaping @Sendable () -> Void) async throws -> [RelayMessage] {
+            sent()
             let s: SourceStep = lock.withLock { steps.isEmpty ? .error(RelayError(status: 404, code: RelayError.mailboxUnknown)) : steps.removeFirst() }
             switch s {
             case .messages(let m): return m
@@ -391,7 +395,10 @@ enum SourceStep { case messages([RelayMessage]), error(Error) }
             }
         }
 
-        func ack(_ msgID: String) async throws { lock.withLock { acks.append(msgID) } }
+        func ack(_ msgID: String) async throws {
+            if let e = lock.withLock({ ackError }) { throw e }
+            lock.withLock { acks.append(msgID) }
+        }
 
         func openStream() throws -> CollectStream {
             try lock.withLock {

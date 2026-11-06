@@ -184,7 +184,7 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
     /// Bumped by every return to the foreground: a background task that began before one does not stop the collection.
     @ObservationIgnored var foregrounds = 0
     /// The app left the foreground and its background work stopped the collection.
-    @ObservationIgnored var backgrounded = false
+    @ObservationIgnored var backgrounded = false // false at launch: matters once the app launches in the background (phase P)
 
     public init(config: VaultManagerConfig) {
         self.config = config
@@ -253,7 +253,7 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
                 let since = rec.generation
                 return VaultOwnerCheckOps(
                     api: try m.openApi(try await m.openSession()), gate: Self.pinGate(ref),
-                    onStatus: { st in await ref.manager?.learnTimeScale(status: st, since: since) }
+                    around: { read in try await Self.hearing(ref, read, since: since) }
                 )
             },
             load: { try checkFile.load() },
@@ -342,7 +342,7 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
     /// The session, opened once: the device keys (made when missing), the device restored from its state or created
     /// (registering its mailbox at the relay), and its collector started.
     func openSession() async throws -> VaultSession {
-        if let session, session.identity == record.value.activeIdentity { return session }
+        if let session = session ?? takeBackTransferSession(), session.identity == record.value.activeIdentity { return session }
         if session != nil { try await dropSession(forget: false) } // a session of another identity than the record's is stale
         if let opening { return try await join(opening) }
         guard !halted else { throw VaultFailure(.other, code: "halted") }

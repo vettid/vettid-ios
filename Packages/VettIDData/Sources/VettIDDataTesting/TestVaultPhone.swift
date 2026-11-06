@@ -233,15 +233,9 @@ public final class TestVaultPhone {
         get { uptime.ahead }
         set { uptime.ahead = newValue }
     }
-    /// Stops this phone's clock and its monotonic clock at now, as ``FakeVaultService/freezeVaultClock()`` stops the
-    /// vault's: a test of a window of seconds then depends on the clocks it moves, not on how long the machine takes.
-    public func freezeClocks() {
-        clock.freeze()
-        uptime.freeze()
-    }
     private let gate = PrepareSwitch()
-    private let clock = TestPhoneClock()
-    private let uptime = TestPhoneClock()
+    let clock = TestPhoneClock()
+    let uptime = TestPhoneClock()
     /// The pauses between the checks of a change whose answer was lost: each waits until the test releases it.
     public let changePauses = TestPauses()
     /// A change's wait for the credential operations before it (§11.14.9 step 1): ends when the test releases it while
@@ -260,8 +254,15 @@ public final class TestVaultPhone {
     public let keptEndPauses = TestPauses()
     /// The new phone's wait for the deadline of its transfer (11 minutes, §11.14.10 rule 5), released by the test.
     public let deadlinePauses = TestPauses()
-    /// The bound of the one collect before the drop (30 s): never released unless a test wants a timed-out collect.
+    /// The bound of each collect before the drop (`wait` + 70 s): never released unless a test wants a timed-out collect.
     public let collectPauses = TestPauses()
+    /// The window of collects before the drop (90 s; lengths to the nearest second): over at once unless a test holds it.
+    public let windowPauses = { let p = TestPauses(); p.holding = false; return p }()
+    /// The ticks of a window's heartbeat (1 s): 10 ms, unless a test holds them (``TestPauses/holding``).
+    public let heartbeatPauses = { let p = TestPauses(); p.holding = false; return p }()
+    /// The pauses of a window kept alive in the background (15 s): 10 ms, unless a test holds them.
+    public let backgroundPauses = { let p = TestPauses(); p.holding = false; return p }()
+    var waitsForOldCollects = true
     /// Whether a change's wait lasts until the test releases it (``changeWaits``).
     public var holdsChangeWaits: Bool {
         get { changeWaits.holding }
@@ -313,7 +314,8 @@ public final class TestVaultPhone {
         let waits = Waits(
             requestTimeout: requestTimeout, pauses: changePauses, changeWaits: changeWaits, deletion: deletionPauses,
             transfer: transferPauses, keep: keepPauses, keptEnd: keptEndPauses, deadline: deadlinePauses,
-            collect: collectPauses, lockStatusWait: lockStatusWait
+            collect: collectPauses, window: windowPauses, heartbeat: heartbeatPauses, background: backgroundPauses,
+            lockStatusWait: lockStatusWait
         )
         var config = try Self.configured(
             service, appKeys, seedWrap, wrapped, phoneKeys, fileKeys, protectedData, directory, gate, clock,
@@ -350,24 +352,17 @@ public final class TestVaultPhone {
         Waits(
             requestTimeout: requestTimeout, pauses: changePauses, changeWaits: changeWaits, deletion: deletionPauses,
             transfer: transferPauses, keep: keepPauses, keptEnd: keptEndPauses, deadline: deadlinePauses,
-            collect: collectPauses, lockStatusWait: lockStatusWait
+            collect: collectPauses, window: windowPauses, heartbeat: heartbeatPauses, background: backgroundPauses,
+            lockStatusWait: lockStatusWait
         )
     }
 
     /// A test phone's waits: how long a request waits for its answer, and the pauses the test releases.
     private struct Waits {
         let requestTimeout: TimeInterval
-        let pauses: TestPauses
-        let changeWaits: TestPauses
-        let deletion: TestPauses
-        let transfer: TestPauses
-        let keep: TestPauses
-        let keptEnd: TestPauses
-        let deadline: TestPauses
-        let collect: TestPauses
+        let pauses, changeWaits, deletion, transfer, keep, keptEnd, deadline, collect, window, heartbeat, background: TestPauses
         let lockStatusWait: TimeInterval
     }
-
     // swiftlint:disable:next function_parameter_count
     private static func configured(
         _ service: FakeVaultService, _ appKeys: SoftwareAppKeyStore, _ seedWrap: SoftwareSeedWrapKeySource,
@@ -391,22 +386,26 @@ public final class TestVaultPhone {
             let silent = service?.unanswered("vault.status") ?? true
             try await Task.sleep(for: silent ? d : d * Self.roomyStatusWaitFactor)
         }
-        let pauses = waits.pauses
-        c.changeCheckSleep = { try await pauses.sleep($0) }
+        c.changeCheckSleep = { [pauses = waits.pauses] in try await pauses.sleep($0) }
         let changeWaits = waits.changeWaits
         changeWaits.holding = false
         c.changeWaitSleep = { try await changeWaits.sleep($0) }
         c.releaseUpdateSleep = { _ in try await Task.sleep(for: .milliseconds(5)) }
+        c.relaySleep = c.releaseUpdateSleep // the one re-read of a refused relay (VAULT-MESSAGING 0.84.0 §3.4)
         let deletion = waits.deletion
         c.deletionSleep = { d in try await deletion.sleep(Double(d.components.seconds) + Double(d.components.attoseconds) / 1e18) }
         let transfer = waits.transfer, keep = waits.keep
         c.transferSleep = { d in try await transfer.sleep(Double(d.components.seconds) + Double(d.components.attoseconds) / 1e18) }
         c.keepSleep = { d in try await keep.sleep(Double(d.components.seconds) + Double(d.components.attoseconds) / 1e18) }
         // The waits that bound a check or a collect are pauses the test releases, never clocks that a loaded machine can win.
-        let keptEnd = waits.keptEnd, deadline = waits.deadline, collect = waits.collect
+        let keptEnd = waits.keptEnd, deadline = waits.deadline, collect = waits.collect, window = waits.window
         c.keptEndSleep = { d in try await keptEnd.sleep(Double(d.components.seconds) + Double(d.components.attoseconds) / 1e18) }
         c.transferDeadlineSleep = { d in try await deadline.sleep(Double(d.components.seconds) + Double(d.components.attoseconds) / 1e18) }
         c.transferCollectSleep = { d in try await collect.sleep(Double(d.components.seconds) + Double(d.components.attoseconds) / 1e18) }
+        c.transferWindowSleep = { d in if window.holding { try await window.sleep((d / .seconds(1)).rounded()) } }
+        c.transferRetrySleep = { _ in try await Task.sleep(for: .milliseconds(10)) }
+        c.transferHeartbeatSleep = Self.heartbeatSleep(waits.heartbeat)
+        c.transferBackgroundSleep = Self.heldSleep(waits.background)
         c.uptime = { uptime.monotonic }
         return c
     }
@@ -519,7 +518,7 @@ public final class TestPauses: @unchecked Sendable {
     public var lengths: [TimeInterval] { lock.withLock { asked } }
 
     /// False: a pause lasts five seconds instead of waiting for ``release()`` (its length is recorded all the same).
-    var holding: Bool {
+    public var holding: Bool {
         get { lock.withLock { hold } }
         set { lock.withLock { hold = newValue } }
     }

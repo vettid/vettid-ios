@@ -93,6 +93,8 @@ public struct OnboardingState: Equatable, Sendable, CustomStringConvertible, Cus
     public var finishMovePending = false
     /// (IOS-PLAN §4.2) "Your vault was deleted…", once, on the welcome screen after a vault was deleted.
     public var deletedNotice = false
+    /// (§11.14.10 rule 5) How a move waited for in the background ended without completing: told on the welcome screen.
+    public var transferEnd: TransferEnd?
     /// The vault has a phone secret (release R): the move's last screen says so in its words.
     public var phoneSecret = false
     public var progress: [ProgressEntry] = []

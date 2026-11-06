@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+import VettIDRelay
 @testable import VettIDData
 import VettIDDataTesting
 @testable import VettIDVault
@@ -67,8 +68,9 @@ extension VaultManagerTransferInTests {
         #expect(phone.attester.discarded == phone.attester.attested)
     }
 
-    /// A collect that fails drops at once: no reason to keep the keys longer.
-    @Test func aFailedCollectDropsEvenWithAnApprovalWaiting() async throws {
+    /// The mailbox gone (`mailbox_unknown`) at the deadline: the session ended, reported as ended (not as a drop), and the
+    /// keys go: no reason to keep them longer.
+    @Test func aGoneMailboxEndsTheSessionEvenWithAnApprovalWaiting() async throws {
         defer { phone.close() }
         _ = try await scanned()
         phone.clockAhead = 600
@@ -80,7 +82,7 @@ extension VaultManagerTransferInTests {
         phone.clockAhead = 700
         phone.deadlinePauses.release()
         let failure = await vaultFailure { _ = try await waiting.value }
-        #expect(failure?.kind == .noResponse && !deviceHoldsVault && !pendingRecord)
+        #expect(failure?.code == VaultManager.codeTransferSessionEnded && !deviceHoldsVault && !pendingRecord)
     }
 
     /// No user action extends the deadline: asking again, or leaving and coming back, keeps the stored moment.
@@ -155,6 +157,7 @@ extension VaultManagerTransferInTests {
         let second = Task { try await m.refresh() }
         try await first.value
         try await second.value
+        _ = await eventually(within: .seconds(30)) { m.finishMovePending && m.phase == .setup(.finishing) }
         #expect(m.finishMovePending && m.phase == .setup(.finishing) && phone.attester.discarded.isEmpty)
         #expect(service.requestsSeen.filter { $0 == "credential.get" }.count == 1)
     }
@@ -182,7 +185,7 @@ extension VaultManagerTransferInTests {
         #expect(await deadlineWaiting())
         phone.clockAhead = 661
         phone.deadlinePauses.release()
-        #expect(await eventually { m.record.value.transferStartedMs == nil && !pendingRecord })
+        #expect(await eventually(within: .seconds(30)) { m.record.value.transferStartedMs == nil && !pendingRecord })
         #expect(phone.attester.discarded == phone.attester.attested)
     }
 }
@@ -229,4 +232,5 @@ extension VaultManagerTransferInTests {
         let refusal = await vaultFailure { _ = try await m.redeemSetupCode(.secret(service.secret)) }
         #expect(refusal?.kind == .enrollmentStarted && refusal?.code == VaultManager.codeTransferWaiting)
     }
+
 }

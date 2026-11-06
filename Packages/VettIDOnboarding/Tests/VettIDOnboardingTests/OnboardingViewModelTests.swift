@@ -115,6 +115,16 @@ import VettIDDataTesting
         #expect(vm.state.step == .confirmAccount)
     }
 
+    /// (§11.14.10 rule 5) A setup link is ignored on the transfer screen: no enrollment while a transfer is pinned.
+    @Test func anAppLinkIsIgnoredOnTheTransferScreen() async {
+        let vm = vm()
+        await vm.settle()
+        vm.startTransfer()
+        inbox.offer("https://account.vettid.org/vault/enroll/#s=\(secret)")
+        await vm.settle()
+        #expect(inbox.link == nil && !vault.calls.contains("redeemSetupCode") && vm.state.step == .transferIn)
+    }
+
     @Test func anotherEnvironmentsAppLinkIsNotRedeemed() async {
         let vm = vm()
         await vm.settle()

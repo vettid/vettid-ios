@@ -1,4 +1,5 @@
 import Foundation
+import VettIDData
 
 /// The move to this phone: the transfer from the old phone and "Finish the move" (vettid-android `feature/onboarding`
 /// `strings.xml`, word for word). The key `onboarding_moved_recovered_body` comes with the recovery screens.
@@ -163,6 +164,75 @@ enum MoveStrings {
 
     static var transferInAgain: String {
         String(localized: "transfer_in_again", defaultValue: "Try again", bundle: .module)
+    }
+
+    /// (§11.14.10 rule 5) The welcome screen's notice of a move that was waited for in the background and ended without
+    /// completing.
+    static func transferEndTitle(_ end: TransferEnd) -> String {
+        switch end {
+        case .stopped: transferInStoppedTitle
+        case .timedOut:
+            String(localized: "transfer_in_background_timeout_title", defaultValue: "The move to this phone didn't finish", bundle: .module)
+        case .declined:
+            String(localized: "transfer_in_background_declined_title", defaultValue: "The move was declined", bundle: .module)
+        }
+    }
+
+    static func transferEndBody(_ end: TransferEnd) -> String {
+        switch end {
+        case .stopped: transferInStoppedBody
+        case .timedOut:
+            String(
+                localized: "transfer_in_background_timeout_body",
+                defaultValue: """
+                    Your old phone didn't approve the move in time, so nothing changed: your vault is still on your old \
+                    phone. To try again, show a new code on your old phone.
+                    """,
+                bundle: .module
+            )
+        case .declined:
+            String(
+                localized: "transfer_in_background_declined_body",
+                defaultValue: "The move was declined on your old phone. Nothing changed: your vault is still on your old phone.",
+                bundle: .module
+            )
+        }
+    }
+
+    /// The title of the screen after the deadline, while the vault is checked.
+    static var transferInCheckingTitle: String {
+        String(localized: "transfer_in_checking_title", defaultValue: "Checking with your vault", bundle: .module)
+    }
+
+    /// (§11.14.10 rule 5) The transfer's session ended during the window: this phone could not tell whether the old phone
+    /// approved.
+    static var transferInStoppedTitle: String {
+        String(localized: "transfer_in_stopped_title", defaultValue: "The move stopped on this phone", bundle: .module)
+    }
+
+    static var transferInStoppedBody: String {
+        String(
+            localized: "transfer_in_stopped_body",
+            defaultValue: """
+                This phone stopped before it could check whether your old phone approved. If you approved the move there, \
+                recover your vault on this phone. If not, show a new code on your old phone.
+                """,
+            bundle: .module
+        )
+    }
+
+    /// Back during the check (vettid-android `transfer_in_checking_leave`).
+    static var transferInCheckingLeave: String {
+        String(
+            localized: "transfer_in_checking_leave",
+            defaultValue: "You can leave the app. The check finishes in the background or the next time you open VettID.",
+            bundle: .module
+        )
+    }
+
+    /// After the deadline, while the vault is checked for an approval that came in time.
+    static var transferInChecking: String {
+        String(localized: "transfer_in_checking", defaultValue: "Checking whether your old phone approved in time…", bundle: .module)
     }
 
     static var transferInNoAnswerTitle: String {

@@ -74,9 +74,8 @@ extension VaultManager {
     /// shows what the member API said. Any other failure is the screen's (as vettid-android drops only an `IOException`).
     private func openStatus(_ s: VaultSession, since rec: Int) async throws -> VaultStatusInfo? {
         do {
-            let st = try await openApi(s).status()
-            learnTimeScale(status: st, since: rec)
-            return st
+            let api = try openApi(s)
+            return try await hearing({ try await api.status() }, since: rec)
         } catch {
             let mapped = VaultFailures.map(error)
             if let f = mapped as? VaultFailure, f.kind == .network || f.kind == .noResponse { return nil }

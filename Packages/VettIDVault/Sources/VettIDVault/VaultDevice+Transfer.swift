@@ -197,18 +197,105 @@ extension VaultDevice {
         try await deliver(entry, keepOnFailure: false)
     }
 
-    // MARK: - The new app: one collect before the drop (§11.14.10 rule 5)
+    // MARK: - The new app: the collects before the drop (§11.14.10 rule 5)
 
-    /// One collect of this device's mailbox (`wait=0`, `max` at its cap, RELAY-PROTOCOL §6.3), bounded by [timeout] seconds
-    /// in all, its transport retries included: each message is handled as the collector handles it and acked. A
-    /// `device.paired{transfer}` it brings is then found by ``awaitTransfer(timeout:)``. Throws when the collect fails or
-    /// times out; a task that is cancelled stops it.
+    /// The relay's limits from a registration of the mailbox again (idempotent, RELAY-PROTOCOL §6.1); its visibility
+    /// timeout is kept with the state (``storedRelayVisibility``).
+    func registered() async throws -> RelayLimits {
+        let limits = try await own.register().limits
+        let changed: Bool = mem.withLock {
+            defer { st.relayVisibilitySeconds = limits.visibilityTimeoutSeconds }
+            return st.relayVisibilitySeconds != limits.visibilityTimeoutSeconds
+        }
+        if changed { _ = try? await lock.withLock { try save() } }
+        return limits
+    }
+
+    /// The visibility timeout the mailbox's last registration gave, if one was kept (seconds).
+    public var storedRelayVisibility: TimeInterval? { mem.withLock { st.relayVisibilitySeconds.map { TimeInterval($0) } } }
+
+    /// A round of the collector began ([out]) or ended (``collectRequestSince``); its request's send time comes when it
+    /// goes out (``collectorSent(of:)``). [round]: the collection's (``start()``); a stopped one's last request ending
+    /// late leaves a newer one's alone.
+    func collectorRequest(_ out: Bool, of round: Int) {
+        mem.withLock {
+            guard round == collectRound else { return }
+            let none: CollectSent? = nil
+            if !out, collectSince != nil { collectLastEnded = cfg.uptime() }
+            collectSince = out ? (at: Date(), sent: none) : nil
+            collectStreaming = false
+        }
+    }
+
+    /// When the collector's last request went out (uptime), kept after it ended: a request that ended on a wake, before
+    /// anything saw the freeze, was still in flight when it began. Over a WebSocket (``MailboxCollector/Mode/webSocket``)
+    /// it is when the stream opened or last pushed a message, which is leased as it is pushed.
+    public var collectLastSentUptime: TimeInterval? { lastCollectorSent?.at }
+
+    /// The collector's last send (``collectLastSentUptime``) and the time after it the relay may still hand out what it
+    /// leases (a long poll's `wait`; 0 for a push over the stream).
+    public var lastCollectorSent: CollectSent? { mem.withLock { collectLastSent } }
+
+    /// When the collector's last request ended (uptime; a stop counts), nil if none has: with ``lastCollectorSent`` it tells
+    /// whether that request was still out at a given time.
+    public var lastCollectorEnded: TimeInterval? { mem.withLock { collectLastEnded } }
+
+    /// The `wait` of the collector's long polls: the relay may answer one, and lease what it hands out, that long after
+    /// it went (each send carries its own: ``lastCollectorSent``).
+    public var collectorWait: TimeInterval { cfg.pollWait }
+
+    /// When the collector's request out now went, on the monotonic uptime (``DeviceConfig/uptime``); nil while none is out.
+    public var collectRequestUptime: TimeInterval? { collectRequestSent?.at }
+
+    /// The collector's request out now: its last send, and the time after it the relay may still hand out what it leases;
+    /// for an open stream, now (it may push, and lease, at any time).
+    public var collectRequestSent: CollectSent? {
+        let now = cfg.uptime()
+        return mem.withLock { collectStreaming ? (now, 0) : collectSince?.sent }
+    }
+
+    /// The collector's requests that were cut, so that what the relay handed them may stay leased (RELAY-PROTOCOL §6.3),
+    /// and when the last of them went out (uptime): a round that failed on a transport loss, a 5xx, or an answer it could
+    /// not read or handle, and a request out when the collection stopped. A relay's 4xx handed nothing out.
+    public var collectorCuts: (count: Int, sent: CollectSent?) { mem.withLock { collectCuts } }
+
+    /// When the latest of ``collectorCuts`` was noticed (uptime).
+    public var collectorCutNoticed: TimeInterval? { mem.withLock { collectCutNoticed } }
+
+    /// A round of the collector failed with [e] (``collectorCuts``); [handed]: it had been handed messages, which may stay
+    /// leased whatever the error (an ack refused mid-batch leaves the rest unhandled); [round]: the collection's. A stopped
+    /// one's late failure counts nothing: ``stop()`` counted its request out.
+    func collectorFailed(_ e: Error, handed: Bool = false, of round: Int) {
+        let lost: Bool = switch e {
+        case let r as RelayError: r.status >= 500 || r.status < 400
+        case is CancellationError: false
+        default: true
+        }
+        guard handed || lost else { return }
+        let now = cfg.uptime()
+        mem.withLock {
+            guard round == collectRound else { return }
+            // A stream's cut counts from now: it may have pushed, and leased, up to it.
+            collectCuts = (collectCuts.count + 1, collectStreaming ? (now, 0) : collectSince?.sent)
+            collectCutNoticed = now
+        }
+    }
+
+    /// Halted (``halt()``) or forgotten (``forget()``): a device that writes nothing any more, not one to use again.
+    public var ended: Bool { mem.withLock { halted || forgotten } }
+
+    /// One collect of this device's mailbox (a long poll of [wait] seconds, `max` at its cap, RELAY-PROTOCOL §6.3), bounded
+    /// by [timeout] seconds in all, its transport retries included ([attempts]: nil for the relay client's own): each
+    /// message is handled as the collector handles it and acked. A `device.paired{transfer}` it brings is then found by
+    /// ``awaitTransfer(timeout:)``. Throws when the collect fails or times out; a task that is cancelled stops it.
     public func collectOnce(
-        timeout: TimeInterval = 30, sleep: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) }
+        timeout: TimeInterval = 30, wait: TimeInterval = 0, attempts: Int? = nil,
+        sleep: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) },
+        sent: (@Sendable () -> Void)? = nil, fresh: Bool = false
     ) async throws {
         let own = own
         let messages: [RelayMessage] = try await withThrowingTaskGroup(of: [RelayMessage]?.self) { group in
-            group.addTask { try await own.collect(wait: 0, max: RelayClient.maxCollect) }
+            group.addTask { try await own.collect(wait: wait, max: RelayClient.maxCollect, attempts: attempts, sent: sent, fresh: fresh) }
             group.addTask {
                 try await sleep(.seconds(timeout))
                 return nil

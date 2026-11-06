@@ -38,6 +38,7 @@ extension VaultManager {
             // The vault resolves any open alarm with the rotation; its own word follows (`sync.event`, the version).
             alarm = nil
             await refreshAlarm(api)
+            await relayKeysReplaced()
         }
     }
 

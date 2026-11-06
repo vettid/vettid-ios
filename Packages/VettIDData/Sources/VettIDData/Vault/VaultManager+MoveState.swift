@@ -12,6 +12,7 @@ final class MoveFlags {
     @ObservationIgnored let book = MoveBook()
     @ObservationIgnored var runner: FinishMoveRunner?
     var changeCheck: ChangeCheck?
+    var relayRefused = false // (0.84.0) the latest `vault.status` had `relay: "refused"`
     var rotateOffered = false // (release R) ``LocalAccount/rotateOffer``
     var movedIn = false
     var finishMovePending = false
@@ -19,6 +20,7 @@ final class MoveFlags {
     var keptCheckPending = false
     var movedBack = false
     var movedAway = false
+    var transferEnd: TransferEnd?
     var finishMoveHold: FailureKind?
 }
 
@@ -39,9 +41,36 @@ final class MoveBook {
     var openTransferID: String?
     /// The one task that settles the end of a transfer to this phone (a take-over, or a drop): every caller joins it.
     var settling: Task<TransferSettled, Never>?
+    /// The window of collects before the drop that the settlement is running, to cut it short.
+    var settleWindow: Task<VaultManager.WindowEnd, Never>?
     /// The wait of a transfer found waiting at a start (before its deadline), and whether the start was looked at.
     var transferWaiter: Task<Void, Never>?
     var transferResumed = false
+    /// The times the app went to the background (``VaultManager/onBackground(budget:)``), and the times every device was
+    /// forgotten (a wipe, a sign-out): what the settlement window watches, as a background ends the session too.
+    var backgrounds = 0
+    var sessionEnds = 0
+    /// The session a transfer to this phone is waited for and settled through (``VaultManager/awaitTransferIn()``): a
+    /// background ends the manager's session, and the foreground takes this one back rather than load a second device from
+    /// the same stored state (one device, one writer, per transfer).
+    var transferSession: VaultSession?
+    /// The ``VaultManager/awaitTransferIn()`` calls under way (the screen's, the background's).
+    var waitingIn = 0
+    /// The ``VaultManager/transferIn(code:)`` calls under way: a start's resume waits for none to run (its start may be
+    /// written before its handshake is saved).
+    var startingIn = 0
+    /// The times a settlement window began to wait for the collector's round at its end (what a test awaits).
+    var collectorRounds = 0
+    /// The last collects of settlement windows that went out (a window cut during its last collect makes another).
+    var finalCollects = 0
+    /// When the last collect of a settlement window went out (uptime; what a test reads).
+    var windowCollectSent: TimeInterval?
+    /// How many collects of settlement windows ended, once what their end noted (a cut) was noted (what a test reads).
+    var windowCollectsEnded = 0
+    /// The last pause a settlement window asked for between its collects (seconds; what a test reads).
+    var windowPauseSeconds: TimeInterval?
+    /// The ticks of settlement windows' heartbeats (what a test that moves the clock awaits).
+    var windowBeats = 0
     /// How many day-7 checks ended (any result): what a test awaits instead of a fixed time.
     var keptChecksFinished = 0
     /// The timer to the end of a kept transfer, and whether its end is being decided now.
@@ -59,6 +88,17 @@ final class MoveBook {
     var lifecycle = 0
     /// The wipe that runs now is an old phone's at the end of a kept transfer (it says so on the welcome screen).
     var wipeMovedAway = false
+    /// The one re-read after a status found the relay refused (``VaultManager/noteRelay(status:)``), and whether it was made
+    /// for this unlock.
+    var relayRecheck: Task<Void, Never>?
+    var relayRechecked = false
+    /// The status reads begun (``VaultManager/beginStatusRead()``), the newest one applied to the notice, and the count of
+    /// clears (a lock, a sign-out, a wipe) a read must not span.
+    var statusSeq = 0
+    var relayAppliedSeq = 0
+    var relayEpoch = 0
+    /// The ids of the active `identity.rotation_failed` feed items already acted on.
+    var rotationFailedSeen = Set<String>()
     /// (IOS-PLAN 0.1.40 §4.9) The PIN the recovered phone's unlock just used, kept in memory only while the pairing runs on the
     /// screen in front, for the lost-ok unlock that may be sent again; forgotten when the app leaves the foreground (§6.3).
     var pairingPin: String?
@@ -125,6 +165,14 @@ extension VaultManager {
         get { moveFlags.movedAway }
         set { moveFlags.movedAway = newValue }
     }
+
+    /// A move waited for in the background ended without completing (``TransferEndNotice/transferEnd``).
+    public internal(set) var transferEnd: TransferEnd? {
+        get { moveFlags.transferEnd }
+        set { moveFlags.transferEnd = newValue }
+    }
+
+    public func acknowledgeTransferEnd() { transferEnd = nil }
 
     /// (VAULT-MESSAGING 0.45.0 §11.14.9 step 2) Why "Finish the move" is held: a PIN or password change is being decided
     /// or the PIN is uncertain (the gate's failure kind); nil when the move can be finished. Observable: updated wherever a

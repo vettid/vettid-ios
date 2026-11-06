@@ -43,7 +43,7 @@ import VettIDVault
         #expect(title(Self.item("recovery.counter_unavailable", nil, "urgent")) == "Your vault cannot check its recovery attempts")
         #expect(line(Self.item("recovery.counter_unavailable", nil, "urgent")) == nil)
         #expect(title(Self.item("identity.rotation_failed", "recovery", "high")) == "Your vault could not update its keys")
-        #expect(line(Self.item("identity.rotation_failed")) == "Your connections still know your old keys. VettID will offer the update again.")
+        #expect(line(Self.item("identity.rotation_failed")) == "Your vault couldn't finish updating its keys. It will try again the next time you unlock it.")
         #expect(title(Self.item("identity.rotate_conflict", nil, "high", connection: "c1")) == "\u{2068}Sam Lee\u{2069}: verify again")
         #expect(line(Self.item("identity.rotate_conflict", connection: "c1")) == "This connection's vault announced two different new keys. That can mean someone holds an old copy of their vault. Nothing is sent or received until you check.")
         // Without the connection any more: the name falls back, never "Removed connection: …" twice.
