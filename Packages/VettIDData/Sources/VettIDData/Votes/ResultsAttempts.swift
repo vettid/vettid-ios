@@ -95,9 +95,15 @@ public final class FileResultsAttemptStore: ResultsAttemptStore, @unchecked Send
         let bytes: [UInt8]?
         do {
             bytes = try file.load()
-        } catch {
-            // Cannot be read now (the protected data is unavailable, a key is not readable): not "empty".
+        } catch KeysError.unavailable {
+            // Cannot be read now (the protected data is unavailable): not "empty", and nothing is written over it.
             return nil
+        } catch {
+            // Damaged, replaced, in a format this app does not know, or its key is gone: the attempts are only a daily stamp
+            // and hashes, so it reads as empty and the file is cleared, and the next write repairs it (as vettid-android's
+            // store, whose unreadable file reads as empty).
+            try? file.clear()
+            return []
         }
         guard let bytes else { return [] }
         return (try? JSONDecoder().decode([ResultsAttempt].self, from: Data(bytes))) ?? []

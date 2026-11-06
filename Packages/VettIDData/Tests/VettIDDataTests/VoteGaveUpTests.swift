@@ -3,6 +3,8 @@ import Testing
 @testable import VettIDCrypto
 @testable import VettIDData
 import VettIDDataTesting
+import VettIDKeys
+import VettIDKeysTesting
 @testable import VettIDVault
 
 // Fixtures stay on one line each.
@@ -396,6 +398,39 @@ struct VoteGaveUpTests: VotesTestCase {
         site.put("p/\(pid)/results.json", #"{"counts":{"eligible":0}}"#)
         #expect(try await m.checkResults(key) == .submitted(.gaveUp))
         #expect(vault.submits.count == 1)
+    }
+
+    /// A damaged attempts file is not "unreadable for now": it reads as empty and is cleared, so the re-check is due again and
+    /// the next write repairs it (as vettid-android's store). Only unavailable protected data waits.
+    @Test func aCorruptAttemptsFileIsClearedAndRepairedByTheNextWrite() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("attempts-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let url = dir.appendingPathComponent("vote-attempts")
+        let flag = ProtectedDataFlag(available: true)
+        let file = EncryptedFileStore(url: url, purpose: VaultFiles.voteAttempts, keys: InMemoryFileKeyHolder(), protectedData: flag)
+        let store = FileResultsAttemptStore(file: file)
+        store.save([ResultsAttempt(key: "c/p", atMs: 1)])
+        #expect(store.load()?.count == 1)
+        // Damaged: not a blob of this file.
+        try Data(repeating: 7, count: 64).write(to: url)
+        let attempts = ResultsAttempts(store: store)
+        #expect(attempts.dailyDue(key, at: clock.date) && !attempts.rowsDeferred(key, at: clock.date, unmetered: { true }))
+        #expect(!FileManager.default.fileExists(atPath: url.path))
+        attempts.put(key, ResultsAttempt(key: ResultsAttempts.id(key), atMs: 5), epoch: attempts.epoch)
+        #expect(FileResultsAttemptStore(file: file).load()?.map(\.key) == [ResultsAttempts.id(key)])
+        // Protected data away (a file that cannot be told from a missing one): unreadable for now, not empty.
+        try FileManager.default.removeItem(at: url)
+        flag.set(false)
+        #expect(store.load() == nil)
+    }
+
+    /// A list read that does not happen (held, or no votes in this vault) is not a fresh list.
+    @Test func aQuietReadThatIsSkippedIsNotFresh() async throws {
+        let (m, ops) = try await setUp()
+        #expect(await m.readQuietly())
+        let held = VotesManager(ops: { ops }, gated: { true })
+        #expect(await held.readQuietly() == false)
     }
 
     /// Attempts that cannot be read now are not read as empty and written over: nothing is written until a load works.

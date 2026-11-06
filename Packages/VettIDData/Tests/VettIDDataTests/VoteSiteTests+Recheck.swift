@@ -101,6 +101,12 @@ extension VoteSiteTests {
             try await fresh()
             #expect(try await m.recheckResults(key) == .notChecked && m.hints[key]?.observerVerdict == nil)
         }
+        // Results whose electorate reads but that are otherwise unusable (no rows_root) are a failed check, as in
+        // vettid-android: "don't add up" with the verdict kept, not "not rechecked".
+        site.put("p/\(pid)/results.json", #"{"counts":{"eligible":2}}"#)
+        try await fresh()
+        #expect(try await m.recheckResults(key) == .dontAddUp)
+        #expect(m.hints[key]?.observerVerdict == false && m.hints[key]?.resultsDontAddUp == true && m.hints[key]?.verdictKept == true)
         // No record tag to look for.
         VoteResultsFixture.publish(site, pid)
         ops.detail = voteObj(#"{"proposal_id":"\#(pid)","connection_id":"\#(conn)","title":"t","state":"closed","text":"t","choices":[],"extensions":0}"#)

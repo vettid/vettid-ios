@@ -88,14 +88,6 @@ public enum VoteRows {
     /// The largest `rows.json` read at all: ``maxRows`` rows.
     public static let rowsMax = maxRows * rowBytes + rowsOverhead
 
-    /// The most of `rows.json` read for these results: as many rows as their `counts.eligible` (the bound ``ownRow``
-    /// refuses above), and never over ``rowsMax``; ``rowsMax`` when the results do not say.
-    public static func rowsCap(results bytes: [UInt8]) -> Int {
-        guard let eligible = try? StrictJson.parseObject(bytes).obj("counts").uint("eligible", min: 1, max: UInt64(maxRows))
-        else { return rowsMax }
-        return min(rowsMax, Int(eligible) * rowBytes + rowsOverhead)
-    }
-
     /// What the results say of how much of `rows.json` to read (§10.19.6 step 1).
     public enum RowsBound: Equatable, Sendable {
         /// The most bytes of `rows.json` to read.

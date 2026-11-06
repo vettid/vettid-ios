@@ -314,6 +314,8 @@ public final class VotesManager: VotesRepository {
 
     /// The list read now, over the session already open (a notification's read, nobody asked for): true when it went through.
     public func readQuietly() async -> Bool {
+        // A vault held or without the feature reads nothing: the list is not fresher than it was.
+        guard availability != .unsupported, !gated() else { return false }
         do {
             try await read(quietly: true)
             return true

@@ -44,7 +44,9 @@ extension VoteSiteRunner {
         switch try await reader.fetchRows(key.proposalID, cap: cap) {
         case .absent, .down: return .notChecked
         // An over-cap rows.json is still a failed check: its cap comes from a results.json that parsed.
-        case .tooLarge: return keepRecheck(key, consistent: false)
+        case .tooLarge:
+            try Task.checkCancellation()
+            return keepRecheck(key, consistent: false)
         case .rows(let b): rows = b
         }
         // A failure that leaves no row with a proof is a problem as well: the results no longer hold what was checked.
@@ -52,7 +54,6 @@ extension VoteSiteRunner {
         // here, not the vault's (chosen; not in the spec).
         let verdict = await Task.detached { Self.verdict(doc, rows, tag, detail) }.value
         try Task.checkCancellation()
-        guard let verdict else { return .notChecked }
         return keepRecheck(key, consistent: verdict)
     }
 
@@ -71,17 +72,12 @@ extension VoteSiteRunner {
         }
     }
 
-    /// Whether the observer's check of [doc] and [rows] passes, with the vault's numbers; nil when the results do not read at
-    /// all (nothing was checked).
-    private nonisolated static func verdict(_ doc: [UInt8], _ rows: [UInt8], _ tag: [UInt8], _ detail: VoteDetail) -> Bool? {
+    /// Whether the observer's check of [doc] and [rows] passes, with the vault's numbers. Any other problem with the results,
+    /// once their electorate reads (a missing `rows_root`, say), is a failed check, as in vettid-android: only an electorate
+    /// that does not read is "not rechecked", and that is decided before.
+    private nonisolated static func verdict(_ doc: [UInt8], _ rows: [UInt8], _ tag: [UInt8], _ detail: VoteDetail) -> Bool {
         guard sameNumbers(doc, detail) else { return false }
-        do {
-            return try VoteRows.ownRow(results: doc, rows: rows, recordTag: tag).problem == nil
-        } catch let p as ResultsProblem {
-            return p.reason == "results" ? nil : false
-        } catch {
-            return false
-        }
+        return (try? VoteRows.ownRow(results: doc, rows: rows, recordTag: tag).problem == nil) ?? false
     }
 
     private func keepRecheck(_ key: VoteKey, consistent: Bool) -> RecheckOutcome {
