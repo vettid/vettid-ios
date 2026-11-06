@@ -147,6 +147,8 @@ final class ResultsAttempts {
 
     /// A `gave_up` check is run again at most once a day per record; a clock set back does not hold it up.
     func dailyDue(_ key: VoteKey, at: Date) -> Bool {
+        // Attempts that cannot be read now are not "none": the daily re-check waits until they can.
+        guard loaded != nil else { return false }
         guard let last = attempt(key) else { return true }
         let since = at.timeIntervalSince1970 * 1000 - Double(last.atMs)
         return since < 0 || since >= Self.recheckEvery * 1000
@@ -156,6 +158,8 @@ final class ResultsAttempts {
     /// re-check, on a network not known to be unmetered, and less than ``meteredRowsEvery`` since the last rows download.
     /// Within the 7 days, or on an unmetered network, the daily rule alone governs. [unmetered] nil (unknown) is metered.
     func rowsDeferred(_ key: VoteKey, at: Date, unmetered: () -> Bool?) -> Bool {
+        // Unreadable attempts: the download waits too (nothing is known of the last one).
+        guard loaded != nil else { return true }
         guard let last = attempt(key), let first = last.firstRecheckMs, let rowsAt = last.lastRowsMs else { return false }
         let now = Int64(at.timeIntervalSince1970 * 1000)
         return now - first >= Int64(Self.wifiOnlyAfter * 1000) && (0 ..< Int64(Self.meteredRowsEvery * 1000)).contains(now - rowsAt) &&

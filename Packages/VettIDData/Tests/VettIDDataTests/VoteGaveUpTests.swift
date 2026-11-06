@@ -414,7 +414,10 @@ struct VoteGaveUpTests: VotesTestCase {
         attempts.put(key, mine, epoch: attempts.epoch)
         attempts.forget(epoch: attempts.epoch) { _ in true }
         #expect(flaky.saved.isEmpty && attempts.attempt(key) == nil)
+        // Meanwhile the daily re-check is not due and the automatic download is held back.
+        #expect(!attempts.dailyDue(key, at: clock.date) && attempts.rowsDeferred(key, at: clock.date, unmetered: { true }))
         flaky.readable = true
+        #expect(attempts.dailyDue(key, at: clock.date) && !attempts.rowsDeferred(key, at: clock.date, unmetered: { true }))
         attempts.put(key, mine, epoch: attempts.epoch)
         #expect(flaky.saved.last?.map(\.key).sorted() == ["c/other", ResultsAttempts.id(key)].sorted())
     }
