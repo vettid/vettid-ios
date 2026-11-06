@@ -22,6 +22,31 @@ extension VaultManagerTransferInTests {
         #expect(VaultManager.settleWindow(visibility: 60) == 90)
         #expect(VaultManager.settleWindow(visibility: 400) == 330)
         #expect(VaultManager.settleWindow(visibility: -5) == 30)
+        #expect(VaultManager.maxEndPastFirst(visibility: 60) == 95, "V + 25 + 5 + 5")
+    }
+
+    /// Moves the phone's uptime on by [seconds] (its clocks frozen), in steps a window's heartbeat sees as no freeze: each
+    /// waits for two of its ticks (one may have been under way).
+    func advance(_ seconds: TimeInterval) async throws {
+        var left = seconds
+        while left > 0 {
+            let step = min(left, 3)
+            let beats = m.moveFlags.book.windowBeats
+            phone.uptimeAhead += step
+            left -= step
+            #expect(await eventually { m.moveFlags.book.windowBeats >= beats + 2 }, "the heartbeat ticks")
+        }
+    }
+
+    /// The window running on frozen clocks, its first pause (90 s) held.
+    func windowOnFrozenClocks() async throws {
+        _ = try await scanned()
+        try await phone.restart()
+        phone.windowPauses.holding = true
+        phone.clockAhead = 700
+        try await m.refresh()
+        #expect(await eventually { phone.windowPauses.lengths == [90] }, "the window runs")
+        phone.freezeClocks()
     }
 
     /// With only the window collecting: long polls of min(25, time left − 5) s, and one `wait=0` collect at its end.
@@ -60,18 +85,14 @@ extension VaultManagerTransferInTests {
     }
 
     /// A background while the window waits for the collector's round at its end: the collector's long poll, handed the
-    /// pairing, is cut (and the pairing leased); the window decides nothing then, runs a full window again in the
-    /// foreground, and applies the pairing when it reappears.
+    /// pairing, is cut (and the pairing leased); the window decides nothing then, moves its end out (within the cap) in
+    /// the foreground, and applies the pairing when it reappears.
     @Test func aBackgroundDuringTheCollectorsRoundDecidesNothing() async throws {
         defer { phone.close() }
-        _ = try await scanned()
-        try await phone.restart()
-        phone.windowPauses.holding = true
-        phone.clockAhead = 700
-        try await m.refresh()
-        #expect(await eventually { !phone.windowPauses.lengths.isEmpty }, "the window runs")
+        try await windowOnFrozenClocks()
+        try await advance(90)
         #expect(m.session?.device.collecting == true, "the collector runs")
-        service.leasesCollected = 1
+        service.leasesCollected = 600
         let gate = FakeHTTPServer.Gate()
         service.holdsCollectAnswersOfWait = 1
         service.holdsCollectAnswers = gate
@@ -85,22 +106,20 @@ extension VaultManagerTransferInTests {
         service.holdsCollectAnswers = nil
         gate.open()
         m.onForeground()
+        #expect(await eventually { phone.windowPauses.lengths == [90, 60] }, "the end moved out: \(phone.windowPauses.lengths)")
+        service.endLeases()
         #expect(await eventually(within: .seconds(30)) { m.finishMovePending && m.record.value.transferStartedMs == nil })
-        #expect(phone.windowPauses.lengths.count >= 2, "a full window again: \(phone.windowPauses.lengths)")
         phone.windowPauses.release()
     }
 
-    /// A freeze during the window (a suspension the app was not told of: the monotonic clock jumps): a full window again.
-    @Test func aFreezeDuringTheWindowRunsAFullWindowAgain() async throws {
+    /// A freeze during the window (a suspension the app was not told of: the monotonic clock jumps) moves its end out
+    /// within the cap: woken long past it, the window makes its last collect and drops, without another pause.
+    @Test func aFreezePastTheCapEndsTheWindow() async throws {
         defer { phone.close() }
-        _ = try await scanned()
-        try await phone.restart()
-        phone.windowPauses.holding = true
-        phone.clockAhead = 700
-        try await m.refresh()
-        #expect(await eventually { phone.windowPauses.lengths == [90] }, "the window runs")
+        try await windowOnFrozenClocks()
         phone.uptimeAhead += 1_000
-        #expect(await eventually { phone.windowPauses.lengths == [90, 90] }, "\(phone.windowPauses.lengths)")
+        #expect(await eventually(within: .seconds(30)) { m.record.value.transferStartedMs == nil }, "dropped")
+        #expect(phone.windowPauses.lengths == [90], "\(phone.windowPauses.lengths)")
         phone.windowPauses.release()
     }
 
@@ -124,56 +143,39 @@ extension VaultManagerTransferInTests {
         phone.windowPauses.release()
     }
 
-    /// A freeze shorter than a visibility timeout (30 s) is caught by the heartbeat, and moves the window's end out.
+    /// A freeze shorter than a visibility timeout (30 s), 40 s into the window, is caught by the heartbeat: the end moves
+    /// to now + 60 s.
     @Test func aFreezeOfLessThanAVisibilityTimeoutIsCaught() async throws {
         defer { phone.close() }
-        _ = try await scanned()
-        try await phone.restart()
-        phone.windowPauses.holding = true
-        phone.clockAhead = 700
-        try await m.refresh()
-        #expect(await eventually { phone.windowPauses.lengths == [90] }, "the window runs")
+        try await windowOnFrozenClocks()
+        try await advance(40)
         phone.uptimeAhead += 30
-        #expect(await eventually { phone.windowPauses.lengths.count == 2 }, "\(phone.windowPauses.lengths)")
+        #expect(await eventually { phone.windowPauses.lengths == [90, 60] }, "\(phone.windowPauses.lengths)")
         phone.windowPauses.release()
     }
 
-    /// A freeze moves the end out to `now` + the window, at most one visibility timeout past the first end: 70 s in, the
-    /// end is the first end + 60 s (80 s left), not a full window again (90 s).
+    /// A freeze moves the end out to max(end, now + V), not to a full window again: woken 70 s in, 60 s are left (not 90).
     @Test func aFreezeMovesTheEndOutRatherThanRestarting() async throws {
         defer { phone.close() }
-        _ = try await scanned()
-        try await phone.restart()
-        phone.windowPauses.holding = true
-        phone.clockAhead = 700
-        try await m.refresh()
-        #expect(await eventually { phone.windowPauses.lengths == [90] }, "the window runs")
-        phone.clockAhead += 70
-        phone.uptimeAhead += 30
+        try await windowOnFrozenClocks()
+        phone.uptimeAhead += 70
         #expect(await eventually { phone.windowPauses.lengths.count == 2 }, "\(phone.windowPauses.lengths)")
-        let lengths = phone.windowPauses.lengths
-        #expect(lengths.count == 2 && (79...80).contains(lengths[1]), "\(lengths)")
+        #expect(phone.windowPauses.lengths == [90, 60], "\(phone.windowPauses.lengths)")
         phone.windowPauses.release()
     }
 
-    /// Backgrounds again and again cannot move the end past the first end + one visibility timeout: once it is there, no
-    /// later one moves it.
+    /// Backgrounds again and again cannot move the end past the cap (the first end + V + 35 s, 185 s in): at 70 s the end
+    /// moves to 130 s, at 150 s to the cap (35 s left), and at 170 s no more.
     @Test func repeatedBackgroundsStopAtTheCap() async throws {
         defer { phone.close() }
-        _ = try await scanned()
-        try await phone.restart()
-        phone.windowPauses.holding = true
-        phone.clockAhead = 700
-        try await m.refresh()
-        #expect(await eventually { phone.windowPauses.lengths == [90] }, "the window runs")
-        phone.clockAhead += 70
-        for _ in 0..<3 {
+        try await windowOnFrozenClocks()
+        for to in [70.0, 150, 170] {
+            try await advance(to - phone.uptimeAhead)
             await m.onBackground(budget: .seconds(1))
             m.onForeground()
             try await Task.sleep(for: .milliseconds(150))
         }
-        let lengths = phone.windowPauses.lengths
-        #expect(lengths.count == 2 && (79...80).contains(lengths[1]), "\(lengths)")
+        #expect(phone.windowPauses.lengths == [90, 60, 35], "\(phone.windowPauses.lengths)")
         phone.windowPauses.release()
     }
 

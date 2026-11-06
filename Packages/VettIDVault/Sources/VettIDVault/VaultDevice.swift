@@ -207,13 +207,13 @@ public final class VaultDevice: @unchecked Sendable {
     let countedBroadcast = Broadcast<String>()
     let reconnectBroadcast = Broadcast<Int>()
     /// How many times the collection came back (``relayReconnects()``).
-    var reconnects = 0
+    var reconnects = 0, collectCuts: (count: Int, sent: TimeInterval?) = (0, nil)
     var isPaired: Bool
     var sas: String?
     var refusals = 0
     var collector: Task<Void, Never>?
     var collectEnded: String?
-    var collectSince: Date?
+    var collectSince: (at: Date, uptime: TimeInterval)?, collectLastSent: TimeInterval?
     var stopped = true
     /// Set by ``forget()``: nothing is written to the store any more.
     var forgotten = false
@@ -323,7 +323,7 @@ public final class VaultDevice: @unchecked Sendable {
     /// Whether the mailbox collector runs.
     public var collecting: Bool { mem.withLock { collector != nil && collectEnded == nil && !stopped } }
     /// When the collection's current relay request went out, nil while none is out.
-    public var collectRequestSince: Date? { mem.withLock { collectSince } }
+    public var collectRequestSince: Date? { mem.withLock { collectSince?.at } }
     /// This device's relay address (§6.2).
     public var relayAddr: RelayAddr {
         RelayAddr(url: cfg.relayURL, mailbox: RelayAuth.mailboxID(secrets.relay.publicKey), pk: secrets.relay.publicKey)
@@ -443,8 +443,8 @@ public final class VaultDevice: @unchecked Sendable {
             let source = RelayMailbox(client: own, transport: cfg.transport)
             let c = MailboxCollector(
                 source: source, mode: cfg.collectMode, wait: cfg.pollWait, now: cfg.now,
-                onRequest: { [weak self] out in self?.mem.withLock { self?.collectSince = out ? Date() : nil } },
-                onRecovered: { [weak self] in self?.relayCameBack() }
+                onRequest: { [weak self] out in self?.collectorRequest(out) },
+                onRecovered: { [weak self] in self?.relayCameBack() }, onFailed: { [weak self] in self?.collectorFailed($0) }
             )
             do {
                 try await c.run { m in try await self.handle(m) }
@@ -489,10 +489,9 @@ public final class VaultDevice: @unchecked Sendable {
     public func stop() {
         let task: Task<Void, Never>? = mem.withLock {
             stopped = true
-            defer {
-                collector = nil
-                collectSince = nil
-            }
+            // A request out is cut: what the relay handed it may stay leased (``collectorCuts``).
+            if let out = collectSince { collectCuts = (collectCuts.count + 1, out.uptime) }
+            defer { (collector, collectSince) = (nil, nil) }
             return collector
         }
         task?.cancel()

@@ -183,6 +183,8 @@ public struct VaultManagerConfig: Sendable {
     /// The pauses between the collects of that window: after a failure (1 s, doubled, at most 8 s), between `wait=0`
     /// collects while the collector long-polls (1 s), and while waiting for the collector's round at the end (50 ms).
     public var transferRetrySleep: LockSleep = realLockSleep
+    /// The tick of a settlement window's heartbeat (1 s, ``VaultManager/freezeGap``).
+    public var transferHeartbeatSleep: LockSleep = realLockSleep
     /// The limit of the day-7 check's wait for `device.list` (``keptEndCheck``; a pause the tests release).
     public var keptEndSleep: LockSleep = realLockSleep
     /// The wait to the end of a kept transfer (``VaultManager/checkKeptTransfer()``; a pause the tests release).

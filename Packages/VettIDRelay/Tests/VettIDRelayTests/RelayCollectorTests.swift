@@ -73,4 +73,21 @@ extension MailboxCollectorTests {
         #expect(ackedWhenHandled.all == [0, 0], "no ack while the handler runs")
         #expect(stream.acked == ["01K"], "acked once it returned")
     }
+
+    /// Every failed round is told (`onFailed`) before the request is marked ended, the terminal one too; the rounds that
+    /// succeed are not.
+    @Test func everyFailedRoundIsTold() async throws {
+        let src = FakeSource([
+            .error(URLError(.networkConnectionLost)), .messages([]), .error(RelayError(status: 503, code: "internal")),
+        ])
+        let told = Recorder<String>()
+        let ended = Recorder<Bool>()
+        await #expect(throws: RelayError.self) {
+            try await MailboxCollector(
+                source: src, sleep: { _ in }, onRequest: { ended.add($0) },
+                onFailed: { e in told.add((e as? RelayError)?.code ?? "transport \(ended.all.last == true)") }
+            ).run { _ in }
+        }
+        #expect(told.all == ["transport true", "internal", RelayError.mailboxUnknown], "\(told.all)")
+    }
 }

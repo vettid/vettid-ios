@@ -60,6 +60,10 @@ final class MoveBook {
     var startingIn = 0
     /// The times a settlement window began to wait for the collector's round at its end (what a test awaits).
     var collectorRounds = 0
+    /// The last collects of settlement windows that went out (a window cut during its last collect makes another).
+    var finalCollects = 0
+    /// The ticks of settlement windows' heartbeats (what a test that moves the clock awaits).
+    var windowBeats = 0
     /// How many day-7 checks ended (any result): what a test awaits instead of a fixed time.
     var keptChecksFinished = 0
     /// The timer to the end of a kept transfer, and whether its end is being decided now.

@@ -1,4 +1,5 @@
 import Foundation
+import VettIDData
 
 // TEST ONLY. The end of a test phone's app process, before ``TestVaultPhone/restart()`` starts the next one.
 extension TestVaultPhone {
@@ -22,5 +23,12 @@ extension TestVaultPhone {
             try await Task.sleep(for: .milliseconds(5))
         }
         service.noteRestart(left: left.count, outlived: !service.collectsInFlight.isDisjoint(with: left))
+    }
+
+    /// A window heartbeat's tick: 10 ms, or a pause the test releases while it holds [beat].
+    static func heartbeatSleep(_ beat: TestPauses) -> LockSleep {
+        { _ in
+            if beat.holding { try await beat.sleep(1) } else { try await Task.sleep(for: .milliseconds(10)) }
+        }
     }
 }

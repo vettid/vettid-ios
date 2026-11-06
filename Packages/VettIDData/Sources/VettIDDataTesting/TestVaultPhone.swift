@@ -262,9 +262,10 @@ public final class TestVaultPhone {
     public let deadlinePauses = TestPauses()
     /// The bound of each collect before the drop (`wait` + 70 s): never released unless a test wants a timed-out collect.
     public let collectPauses = TestPauses()
-    /// The window of collects before the drop (90 s): over almost at once (a collect or two), unless a test holds it
-    /// (``TestPauses/holding``) and releases it.
+    /// The window of collects before the drop (90 s; lengths to the nearest second): over at once unless a test holds it.
     public let windowPauses = { let p = TestPauses(); p.holding = false; return p }()
+    /// The ticks of a window's heartbeat (1 s): 10 ms, unless a test holds them (``TestPauses/holding``).
+    public let heartbeatPauses = { let p = TestPauses(); p.holding = false; return p }()
     var waitsForOldCollects = true
     /// Whether a change's wait lasts until the test releases it (``changeWaits``).
     public var holdsChangeWaits: Bool {
@@ -317,7 +318,7 @@ public final class TestVaultPhone {
         let waits = Waits(
             requestTimeout: requestTimeout, pauses: changePauses, changeWaits: changeWaits, deletion: deletionPauses,
             transfer: transferPauses, keep: keepPauses, keptEnd: keptEndPauses, deadline: deadlinePauses,
-            collect: collectPauses, window: windowPauses, lockStatusWait: lockStatusWait
+            collect: collectPauses, window: windowPauses, heartbeat: heartbeatPauses, lockStatusWait: lockStatusWait
         )
         var config = try Self.configured(
             service, appKeys, seedWrap, wrapped, phoneKeys, fileKeys, protectedData, directory, gate, clock,
@@ -354,17 +355,16 @@ public final class TestVaultPhone {
         Waits(
             requestTimeout: requestTimeout, pauses: changePauses, changeWaits: changeWaits, deletion: deletionPauses,
             transfer: transferPauses, keep: keepPauses, keptEnd: keptEndPauses, deadline: deadlinePauses,
-            collect: collectPauses, window: windowPauses, lockStatusWait: lockStatusWait
+            collect: collectPauses, window: windowPauses, heartbeat: heartbeatPauses, lockStatusWait: lockStatusWait
         )
     }
 
     /// A test phone's waits: how long a request waits for its answer, and the pauses the test releases.
     private struct Waits {
         let requestTimeout: TimeInterval
-        let pauses, changeWaits, deletion, transfer, keep, keptEnd, deadline, collect, window: TestPauses
+        let pauses, changeWaits, deletion, transfer, keep, keptEnd, deadline, collect, window, heartbeat: TestPauses
         let lockStatusWait: TimeInterval
     }
-
     // swiftlint:disable:next function_parameter_count
     private static func configured(
         _ service: FakeVaultService, _ appKeys: SoftwareAppKeyStore, _ seedWrap: SoftwareSeedWrapKeySource,
@@ -400,13 +400,13 @@ public final class TestVaultPhone {
         c.transferSleep = { d in try await transfer.sleep(Double(d.components.seconds) + Double(d.components.attoseconds) / 1e18) }
         c.keepSleep = { d in try await keep.sleep(Double(d.components.seconds) + Double(d.components.attoseconds) / 1e18) }
         // The waits that bound a check or a collect are pauses the test releases, never clocks that a loaded machine can win.
-        let keptEnd = waits.keptEnd, deadline = waits.deadline, collect = waits.collect
+        let keptEnd = waits.keptEnd, deadline = waits.deadline, collect = waits.collect, window = waits.window
         c.keptEndSleep = { d in try await keptEnd.sleep(Double(d.components.seconds) + Double(d.components.attoseconds) / 1e18) }
         c.transferDeadlineSleep = { d in try await deadline.sleep(Double(d.components.seconds) + Double(d.components.attoseconds) / 1e18) }
         c.transferCollectSleep = { d in try await collect.sleep(Double(d.components.seconds) + Double(d.components.attoseconds) / 1e18) }
-        let window = waits.window
-        c.transferWindowSleep = { d in if window.holding { try await window.sleep(Double(d.components.seconds)) } }
+        c.transferWindowSleep = { d in if window.holding { try await window.sleep((d / .seconds(1)).rounded()) } }
         c.transferRetrySleep = { _ in try await Task.sleep(for: .milliseconds(10)) }
+        c.transferHeartbeatSleep = Self.heartbeatSleep(waits.heartbeat)
         c.uptime = { uptime.monotonic }
         return c
     }

@@ -56,6 +56,7 @@ struct FakeTransferStore {
     var collectGate: FakeHTTPServer.Gate?
     var opensAtDelete = false
     var collectGateWait: Int?
+    var collectAnswersLost = 0
     var visibility = 60
     var registerRefused = false
     var leased: [(message: RelayMessage, until: Date)] = []
@@ -308,8 +309,8 @@ extension FakeVaultService {
         set { locked { transfer.registerRefused = newValue } }
     }
 
-    /// Only the collects of this `wait` are held (``holdsCollectAnswers``): the test phone's collector long-polls with
-    /// `wait=1`, a settlement window's collects with 0 or more.
+    /// Only the collects of this `wait` are held (``holdsCollectAnswers``), and only they take messages meanwhile (the others
+    /// find none): the test phone's collector long-polls with `wait=1`, a settlement window's collects with 0 or more.
     public var holdsCollectAnswersOfWait: Int? {
         get { locked { transfer.collectGateWait } }
         set { locked { transfer.collectGateWait = newValue } }
@@ -321,6 +322,14 @@ extension FakeVaultService {
         set { locked { transfer.opensAtDelete = newValue } }
     }
 
+    /// How many of the next collects that take messages lose their answer in transport, the messages leased all the same
+    /// (``leasesCollected``), as when the network drops a long poll's answer (with ``holdsCollectAnswers``, once the gate
+    /// opens).
+    public var losesCollectAnswers: Int {
+        get { locked { transfer.collectAnswersLost } }
+        set { locked { transfer.collectAnswersLost = newValue } }
+    }
+
     /// The collect failures asked for (``failNextCollects(_:)``) not yet used.
     public var collectFailuresLeft: Int { locked { transfer.collectFailures } }
 
@@ -330,6 +339,9 @@ extension FakeVaultService {
         get { locked { transfer.leaseFor } }
         set { locked { transfer.leaseFor = newValue } }
     }
+
+    /// Every lease runs out now: the messages leased are collected again (the time of their lease passed).
+    public func endLeases() { locked { transfer.leased = transfer.leased.map { ($0.message, Date.distantPast) } } }
 
     /// The messages whose lease ended, queued again (first). Callers hold ``cond``.
     func requeueEndedLeases() {

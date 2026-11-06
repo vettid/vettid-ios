@@ -1,0 +1,190 @@
+import Foundation
+import Testing
+import VettIDRelay
+@testable import VettIDData
+import VettIDDataTesting
+import VettIDTesting
+@testable import VettIDVault
+
+/// The settlement window's cuts and its cap (VAULT-MESSAGING 0.85.2 §11.14.10 rule 5; the shared rule with Android #307):
+/// a collector round that fails is a cut, the end moves out to min(max(end, now + V), the first end + V + 35 s), and a
+/// window woken past the cap makes its last collect no sooner than the lease of the request cut then allows.
+extension VaultManagerTransferInTests {
+    /// The window at its first end (90 s), waiting for the collector's round, whose long poll holds the pairing (leased
+    /// until the test ends it; its answer lost when [lost]).
+    func windowAtItsEndWithThePairingOut(lost: Bool = false) async throws -> FakeHTTPServer.Gate {
+        try await windowOnFrozenClocks()
+        try await advance(90)
+        #expect(m.session?.device.collecting == true, "the collector runs")
+        let gate = try await pairingHeldOut(lease: 600, lost: lost)
+        let rounds = m.moveFlags.book.collectorRounds
+        phone.windowPauses.release()
+        #expect(await eventually { m.moveFlags.book.collectorRounds > rounds }, "the window waits for the collector's round")
+        return gate
+    }
+
+    /// The collector's long poll (`wait=1`; any collect when [wait] is nil) holds the pairing, leased for [lease] seconds,
+    /// its answer lost when [lost].
+    func pairingHeldOut(lease: TimeInterval, lost: Bool, wait: Int? = 1) async throws -> FakeHTTPServer.Gate {
+        service.leasesCollected = lease
+        let gate = FakeHTTPServer.Gate()
+        service.holdsCollectAnswersOfWait = wait
+        service.holdsCollectAnswers = gate
+        if lost { service.losesCollectAnswers = 1 }
+        service.approveTransferIn()
+        #expect(await eventually { gate.waiting > 0 }, "a long poll holds the pairing")
+        return gate
+    }
+
+    /// The collector's long poll that carried the pairing loses its answer (the relay leased it): the collect is not
+    /// retried into an empty answer, the failed round is a cut, the end moves out, and the pairing is applied when it
+    /// reappears.
+    @Test func aCollectorAnswerLostWithThePairingIsACut() async throws {
+        defer { phone.close() }
+        let gate = try await windowAtItsEndWithThePairingOut(lost: true)
+        service.holdsCollectAnswers = nil
+        gate.open()
+        #expect(await eventually { phone.windowPauses.lengths == [90, 60] }, "the end moved out: \(phone.windowPauses.lengths)")
+        service.endLeases()
+        #expect(await eventually(within: .seconds(30)) { m.finishMovePending && m.record.value.transferStartedMs == nil })
+        phone.windowPauses.release()
+    }
+
+    /// A collector round answered 503 is a cut; a 4xx the relay answered handed nothing out, and is none.
+    @Test func aCollectorRoundAnswered5xxIsACut() async throws {
+        defer { phone.close() }
+        _ = try await scanned()
+        let d = try #require(m.session?.device)
+        let before = d.collectorCuts.count
+        service.failNextCollects(1)
+        #expect(await eventually { d.collectorCuts.count == before + 1 }, "the 503 is counted")
+        d.collectorFailed(RelayError(status: 403, code: "forbidden"))
+        d.collectorFailed(RelayError(status: 429, code: "rate_limited"))
+        #expect(d.collectorCuts.count == before + 1, "a 4xx is no cut")
+        d.collectorFailed(URLError(.networkConnectionLost))
+        #expect(d.collectorCuts.count == before + 2, "a transport loss is one")
+    }
+
+    /// The collector cut by a background 20 s after the first end, the pairing leased for the visibility timeout: the end
+    /// moves to now + 60 s (the cap, the first end + 95 s, leaves room for it; one of the first end + 60 s would not).
+    @Test func aCutAfterTheFirstEndIsCoveredByTheCap() async throws {
+        defer { phone.close() }
+        let gate = try await windowAtItsEndWithThePairingOut()
+        try await advance(20)
+        await m.onBackground(budget: .seconds(1))
+        service.holdsCollectAnswers = nil
+        gate.open()
+        m.onForeground()
+        #expect(await eventually { phone.windowPauses.lengths == [90, 60] }, "\(phone.windowPauses.lengths)")
+        service.endLeases()
+        #expect(await eventually(within: .seconds(30)) { m.finishMovePending && m.record.value.transferStartedMs == nil })
+        phone.windowPauses.release()
+    }
+
+    /// A request out at s = 130 s, a freeze to 186 s (past the cap, 185 s, before s + V) during which its answer is lost:
+    /// the end goes to the cap, and the last collect waits to s + V + 5 s (9 s more); the pairing, leased to s + V, is then
+    /// collected and applied.
+    @Test func aWakePastTheCapWaitsForTheLeaseOfTheRequestOut() async throws {
+        defer { phone.close() }
+        try await windowOnFrozenClocks()
+        try await advance(130)
+        // Only requests sent from 130 s on are out (the clocks are frozen: they all went at that uptime).
+        let sent = m.config.uptime()
+        #expect(await eventually { m.session?.device.collectRequestUptime == sent }, "a collect went out at 130 s")
+        let gate = try await pairingHeldOut(lease: 600, lost: true, wait: nil)
+        phone.uptimeAhead += 56
+        service.holdsCollectAnswers = nil
+        gate.open()
+        let left = (sent + 65 - m.config.uptime()).rounded()
+        #expect(left == 9, "s + V + 5 s is 9 s away")
+        #expect(await eventually { phone.windowPauses.lengths == [90, 9] }, "\(phone.windowPauses.lengths)")
+        service.endLeases()
+        phone.windowPauses.release()
+        #expect(await eventually(within: .seconds(30)) { m.finishMovePending && m.record.value.transferStartedMs == nil })
+    }
+
+    /// A freeze while the last collect is out, the pairing leased to it (its answer lost): that collect is cut too, and one
+    /// more last collect goes, no sooner than its own s + V + 5 s (35 s after a wake 30 s on), which applies the move.
+    @Test func aFreezeDuringTheLastCollectMakesAnotherOne() async throws {
+        defer { phone.close() }
+        try await windowOnFrozenClocks()
+        // Only the window collects (`wait=0` past its end): the pairing goes to its collects alone.
+        m.session?.device.stop()
+        try await advance(150)
+        let gate = try await pairingHeldOut(lease: 600, lost: true, wait: 0)
+        phone.uptimeAhead += 36
+        service.holdsCollectAnswers = nil
+        gate.open()
+        // Woken past the cap (186 s): the last collect waits (29 s, less if the collect handed the pairing went earlier).
+        #expect(await eventually { phone.windowPauses.lengths.count == 2 }, "\(phone.windowPauses.lengths)")
+        let finals = m.moveFlags.book.finalCollects
+        service.endLeases()
+        let last = FakeHTTPServer.Gate()
+        service.holdsCollectAnswers = last
+        service.losesCollectAnswers = 1
+        phone.windowPauses.release()
+        #expect(await eventually { last.waiting > 0 && m.moveFlags.book.finalCollects == finals + 1 }, "the last collect holds it")
+        let sent = m.config.uptime()
+        phone.uptimeAhead += 30
+        service.holdsCollectAnswers = nil
+        last.open()
+        #expect(await eventually { phone.windowPauses.lengths.count == 3 }, "\(phone.windowPauses.lengths)")
+        #expect(phone.windowPauses.lengths.last == (sent + 65 - m.config.uptime()).rounded(), "\(phone.windowPauses.lengths)")
+        #expect(m.record.value.transferStartedMs != nil, "not dropped")
+        service.endLeases()
+        phone.windowPauses.release()
+        #expect(await eventually(within: .seconds(30)) { m.finishMovePending && m.record.value.transferStartedMs == nil })
+    }
+
+    /// A request handed the pairing at 150 s, a freeze from 150 to 170 s (the wake before the cap, 185 s): the end moves
+    /// to the cap, and the last collect there waits to s + V + 5 s (215 s, 30 s more), then applies the move.
+    @Test func aFreezeThatWakesBeforeTheCapHoldsTheLastCollect() async throws {
+        defer { phone.close() }
+        try await windowOnFrozenClocks()
+        m.session?.device.stop()
+        try await advance(150)
+        let gate = try await pairingHeldOut(lease: 600, lost: true, wait: 0)
+        phone.uptimeAhead += 20
+        service.holdsCollectAnswers = nil
+        gate.open()
+        #expect(await eventually { phone.windowPauses.lengths == [90, 15] }, "to the cap: \(phone.windowPauses.lengths)")
+        try await advance(15)
+        phone.windowPauses.release()
+        // To s + V + 5 s: 30 s, or less when the collect handed the pairing went out before 150 s (a loaded machine).
+        #expect(await eventually { phone.windowPauses.lengths.count == 3 }, "\(phone.windowPauses.lengths)")
+        #expect(phone.windowPauses.lengths.prefix(2) == [90, 15] && (1...30).contains(phone.windowPauses.lengths.last ?? 0))
+        #expect(m.record.value.transferStartedMs != nil, "not dropped")
+        service.endLeases()
+        phone.windowPauses.release()
+        #expect(await eventually(within: .seconds(30)) { m.finishMovePending && m.record.value.transferStartedMs == nil })
+    }
+
+    /// The send time of a request that ended on the wake, before anything saw the freeze, is kept: the last collect waits
+    /// for its lease all the same (the collector's request, and the window's own).
+    @Test func aRequestThatEndsOnTheWakeStillHoldsTheLastCollect() async throws {
+        defer { phone.close() }
+        try await windowOnFrozenClocks()
+        let d = try #require(m.session?.device)
+        d.stop()
+        phone.heartbeatPauses.holding = true
+        for own in [false, true] {
+            let clock = VaultManager.WindowClock(visibility: 60, backgrounds: m.moveFlags.book.backgrounds, background: false)
+            clock.start(m, d)
+            clock.follow(m, d)
+            phone.uptimeAhead += 0.5
+            let sent = m.config.uptime()
+            if own {
+                clock.ownOut = sent
+                clock.ownOut = nil
+            } else {
+                d.collectorRequest(true)
+                d.collectorRequest(false)
+            }
+            phone.uptimeAhead += 20
+            clock.follow(m, d)
+            #expect(clock.finalNotBefore == sent + 65, own ? "the window's own" : "the collector's")
+            clock.stop()
+        }
+        phone.heartbeatPauses.release()
+    }
+}

@@ -97,12 +97,19 @@ extension FakeVaultService {
         let id = transfer.collectSeq
         transfer.collecting.insert(id)
         defer { transfer.collecting.remove(id) }
-        let deadline = Date().addingTimeInterval(Self.collectHold)
+        // A `wait=0` collect answers at once, as the relay does: only a long poll waits for what comes.
+        let deadline = Date().addingTimeInterval(r.query?.hasPrefix("wait=0&") == true ? 0 : Self.collectHold)
         requeueEndedLeases()
         while queued.isEmpty || holdMessagesValue, cond.wait(until: deadline) {}
-        if holdMessagesValue { return .json(200, #"{"messages":[]}"#) }
+        // While answers are held for one `wait` (``holdsCollectAnswersOfWait``), only the collects of that wait take messages.
+        let other = transfer.collectGate != nil && transfer.collectGateWait.map { r.query?.contains("wait=\($0)&") != true } ?? false
+        if holdMessagesValue || other { return .json(200, #"{"messages":[]}"#) }
         let msgs = takeQueued().map { JsonBuilder().string("msg_id", $0.msgID).string("sender", $0.sender).base64("payload", $0.payload).build() }
-        let answer = FakeHTTPServer.Answer.json(200, #"{"messages":\#(JsonBuilder.array(msgs))}"#)
+        var answer = FakeHTTPServer.Answer.json(200, #"{"messages":\#(JsonBuilder.array(msgs))}"#)
+        if !msgs.isEmpty, transfer.collectAnswersLost > 0 {
+            transfer.collectAnswersLost -= 1
+            answer = .failure(.networkConnectionLost)
+        }
         if !msgs.isEmpty, let gate = transfer.collectGate, transfer.collectGateWait.map({ r.query?.contains("wait=\($0)&") == true }) ?? true {
             return .held(gate, answer)
         }

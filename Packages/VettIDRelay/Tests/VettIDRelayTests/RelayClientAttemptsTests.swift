@@ -15,4 +15,13 @@ extension RelayClientTests {
         await #expect(throws: RelayError.self) { _ = try await client().collect(wait: 0) }
         #expect(server.requestCount == 1 + RelayClient.defaultAttempts)
     }
+
+    /// The collector's collect (``RelayMailbox``) is one attempt: an answer lost after the relay handed it messages fails
+    /// as such, and is not retried into an empty answer while they stay leased.
+    @Test func theCollectorsCollectIsOneAttempt() async throws {
+        server.enqueue(.json(503, #"{"code":"internal","message":"x"}"#))
+        let mailbox = RelayMailbox(client: client(), transport: HTTPTransport(session: server.session, sleep: { _ in }))
+        await #expect(throws: RelayError.self) { _ = try await mailbox.collect(wait: 0, max: 10) }
+        #expect(server.requestCount == 1 && sleeps.all.isEmpty)
+    }
 }

@@ -132,23 +132,19 @@ extension VaultManagerTransferInTests {
         phone.windowPauses.release()
     }
 
-    /// Back in the foreground during the window, a full window runs again: a suspended app's collects were cut, and their
-    /// leases may still run.
-    @Test func aReturnToTheForegroundRunsAFullWindowAgain() async throws {
+    /// Back in the foreground during the window, its end moves out to now + V (within the cap): a suspended app's collects
+    /// were cut, and their leases may still run. 50 s in, 60 s are left.
+    @Test func aReturnToTheForegroundMovesTheEndOut() async throws {
         defer { phone.close() }
-        _ = try await scanned()
-        try await phone.restart()
-        phone.windowPauses.holding = true
-        phone.clockAhead = 700
-        try await m.refresh()
-        #expect(await eventually { phone.windowPauses.lengths == [90] })
+        try await windowOnFrozenClocks()
+        try await advance(50)
         // A return to the foreground alone (no background before it) changes nothing, over a few rounds of the window.
         m.onForeground()
         try await Task.sleep(for: .milliseconds(300))
         #expect(phone.windowPauses.lengths == [90])
         await m.onBackground(budget: .seconds(1))
         m.onForeground()
-        #expect(await eventually { phone.windowPauses.lengths == [90, 90] }, "\(phone.windowPauses.lengths)")
+        #expect(await eventually { phone.windowPauses.lengths == [90, 60] }, "\(phone.windowPauses.lengths)")
         phone.windowPauses.release()
     }
 
@@ -323,7 +319,7 @@ extension VaultManagerTransferInTests {
     }
 
     /// A window that started with the app in the background (the deadline came after it went) decides nothing until the
-    /// app is back, then runs a full window again: its timer may have ended while the app was suspended.
+    /// app is back, then moves its end out to now + V: its timer may have ended while the app was suspended.
     @Test func aWindowStartedInTheBackgroundRunsAgainInTheForeground() async throws {
         defer { phone.close() }
         _ = try await scanned()
@@ -333,11 +329,13 @@ extension VaultManagerTransferInTests {
         await m.onBackground(budget: .seconds(1))
         try await m.refresh()
         #expect(await eventually { phone.windowPauses.lengths == [90] }, "the window runs")
+        phone.freezeClocks()
+        try await advance(90)
         phone.windowPauses.release()
         try await Task.sleep(for: .milliseconds(200))
         #expect(m.record.value.transferStartedMs != nil, "nothing decided in the background")
         m.onForeground()
-        #expect(await eventually { phone.windowPauses.lengths == [90, 90] }, "\(phone.windowPauses.lengths)")
+        #expect(await eventually { phone.windowPauses.lengths == [90, 60] }, "\(phone.windowPauses.lengths)")
         phone.windowPauses.release()
     }
 

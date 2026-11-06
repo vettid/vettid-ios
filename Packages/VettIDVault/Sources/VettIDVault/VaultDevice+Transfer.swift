@@ -214,6 +214,38 @@ extension VaultDevice {
     /// The visibility timeout the mailbox's last registration gave, if one was kept (seconds).
     public var storedRelayVisibility: TimeInterval? { mem.withLock { st.relayVisibilitySeconds.map { TimeInterval($0) } } }
 
+    /// A round of the collector went out ([out]) or ended: when, on this device's clocks (``collectRequestSince``).
+    func collectorRequest(_ out: Bool) {
+        let up = cfg.uptime()
+        mem.withLock {
+            collectSince = out ? (Date(), up) : nil
+            if out { collectLastSent = up }
+        }
+    }
+
+    /// When the collector's last request went out (uptime), kept after it ended: a request that ended on a wake, before
+    /// anything saw the freeze, was still in flight when it began.
+    public var collectLastSentUptime: TimeInterval? { mem.withLock { collectLastSent } }
+
+    /// When the collector's request out now went, on the monotonic uptime (``DeviceConfig/uptime``); nil while none is out.
+    public var collectRequestUptime: TimeInterval? { mem.withLock { collectSince?.uptime } }
+
+    /// The collector's requests that were cut, so that what the relay handed them may stay leased (RELAY-PROTOCOL §6.3),
+    /// and when the last of them went out (uptime): a round that failed on a transport loss, a 5xx, or an answer it could
+    /// not read or handle, and a request out when the collection stopped. A relay's 4xx handed nothing out.
+    public var collectorCuts: (count: Int, sent: TimeInterval?) { mem.withLock { collectCuts } }
+
+    /// A round of the collector failed with [e] (``collectorCuts``).
+    func collectorFailed(_ e: Error) {
+        let cut: Bool = switch e {
+        case let r as RelayError: r.status >= 500 || r.status < 400
+        case is CancellationError: false
+        default: true
+        }
+        guard cut else { return }
+        mem.withLock { collectCuts = (collectCuts.count + 1, collectSince?.uptime) }
+    }
+
     /// Halted (``halt()``) or forgotten (``forget()``): a device that writes nothing any more, not one to use again.
     public var ended: Bool { mem.withLock { halted || forgotten } }
 
