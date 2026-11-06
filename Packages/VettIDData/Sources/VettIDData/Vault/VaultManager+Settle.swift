@@ -191,7 +191,10 @@ extension VaultManager {
     private func windowCollect(_ d: VaultDevice, wait: TimeInterval, last: Bool, clock: WindowClock) async -> Collected {
         moveFlags.book.windowCollectSent = config.uptime()
         let own = clock.own, uptime = config.uptime
-        defer { own.ended(at: uptime()) }
+        defer {
+            own.ended(at: uptime())
+            moveFlags.book.windowCollectsEnded += 1
+        }
         do {
             try await d.collectOnce(
                 timeout: wait + Self.collectSlack, wait: wait, attempts: 1, sleep: config.transferCollectSleep,

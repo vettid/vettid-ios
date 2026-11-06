@@ -21,7 +21,10 @@ extension VaultManagerTransferInTests {
         let gate = try await pairingHeldOut(lease: 600, lost: true, wait: 0)
         phone.uptimeAhead += 20
         service.holdsCollectAnswers = nil
+        let ended = m.moveFlags.book.windowCollectsEnded
         gate.open()
+        // The cut is noticed before the clock moves on (its lease counts from the notice).
+        #expect(await eventually { m.moveFlags.book.windowCollectsEnded > ended }, "the cut collect ended")
         #expect(await eventually { phone.windowPauses.lengths == [90, 15] }, "to the cap: \(phone.windowPauses.lengths)")
         try await advance(15)
         phone.windowPauses.release()
