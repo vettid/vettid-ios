@@ -84,8 +84,8 @@ extension VaultManagerTransferInTests {
     }
 
     /// A request out at s = 130 s, a freeze to 186 s (past the cap, 185 s, before s + V) during which its answer is lost:
-    /// the end goes to the cap, and the last collect waits to s + wait + V + 15 s (20 s more); the pairing, leased to s + V, is
-    /// collected and applied.
+    /// the end goes to the cap, and the last collect waits to the wake + wait + V + 15 s (76 s more: what was sent may reach
+    /// the relay only on the wake); the pairing, leased to s + V, is collected and applied.
     @Test func aWakePastTheCapWaitsForTheLeaseOfTheRequestOut() async throws {
         defer { phone.close() }
         try await windowOnFrozenClocks()
@@ -97,17 +97,15 @@ extension VaultManagerTransferInTests {
         phone.uptimeAhead += 56
         service.holdsCollectAnswers = nil
         gate.open()
-        // The collector's long poll (`wait=1`) may be answered, and its lease start, 1 s after it went.
-        let left = (sent + 1 + 75 - m.config.uptime()).rounded()
-        #expect(left == 20, "s + wait + V + 15 s is 20 s away")
-        #expect(await eventually { phone.windowPauses.lengths == [90, 20] }, "\(phone.windowPauses.lengths)")
+        // The collector's long poll (`wait=1`) may be handed to the relay on the wake, and parked for 1 s.
+        #expect(await eventually { phone.windowPauses.lengths == [90, 76] }, "\(phone.windowPauses.lengths)")
         service.endLeases()
         phone.windowPauses.release()
         #expect(await eventually(within: .seconds(30)) { m.finishMovePending && m.record.value.transferStartedMs == nil })
     }
 
     /// A freeze while the last collect is out, the pairing leased to it (its answer lost): that collect is cut too, and one
-    /// more last collect goes, no sooner than its own s + V + 15 s (45 s after a wake 30 s on), which applies the move.
+    /// more last collect goes, no sooner than its own s + V + 15 s (75 s after a wake 30 s on, the clocks frozen), which applies the move.
     @Test func aFreezeDuringTheLastCollectMakesAnotherOne() async throws {
         defer { phone.close() }
         try await windowOnFrozenClocks()
@@ -120,8 +118,8 @@ extension VaultManagerTransferInTests {
         phone.uptimeAhead += 36
         service.holdsCollectAnswers = nil
         gate.open()
-        // Woken past the cap (186 s): the last collect waits (39 s).
-        #expect(await eventually { phone.windowPauses.lengths == [90, 39] }, "\(phone.windowPauses.lengths)")
+        // Woken past the cap (186 s): the last collect waits for the lease from the wake (75 s).
+        #expect(await eventually { phone.windowPauses.lengths == [90, 75] }, "\(phone.windowPauses.lengths)")
         let finals = m.moveFlags.book.finalCollects
         service.endLeases()
         let last = FakeHTTPServer.Gate()
@@ -134,7 +132,9 @@ extension VaultManagerTransferInTests {
         service.holdsCollectAnswers = nil
         last.open()
         #expect(await eventually { phone.windowPauses.lengths.count == 3 }, "\(phone.windowPauses.lengths)")
-        #expect(phone.windowPauses.lengths.last == (sent + 75 - m.config.uptime()).rounded(), "\(phone.windowPauses.lengths)")
+        // The freeze's lease starts at the wake: 75 s from there.
+        #expect(phone.windowPauses.lengths.last == 75, "\(phone.windowPauses.lengths)")
+        _ = sent
         #expect(m.record.value.transferStartedMs != nil, "not dropped")
         service.endLeases()
         phone.windowPauses.release()
@@ -142,7 +142,7 @@ extension VaultManagerTransferInTests {
     }
 
     /// A request handed the pairing at 150 s, a freeze from 150 to 170 s (the wake before the cap, 185 s): the end moves
-    /// to the cap, and the last collect there waits to s + V + 15 s (225 s, 40 s more), then applies the move.
+    /// to the cap, and the last collect there waits to the wake + V + 15 s (245 s, 60 s more), then applies the move.
     @Test func aFreezeThatWakesBeforeTheCapHoldsTheLastCollect() async throws {
         defer { phone.close() }
         try await windowOnFrozenClocks()
@@ -157,8 +157,8 @@ extension VaultManagerTransferInTests {
         gate.open()
         #expect(await eventually { phone.windowPauses.lengths == [90, 15] }, "to the cap: \(phone.windowPauses.lengths)")
         try await advance(15)
-        let held = (sent + 75 - m.config.uptime()).rounded()
-        #expect(held == 40, "s + V + 15 s is 40 s away: \(held)")
+        let held = (sent + 20 + 75 - m.config.uptime()).rounded()
+        #expect(held == 60, "wake + V + 15 s is 60 s away: \(held)")
         phone.windowPauses.release()
         #expect(await eventually { phone.windowPauses.lengths == [90, 15, held] }, "\(phone.windowPauses.lengths)")
         #expect(m.record.value.transferStartedMs != nil, "not dropped")
@@ -191,7 +191,9 @@ extension VaultManagerTransferInTests {
             }
             phone.uptimeAhead += 20
             clock.follow(m, d)
-            #expect(clock.finalNotBefore == sent + (own ? 0 : d.collectorWait) + 75, own ? "the window's own" : "the collector's")
+            let expected = m.config.uptime() + (own ? 0 : d.collectorWait) + 75
+            #expect(clock.finalNotBefore == expected, own ? "the window's own" : "the collector's")
+            _ = sent
             clock.stop()
         }
         phone.heartbeatPauses.release()
@@ -229,7 +231,7 @@ extension VaultManagerTransferInTests {
         phone.uptimeAhead += 56
         service.holdsCollectAnswers = nil
         gate.open()
-        #expect(await eventually { phone.windowPauses.lengths == [90, 20] }, "the hold: \(phone.windowPauses.lengths)")
+        #expect(await eventually { phone.windowPauses.lengths == [90, 76] }, "the hold: \(phone.windowPauses.lengths)")
         // During the hold, the collector is handed the pairing at 186 s, and its answer is lost.
         let again = FakeHTTPServer.Gate()
         service.holdsCollectAnswers = again
@@ -242,7 +244,7 @@ extension VaultManagerTransferInTests {
         try await Task.sleep(for: .milliseconds(100))
         phone.windowPauses.release()
         // The last collect finds the pairing leased; the one more waits to 186 s + 1 s + 75 s (the collector's long poll).
-        #expect(await eventually { phone.windowPauses.lengths == [90, 20, 76] }, "\(phone.windowPauses.lengths)")
+        #expect(await eventually { phone.windowPauses.lengths == [90, 76, 76] }, "\(phone.windowPauses.lengths)")
         #expect(m.record.value.transferStartedMs != nil, "not dropped")
         service.endLeases()
         phone.windowPauses.release()
@@ -311,8 +313,8 @@ extension VaultManagerTransferInTests {
         #expect(await eventually { m.moveFlags.book.windowCollectSent != sent }, "the next window collect went")
         try await advance(60)
         phone.windowPauses.release()
-        // To 84 s + V + 15 s (159 s), 20 s past the end.
-        #expect(await eventually { phone.windowPauses.lengths == [90, 60, 20] }, "\(phone.windowPauses.lengths)")
+        // To the wake (79 s) + 25 s + V + 15 s (179 s), 40 s past the end.
+        #expect(await eventually { phone.windowPauses.lengths == [90, 60, 40] }, "\(phone.windowPauses.lengths)")
         service.endLeases()
         phone.windowPauses.release()
         #expect(await eventually(within: .seconds(30)) { m.finishMovePending && m.record.value.transferStartedMs == nil })

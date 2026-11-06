@@ -259,6 +259,9 @@ extension VaultDevice {
     /// not read or handle, and a request out when the collection stopped. A relay's 4xx handed nothing out.
     public var collectorCuts: (count: Int, sent: CollectSent?) { mem.withLock { collectCuts } }
 
+    /// When the latest of ``collectorCuts`` was noticed (uptime).
+    public var collectorCutNoticed: TimeInterval? { mem.withLock { collectCutNoticed } }
+
     /// A round of the collector failed with [e] (``collectorCuts``); [handed]: it had been handed messages, which may stay
     /// leased whatever the error (an ack refused mid-batch leaves the rest unhandled); [round]: the collection's. A stopped
     /// one's late failure counts nothing: ``stop()`` counted its request out.
@@ -274,6 +277,7 @@ extension VaultDevice {
             guard round == collectRound else { return }
             // A stream's cut counts from now: it may have pushed, and leased, up to it.
             collectCuts = (collectCuts.count + 1, collectStreaming ? (now, 0) : collectSince?.sent)
+            collectCutNoticed = now
         }
     }
 

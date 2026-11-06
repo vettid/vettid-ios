@@ -123,14 +123,16 @@ extension VaultManagerTransferInTests {
     }
 
     /// A freeze during the window (a suspension the app was not told of: the monotonic clock jumps) moves its end out
-    /// within the cap: woken long past it, the window makes its last collect and drops, without another pause.
+    /// within the cap: woken long past it, the window waits for the lease of the collector's long poll sent before the
+    /// freeze (the wake + its wait + V + 15 s), makes its last collect and drops.
     @Test func aFreezePastTheCapEndsTheWindow() async throws {
         defer { phone.close() }
         try await windowOnFrozenClocks()
         phone.uptimeAhead += 1_000
-        #expect(await eventually(within: .seconds(30)) { m.record.value.transferStartedMs == nil }, "dropped")
-        #expect(phone.windowPauses.lengths == [90], "\(phone.windowPauses.lengths)")
+        #expect(await eventually { phone.windowPauses.lengths == [90, 76] }, "the hold: \(phone.windowPauses.lengths)")
         phone.windowPauses.release()
+        #expect(await eventually(within: .seconds(30)) { m.record.value.transferStartedMs == nil }, "dropped")
+        #expect(phone.windowPauses.lengths == [90, 76], "\(phone.windowPauses.lengths)")
     }
 
     /// The iPhone locked during the window (to the manager, a background: the vault lock is no step of a move not yet

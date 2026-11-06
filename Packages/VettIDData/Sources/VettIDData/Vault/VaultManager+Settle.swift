@@ -117,7 +117,11 @@ extension VaultManager {
             if case .nothing = found {} else { return found }
             // Decided only if nothing cut the last collects: a background (it stops the collector, whose long poll may have
             // been handed the pairing) or a freeze during them moves the end out first, within its cap.
-            if last, clock.dropsAfterFinalCollect(self, d) { return await lastLook(d, clock: clock, sessionEnds: sessionEnds) }
+            if last, clock.dropsAfterFinalCollect(self, d) {
+                // Nil: the look's collect was cut with the one more unused, and it goes (held) before the drop.
+                if let end = await lastLook(d, clock: clock, sessionEnds: sessionEnds) { return end }
+                continue
+            }
             await pauseBetweenCollects(failures: failures, wait: wait)
         }
         return await pairedOrRejected(d)
@@ -126,26 +130,46 @@ extension VaultManager {
     /// Before the drop: while the app is in the background (nothing is decided there), a `wait=0` collect every
     /// ``backgroundCollectPause``, and back in the foreground after a background since the last collect went (it stopped
     /// the collector), one more; none of them moves the end or gives another last collect (chosen; the shared rule with
-    /// Android #307, the erratum to follow). Then the drop, unless a `device.paired` or a refusal came, or the session
-    /// ended meanwhile (a wipe or a sign-out since [sessionEnds], or `mailbox_unknown`).
-    private func lastLook(_ d: VaultDevice, clock: WindowClock, sessionEnds: Int) async -> WindowEnd {
+    /// Android #307, the erratum to follow), except that a look's collect that is cut or refused while the one more last
+    /// collect is unused uses it: nil is returned, and the window goes back for that collect (held) before the drop. Then
+    /// the drop, unless a `device.paired` or a refusal came, or the session ended meanwhile (a wipe or a sign-out since
+    /// [sessionEnds], or `mailbox_unknown`).
+    private func lastLook(_ d: VaultDevice, clock: WindowClock, sessionEnds: Int) async -> WindowEnd? {
         let waited = clock.backgroundSinceFinal(self)
         while backgrounded, !Task.isCancelled {
             await backgroundPause()
-            if let end = await lookOnce(d, clock: clock, sessionEnds: sessionEnds) { return end }
+            switch await lookOnce(d, clock: clock, sessionEnds: sessionEnds) {
+            case .ends(let end): return end
+            case .again: return nil
+            case nil: break
+            }
         }
-        if waited, let end = await lookOnce(d, clock: clock, sessionEnds: sessionEnds) { return end }
+        if waited {
+            switch await lookOnce(d, clock: clock, sessionEnds: sessionEnds) {
+            case .ends(let end): return end
+            case .again: return nil
+            case nil: break
+            }
+        }
         return await pairedOrRejected(d)
     }
 
+    /// How a look ended: with the window's end, or with the one more last collect to make.
+    private enum Look {
+        case ends(WindowEnd)
+        case again
+    }
+
     /// One `wait=0` collect of the last look, and what it ends with, if anything.
-    private func lookOnce(_ d: VaultDevice, clock: WindowClock, sessionEnds: Int) async -> WindowEnd? {
-        if moveFlags.book.sessionEnds != sessionEnds { return .ended(drop: false) }
-        if case .gone = await windowCollect(d, wait: 0, last: false, clock: clock) { return .ended(drop: true) }
-        if moveFlags.book.sessionEnds != sessionEnds { return .ended(drop: false) }
+    private func lookOnce(_ d: VaultDevice, clock: WindowClock, sessionEnds: Int) async -> Look? {
+        if moveFlags.book.sessionEnds != sessionEnds { return .ends(.ended(drop: false)) }
+        let notes = clock.notesNow(self, d)
+        // As the last collect: a refusal of it (429, a stale signature) uses the one more too.
+        if case .gone = await windowCollect(d, wait: 0, last: true, clock: clock) { return .ends(.ended(drop: true)) }
+        if moveFlags.book.sessionEnds != sessionEnds { return .ends(.ended(drop: false)) }
         let found = await pairedOrRejected(d)
-        if case .nothing = found { return nil }
-        return found
+        guard case .nothing = found else { return .ends(found) }
+        return clock.redoneAfterLook(self, d, notesBefore: notes) ? .again : nil
     }
 
     /// Between collects: a pause after a failure (1 s, doubled, at most 8 s), or while the collector long-polls; in the

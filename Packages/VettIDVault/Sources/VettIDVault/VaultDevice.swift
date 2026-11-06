@@ -208,6 +208,8 @@ public final class VaultDevice: @unchecked Sendable {
     let reconnectBroadcast = Broadcast<Int>()
     /// How many times the collection came back (``relayReconnects()``).
     var reconnects = 0, collectCuts: (count: Int, sent: CollectSent?) = (0, nil), collectStreaming = false
+    /// When the latest cut was noticed (uptime).
+    var collectCutNoticed: TimeInterval?
     var isPaired: Bool
     var sas: String?
     var refusals = 0
@@ -486,6 +488,7 @@ public final class VaultDevice: @unchecked Sendable {
             // A request out is cut: what the relay handed it may stay leased (``collectorCuts``).
             if let out = collectSince {
                 collectCuts = (collectCuts.count + 1, collectStreaming ? (cfg.uptime(), 0) : out.sent)
+                collectCutNoticed = cfg.uptime()
                 collectLastEnded = cfg.uptime()
             }
             defer { (collector, collectSince, collectRound, collectStreaming) = (nil, nil, collectRound + 1, false) }

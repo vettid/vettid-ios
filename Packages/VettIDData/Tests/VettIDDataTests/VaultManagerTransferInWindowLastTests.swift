@@ -11,7 +11,7 @@ import VettIDTesting
 /// session's collector is followed after its session went; and a window kept alive in the background collects slowly.
 extension VaultManagerTransferInTests {
     /// The window's collect handed the pairing at 150 s, a freeze to 170 s cutting it: the end goes to the cap (185 s),
-    /// and the last collect there waits to 225 s, released at 225 s. Returns with the pairing leased.
+    /// and the last collect there waits to 245 s (the wake + V + 15 s), released at 245 s. Returns with the pairing leased.
     func lastCollectAfterAFreeze() async throws {
         try await windowOnFrozenClocks()
         m.session?.device.stop()
@@ -25,8 +25,8 @@ extension VaultManagerTransferInTests {
         #expect(await eventually { phone.windowPauses.lengths == [90, 15] }, "to the cap: \(phone.windowPauses.lengths)")
         try await advance(15)
         phone.windowPauses.release()
-        #expect(await eventually { phone.windowPauses.lengths == [90, 15, 40] }, "the hold: \(phone.windowPauses.lengths)")
-        try await advance(40)
+        #expect(await eventually { phone.windowPauses.lengths == [90, 15, 60] }, "the hold: \(phone.windowPauses.lengths)")
+        try await advance(60)
     }
 
     /// The last collect refused `429` (`Retry-After: 7`): one more goes 7 s later, on a request signed anew, and applies
@@ -36,7 +36,7 @@ extension VaultManagerTransferInTests {
         try await lastCollectAfterAFreeze()
         service.refuseNextCollects(1)
         phone.windowPauses.release()
-        #expect(await eventually { phone.windowPauses.lengths == [90, 15, 40, 7] }, "\(phone.windowPauses.lengths)")
+        #expect(await eventually { phone.windowPauses.lengths == [90, 15, 60, 7] }, "\(phone.windowPauses.lengths)")
         #expect(m.record.value.transferStartedMs != nil, "not dropped")
         service.endLeases()
         phone.windowPauses.release()
@@ -50,7 +50,7 @@ extension VaultManagerTransferInTests {
         try await lastCollectAfterAFreeze()
         service.refuseNextCollects(1)
         phone.windowPauses.release()
-        #expect(await eventually { phone.windowPauses.lengths == [90, 15, 40, 7] }, "\(phone.windowPauses.lengths)")
+        #expect(await eventually { phone.windowPauses.lengths == [90, 15, 60, 7] }, "\(phone.windowPauses.lengths)")
         try await advance(7)
         // The one more last collect is handed the pairing, and held out.
         let gate = FakeHTTPServer.Gate()
@@ -69,7 +69,7 @@ extension VaultManagerTransferInTests {
         m.onForeground()
         #expect(await eventually { m.record.value.transferStartedMs == nil }, "dropped back in the foreground")
         #expect(m.moveFlags.book.finalCollects == finals + 1, "no last collect more")
-        #expect(phone.windowPauses.lengths == [90, 15, 40, 7], "no hold more: \(phone.windowPauses.lengths)")
+        #expect(phone.windowPauses.lengths == [90, 15, 60, 7], "no hold more: \(phone.windowPauses.lengths)")
     }
 
     /// A cut of the collector of a session's device (not the window's) is followed after the session went (a
@@ -150,7 +150,7 @@ extension VaultManagerTransferInTests {
         try await lastCollectAfterAFreeze()
         service.refuseNextCollects(1)
         phone.windowPauses.release()
-        #expect(await eventually { phone.windowPauses.lengths == [90, 15, 40, 7] }, "\(phone.windowPauses.lengths)")
+        #expect(await eventually { phone.windowPauses.lengths == [90, 15, 60, 7] }, "\(phone.windowPauses.lengths)")
         try await advance(7)
         let gate = FakeHTTPServer.Gate()
         service.holdsCollectAnswersOfWait = 0
@@ -288,6 +288,42 @@ extension VaultManagerTransferInTests {
         m.onForeground()
     }
 
+    /// The last collect at the cap succeeds with the app backgrounded and back meanwhile (a bare background: the one more
+    /// is unused), and the window goes to its look; the look's collect fails (a 5xx): the window does not drop, a held last
+    /// collect goes no sooner than the look's send + V + 15 s, and then the drop.
+    @Test func aCutOfTheLastLooksCollectGivesTheOneMoreHeld() async throws {
+        defer { phone.close() }
+        try await windowOnFrozenClocks()
+        let d = try #require(m.session?.device)
+        let from = service.relay.requests.count
+        d.stop()
+        // The window collects on its own: long polls (the first collect, sent before the stop, is over).
+        #expect(await eventually { collectWaits(from: from).contains(25) }, "the window's own long polls")
+        try await advance(3)
+        // At the window's end, its last collect is handed a message the window ignores, and held out.
+        let gate = FakeHTTPServer.Gate()
+        service.holdsCollectAnswersOfWait = 0
+        service.holdsCollectAnswers = gate
+        service.sendStrayDeviceList()
+        let finals = m.moveFlags.book.finalCollects
+        phone.windowPauses.release()
+        #expect(await eventually { gate.waiting > 0 && m.moveFlags.book.finalCollects == finals + 1 }, "the last collect is out")
+        // The app went to the background and back meanwhile (its device, stopped here, keeps no collector).
+        m.moveFlags.book.backgrounds += 1
+        // The look's collect fails.
+        service.holdsCollectAnswers = nil
+        service.failNextCollects(1)
+        gate.open()
+        #expect(await eventually { service.collectFailuresLeft == 0 }, "the look's collect failed")
+        // Held until its send + V + 15 s (the clocks are frozen: 75 s).
+        #expect(await eventually { phone.windowPauses.lengths == [90, 75] }, "a held last collect: \(phone.windowPauses.lengths)")
+        #expect(m.record.value.transferStartedMs != nil, "not dropped at the look")
+        #expect(m.moveFlags.book.finalCollects == finals + 1, "the held collect has not gone")
+        phone.windowPauses.release()
+        #expect(await eventually(within: .seconds(30)) { m.record.value.transferStartedMs == nil }, "then the drop")
+        #expect(m.moveFlags.book.finalCollects == finals + 2, "one more last collect only")
+    }
+
     /// A window's heartbeat stopped during its sleep follows nothing more: a session's device it had not seen is not
     /// marked to collect on connections of its own.
     @Test func aStoppedHeartbeatFollowsNothingMore() async throws {
@@ -320,7 +356,7 @@ extension VaultManagerTransferInTests {
         try await lastCollectAfterAFreeze()
         service.refuseNextCollects(1)
         phone.windowPauses.release()
-        #expect(await eventually { phone.windowPauses.lengths == [90, 15, 40, 7] }, "\(phone.windowPauses.lengths)")
+        #expect(await eventually { phone.windowPauses.lengths == [90, 15, 60, 7] }, "\(phone.windowPauses.lengths)")
         try await advance(7)
         let gate = FakeHTTPServer.Gate()
         service.holdsCollectAnswersOfWait = 0
