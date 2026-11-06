@@ -135,6 +135,8 @@ extension VaultManager {
     /// the drop, unless a `device.paired` or a refusal came, or the session ended meanwhile (a wipe or a sign-out since
     /// [sessionEnds], or `mailbox_unknown`).
     private func lastLook(_ d: VaultDevice, clock: WindowClock, sessionEnds: Int) async -> WindowEnd? {
+        // A hold raised during the one more last collect is waited for first, and one `wait=0` look follows it.
+        let held = await clock.holdAfterExtra(self)
         let waited = clock.backgroundSinceFinal(self)
         while backgrounded, !Task.isCancelled {
             await backgroundPause()
@@ -144,7 +146,7 @@ extension VaultManager {
             case nil: break
             }
         }
-        if waited {
+        if waited || held {
             switch await lookOnce(d, clock: clock, sessionEnds: sessionEnds) {
             case .ends(let end): return end
             case .again: return nil

@@ -68,7 +68,7 @@ extension VaultManagerTransferInTests {
     }
 
     /// The collector cut by a background 20 s after the first end, the pairing leased for the visibility timeout: the end
-    /// moves to now + 60 s (the cap, the first end + 95 s, leaves room for it; one of the first end + 60 s would not).
+    /// moves to the notice + 15 s + V, now + 75 s (the cap, the first end + 95 s, leaves room for it; one of the first end + 60 s would not).
     @Test func aCutAfterTheFirstEndIsCoveredByTheCap() async throws {
         defer { phone.close() }
         let gate = try await windowAtItsEndWithThePairingOut()
@@ -77,7 +77,7 @@ extension VaultManagerTransferInTests {
         service.holdsCollectAnswers = nil
         gate.open()
         m.onForeground()
-        #expect(await eventually { phone.windowPauses.lengths == [90, 60] }, "\(phone.windowPauses.lengths)")
+        #expect(await eventually { phone.windowPauses.lengths == [90, 75] }, "\(phone.windowPauses.lengths)")
         service.endLeases()
         #expect(await eventually(within: .seconds(30)) { m.finishMovePending && m.record.value.transferStartedMs == nil })
         phone.windowPauses.release()

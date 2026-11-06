@@ -85,8 +85,8 @@ extension VaultManagerTransferInTests {
         phone.heartbeatPauses.release()
     }
 
-    /// After the extra is given, freezes with a request out are held for (their lease from the wake) while the hold ends at
-    /// or below the cap, then one past it, and no further one.
+    /// The budget: after the extra is given, freezes with a request out are held for (their lease from the wake) while the
+    /// hold ends at or below the cap, then the first one past it (free), and no further one.
     @Test func aFreezeAfterTheOneMoreIsHeldForOnce() async throws {
         defer { phone.close() }
         _ = try await scanned()
@@ -123,8 +123,8 @@ extension VaultManagerTransferInTests {
         phone.heartbeatPauses.release()
     }
 
-    /// The extra is given by a cut whose hold ends under the cap; a cut noticed during that hold, whose lease runs past
-    /// the cap, is still held for.
+    /// The budget: the extra is given by a cut whose hold ends under the cap; a cut noticed during that hold, whose lease
+    /// runs past the cap, is still held for (the first hold past the cap is free).
     @Test func aLeasePastTheCapDuringACutExtrasHoldIsHeldFor() async throws {
         defer { phone.close() }
         _ = try await scanned()
@@ -158,7 +158,7 @@ extension VaultManagerTransferInTests {
     }
 
     /// A window of V = 60 (first end 90 s, cap 185 s) whose last collect's reply is lost at 90.5 s: the extra, held to
-    /// 165 s, under the cap. Returns the clock, its start, and a stepper of the uptime.
+    /// 90.5 + 15 + V = 165.5 s, under the cap. Returns the clock, its start, and a stepper of the uptime.
     private func extraGivenBeforeTheCap(_ d: VaultDevice) async throws -> (VaultManager.WindowClock, TimeInterval) {
         phone.freezeClocks()
         phone.heartbeatPauses.holding = true
@@ -172,7 +172,7 @@ extension VaultManagerTransferInTests {
         step(clock, d, t0, to: 90.5)
         clock.cut(m, d, sent: clock.own.out)
         #expect(!clock.dropsAfterFinalCollect(m, d), "the one more last collect")
-        #expect(clock.finalNotBefore == t0 + 165, "under the cap")
+        #expect(clock.finalNotBefore == t0 + 165.5, "under the cap")
         return (clock, t0)
     }
 
@@ -183,8 +183,8 @@ extension VaultManagerTransferInTests {
         }
     }
 
-    /// After an extra given before the cap, a freeze whose hold ends under the cap is free: it does not use up the one
-    /// hold past the cap, which a later cut's lease still gets.
+    /// The budget: after an extra given before the cap, a freeze whose hold ends under the cap is free; the first hold past
+    /// the cap is free too, and a later cut's lease gets it.
     @Test func aHoldUnderTheCapAfterTheExtraDoesNotUseUpTheOnePastIt() async throws {
         defer { phone.close() }
         _ = try await scanned()
@@ -197,16 +197,18 @@ extension VaultManagerTransferInTests {
         phone.uptimeAhead += 11
         clock.follow(m, d)
         #expect(clock.finalNotBefore == t0 + 181, "the freeze is held for, under the cap")
-        // A collect sent at 149 s loses its reply at 150 s: its lease runs to 224 s, past the cap, and is held for.
+        // A collect sent at 149 s loses its reply at 150 s: its lease runs to 150 + 15 + V = 225 s, past the cap, and is
+        // held for (the first hold past the cap).
         step(clock, d, t0, to: 150)
         clock.cut(m, d, sent: .init(at: t0 + 149, wait: 0))
-        #expect(clock.finalNotBefore == t0 + 224, "the one hold past the cap")
+        #expect(clock.finalNotBefore == t0 + 225, "the first hold past the cap")
         clock.stop()
         phone.heartbeatPauses.release()
     }
 
-    /// After an extra given before the cap, a cut whose lease ends under the cap, later than the extra's hold, is held for.
-    @Test func aCutUnderTheCapAfterTheExtraIsHeldFor() async throws {
+    /// The budget: after an extra given before the cap, a cut whose lease ends under the cap, later than the extra's hold,
+    /// moves the end out to the end of its lease (free: the cap bounds it), so that the last collect after it is not before.
+    @Test func aCutUnderTheCapAfterTheExtraMovesTheEndToItsLease() async throws {
         defer { phone.close() }
         _ = try await scanned()
         let d = try #require(m.session?.device)
@@ -214,7 +216,7 @@ extension VaultManagerTransferInTests {
         let (clock, t0) = try await extraGivenBeforeTheCap(d)
         step(clock, d, t0, to: 106)
         clock.cut(m, d, sent: .init(at: t0 + 105, wait: 0))
-        #expect(clock.finalNotBefore == t0 + 180, "its lease ends at 105 + 15 + V = 180 s, under the cap")
+        #expect(clock.until == t0 + 181, "its lease ends at 106 + 15 + V = 181 s, under the cap")
         clock.stop()
         phone.heartbeatPauses.release()
     }
@@ -307,12 +309,12 @@ extension VaultManagerTransferInTests {
         return (clock, t0)
     }
 
-    /// A cut noticed after its request's answer was due (send + wait + 15 s): the lease may run from the notice, so the end
-    /// moves to the notice + V, not to send + wait + 15 s + V.
+    /// A cut noticed after its request's answer was due (send + wait): the lease may run from the notice, so the end
+    /// moves to the notice + 15 s + V, not to send + wait + 15 s + V.
     @Test func aCutNoticedLateCountsTheLeaseFromTheNotice() async throws {
         defer { phone.close() }
         let (clock, t0) = try await cutNoticedLate(sendAt: 20)
-        #expect(clock.until == t0 + 80 + 60, "the notice (80 s) + V, not send + wait + 15 + V = 120 s: \(clock.until - t0)")
+        #expect(clock.until == t0 + 80 + 15 + 60, "the notice (80 s) + 15 + V, not send + wait + 15 + V = 120 s: \(clock.until - t0)")
         clock.stop()
         phone.heartbeatPauses.release()
     }
@@ -323,7 +325,7 @@ extension VaultManagerTransferInTests {
         defer { phone.close() }
         let (clock, t0) = try await cutNoticedLate(sendAt: 75)
         #expect(clock.until == t0 + 185, "to the cap")
-        #expect(clock.finalNotBefore == t0 + 135 + 60, "the notice (135 s) + V")
+        #expect(clock.finalNotBefore == t0 + 135 + 15 + 60, "the notice (135 s) + 15 + V")
         clock.stop()
         phone.heartbeatPauses.release()
     }
@@ -369,10 +371,150 @@ extension VaultManagerTransferInTests {
         let now = m.config.uptime()
         clock.cut(m, d, sent: .init(at: now, wait: 25))
         phone.windowPauses.release()
-        #expect(await eventually { phone.windowPauses.lengths == [10, 100] }, "the cut's lease is held: \(phone.windowPauses.lengths)")
+        // (81 s: the window's timer, moved out to the cap by the cut.)
+        let lengths = { phone.windowPauses.lengths.sorted() }
+        #expect(await eventually { lengths() == [10, 81, 100] }, "the cut's lease is held: \(phone.windowPauses.lengths)")
         phone.windowPauses.holding = false
         phone.windowPauses.release()
         await waiting.value
+        clock.stop()
+        phone.heartbeatPauses.release()
+    }
+
+    /// The window's second last collect (the one more) goes at [secondAt] after the first, a refusal of the first having
+    /// given it: the clock, its start, and the end of the window when the second goes (V = 60, first end 90 s, cap 185 s).
+    private func secondLastCollectOut(_ d: VaultDevice) async throws -> (VaultManager.WindowClock, TimeInterval) {
+        phone.freezeClocks()
+        phone.heartbeatPauses.holding = true
+        let clock = VaultManager.WindowClock(visibility: 60, backgrounds: m.moveFlags.book.backgrounds, background: false)
+        let t0 = m.config.uptime()
+        clock.start(m, d)
+        step(clock, d, t0, to: 90)
+        #expect(await eventually { clock.over }, "the window is over")
+        await clock.waitForFinalCollect(m)
+        clock.own.sent(.init(at: m.config.uptime(), wait: 0))
+        // The last collect at 90 s is refused (429, `retry_after` 1): the one more, at 91 s.
+        clock.refused(m, retryAfter: 1)
+        #expect(!clock.dropsAfterFinalCollect(m, d), "the one more last collect")
+        step(clock, d, t0, to: 91)
+        await clock.waitForFinalCollect(m)
+        clock.own.sent(.init(at: m.config.uptime(), wait: 0))
+        return (clock, t0)
+    }
+
+    /// The budget: a cut noticed during the one more's own collect, whose lease ends under the cap, moves the end out to
+    /// it (V 60: the collector's poll written at 80 s, wait 25 s, lost, noticed at 92 s: 105 + 15 + V = 180 s): the window
+    /// does not drop at 92 s but collects on and makes a last collect at the new end.
+    @Test func aCutDuringTheOneMoresCollectUnderTheCapMovesTheEnd() async throws {
+        defer { phone.close() }
+        _ = try await scanned()
+        let d = try #require(m.session?.device)
+        d.stop()
+        let (clock, t0) = try await secondLastCollectOut(d)
+        step(clock, d, t0, to: 92)
+        clock.cut(m, d, sent: .init(at: t0 + 80, wait: 25))
+        #expect(clock.until == t0 + 180, "the end moves out within the cap: \(clock.until - t0)")
+        #expect(!clock.dropsAfterFinalCollect(m, d), "no drop at 92 s, with the lease running to 180 s")
+        step(clock, d, t0, to: 180)
+        #expect(await eventually { clock.over }, "the window is over at 180 s")
+        await clock.waitForFinalCollect(m)
+        clock.own.sent(.init(at: m.config.uptime(), wait: 0))
+        #expect(clock.dropsAfterFinalCollect(m, d), "the last collect after the lease: the drop")
+        clock.stop()
+        phone.heartbeatPauses.release()
+    }
+
+    /// The budget: the window's end is at the cap already (a freeze early on), the one more is given (a refusal), and a
+    /// freeze during its collect leases past the cap: the first hold past the cap is free, so the window waits for it and
+    /// makes one `wait=0` look before the drop (the end cannot move any more), once.
+    @Test func aFreezeDuringTheOneMoresCollectIsHeldForWithALook() async throws {
+        defer { phone.close() }
+        _ = try await scanned()
+        let d = try #require(m.session?.device)
+        d.stop()
+        phone.freezeClocks()
+        phone.heartbeatPauses.holding = true
+        let clock = VaultManager.WindowClock(visibility: 60, backgrounds: m.moveFlags.book.backgrounds, background: false)
+        let t0 = m.config.uptime()
+        clock.start(m, d)
+        step(clock, d, t0, to: 20)
+        // A freeze to 190 s: the end goes to the cap (185 s), nothing was out to hold the last collect for.
+        phone.uptimeAhead += 170
+        clock.follow(m, d)
+        #expect(clock.until == t0 + 185, "the cap")
+        #expect(clock.finalNotBefore == nil)
+        await clock.waitForFinalCollect(m)
+        clock.own.sent(.init(at: m.config.uptime(), wait: 0))
+        clock.refused(m, retryAfter: 1)
+        #expect(!clock.dropsAfterFinalCollect(m, d), "the one more last collect")
+        await clock.waitForFinalCollect(m)
+        let sent = m.config.uptime()
+        clock.own.sent(.init(at: sent, wait: 0))
+        // A freeze of 20 s with that collect out: its lease runs to the wake + V + 15 s, past the cap.
+        phone.uptimeAhead += 20
+        clock.follow(m, d)
+        #expect(clock.finalNotBefore == sent + 20 + 75, "the first hold past the cap")
+        #expect(clock.dropsAfterFinalCollect(m, d), "the end cannot move: the drop is next")
+        phone.windowPauses.holding = true
+        let waiting = Task { @MainActor in await clock.holdAfterExtra(m) }
+        #expect(await eventually { phone.windowPauses.lengths == [75] }, "the hold of the freeze: \(phone.windowPauses.lengths)")
+        phone.windowPauses.release()
+        #expect(await waiting.value, "the hold is waited for, then a look")
+        #expect(await !clock.holdAfterExtra(m), "once")
+        clock.stop()
+        phone.heartbeatPauses.release()
+    }
+
+    /// The budget: a hold past the cap that was taken before the one more is the first one (free); after the one more, no
+    /// other hold past the cap is taken (the one more is the extra).
+    @Test func noSecondHoldPastTheCapIsTakenAfterTheOneMore() async throws {
+        defer { phone.close() }
+        _ = try await scanned()
+        let d = try #require(m.session?.device)
+        d.stop()
+        phone.freezeClocks()
+        phone.heartbeatPauses.holding = true
+        let clock = VaultManager.WindowClock(visibility: 60, backgrounds: m.moveFlags.book.backgrounds, background: false)
+        let t0 = m.config.uptime()
+        clock.start(m, d)
+        step(clock, d, t0, to: 150)
+        // A request out at 150 s, a freeze to 190 s (past the cap): the first hold past the cap, 190 + 25 + 75.
+        clock.own.sent(.init(at: m.config.uptime(), wait: 25))
+        phone.uptimeAhead += 40
+        clock.follow(m, d)
+        let first = clock.finalNotBefore
+        #expect(first == t0 + 190 + 25 + 75, "the first hold past the cap")
+        await clock.waitForFinalCollect(m)
+        clock.own.sent(.init(at: m.config.uptime(), wait: 0))
+        clock.refused(m, retryAfter: 1)
+        #expect(!clock.dropsAfterFinalCollect(m, d), "the one more last collect")
+        await clock.waitForFinalCollect(m)
+        clock.own.sent(.init(at: m.config.uptime(), wait: 25))
+        phone.uptimeAhead += 20
+        clock.follow(m, d)
+        #expect(clock.finalNotBefore == first, "no other hold past the cap")
+        clock.stop()
+        phone.heartbeatPauses.release()
+    }
+
+    /// A request sent between a late tick and a freeze (after the last tick by more than a tick, but longer ago than the
+    /// freeze gap) was out when the freeze began: its lease is held for.
+    @Test func aSendBetweenALateTickAndTheFreezeIsHeldFor() async throws {
+        defer { phone.close() }
+        _ = try await scanned()
+        let d = try #require(m.session?.device)
+        d.stop()
+        phone.freezeClocks()
+        phone.heartbeatPauses.holding = true
+        let clock = VaultManager.WindowClock(visibility: 60, backgrounds: m.moveFlags.book.backgrounds, background: false)
+        clock.start(m, d)
+        clock.follow(m, d)
+        // The next tick is late: a request goes out 5 s after the last one, and 20 s later the freeze is seen.
+        phone.uptimeAhead += 5
+        clock.own.sent(.init(at: m.config.uptime(), wait: 25))
+        phone.uptimeAhead += 20
+        clock.follow(m, d)
+        #expect(clock.finalNotBefore == m.config.uptime() + 25 + 60 + 15, "the freeze holds the last collect for it")
         clock.stop()
         phone.heartbeatPauses.release()
     }
