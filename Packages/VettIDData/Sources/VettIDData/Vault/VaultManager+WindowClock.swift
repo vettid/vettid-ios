@@ -51,16 +51,17 @@ extension VaultManager {
     /// sooner than that lease end (for a freeze, s + V + 15 s, ``holdMargin``; s the latest request sent at or before the
     /// freeze). A cut, a freeze (each counts as a note) while that last collect is out, or during its hold, and a refusal
     /// of it (429, a stale signature), give one more last collect (at most one per window, so held last collects cannot
-    /// repeat; and once it is given, or two last collects went, nothing holds one further), no sooner than the lease end
-    /// of the cut, its own s + V + 15 s for a freeze, the hold raised meanwhile, or the refusal's `retry_after` (at most
-    /// V). A bare background gives nothing. After the last collect, in the foreground, the window takes a last look
+    /// repeat), no sooner than the lease end of the cut, of a freeze noted meanwhile (the wake + the wait of what was sent
+    /// before it + V + 15 s), the hold raised meanwhile, or the refusal's `retry_after` (at most V). A bare background
+    /// gives nothing, and the same notes during the looks give the one more too, if it is unused. Once it is given, one
+    /// hold more is allowed (a cut's lease, or a freeze's, noticed during the extra's hold, which is waited for once),
+    /// then none. After the last collect, in the foreground, the window takes a last look
     /// (``VaultManager/lastLook(_:clock:sessionEnds:)``: a `wait=0` collect after a background); a cut or a refusal of the
     /// look's collect, while the one more is still unused, gives it (no sooner than that collect's send + V + 15 s), and
     /// the drop follows that one's look. A freeze leases whatever was sent before it from the wake + that request's `wait`
-    /// (the relay may be handed it only then). A cut noticed during the hold of the one more, whose lease runs past the
-    /// cap, is held for too, once. So the drop comes at most 25 s + 5 × ``collectSlack`` + 2 × 30 s + 3 × (V + 40 s)
-    /// of foreground time past the cap (a collect out at the end, three holds, two last collects and two looks, the
-    /// collector's round after each last collect); time in the background or frozen comes on top (chosen; the shared
+    /// (the relay may be handed it only then). So the drop comes at most 25 s + 5 × ``collectSlack`` + 2 × 30 s + 8 s +
+    /// 3 × (V + 40 s) of foreground time past the cap (a collect out at the end, three holds, two last collects and two
+    /// looks, the collector's round after each last collect, the pause (at most 8 s) after the extra is given); time in the background or frozen comes on top (chosen; the shared
     /// rule with Android #307, the erratum to follow).
     @MainActor
     final class WindowClock {
@@ -80,6 +81,8 @@ extension VaultManager {
         private var finalRedone = false
         /// Whether a cut's lease hold exists since the one more was given (the redo's own, or one noticed meanwhile).
         private var leaseHeld = false
+        /// The latest end of a freeze's lease noted.
+        private var freezeHoldAt: TimeInterval?
         private var finalsGone = 0
         private var refusedUntil: TimeInterval?
         /// The backgrounds counted when the last collect went.
@@ -216,24 +219,37 @@ extension VaultManager {
             if let sent { holdFinal(sent) }
         }
 
+        /// A freeze's hold (or a cut attributed to a freeze): the last collect waits until [sent] + V + 15 s.
         private func holdFinal(_ sent: TimeInterval) {
-            // Once the one more last collect is given, or two have gone, nothing holds one further (chosen; the shared
-            // rule with Android #307, the erratum to follow).
-            guard !finalRedone, finalsGone < 2 else { return }
-            finalNotBefore = max(finalNotBefore ?? 0, sent + visibility + VaultManager.holdMargin)
+            let at = sent + visibility + VaultManager.holdMargin
+            // Kept whatever follows: the one more last collect, if it is given because of this freeze, waits for it too.
+            freezeHoldAt = max(freezeHoldAt ?? 0, at)
+            raiseHold(to: at)
         }
 
-        /// The hold of the one more last collect being given now: the request's send + wait + V + 15 s.
+        /// A cut's lease hold: the last collect waits until the end of the lease ([lease] + V).
         private func holdForLease(_ lease: TimeInterval) {
-            // The first lease hold after the one more is given is free (a cut noticed during its hold); then none moves it.
-            guard finalsGone < 2, !finalRedone || !leaseHeld else { return }
-            if finalRedone { leaseHeld = true }
-            finalNotBefore = max(finalNotBefore ?? 0, lease + visibility)
+            raiseHold(to: lease + visibility)
         }
 
-        private func holdForRedo(_ lease: TimeInterval) {
-            leaseHeld = true
-            finalNotBefore = max(finalNotBefore ?? 0, lease + visibility)
+        /// Raises the hold of the next last collect. Before the one more is given, a hold only moves out (a last collect
+        /// is made when a note comes after the last one, so it is always used by it). After it is given, one hold more is
+        /// allowed (a lease noticed during the extra's hold), then none (chosen; the shared rule with Android #307, the
+        /// erratum to follow).
+        private func raiseHold(to at: TimeInterval) {
+            if finalRedone {
+                guard !leaseHeld else { return }
+                leaseHeld = true
+            }
+            finalNotBefore = max(finalNotBefore ?? 0, at)
+        }
+
+        /// The hold of the one more last collect being given now for a cut: the end of the cut's lease, and of any
+        /// freeze's lease noted since. It is the first lease hold only if it runs past the cap.
+        private func holdForRedo(_ lease: TimeInterval, now: TimeInterval) {
+            let at = max(lease + visibility, freezeHoldAt ?? 0)
+            finalNotBefore = max(finalNotBefore ?? 0, at)
+            if at > cap || now >= cap { leaseHeld = true }
         }
 
         /// The start of the lease of what the cut request [sent] may have been handed: no earlier than the cut was noticed.
@@ -324,8 +340,7 @@ extension VaultManager {
             guard over else { return }
             notesAtFinal = notes
             refusedUntil = nil
-            // The hold is read once; but the first lease hold raised during it (after the one more was given) is waited
-            // for too, once.
+            // The hold is read once; but the one hold raised during it after the one more was given is waited for too.
             let held = leaseHeld
             if let at = finalNotBefore, at > m.config.uptime() {
                 try? await m.config.transferWindowSleep(.seconds(at - m.config.uptime()))
@@ -343,19 +358,15 @@ extension VaultManager {
             m.backgrounded || m.moveFlags.book.backgrounds != backgroundsAtFinal
         }
 
-        /// The notes so far, to compare after a look's collect (``redoneAfterLook(_:_:notesBefore:)``).
-        func notesNow(_ m: VaultManager, _ d: VaultDevice) -> Int {
+        /// After a collect of the last look: whether a cut (a lost reply, a 5xx, an unreadable answer, or the window stopped),
+        /// a freeze, or a refusal (429, a stale signature) came since the last collect went, while the one more last
+        /// collect is unused: then that one is given, no sooner than the end of the lease of the cut or the freeze, or the
+        /// refusal's `retry_after` (at most V).
+        func redoneAfterLook(_ m: VaultManager, _ d: VaultDevice) -> Bool {
             follow(m, d)
-            return notes
-        }
-
-        /// After a collect of the last look: whether it was cut (a lost reply, a 5xx, an unreadable answer, or the window
-        /// stopped) or refused (429, a stale signature) while the one more last collect is unused: then that one is given,
-        /// no sooner than the look's send + wait + V + 15 s, or the refusal's `retry_after` (at most V).
-        func redoneAfterLook(_ m: VaultManager, _ d: VaultDevice, notesBefore: Int) -> Bool {
-            follow(m, d)
-            guard !finalRedone, notes != notesBefore || refusedUntil != nil else { return false }
-            if notes != notesBefore, let s = own.last?.answered { holdForRedo(leaseOfCut(s)) }
+            let noted = notesAtFinal.map { notes != $0 } ?? false
+            guard !finalRedone, noted || refusedUntil != nil else { return false }
+            if noted { holdForRedo(own.last.map { leaseOfCut($0.answered) } ?? 0, now: m.config.uptime()) }
             if let r = refusedUntil { finalNotBefore = max(finalNotBefore ?? 0, r) }
             finalRedone = true
             return true
@@ -369,7 +380,7 @@ extension VaultManager {
             if finalRedone, finalsGone >= 2 { return true }
             let cutDuring = notesAtFinal.map { notes != $0 } ?? false
             if cutDuring || refusedUntil != nil, !finalRedone {
-                if cutDuring, let s = own.last?.answered { holdForRedo(leaseOfCut(s)) }
+                if cutDuring { holdForRedo(own.last.map { leaseOfCut($0.answered) } ?? 0, now: m.config.uptime()) }
                 if let r = refusedUntil { finalNotBefore = max(finalNotBefore ?? 0, r) }
                 finalRedone = true
                 return false

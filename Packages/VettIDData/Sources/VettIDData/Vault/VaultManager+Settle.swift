@@ -163,13 +163,12 @@ extension VaultManager {
     /// One `wait=0` collect of the last look, and what it ends with, if anything.
     private func lookOnce(_ d: VaultDevice, clock: WindowClock, sessionEnds: Int) async -> Look? {
         if moveFlags.book.sessionEnds != sessionEnds { return .ends(.ended(drop: false)) }
-        let notes = clock.notesNow(self, d)
         // As the last collect: a refusal of it (429, a stale signature) uses the one more too.
         if case .gone = await windowCollect(d, wait: 0, last: true, clock: clock) { return .ends(.ended(drop: true)) }
         if moveFlags.book.sessionEnds != sessionEnds { return .ends(.ended(drop: false)) }
         let found = await pairedOrRejected(d)
         guard case .nothing = found else { return .ends(found) }
-        return clock.redoneAfterLook(self, d, notesBefore: notes) ? .again : nil
+        return clock.redoneAfterLook(self, d) ? .again : nil
     }
 
     /// Between collects: a pause after a failure (1 s, doubled, at most 8 s), or while the collector long-polls; in the

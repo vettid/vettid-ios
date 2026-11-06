@@ -55,24 +55,38 @@ extension VaultManagerTransferInTests {
         phone.heartbeatPauses.release()
     }
 
-    /// Once two last collects went, nothing holds a further one: a freeze with a request out raises no hold.
-    @Test func aFreezeAfterTwoLastCollectsHoldsNothing() async throws {
+    /// Two last collects went (a bare background during each), and the look in the background, whose request is out, is
+    /// frozen: the freeze's lease is held for, and the unused extra is given for it, where the window would have dropped
+    /// with the lease running.
+    @Test func aFreezeInTheLookAfterTwoLastCollectsGivesTheHeldExtra() async throws {
         defer { phone.close() }
         _ = try await scanned()
         let d = try #require(m.session?.device)
         d.stop()
         let (clock, _) = try await lastCollectOut(d)
-        await clock.waitForFinalCollect(m)
+        for round in 0..<2 {
+            if round == 1 {
+                await clock.waitForFinalCollect(m)
+                clock.own.sent(.init(at: m.config.uptime(), wait: 0))
+            }
+            m.moveFlags.book.backgrounds += 1
+            _ = clock.dropsAfterFinalCollect(m, d)
+            #expect(await eventually { clock.over }, "the window is over again")
+            #expect(clock.dropsAfterFinalCollect(m, d), "the look, not the extra: a bare background")
+        }
+        // The look's collect is out, and the phone is suspended.
         clock.own.sent(.init(at: m.config.uptime(), wait: 0))
-        phone.uptimeAhead += 20
         clock.follow(m, d)
-        #expect(clock.finalNotBefore == nil, "no hold after two last collects")
+        phone.uptimeAhead += 30
+        clock.follow(m, d)
+        #expect(clock.redoneAfterLook(m, d), "the extra is given")
+        #expect(clock.finalNotBefore == m.config.uptime() + 75, "held for the lease from the wake")
         clock.stop()
         phone.heartbeatPauses.release()
     }
 
-    /// After the one more is given, a freeze with a request out raises no hold either.
-    @Test func aFreezeAfterTheOneMoreHoldsNothing() async throws {
+    /// After the extra is given, one freeze with a request out is held for (its lease from the wake), and no further one.
+    @Test func aFreezeAfterTheOneMoreIsHeldForOnce() async throws {
         defer { phone.close() }
         _ = try await scanned()
         let d = try #require(m.session?.device)
@@ -80,13 +94,52 @@ extension VaultManagerTransferInTests {
         let (clock, _) = try await lastCollectOut(d)
         clock.cut(m, d, sent: clock.own.out)
         #expect(!clock.dropsAfterFinalCollect(m, d), "the one more last collect")
-        let hold = clock.finalNotBefore
-        phone.uptimeAhead += 2
+        func freeze() -> TimeInterval {
+            phone.uptimeAhead += 2
+            clock.own.sent(.init(at: m.config.uptime(), wait: 0))
+            clock.follow(m, d)
+            phone.uptimeAhead += 20
+            clock.follow(m, d)
+            return m.config.uptime()
+        }
+        let wake = freeze()
+        #expect(clock.finalNotBefore == wake + 75, "the first one is held for")
+        _ = freeze()
+        #expect(clock.finalNotBefore == wake + 75, "no hold more")
+        clock.stop()
+        phone.heartbeatPauses.release()
+    }
+
+    /// The extra is given by a cut whose hold ends under the cap; a cut noticed during that hold, whose lease runs past
+    /// the cap, is still held for.
+    @Test func aLeasePastTheCapDuringACutExtrasHoldIsHeldFor() async throws {
+        defer { phone.close() }
+        _ = try await scanned()
+        let d = try #require(m.session?.device)
+        d.stop()
+        phone.freezeClocks()
+        phone.heartbeatPauses.holding = true
+        let clock = VaultManager.WindowClock(visibility: 60, backgrounds: m.moveFlags.book.backgrounds, background: false)
+        let t0 = m.config.uptime()
+        clock.start(m, d)
+        func step(to seconds: TimeInterval) {
+            while m.config.uptime() < t0 + seconds {
+                phone.uptimeAhead += min(8, t0 + seconds - m.config.uptime())
+                clock.follow(m, d)
+            }
+        }
+        step(to: 90)
+        #expect(await eventually { clock.over }, "the window is over")
+        await clock.waitForFinalCollect(m)
+        // The last collect's reply is lost: the extra, held to 90 + 15 + V = 165 s, under the cap (185 s).
         clock.own.sent(.init(at: m.config.uptime(), wait: 0))
-        clock.follow(m, d)
-        phone.uptimeAhead += 20
-        clock.follow(m, d)
-        #expect(clock.finalNotBefore == hold, "no hold more")
+        clock.cut(m, d, sent: clock.own.out)
+        #expect(!clock.dropsAfterFinalCollect(m, d), "the one more last collect")
+        #expect(clock.finalNotBefore == t0 + 165, "under the cap")
+        // At 150 s, the collector's long poll (sent at 149 s, wait 25 s) is cut: its lease ends at 249 s.
+        step(to: 149)
+        clock.cut(m, d, sent: .init(at: m.config.uptime(), wait: 25))
+        #expect(clock.finalNotBefore == t0 + 249, "held for, past the cap")
         clock.stop()
         phone.heartbeatPauses.release()
     }

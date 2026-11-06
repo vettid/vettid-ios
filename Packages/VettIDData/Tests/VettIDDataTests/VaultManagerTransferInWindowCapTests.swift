@@ -127,14 +127,12 @@ extension VaultManagerTransferInTests {
         service.losesCollectAnswers = 1
         phone.windowPauses.release()
         #expect(await eventually { last.waiting > 0 && m.moveFlags.book.finalCollects == finals + 1 }, "the last collect holds it")
-        let sent = m.config.uptime()
         phone.uptimeAhead += 30
         service.holdsCollectAnswers = nil
         last.open()
         #expect(await eventually { phone.windowPauses.lengths.count == 3 }, "\(phone.windowPauses.lengths)")
         // The freeze's lease starts at the wake: 75 s from there.
         #expect(phone.windowPauses.lengths.last == 75, "\(phone.windowPauses.lengths)")
-        _ = sent
         #expect(m.record.value.transferStartedMs != nil, "not dropped")
         service.endLeases()
         phone.windowPauses.release()
@@ -193,8 +191,7 @@ extension VaultManagerTransferInTests {
             clock.follow(m, d)
             let expected = m.config.uptime() + (own ? 0 : d.collectorWait) + 75
             #expect(clock.finalNotBefore == expected, own ? "the window's own" : "the collector's")
-            _ = sent
-            clock.stop()
+                clock.stop()
         }
         phone.heartbeatPauses.release()
     }
