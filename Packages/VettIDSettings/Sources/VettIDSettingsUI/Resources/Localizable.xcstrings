@@ -948,6 +948,7 @@
       }
     },
     "ios_settings_delete_account": {
+      "comment": "iPhone only: no Android text; for the owner to approve.",
       "extractionState": "manual",
       "localizations": {
         "en": {
@@ -959,6 +960,7 @@
       }
     },
     "ios_settings_delete_account_body": {
+      "comment": "iPhone only: no Android text; for the owner to approve.",
       "extractionState": "manual",
       "localizations": {
         "en": {
@@ -970,6 +972,7 @@
       }
     },
     "ios_settings_delete_account_explain": {
+      "comment": "iPhone only: no Android text; for the owner to approve.",
       "extractionState": "manual",
       "localizations": {
         "en": {
@@ -981,6 +984,7 @@
       }
     },
     "ios_settings_delete_account_open": {
+      "comment": "iPhone only: no Android text; for the owner to approve.",
       "extractionState": "manual",
       "localizations": {
         "en": {
@@ -3757,6 +3761,7 @@
       }
     },
     "ios_help_section_legal": {
+      "comment": "iPhone only: no Android text; for the owner to approve.",
       "extractionState": "manual",
       "localizations": {
         "en": {
@@ -3768,6 +3773,7 @@
       }
     },
     "ios_help_privacy_policy": {
+      "comment": "iPhone only: no Android text; for the owner to approve.",
       "extractionState": "manual",
       "localizations": {
         "en": {
@@ -3779,6 +3785,7 @@
       }
     },
     "ios_help_licenses": {
+      "comment": "iPhone only: no Android text; for the owner to approve.",
       "extractionState": "manual",
       "localizations": {
         "en": {
@@ -3790,6 +3797,7 @@
       }
     },
     "ios_help_licenses_body": {
+      "comment": "iPhone only: no Android text; for the owner to approve.",
       "extractionState": "manual",
       "localizations": {
         "en": {
@@ -3801,6 +3809,7 @@
       }
     },
     "ios_help_licenses_intro": {
+      "comment": "iPhone only: no Android text; for the owner to approve.",
       "extractionState": "manual",
       "localizations": {
         "en": {

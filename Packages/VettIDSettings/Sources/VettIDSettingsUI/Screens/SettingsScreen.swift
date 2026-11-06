@@ -62,7 +62,7 @@ public struct SettingsContent: View {
     let now: Date
     /// The member's own profile photo (VAULT-MESSAGING §10.8) on the account card, decoded by the caller.
     let accountPhoto: UIImage?
-    /// The account site's deletion page: "Delete your VettID account" is shown only while there is one (``AccountDeletion``).
+    /// The account site's deletion page (``AccountDeletion``): "Delete your VettID account" is hidden while it is nil.
     let accountDeletionURL: URL?
     @State private var confirmAccountDeletion = false
     @State private var confirmLock = false
@@ -78,7 +78,7 @@ public struct SettingsContent: View {
         now: Date = Date(),
         askScreenshots: Bool = false,
         accountPhoto: UIImage? = nil,
-        accountDeletionURL: URL? = AccountDeletion.url
+        accountDeletionURL: URL? = nil
     ) {
         self.accountPhoto = accountPhoto
         self.accountDeletionURL = accountDeletionURL

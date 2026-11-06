@@ -32,7 +32,7 @@ meta() {
 }
 
 identities() { # every identity of every Package.resolved of the repository, one per line
-  find . -name Package.resolved -not -path './.build/*' -not -path '*/.build/*' -print0 | xargs -0 jq -r '.pins[].identity' | sort -u
+  git ls-files -z '*Package.resolved' | xargs -0 jq -r '.pins[].identity' | sort -u
 }
 
 if [[ "${1:-}" == "--verify" ]]; then

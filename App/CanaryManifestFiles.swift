@@ -1,9 +1,9 @@
 import Foundation
 import VettIDData
 
-/// A file opened with VettID ("Open in VettID" from Files, the share sheet or AirDrop): the app declares its own
-/// type, `org.vettid.release-manifest` (a JSON file with the extension `.vettidmanifest`), as a document type it can
-/// view, so that it is not offered for ordinary JSON files (`project.yml`, `CFBundleDocumentTypes`). The only JSON file it takes is a canary
+/// A file opened with VettID ("Open in VettID" from Files, the share sheet or AirDrop): the app declares `public.json`
+/// as a document type it can view, at rank `Alternate`, so that it is never the default app for JSON files and only
+/// offered when the member chooses it (`project.yml`, `CFBundleDocumentTypes`). The only JSON file it takes is a canary
 /// manifest (VAULT-RELEASES §10.1 step 9, VAULT-MESSAGING §11.10.1): an opened file is read, bounded, and handed to the
 /// root's dialog, which verifies it and installs nothing before the member confirms. Nothing else happens on an open.
 /// Mirrors vettid-android `MainActivity.receiveCanaryManifest`.

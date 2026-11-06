@@ -65,7 +65,7 @@ STAGING_KEYS=("MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEok8gqeC5VcGx4KL+B5fL7UgENBXf"
 # manifests with it; no build may pin it, or anyone could sign a canary manifest that build accepts.
 TEST_MANIFEST_KEY=("MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAERi26GuT8GpaLTazyDN1tvh" "1edbb48b6669decd")
 # The document type a canary manifest is opened with (VAULT-RELEASES §10.1 step 9): it works in Release and Staging too.
-DOCUMENT_TYPES=("org.vettid.release-manifest")
+DOCUMENT_TYPES=("public.json")
 
 archive() {
   local config=$1
@@ -222,20 +222,38 @@ check_store_files() {
   echo "${app}: icon ${icon} and the privacy manifest present"
 }
 
+# The document types the shipping Info.plist declares, whole (normalised JSON), and the exported types it declares (none):
+# one place for both. A canary manifest is opened with VettID as JSON, at rank Alternate, a viewer (VAULT-RELEASES §10.1
+# step 9); narrowing it to a type of VettID's own waits for the release tooling to write one (audit S8). A second entry, a
+# wider type, another rank or an exported type of the app's own (one claiming the json extension, say) is refused.
+EXPECTED_DOCUMENT_TYPES='[{"CFBundleTypeName":"VettID release manifest","CFBundleTypeRole":"Viewer","LSHandlerRank":"Alternate","LSItemContentTypes":["public.json"]}]'
+EXPECTED_EXPORTED_TYPES='none'
+
+# The Xcode run destinations of Mac, Mac Catalyst and Apple Vision Pro are off in <config>'s build settings (<settings> is
+# `xcodebuild -showBuildSettings`). These settings do not set the store's availability: that is opted out in App Store Connect
+# (Pricing and Availability, for Mac and for Apple Vision Pro separately), a step of the owner's release checklist.
+check_run_destinations() {
+  local settings=$1 config=$2 k problems=0
+  for k in SUPPORTS_MACCATALYST SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD; do
+    grep -qE "^ *${k} = NO\$" <<<"${settings}" || { echo "${k} is not NO in ${config}" >&2; problems=1; }
+  done
+  return ${problems}
+}
+
 # The shipping Info.plist and binary (App Store readiness): the export compliance answer (the app implements its own
 # end-to-end encryption and qualifies for the mass-market exemption, Category 5 Part 2 note 3, which the owner confirms in
-# App Store Connect), iPhone and iPad only (no Mac, Mac Catalyst or Vision Pro: the device family, the executable's
-# platform and the build settings of the configuration), the privacy manifest, and VettID offered for its own manifest type
-# alone, not for every JSON file.
+# App Store Connect), an iPhone-only app (the device family, the iOS platform of the executable, no Mac key; this does not
+# show the store's Mac and Vision Pro availability, which is set in App Store Connect), the privacy manifest, the document
+# types as declared above, and the configuration's Xcode run destinations.
 check_shipping_plist() {
-  local app=$1 config=$2 problems=() v settings exe i=0 t
+  local app=$1 config=$2 problems=() v settings exe
   local info="${app}/Info.plist"
   v=$(/usr/libexec/PlistBuddy -c 'Print :ITSAppUsesNonExemptEncryption' "${info}" 2>/dev/null || true)
   [[ "${v}" == "true" ]] || problems+=("ITSAppUsesNonExemptEncryption '${v}', expected true")
   v=$(plutil -extract UIDeviceFamily json -o - "${info}" 2>/dev/null | tr -d ' ' || true)
   [[ "${v}" == "[1]" ]] || problems+=("UIDeviceFamily ${v}, expected [1] (iPhone)")
   for key in LSMinimumSystemVersion LSMinimumSystemVersionByArchitecture; do
-    [[ -z "$(/usr/libexec/PlistBuddy -c "Print :${key}" "${info}" 2>/dev/null || true)" ]] || problems+=("Info.plist has ${key} (a Mac or Vision Pro key)")
+    [[ -z "$(/usr/libexec/PlistBuddy -c "Print :${key}" "${info}" 2>/dev/null || true)" ]] || problems+=("Info.plist has ${key} (a Mac key)")
   done
   v=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleSupportedPlatforms' "${info}" 2>/dev/null | tr -d ' \n' || true)
   [[ "${v}" == "Array{iPhoneOS}" ]] || problems+=("CFBundleSupportedPlatforms ${v}, expected iPhoneOS alone")
@@ -248,25 +266,21 @@ check_shipping_plist() {
   else
     problems+=("no executable")
   fi
-  # VettID is offered for its own manifest type alone.
-  v=$(plutil -extract CFBundleDocumentTypes.0.LSItemContentTypes json -o - "${info}" 2>/dev/null | tr -d ' ' || true)
-  [[ "${v}" == '["org.vettid.release-manifest"]' ]] || problems+=("document types ${v}, expected the release manifest type alone")
-  while t=$(/usr/libexec/PlistBuddy -c "Print :CFBundleDocumentTypes:${i}:LSItemContentTypes:0" "${info}" 2>/dev/null); do
-    [[ "${t}" != "public.json" && "${t}" != "public.data" && "${t}" != public.content ]] || problems+=("document type ${t} offers VettID for every such file")
-    i=$((i + 1))
-  done
-  # The configuration's own build settings.
+  # The document types and the exported types, whole.
+  v=$(plutil -extract CFBundleDocumentTypes json -o - "${info}" 2>/dev/null | jq -S -c . 2>/dev/null || true)
+  [[ "${v}" == "$(jq -S -c . <<<"${EXPECTED_DOCUMENT_TYPES}")" ]] || problems+=("CFBundleDocumentTypes ${v}, expected ${EXPECTED_DOCUMENT_TYPES}")
+  v=$(plutil -extract UTExportedTypeDeclarations json -o - "${info}" 2>/dev/null | jq -S -c . 2>/dev/null || echo none)
+  [[ "${v}" == "${EXPECTED_EXPORTED_TYPES}" ]] || problems+=("UTExportedTypeDeclarations ${v}, expected ${EXPECTED_EXPORTED_TYPES}")
+  # The configuration's own Xcode run destinations.
   if [[ -n "${config}" ]]; then
     settings=$(xcodebuild -showBuildSettings -project VettID.xcodeproj -target VettID -configuration "${config}" 2>/dev/null)
-    for k in SUPPORTS_MACCATALYST SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD; do
-      grep -qE "^ *${k} = NO\$" <<<"${settings}" || problems+=("${k} is not NO in ${config}")
-    done
+    check_run_destinations "${settings}" "${config}" 2>/dev/null || problems+=("a Mac, Mac Catalyst or Vision Pro run destination is on in ${config}")
   fi
   if [[ ${#problems[@]} -gt 0 ]]; then
     for p in "${problems[@]}"; do echo "${app}: ${p}" >&2; done
     return 1
   fi
-  echo "${app}: export compliance declared, iPhone only, privacy manifest present, VettID's own document type alone"
+  echo "${app}: export compliance declared, iPhone only (the store's Mac and Vision Pro availability is set in App Store Connect), privacy manifest present, document types as expected"
 }
 
 # An archive holds the VettID app alone: never the VettIDDevStack app (SKIP_INSTALL, and not in the VettID scheme).
@@ -629,10 +643,24 @@ if [[ ${SELF_TEST} -eq 1 ]]; then
     unship "${config}" "without ITSAppUsesNonExemptEncryption" "plutil -remove ITSAppUsesNonExemptEncryption Info.plist"
     unship "${config}" "that also runs on an iPad" "plutil -replace UIDeviceFamily -json '[1,2]' Info.plist"
     unship "${config}" "with a Mac key" "plutil -insert LSMinimumSystemVersion -string 14.0 Info.plist"
-    unship "${config}" "that is offered for every JSON file" \
-      "plutil -replace CFBundleDocumentTypes.0.LSItemContentTypes -json '[\"org.vettid.release-manifest\",\"public.json\"]' Info.plist"
+    unship "${config}" "with a second document type for JSON" \
+      "plutil -insert CFBundleDocumentTypes.1 -json '{\"CFBundleTypeName\":\"JSON\",\"CFBundleTypeRole\":\"Viewer\",\"LSHandlerRank\":\"Alternate\",\"LSItemContentTypes\":[\"public.json\"]}' Info.plist"
+    unship "${config}" "with a wider document type" \
+      "plutil -replace CFBundleDocumentTypes.0.LSItemContentTypes -json '[\"public.json\",\"public.data\"]' Info.plist"
+    unship "${config}" "that is the default app for JSON" "plutil -replace CFBundleDocumentTypes.0.LSHandlerRank -string Owner Info.plist"
+    unship "${config}" "with an exported type claiming the json extension" \
+      "plutil -insert UTExportedTypeDeclarations -json '[{\"UTTypeIdentifier\":\"org.vettid.any\",\"UTTypeConformsTo\":[\"public.json\"],\"UTTypeTagSpecification\":{\"public.filename-extension\":[\"json\"]}}]' Info.plist"
     unship "${config}" "without its privacy manifest" "rm PrivacyInfo.xcprivacy"
   done
+  # Mac, Mac Catalyst and Vision Pro run destinations on must be refused (the settings text of a configuration).
+  for k in SUPPORTS_MACCATALYST SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD; do
+    on=$(xcodebuild -showBuildSettings -project VettID.xcodeproj -target VettID -configuration Release 2>/dev/null | sed "s/^ *${k} = NO\$/    ${k} = YES/")
+    if check_run_destinations "${on}" Release >/dev/null 2>&1; then
+      echo "self-test FAILED: the run destination check accepted ${k} = YES" >&2
+      exit 1
+    fi
+  done
+  echo "self-test: the run destination check refuses each of the three on"
   # An entitlements file with another capability, or without the associated domain, must be refused.
   extra="${OUT}/planted/extra.entitlements"
   cp Config/VettID-production.entitlements "${extra}"
@@ -655,6 +683,12 @@ if [[ ${SELF_TEST} -eq 1 ]]; then
     exit 1
   fi
   echo "self-test: the licenses check refuses a list that lacks a dependency"
+  jq 'map(if .id == "swift-crypto" then .version = "0.0.0" else . end)' "${OUT}/planted/Licences.json" >"${OUT}/planted/Licences-version.json"
+  if LICENCES_RESOURCE="${OUT}/planted/Licences-version.json" scripts/licences.sh --verify >/dev/null 2>&1; then
+    echo "self-test FAILED: the licenses check accepted a list naming another version of swift-crypto" >&2
+    exit 1
+  fi
+  echo "self-test: the licenses check refuses a list naming another version"
   unstore Release AppIcon "with the non-production icon name" \
     "plutil -replace CFBundleIcons.CFBundlePrimaryIcon.CFBundleIconName -string AppIcon-NonProduction Info.plist"
   unstore Staging AppIcon-NonProduction "with the production icon name" \

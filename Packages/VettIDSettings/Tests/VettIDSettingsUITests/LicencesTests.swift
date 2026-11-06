@@ -19,6 +19,13 @@ import Testing
         #expect(first.text == license.trimmingCharacters(in: .newlines))
     }
 
+    @Test func aLongLicenseIsInParagraphs() throws {
+        let first = try #require(Licences.all().first)
+        #expect(first.paragraphs.count > 50)
+        #expect(first.paragraphs.allSatisfy { !$0.isEmpty && $0.count < 5_000 })
+        #expect(first.paragraphs.joined().filter { !$0.isWhitespace } == first.text.filter { !$0.isWhitespace })
+    }
+
     @Test func everyEntryHasItsOwnText() {
         let all = Licences.all()
         #expect(all.count >= 9)

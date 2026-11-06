@@ -60,19 +60,21 @@ private struct LicenseTextScreen: View {
     var body: some View {
         DetailScaffold(background: colors.groupedBackground, onBack: onBack) {
             ScrollView {
-                VStack(spacing: Spacing.m) {
+                // Paragraph by paragraph, built lazily: the AGPL is 34,000 characters, and VoiceOver moves a paragraph at a time.
+                LazyVStack(spacing: Spacing.m) {
                     LargeTitle(LicensesScreen.title(entry))
                     Text(entry.url)
                         .vettIDFont(.bodySmall)
                         .foregroundStyle(colors.onSurfaceVariant)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.horizontal, Spacing.gutter + Spacing.xs)
-                    Text(entry.text)
-                        .vettIDFont(.bodySmall)
-                        .foregroundStyle(colors.onSurface)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal, Spacing.gutter + Spacing.xs)
-                        .accessibilityIdentifier("license_text")
+                    ForEach(Array(entry.paragraphs.enumerated()), id: \.offset) { _, paragraph in
+                        Text(paragraph)
+                            .vettIDFont(.bodySmall)
+                            .foregroundStyle(colors.onSurface)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, Spacing.gutter + Spacing.xs)
+                    }
                     Spacer().frame(height: Spacing.xxl)
                 }
             }

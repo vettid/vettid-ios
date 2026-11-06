@@ -84,21 +84,15 @@ targets:
         VettIDManifestKeys: $(VETTID_MANIFEST_KEYS)
         VettIDVotesHost: $(VETTID_VOTES_HOST)
         # A canary manifest (VAULT-RELEASES §10.1 step 9, VAULT-MESSAGING §11.10.1) is opened with VettID from Files, the
-        # share sheet or AirDrop, in every configuration (the canary phone runs the release build). VettID is offered only
-        # for its own file type, org.vettid.release-manifest (extension .vettidmanifest, a JSON file), not for every JSON
-        # file; an opened file is copied in (not opened in place), only verified and shown, and installed only after the
-        # member confirms (App/CanaryManifestFiles.swift).
+        # share sheet or AirDrop, in every configuration (the canary phone runs the release build). JSON is declared at
+        # rank Alternate (VettID is never the default app for JSON) as a viewer; an opened file is copied in (not opened
+        # in place), only verified and shown, and installed only after the member confirms (App/CanaryManifestFiles.swift).
+        # Narrowing this to a type of VettID's own waits for the release tooling to write one (audit S8).
         CFBundleDocumentTypes:
           - CFBundleTypeName: VettID release manifest
             CFBundleTypeRole: Viewer
-            LSHandlerRank: Owner
-            LSItemContentTypes: [org.vettid.release-manifest]
-        UTExportedTypeDeclarations:
-          - UTTypeIdentifier: org.vettid.release-manifest
-            UTTypeDescription: VettID release manifest
-            UTTypeConformsTo: [public.json]
-            UTTypeTagSpecification:
-              public.filename-extension: [vettidmanifest]
+            LSHandlerRank: Alternate
+            LSItemContentTypes: [public.json]
         LSSupportsOpeningDocumentsInPlace: false
         # The relay page's "Open in VettID" link for any relay, self-hosted ones included: vettid://connect#<link>
         # (VAULT-MESSAGING §6.4, IOS-PLAN §6.8), in every configuration as on Android. Nothing is sent before the member
@@ -129,7 +123,9 @@ targets:
         # Export compliance: the app uses encryption beyond the system's (its own end-to-end encryption) and qualifies for
         # the mass-market exemption (Category 5 Part 2, note 3); the owner gives that answer in App Store Connect.
         INFOPLIST_KEY_ITSAppUsesNonExemptEncryption: YES
-        # iPhone and iPad only: no Mac (Designed for iPhone), Mac Catalyst or Vision Pro availability.
+        # iPhone only (TARGETED_DEVICE_FAMILY 1). These three settings only turn off Xcode's Mac, Mac Catalyst and Vision Pro
+        # run destinations; they do not set the store's availability. That is opted out in App Store Connect (Pricing and
+        # Availability, separately for Mac and for Apple Vision Pro), a step of the owner's release checklist.
         SUPPORTS_MACCATALYST: NO
         SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: NO
         SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD: NO

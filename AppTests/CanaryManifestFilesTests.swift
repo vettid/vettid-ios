@@ -4,29 +4,20 @@ import VettIDAttestation
 import VettIDData
 @testable import VettID
 
-/// "Open in VettID" for a canary manifest (VAULT-RELEASES §10.1 step 9): VettID's own type, the release manifest
-/// (org.vettid.release-manifest, extension .vettidmanifest, a JSON file), is declared in every configuration as a viewer,
-/// and public.json is not (VettID is not offered for ordinary JSON files); a file is copied in rather than opened in place;
-/// an opened file is only read, bounded, and its copy removed. Nothing is installed here: the root's dialog asks first.
+/// "Open in VettID" for a canary manifest (VAULT-RELEASES §10.1 step 9): JSON is declared in every configuration at rank
+/// Alternate (VettID is never the default app for JSON) as a viewer, copied in rather than opened in place; an opened
+/// file is only read, bounded, and its copy removed. Nothing is installed here: the root's dialog asks first.
 @MainActor
 @Suite struct CanaryManifestFilesTests {
-    @Test func onlyTheReleaseManifestTypeIsDeclared() throws {
+    @Test func jsonIsDeclaredAsAnAlternateViewer() throws {
         let info = Bundle.main.infoDictionary ?? [:]
         let types = try #require(info["CFBundleDocumentTypes"] as? [[String: Any]])
         #expect(types.count == 1)
         let t = try #require(types.first)
-        #expect(t["LSItemContentTypes"] as? [String] == ["org.vettid.release-manifest"])
-        #expect(t["LSHandlerRank"] as? String == "Owner")
+        #expect(t["LSItemContentTypes"] as? [String] == ["public.json"])
+        #expect(t["LSHandlerRank"] as? String == "Alternate")
         #expect(t["CFBundleTypeRole"] as? String == "Viewer")
         #expect(info["LSSupportsOpeningDocumentsInPlace"] as? Bool == false)
-        // The type is exported by the app, a JSON file with its own extension, so that ordinary JSON files do not offer VettID.
-        let exported = try #require(info["UTExportedTypeDeclarations"] as? [[String: Any]])
-        #expect(exported.count == 1)
-        let e = try #require(exported.first)
-        #expect(e["UTTypeIdentifier"] as? String == "org.vettid.release-manifest")
-        #expect(e["UTTypeConformsTo"] as? [String] == ["public.json"])
-        let tags = try #require(e["UTTypeTagSpecification"] as? [String: Any])
-        #expect(tags["public.filename-extension"] as? [String] == ["vettidmanifest"])
     }
 
     @Test func anOpenedFileIsReadBoundedAndItsCopyRemoved() throws {

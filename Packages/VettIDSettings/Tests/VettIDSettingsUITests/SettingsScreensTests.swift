@@ -106,9 +106,14 @@ import VettIDUI
     /// "Delete your VettID account" (the account, not the vault) is hidden while the account site has no deletion page, and
     /// shown once the one constant is set (chosen; not in the spec).
     @Test func deleteYourAccountShowsOnceTheAccountSiteHasAPage() throws {
-        #expect(AccountDeletion.url == nil)
+        // The page is the environment's account site's: Release's and Staging's own.
+        #expect(AccountDeletion.url(origin: "https://account.vettid.org")?.absoluteString == "https://account.vettid.org/account/delete/")
+        #expect(AccountDeletion.url(origin: "https://account.staging.vettid.org")?.host == "account.staging.vettid.org")
+        #expect(EnvironmentValues().accountDeletionURL == nil)
         #expect(!SettingsContent(state: SettingsState()).accountDeletionShown)
-        let page = try #require(URL(string: "https://account.vettid.org/delete"))
+        // Without a page the row is hidden; with one it is shown.
+        #expect(!SettingsContent(state: SettingsState(), accountDeletionURL: nil).accountDeletionShown)
+        let page = try #require(AccountDeletion.url(origin: "https://account.vettid.org"))
         let shown = SettingsContent(state: SettingsState(), accountDeletionURL: page)
         #expect(shown.accountDeletionShown && height(shown) > 0)
         #expect(SecurityStrings.deleteAccount == "Delete your VettID account")
