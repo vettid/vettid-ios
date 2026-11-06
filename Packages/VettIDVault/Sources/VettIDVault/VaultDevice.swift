@@ -445,7 +445,7 @@ public final class VaultDevice: @unchecked Sendable {
             let c = MailboxCollector(
                 source: source, mode: cfg.collectMode, wait: cfg.pollWait, now: cfg.now,
                 onRequest: { [weak self] out in self?.collectorRequest(out, of: round) },
-                onRecovered: { [weak self] in self?.relayCameBack() }, onFailed: { [weak self] in self?.collectorFailed($0) }
+                onRecovered: { [weak self] in self?.relayCameBack() }, onFailed: { [weak self] in self?.collectorFailed($0, of: round) }
             )
             do {
                 try await c.run { m in try await self.handle(m) }
@@ -492,7 +492,7 @@ public final class VaultDevice: @unchecked Sendable {
             stopped = true
             // A request out is cut: what the relay handed it may stay leased (``collectorCuts``).
             if let out = collectSince { collectCuts = (collectCuts.count + 1, out.uptime) }
-            defer { (collector, collectSince) = (nil, nil) }
+            defer { (collector, collectSince, collectRound) = (nil, nil, collectRound + 1) }
             return collector
         }
         task?.cancel()

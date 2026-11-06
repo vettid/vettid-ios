@@ -58,10 +58,10 @@ extension VaultManagerTransferInTests {
         let before = d.collectorCuts.count
         service.failNextCollects(1)
         #expect(await eventually { d.collectorCuts.count == before + 1 }, "the 503 is counted")
-        d.collectorFailed(RelayError(status: 403, code: "forbidden"))
-        d.collectorFailed(RelayError(status: 429, code: "rate_limited"))
+        d.collectorFailed(RelayError(status: 403, code: "forbidden"), of: d.collectRound)
+        d.collectorFailed(RelayError(status: 429, code: "rate_limited"), of: d.collectRound)
         #expect(d.collectorCuts.count == before + 1, "a 4xx is no cut")
-        d.collectorFailed(URLError(.networkConnectionLost))
+        d.collectorFailed(URLError(.networkConnectionLost), of: d.collectRound)
         #expect(d.collectorCuts.count == before + 2, "a transport loss is one")
     }
 
@@ -261,7 +261,7 @@ extension VaultManagerTransferInTests {
         let sent = m.config.uptime()
         d.collectorRequest(true, of: d.collectRound)
         phone.uptimeAhead += 20
-        d.collectorFailed(URLError(.networkConnectionLost))
+        d.collectorFailed(URLError(.networkConnectionLost), of: d.collectRound)
         d.collectorRequest(false, of: d.collectRound)
         d.collectorRequest(true, of: d.collectRound)
         clock.follow(m, d)
@@ -295,31 +295,38 @@ extension VaultManagerTransferInTests {
         service.holdsCollectAnswers = nil
         gate.open()
         #expect(await eventually { phone.windowPauses.lengths == [90, 60] }, "to now + V: \(phone.windowPauses.lengths)")
+        // The cut collect's own end (its cut noted) before the clock moves on.
+        #expect(await eventually { m.moveFlags.book.windowCollectSent != sent }, "the next window collect went")
         try await advance(60)
         phone.windowPauses.release()
-        // To 84 s + V + 15 s (159 s), 20 s past the end (another cut on a loaded machine may have moved the end out before).
-        let lengths = { phone.windowPauses.lengths }
-        #expect(await eventually { lengths().count >= 3 && lengths().last == 20 }, "\(lengths())")
+        // To 84 s + V + 15 s (159 s), 20 s past the end.
+        #expect(await eventually { phone.windowPauses.lengths == [90, 60, 20] }, "\(phone.windowPauses.lengths)")
         service.endLeases()
         phone.windowPauses.release()
         #expect(await eventually(within: .seconds(30)) { m.finishMovePending && m.record.value.transferStartedMs == nil })
     }
 
-    /// A stopped collection's request that ends after a newer collection's went out leaves the newer one's send time
-    /// alone (its round is not the collection's any more).
+    /// A stopped collection's request that ends, or fails, after a newer collection's went out leaves the newer one's
+    /// send time and its cuts alone (its round is not the collection's any more).
     @Test func aStoppedRoundEndingLateLeavesTheNewerOne() async throws {
         defer { phone.close() }
         _ = try await scanned()
         let d = try #require(m.session?.device)
+        let round = d.collectRound
         d.stop()
-        let old = d.collectRound
-        d.start()
-        d.stop()
-        // The second collection's task winds down (its own request's end comes now, not later).
-        try await Task.sleep(for: .milliseconds(300))
-        #expect(d.collectRound == old + 1)
-        d.collectorRequest(true, of: old + 1)
-        d.collectorRequest(false, of: old)
+        #expect(d.collectRound == round + 1, "a stop ends the round")
+        // A newer collection, as a start makes it, with no task of its own.
+        let new = d.mem.withLock {
+            d.collectRound += 1
+            return d.collectRound
+        }
+        d.collectorRequest(true, of: new)
+        d.collectorRequest(false, of: new - 1)
         #expect(d.collectRequestUptime != nil, "the newer round's request is still out")
+        let cuts = d.collectorCuts.count
+        d.collectorFailed(URLError(.networkConnectionLost), of: new - 1)
+        #expect(d.collectorCuts.count == cuts, "a stopped round's late failure counts nothing")
+        d.collectorFailed(URLError(.networkConnectionLost), of: new)
+        #expect(d.collectorCuts.count == cuts + 1)
     }
 }

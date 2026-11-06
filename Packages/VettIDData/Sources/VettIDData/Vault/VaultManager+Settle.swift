@@ -167,15 +167,16 @@ extension VaultManager {
         private var notes = 0
         private var notesAtFinal: Int?
         private var finalRedone = false
-        /// The heartbeat's last tick, and when the request out then went (the latest, if several).
+        /// The heartbeat's last tick, and the latest send + wait of the requests out then.
         private var lastTick: TimeInterval = 0
         private var lastOut: TimeInterval?
         /// The collector cuts seen, by device.
         private var cuts: [ObjectIdentifier: Int] = [:]
-        /// A cut, a freeze or a background not yet followed by the end moving out, and when the request it cut went.
+        /// A cut, a freeze or a background not yet followed by the end moving out, and the send + wait of the request it cut.
         private var pending: Bool
         private var pendingSent: TimeInterval?
-        /// The earliest uptime of the last collect, after a freeze while a request was out or a cut past the cap.
+        /// The earliest uptime of the last collect, after a freeze while a request was out, or a cut past the cap or whose
+        /// s + wait + V is past it.
         private(set) var finalNotBefore: TimeInterval?
         private var backgrounds: Int
 
@@ -291,8 +292,8 @@ extension VaultManager {
             arm(m, end - now)
         }
 
-        /// Before the last collect (the window over), after a freeze while a request was out or a cut past the cap: until
-        /// s + V + 15 s of the request in flight then. A cut or a freeze during the hold counts as one while the last collect
+        /// Before the last collect (the window over), after a freeze while a request was out, or a cut past the cap or whose
+        /// s + wait + V is past it: until s + wait + V + 15 s of the request in flight then. A cut or a freeze during the hold counts as one while the last collect
         /// is out (the one more last collect waits for the hold it raised); the hold is read once, not waited on again, so
         /// that cuts cannot chain it (chosen; the shared rule with Android #307, the erratum to follow).
         func waitForFinalCollect(_ m: VaultManager) async {

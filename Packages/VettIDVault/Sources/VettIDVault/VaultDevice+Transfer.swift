@@ -242,15 +242,19 @@ extension VaultDevice {
     /// not read or handle, and a request out when the collection stopped. A relay's 4xx handed nothing out.
     public var collectorCuts: (count: Int, sent: TimeInterval?) { mem.withLock { collectCuts } }
 
-    /// A round of the collector failed with [e] (``collectorCuts``).
-    func collectorFailed(_ e: Error) {
+    /// A round of the collector failed with [e] (``collectorCuts``); [round]: the collection's. A stopped one's late failure
+    /// counts nothing: ``stop()`` counted its request out.
+    func collectorFailed(_ e: Error, of round: Int) {
         let cut: Bool = switch e {
         case let r as RelayError: r.status >= 500 || r.status < 400
         case is CancellationError: false
         default: true
         }
         guard cut else { return }
-        mem.withLock { collectCuts = (collectCuts.count + 1, collectSince?.uptime) }
+        mem.withLock {
+            guard round == collectRound else { return }
+            collectCuts = (collectCuts.count + 1, collectSince?.uptime)
+        }
     }
 
     /// Halted (``halt()``) or forgotten (``forget()``): a device that writes nothing any more, not one to use again.
