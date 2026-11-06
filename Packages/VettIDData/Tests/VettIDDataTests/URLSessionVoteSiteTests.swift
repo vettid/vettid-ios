@@ -117,4 +117,31 @@ struct URLSessionVoteSiteTests {
         #expect(!plain.configured)
         #expect(await plain.get("services.json") == .unreachable)
     }
+
+    /// The body's bytes are told as they arrive (vettid-android #319 item 1: they count toward the weekly cap): all of a body
+    /// read, none of a 404 or an error page (no body is read) and none of one refused by its length before it is read.
+    @Test func theBytesOfABodyAreCountedAsTheyArriveAndNothingForAStatusWithoutOne() async {
+        final class Count: @unchecked Sendable {
+            private let lock = NSLock()
+            private var sum = 0
+            private var calls = 0
+            var total: Int { lock.withLock { sum } }
+            var times: Int { lock.withLock { calls } }
+            @Sendable func add(_ k: Int) { lock.withLock { sum += k; calls += 1 } }
+        }
+        let s = site([
+            "/v1/rows.json": .init(status: 200, body: [UInt8](repeating: 0x20, count: 10_000)),
+            "/v1/gone.json": .init(status: 404, body: [UInt8](repeating: 0x20, count: 500)),
+            "/v1/down.json": .init(status: 503, body: [UInt8](repeating: 0x20, count: 500)),
+            "/v1/big.json": .init(status: 200, body: [UInt8](repeating: 0x20, count: 2048)),
+        ])
+        let whole = Count()
+        #expect(await s.getCounted("rows.json", maxBytes: 1 << 20, received: whole.add) == .found([UInt8](repeating: 0x20, count: 10_000)))
+        #expect(whole.total == 10_000 && whole.times >= 2)
+        for path in ["gone.json", "down.json", "big.json", "nowhere.json"] {
+            let none = Count()
+            _ = await s.getCounted(path, maxBytes: 1024, received: none.add)
+            #expect(none.total == 0, "\(path)")
+        }
+    }
 }
