@@ -120,9 +120,12 @@ targets:
         INFOPLIST_KEY_CFBundleDisplayName: $(VETTID_DISPLAY_NAME)
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait
-        # Export compliance: the app uses encryption beyond the system's (its own end-to-end encryption) and qualifies for
-        # the mass-market exemption (Category 5 Part 2, note 3); the owner gives that answer in App Store Connect.
-        INFOPLIST_KEY_ITSAppUsesNonExemptEncryption: YES
+        # Export compliance: the app uses encryption beyond the system's (its own end-to-end encryption), and it qualifies
+        # for the mass-market exemption (Category 5 Part 2, note 3), so it uses no *non-exempt* encryption: NO, which is
+        # what this key states. YES would require export documentation in App Store Connect and its
+        # ITSEncryptionExportComplianceCode in the app. With the key set, App Store Connect asks nothing per build; the
+        # app is not offered in France until an ANSSI declaration exists (the owner's decision, 2026-11-06).
+        INFOPLIST_KEY_ITSAppUsesNonExemptEncryption: NO
         # iPhone only (TARGETED_DEVICE_FAMILY 1). These three settings only turn off Xcode's Mac, Mac Catalyst and Vision Pro
         # run destinations; they do not set the store's availability. That is opted out in App Store Connect (Pricing and
         # Availability, separately for Mac and for Apple Vision Pro), a step of the owner's release checklist.
@@ -208,7 +211,7 @@ targets:
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait
         # The same answer as the VettID app's (this target never ships; the simulator only).
-        INFOPLIST_KEY_ITSAppUsesNonExemptEncryption: YES
+        INFOPLIST_KEY_ITSAppUsesNonExemptEncryption: NO
         # The non-production icon in its DevStack configuration (Config/DevStack.xcconfig).
         ASSETCATALOG_COMPILER_APPICON_NAME: $(VETTID_APP_ICON)
         INFOPLIST_KEY_NSCameraUsageDescription: "VettID uses the camera to scan QR codes, such as your setup code or an invitation, and to take photos you send. Nothing is recorded, and a photo stays in memory until you send it."
