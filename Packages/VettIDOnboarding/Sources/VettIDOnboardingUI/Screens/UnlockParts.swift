@@ -88,17 +88,27 @@ struct ReleaseOfferNotice: View {
     /// The release whose notes are open: another offer (release or PCR0) never shows these notes.
     @State private var notesOpenFor: ReleaseView?
 
+    /// The sheet is open only for the offer it was opened on (release and PCR0).
+    static func isOpen(_ openFor: ReleaseView?, offer: ReleaseView) -> Bool { openFor == offer }
+
+    /// What stays open when the offer changes to [offer]: the same offer's sheet, nothing else.
+    static func stillOpen(_ openFor: ReleaseView?, offer: ReleaseView) -> ReleaseView? { openFor == offer ? openFor : nil }
+
     var body: some View {
         VStack(alignment: .leading, spacing: Spacing.s) {
             VStack(alignment: .leading, spacing: Spacing.xs) {
-                Text(OnboardingStrings.unlockOfferTitle(Int(offer.number))).vettIDFont(.titleSmall, weight: .semibold)
+                // The title is a heading of its own; the line and the fingerprint are separate elements, so that the
+                // line's identifiers (one per state) are found by the UI tests.
+                Text(OnboardingStrings.unlockOfferTitle(Int(offer.number)))
+                    .vettIDFont(.titleSmall, weight: .semibold)
+                    .accessibilityAddTraits(.isHeader)
+                    .accessibilityIdentifier("release_offer_title")
                 securityLine
                 Text(OnboardingStrings.unlockOfferBody(Int(preflight.routed.number), Int(offer.number), offer.fingerprint))
                     .vettIDFont(.bodyMedium)
                     .foregroundStyle(colors.onSurfaceVariant)
+                    .accessibilityIdentifier("release_offer")
             }
-            .accessibilityElement(children: .combine)
-            .accessibilityIdentifier("release_offer")
             // (§11.14.9) Not while a PIN or password change is undecided.
             if !state.updateHeld {
                 Toggle(isOn: Binding(get: { state.approveOffer }, set: { actions.setApproveOffer($0) })) {
@@ -112,9 +122,9 @@ struct ReleaseOfferNotice: View {
         .padding(Spacing.l)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(colors.surfaceContainer, in: VettIDShape.card)
-        .onChange(of: offer) { _, now in if notesOpenFor != now { notesOpenFor = nil } }
+        .onChange(of: offer) { _, now in notesOpenFor = Self.stillOpen(notesOpenFor, offer: now) }
         .sheet(isPresented: uncovered(
-            Binding(get: { notesOpenFor == offer }, set: { notesOpenFor = $0 ? offer : nil }), covered: covered
+            Binding(get: { Self.isOpen(notesOpenFor, offer: offer) }, set: { notesOpenFor = $0 ? offer : nil }), covered: covered
         )) {
             WhatsNewSheet(
                 offer: offer, routed: preflight.routed.number, notes: state.notes, onClose: { notesOpenFor = nil }
@@ -144,7 +154,7 @@ struct ReleaseOfferNotice: View {
             case .line(let text, let urgent): securityText(text, urgent: urgent).accessibilityIdentifier("offer_security")
             }
         }
-        .announced(line.spoken, .polite)
+        .announcedOnChange(line.spoken, .polite)
     }
 
     private var loadingLine: some View {

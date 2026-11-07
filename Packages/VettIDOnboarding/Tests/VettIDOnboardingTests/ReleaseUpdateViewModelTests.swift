@@ -348,6 +348,35 @@ import VettIDDataTesting
         #expect(vm.state.preflight?.offer == other && !vm.state.approveOffer)
     }
 
+    /// The tick is also cleared by a failed check, a rollback and an offer that is gone after a new check.
+    @Test func theTickIsClearedByAFailedCheckARollbackAndNoOffer() async {
+        func ticked() async -> (FakeVaultRepository, UnlockViewModel) {
+            let locked = FakeVaultRepository(.locked)
+            locked.preflightInfo = PreflightInfo(routed: rel(4), lastNumber: 4, softwareUpdated: false, rollback: false, offer: rel(5))
+            let vm = UnlockViewModel(vault: locked, account: locked)
+            await vm.settle()
+            vm.setApproveOffer(true)
+            return (locked, vm)
+        }
+        let (failing, a) = await ticked()
+        failing.fail["preflight"] = FakeVaultRepository.failure(.enclave, code: "enclave")
+        a.retryPreflight()
+        await a.settle()
+        #expect(a.state.preflightError == .enclave && !a.state.approveOffer)
+
+        let (older, b) = await ticked()
+        older.preflightInfo = PreflightInfo(routed: rel(2), lastNumber: 4, softwareUpdated: false, rollback: true, offer: rel(5))
+        b.retryPreflight()
+        await b.settle()
+        #expect(b.state.preflight?.rollback == true && !b.state.approveOffer)
+
+        let (gone, c) = await ticked()
+        gone.preflightInfo = PreflightInfo(routed: rel(5), lastNumber: 5, softwareUpdated: false, rollback: false, offer: nil)
+        c.retryPreflight()
+        await c.settle()
+        #expect(c.state.preflight?.offer == nil && !c.state.approveOffer)
+    }
+
     @Test func whatsNewIsLookedUpForTheUnlockOfferOnly() async {
         let notes = FakeReleaseNotes(.unavailable)
         let locked = FakeVaultRepository(.locked)

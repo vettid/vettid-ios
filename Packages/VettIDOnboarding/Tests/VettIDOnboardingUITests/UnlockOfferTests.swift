@@ -73,6 +73,15 @@ import VettIDUI
         }
         let heights = [nil, .unavailable, entry(.none), entry(.recommended), entry(.urgent)].map { notice($0 as ReleaseNotes?) }
         #expect(Set(heights.map { Int($0.rounded()) }).count == 1)
+        // And at an accessibility size, where the lines wrap.
+        func big(_ n: ReleaseNotes?) -> CGFloat {
+            let s = state(notes: n)
+            let view = ReleaseOfferNotice(preflight: s.preflight!, offer: release(5), state: s, actions: NoUnlockActions())
+                .environment(\.dynamicTypeSize, .accessibility3)
+            return height(view)
+        }
+        let bigHeights = [nil, .unavailable, entry(.none), entry(.recommended), entry(.urgent)].map { big($0 as ReleaseNotes?) }
+        #expect(Set(bigHeights.map { Int($0.rounded()) }).count == 1)
     }
 
     @Test func theSecurityLineFollowsTheNotes() {
@@ -108,6 +117,30 @@ import VettIDUI
     @Test func theSheetRendersEveryNotesState() {
         for notes in [nil, .unavailable, entry(.urgent)] as [ReleaseNotes?] {
             #expect(height(WhatsNewSheet(offer: release(5), routed: 4, notes: notes, onClose: {})) > 0)
+        }
+    }
+
+    /// The sheet is open only for the offer it was opened on: another release or PCR0 never shows its notes.
+    @Test func theSheetIsKeyedToItsOffer() {
+        let five = release(5)
+        var other = release(5)
+        other.pcr0 = String(repeating: "cd", count: 48)
+        #expect(ReleaseOfferNotice.isOpen(five, offer: five))
+        #expect(!ReleaseOfferNotice.isOpen(nil, offer: five))
+        #expect(!ReleaseOfferNotice.isOpen(five, offer: other) && !ReleaseOfferNotice.isOpen(five, offer: release(6)))
+        #expect(ReleaseOfferNotice.stillOpen(five, offer: five) == five)
+        #expect(ReleaseOfferNotice.stillOpen(five, offer: other) == nil)
+        #expect(ReleaseOfferNotice.stillOpen(five, offer: release(6)) == nil)
+        #expect(ReleaseOfferNotice.stillOpen(nil, offer: five) == nil)
+    }
+
+    /// The approval is on the screen and enabled in every notes state (it never waits for the notes).
+    @Test func theApprovalIsOnTheScreenAndEnabledInEveryNotesState() {
+        for notes in [nil, .unavailable, entry(.none), entry(.recommended), entry(.urgent)] as [ReleaseNotes?] {
+            let window = host(UnlockScreen(state: state(notes: notes), actions: NoUnlockActions()))
+            let toggles = views(in: window).compactMap { $0 as? UISwitch }
+            #expect(toggles.count == 1 && toggles[0].isEnabled, "\(String(describing: notes))")
+            window.isHidden = true
         }
     }
 

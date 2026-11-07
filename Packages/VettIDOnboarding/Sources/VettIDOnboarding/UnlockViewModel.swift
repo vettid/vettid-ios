@@ -160,6 +160,7 @@ public final class UnlockViewModel: UnlockActions {
                 if e.kind == .servicePaused { startServiceWait(e.retryAfterSeconds) }
             } catch {
                 state.loading = false
+                state.approveOffer = false
             }
         }
     }
