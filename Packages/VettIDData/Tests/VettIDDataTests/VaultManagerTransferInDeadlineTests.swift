@@ -150,6 +150,7 @@ extension VaultManagerTransferInTests {
     @Test func theDeadlineRaceCompletesTheTakeOverOnce() async throws {
         defer { phone.close() }
         _ = try await scanned()
+        service.leasesCollected = 1 // the relay's lease (RELAY-PROTOCOL §6.3): two refreshes at once may cut a collect
         try await phone.restart()
         service.approveTransferIn()
         phone.clockAhead = 700
@@ -176,6 +177,7 @@ extension VaultManagerTransferInTests {
     @Test func aStartBeforeTheDeadlineKeepsWaiting() async throws {
         defer { phone.close() }
         _ = try await scanned()
+        service.leasesCollected = 1 // the relay's lease (RELAY-PROTOCOL §6.3)
         try await phone.restart()
         try await m.refresh()
         #expect(m.phase == .signedOut && m.moveFlags.book.transferWaiter != nil)
@@ -187,8 +189,8 @@ extension VaultManagerTransferInTests {
         #expect(m.finishMovePending && m.record.value.transferStartedMs == nil, "\(waitingState())")
     }
 
-    /// ... and the approval that comes while the background wait is still starting is applied as well.
-    @Test func anApprovalWhileTheBackgroundWaitIsStartingIsApplied() async throws {
+    /// ... and an approval that comes before the wait is pinned (in whatever order it lands with the wait's start) is applied as well.
+    @Test func anApprovalBeforeTheWaitIsPinnedIsApplied() async throws {
         defer { phone.close() }
         _ = try await scanned()
         try await phone.restart()
@@ -213,6 +215,11 @@ extension VaultManagerTransferInTests {
         }
         service.fence(process: 9999)
         #expect(try await collect(process: 9999) == 0 && service.mailboxCounts.queued == 1)
+        // The integration: after a restart, a collect that carries the previous process's number takes nothing.
+        let previous = phone.process
+        try await phone.restart()
+        #expect(phone.process != previous && service.mailboxCounts.queued == 1)
+        #expect(try await collect(process: previous) == 0 && service.mailboxCounts.queued == 1)
         #expect(try await collect(process: 9998) == 1 && service.mailboxCounts.queued == 0)
     }
 

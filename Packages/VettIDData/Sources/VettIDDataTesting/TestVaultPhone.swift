@@ -262,7 +262,8 @@ public final class TestVaultPhone {
     public let heartbeatPauses = { let p = TestPauses(); p.holding = false; return p }()
     /// The pauses of a window kept alive in the background (15 s): 10 ms, unless a test holds them.
     public let backgroundPauses = { let p = TestPauses(); p.holding = false; return p }()
-    var waitsForOldCollects = true, process = 0
+    var waitsForOldCollects = true
+    public internal(set) var process = 0
     /// Whether a change's wait lasts until the test releases it (``changeWaits``).
     public var holdsChangeWaits: Bool {
         get { changeWaits.holding }

@@ -55,6 +55,8 @@ extension FakeVaultService {
             return .empty(204)
         }
         if r.path == "/v1/mailbox", r.method == "GET" {
+            // A collect of a process that ended takes nothing and uses up no scripted failure meant for the next process.
+            if endedProcess(r) { return .json(200, #"{"messages":[]}"#) }
             return collectFault() ?? collect(r)
         }
         if r.path.hasPrefix("/v1/blob/") { return deviceBlob(r) }
@@ -102,6 +104,12 @@ extension FakeVaultService {
         }
     }
 
+    private func processOf(_ r: FakeHTTPServer.Request) -> Int? { r.header(Self.processHeader).flatMap(Int.init) }
+
+    private func endedProcess(_ r: FakeHTTPServer.Request) -> Bool {
+        locked { transfer.fencedProcesses.contains(processOf(r) ?? 0) }
+    }
+
     /// One collect: the queued messages, waiting briefly while there are none.
     private func collect(_ r: FakeHTTPServer.Request) -> FakeHTTPServer.Answer {
         cond.lock()
@@ -117,9 +125,8 @@ extension FakeVaultService {
         // While answers are held for one `wait` (``holdsCollectAnswersOfWait``), only the collects of that wait take messages.
         let only = transfer.collectGate != nil ? transfer.collectGateWait : transfer.onlyWait
         let other = only.map { r.query?.contains("wait=\($0)&") != true } ?? false
-        // A collect of a process that ended takes nothing, whenever it reaches the fake.
-        let ended = r.header(Self.processHeader).flatMap(Int.init).map { transfer.fencedProcesses.contains($0) } ?? false
-        if holdMessagesValue || other || ended { return .json(200, #"{"messages":[]}"#) }
+        // A process that ended while the collect was held takes nothing either.
+        if holdMessagesValue || other || transfer.fencedProcesses.contains(processOf(r) ?? 0) { return .json(200, #"{"messages":[]}"#) }
         let msgs = takeQueued().map { JsonBuilder().string("msg_id", $0.msgID).string("sender", $0.sender).base64("payload", $0.payload).build() }
         var answer = FakeHTTPServer.Answer.json(200, #"{"messages":\#(JsonBuilder.array(msgs))}"#)
         if !msgs.isEmpty, transfer.collectAnswersLost > 0 {
