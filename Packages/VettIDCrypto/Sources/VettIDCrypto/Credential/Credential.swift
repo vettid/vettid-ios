@@ -113,8 +113,6 @@ public struct CredentialBlobHeader: Sendable, Equatable {
 /// Ed25519(key, "vettid/vms/2/credential-rotate" || m). Mirrors vettid-android `CredentialKeyRotation` and
 /// vettid-vault's `credwire.KeyRotation`.
 public struct CredentialKeyRotation: Sendable {
-    public static let maxChain = 32
-
     public let oldKey: [UInt8]
     public let newKey: [UInt8]
     let sigOld: [UInt8]
@@ -149,7 +147,7 @@ public struct CredentialKeyRotation: Sendable {
         )
     }
 
-    /// Parses one statement strictly (signatures unchecked: ``verify()`` or ``followChain(pinned:_:)``).
+    /// Parses one statement strictly (signatures unchecked: ``verify()``).
     public static func parse(_ o: JsonObject) throws -> CredentialKeyRotation {
         _ = try o.uint("v", min: 1, max: 1)
         return CredentialKeyRotation(
@@ -158,19 +156,5 @@ public struct CredentialKeyRotation: Sendable {
             sigOld: try o.base64("sig_old", Suite.ed25519SignatureSize),
             sigNew: try o.base64("sig_new", Suite.ed25519SignatureSize)
         )
-    }
-
-    /// Follows a non-empty chain (≤ 32 links) from the pinned key; returns the key it leads to.
-    public static func followChain(pinned: [UInt8], _ chain: [CredentialKeyRotation]) throws -> [UInt8] {
-        guard pinned.count == Suite.ed25519PublicSize, !chain.isEmpty, chain.count <= maxChain else {
-            throw CryptoError.signature("credential chain")
-        }
-        var cur = pinned
-        for r in chain {
-            guard Ed25519.equalPublic(r.oldKey, cur) else { throw CryptoError.signature("credential chain") }
-            try r.verify()
-            cur = r.newKey
-        }
-        return cur
     }
 }
