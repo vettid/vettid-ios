@@ -187,6 +187,7 @@ import VettIDDataTesting
     @Test func killedBeforeTheDeadlineAndStartedAfterItAWaitingPairedIsApplied() async throws {
         defer { phone.close() }
         _ = try await scanned()
+        service.leasesCollected = 1
         try await phone.restart()
         service.approveTransferIn()
         phone.clockAhead = 700

@@ -150,6 +150,7 @@ extension VaultManagerTransferInTests {
     @Test func theDeadlineRaceCompletesTheTakeOverOnce() async throws {
         defer { phone.close() }
         _ = try await scanned()
+        service.leasesCollected = 1
         try await phone.restart()
         service.approveTransferIn()
         phone.clockAhead = 700
@@ -167,10 +168,15 @@ extension VaultManagerTransferInTests {
     @Test func aStartBeforeTheDeadlineKeepsWaiting() async throws {
         defer { phone.close() }
         _ = try await scanned()
+        // The relay leases what a collect takes (RELAY-PROTOCOL §6.3): a long poll the killed process left at the relay may
+        // take the approval before the new process's collector does, and the lease gives it back.
+        service.leasesCollected = 1
         try await phone.restart()
         try await m.refresh()
         #expect(m.phase == .signedOut && m.moveFlags.book.transferWaiter != nil)
         #expect(await vaultFailure { _ = try await m.redeemSetupCode(.secret(service.secret)) } != nil)
+        // The approval comes once the background wait is under way (parked for the deadline), not while it is starting.
+        #expect(await deadlineWaiting())
         service.approveTransferIn()
         #expect(await eventually { m.phase == .setup(.finishing) })
         #expect(m.finishMovePending && m.record.value.transferStartedMs == nil)
