@@ -50,6 +50,9 @@ struct FakeTransferStore {
     /// here for the file's length; they count every collect of the device's mailbox.)
     var collecting: Set<Int> = []
     var collectSeq = 0
+    /// The processes of the test phones that were made (``newProcess()``) and those that ended (``fence(process:)``).
+    var processSeq = 0
+    var fencedProcesses: Set<Int> = []
     /// At the last restart of a test phone: the collects its old process left in flight, and whether one outlived the wait.
     var restartLeft = 0
     var restartOutlived = false
@@ -294,6 +297,16 @@ extension FakeVaultService {
     /// At the last restart of a test phone (``TestVaultPhone/restart()``): how many collects its old process left in
     /// flight at the halt, and whether one was still in flight when the wait for them gave up.
     public var lastRestartCollects: (left: Int, outlived: Bool) { locked { (transfer.restartLeft, transfer.restartOutlived) } }
+
+    /// The number a test phone's next process carries on its requests (``processHeader``).
+    func newProcess() -> Int { locked { transfer.processSeq += 1; return transfer.processSeq } }
+
+    /// The process [process] ended (a halt, the app killed): the collects it still has on their way take nothing, as a
+    /// dead process's requests are gone with it. Not used by a restart that leaves them (``TestVaultPhone/restartLeavingCollects()``).
+    public func fence(process: Int) { locked { _ = transfer.fencedProcesses.insert(process) } }
+
+    /// The header that tells the fake which process of a test phone sent a request.
+    public static let processHeader = "X-Test-Process"
 
     func noteRestart(left: Int, outlived: Bool) { locked { (transfer.restartLeft, transfer.restartOutlived) = (left, outlived) } }
 

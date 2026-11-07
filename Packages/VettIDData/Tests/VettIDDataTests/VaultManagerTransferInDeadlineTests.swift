@@ -150,6 +150,7 @@ extension VaultManagerTransferInTests {
     @Test func theDeadlineRaceCompletesTheTakeOverOnce() async throws {
         defer { phone.close() }
         _ = try await scanned()
+        service.leasesCollected = 1 // the relay's lease (RELAY-PROTOCOL §6.3): two refreshes at once may cut a collect
         try await phone.restart()
         service.approveTransferIn()
         phone.clockAhead = 700
@@ -162,18 +163,64 @@ extension VaultManagerTransferInTests {
         #expect(service.requestsSeen.filter { $0 == "credential.get" }.count == 1)
     }
 
+    /// The state the tests of a start before the deadline report when they fail.
+    func waitingState() -> String {
+        "phase \(m.phase), restart \(service.lastRestartCollects), mailbox \(service.mailboxCounts), "
+            + "paired at the vault \(service.transferPaired), finishMovePending \(m.finishMovePending), "
+            + "transferStartedMs set \(m.record.value.transferStartedMs != nil), deviceID set \(m.session?.device.deviceID != nil), "
+            + "waiter \(m.moveFlags.book.transferWaiter != nil), deadline pauses \(phone.deadlinePauses.lengths.count)"
+    }
+
     /// M3: a start before the deadline waits for the rest of it in the background (the welcome screen stays; enrollment is
-    /// refused meanwhile), and the approval then completes the transfer.
+    /// refused meanwhile), and the approval then completes the transfer. The killed process's collects take nothing
+    /// (``TestVaultPhone/restart()``), so the approval is the new process's.
     @Test func aStartBeforeTheDeadlineKeepsWaiting() async throws {
         defer { phone.close() }
         _ = try await scanned()
+        service.leasesCollected = 1 // the relay's lease (RELAY-PROTOCOL §6.3)
         try await phone.restart()
         try await m.refresh()
         #expect(m.phase == .signedOut && m.moveFlags.book.transferWaiter != nil)
         #expect(await vaultFailure { _ = try await m.redeemSetupCode(.secret(service.secret)) } != nil)
+        // The approval comes once the background wait is under way (parked for the deadline).
+        #expect(await deadlineWaiting())
         service.approveTransferIn()
-        #expect(await eventually { m.phase == .setup(.finishing) })
-        #expect(m.finishMovePending && m.record.value.transferStartedMs == nil)
+        #expect(await eventually { m.phase == .setup(.finishing) }, "\(waitingState())")
+        #expect(m.finishMovePending && m.record.value.transferStartedMs == nil, "\(waitingState())")
+    }
+
+    /// ... and an approval that comes before the wait is pinned (in whatever order it lands with the wait's start) is applied as well.
+    @Test func anApprovalBeforeTheWaitIsPinnedIsApplied() async throws {
+        defer { phone.close() }
+        _ = try await scanned()
+        try await phone.restart()
+        try await m.refresh()
+        service.approveTransferIn()
+        #expect(await eventually { m.phase == .setup(.finishing) }, "\(waitingState())")
+        #expect(m.finishMovePending && m.record.value.transferStartedMs == nil, "\(waitingState())")
+    }
+
+    /// The fence of a process that ended: its collect takes nothing, a collect of the running process (or of none) does.
+    @Test func aCollectOfAnEndedProcessTakesNothing() async throws {
+        defer { phone.close() }
+        _ = try await scanned()
+        m.session?.device.stop()
+        service.approveTransferIn()
+        #expect(await eventually { service.mailboxCounts.queued == 1 }, "\(service.mailboxCounts)")
+        let url = try #require(URL(string: service.relay.baseURL + "/v1/mailbox?wait=0&max=10"))
+        func collect(process: Int) async throws -> Int {
+            let session = service.relay.session(headers: [FakeVaultService.processHeader: String(process)])
+            let (data, _) = try await session.data(from: url)
+            return String(bytes: data, encoding: .utf8)?.contains("msg_id") == true ? 1 : 0
+        }
+        service.fence(process: 9999)
+        #expect(try await collect(process: 9999) == 0 && service.mailboxCounts.queued == 1)
+        // The integration: after a restart, a collect that carries the previous process's number takes nothing.
+        let previous = phone.process
+        try await phone.restart()
+        #expect(phone.process != previous && service.mailboxCounts.queued == 1)
+        #expect(try await collect(process: previous) == 0 && service.mailboxCounts.queued == 1)
+        #expect(try await collect(process: 9998) == 1 && service.mailboxCounts.queued == 0)
     }
 
     /// M3: ... and drops it at the deadline when nothing came.
