@@ -117,7 +117,9 @@ extension FakeVaultService {
         // While answers are held for one `wait` (``holdsCollectAnswersOfWait``), only the collects of that wait take messages.
         let only = transfer.collectGate != nil ? transfer.collectGateWait : transfer.onlyWait
         let other = only.map { r.query?.contains("wait=\($0)&") != true } ?? false
-        if holdMessagesValue || other { return .json(200, #"{"messages":[]}"#) }
+        // A collect of a process that ended takes nothing, whenever it reaches the fake.
+        let ended = r.header(Self.processHeader).flatMap(Int.init).map { transfer.fencedProcesses.contains($0) } ?? false
+        if holdMessagesValue || other || ended { return .json(200, #"{"messages":[]}"#) }
         let msgs = takeQueued().map { JsonBuilder().string("msg_id", $0.msgID).string("sender", $0.sender).base64("payload", $0.payload).build() }
         var answer = FakeHTTPServer.Answer.json(200, #"{"messages":\#(JsonBuilder.array(msgs))}"#)
         if !msgs.isEmpty, transfer.collectAnswersLost > 0 {

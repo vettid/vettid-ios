@@ -1,8 +1,18 @@
 import Foundation
 import VettIDData
+import VettIDRelay
 
 // TEST ONLY. The end of a test phone's app process, before ``TestVaultPhone/restart()`` starts the next one.
 extension TestVaultPhone {
+    /// Makes the requests of the next process carry its number; returns it.
+    static func mark(_ config: inout VaultManagerConfig, _ service: FakeVaultService) -> Int {
+        let n = service.newProcess()
+        config.transport = HTTPTransport(
+            session: service.api.session(headers: [FakeVaultService.processHeader: String(n)]), sleep: { _ in }
+        )
+        return n
+    }
+
     /// A restart as a real process death with the relay's long poll still open: the old collects are not waited for, and
     /// one of them may take what the vault sends next (with ``FakeVaultService/leasesCollected``, the relay's lease).
     public func restartLeavingCollects() async throws {
@@ -17,6 +27,9 @@ extension TestVaultPhone {
     /// most a second: another phone's later ones are not. What it found is kept (``FakeVaultService/lastRestartCollects``).
     func haltProcess() async throws {
         await manager.halt()
+        // The halted process's requests take nothing from now on, whenever they reach the fake (a request already handed to
+        // URLSession may arrive after the halt): unless the test leaves them running.
+        if waitsForOldCollects { service.fence(process: process) }
         let left = service.collectsInFlight
         if !waitsForOldCollects { return service.noteRestart(left: left.count, outlived: !left.isEmpty) }
         for _ in 0..<200 where !service.collectsInFlight.isDisjoint(with: left) {

@@ -262,7 +262,7 @@ public final class TestVaultPhone {
     public let heartbeatPauses = { let p = TestPauses(); p.holding = false; return p }()
     /// The pauses of a window kept alive in the background (15 s): 10 ms, unless a test holds them.
     public let backgroundPauses = { let p = TestPauses(); p.holding = false; return p }()
-    var waitsForOldCollects = true
+    var waitsForOldCollects = true, process = 0
     /// Whether a change's wait lasts until the test releases it (``changeWaits``).
     public var holdsChangeWaits: Bool {
         get { changeWaits.holding }
@@ -321,7 +321,7 @@ public final class TestVaultPhone {
             service, appKeys, seedWrap, wrapped, phoneKeys, fileKeys, protectedData, directory, gate, clock,
             wipes ? wipeTargets : nil, attester, startOver, waits, uptime
         )
-        Self.votes(&config, votesSite, votesPauses)
+        Self.votes(&config, votesSite, votesPauses); process = Self.mark(&config, service)
         manager = VaultManager(config: config)
     }
 
@@ -344,7 +344,7 @@ public final class TestVaultPhone {
             wipes ? wipeTargets : nil, attester, attestStartOver, waits, uptime
         )
         config.pairingWait = pairingWait
-        Self.votes(&config, votesSite, votesPauses)
+        Self.votes(&config, votesSite, votesPauses); process = Self.mark(&config, service)
         manager = VaultManager(config: config)
     }
 
