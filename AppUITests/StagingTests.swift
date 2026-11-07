@@ -116,8 +116,7 @@ final class StagingTests: VaultUITestCase {
 
     /// The unlock screen's own offer (§11.10.3): "Update available: release N" under the keypad (RELEASE-UPDATES §2 step
     /// 2), "Approve the update with this unlock", the PIN; the unlock carries the approval, the vault moves and the app
-    /// opens on the new release. Then
-    /// the vault is locked. Skipped when the unlock offers no update.
+    /// opens on the new release. Then the vault is locked. Skipped when the unlock offers no update.
     @MainActor
     func testStagingApproveUpdateAtUnlock() throws {
         let pin = try Self.pin()
