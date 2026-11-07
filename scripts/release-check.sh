@@ -196,10 +196,10 @@ check_store_files() {
     for pair in NSPrivacyAccessedAPICategoryUserDefaults=CA92.1 NSPrivacyAccessedAPICategoryFileTimestamp=C617.1; do
       grep -q "^${pair%%=*}=Array{.*${pair#*=}.*}$" <<<"${pairs}" || problems+=("privacy manifest without ${pair%%=*} reason ${pair#*=}")
     done
-    # The data the member API can read (email, account ids, the app key), declared as the App Privacy answers say.
+    # The data the member API can read (email, name, account ids, the app key), declared as the App Privacy answers say.
     local collected
     collected=$(plutil -extract NSPrivacyCollectedDataTypes xml1 -o - "${manifest}" 2>/dev/null || true)
-    for t in EmailAddress UserID DeviceID; do
+    for t in EmailAddress Name UserID DeviceID; do
       grep -qF "<string>NSPrivacyCollectedDataType${t}</string>" <<<"${collected}" ||
         problems+=("privacy manifest does not declare NSPrivacyCollectedDataType${t}")
     done
@@ -621,6 +621,8 @@ if [[ ${SELF_TEST} -eq 1 ]]; then
     unstore "${config}" "${icon}" "without Assets.car" "rm Assets.car"
     unstore "${config}" "${icon}" "without the collected email address" \
       "plutil -remove NSPrivacyCollectedDataTypes.0 PrivacyInfo.xcprivacy"
+    unstore "${config}" "${icon}" "without the collected name" \
+      "plutil -remove NSPrivacyCollectedDataTypes.3 PrivacyInfo.xcprivacy"
     unstore "${config}" "${icon}" "with a collected type used for tracking" \
       "plutil -replace NSPrivacyCollectedDataTypes.1.NSPrivacyCollectedDataTypeTracking -bool true PrivacyInfo.xcprivacy"
   done
