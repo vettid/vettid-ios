@@ -241,15 +241,15 @@ check_run_destinations() {
 }
 
 # The shipping Info.plist and binary (App Store readiness): the export compliance answer (the app implements its own
-# end-to-end encryption and qualifies for the mass-market exemption, Category 5 Part 2 note 3, which the owner confirms in
-# App Store Connect), an iPhone-only app (the device family, the iOS platform of the executable, no Mac key; this does not
+# end-to-end encryption and qualifies for the mass-market exemption, Category 5 Part 2 note 3, so
+# ITSAppUsesNonExemptEncryption is false; the owner gives the questionnaire's answers in App Store Connect), an iPhone-only app (the device family, the iOS platform of the executable, no Mac key; this does not
 # show the store's Mac and Vision Pro availability, which is set in App Store Connect), the privacy manifest, the document
 # types as declared above, and the configuration's Xcode run destinations.
 check_shipping_plist() {
   local app=$1 config=$2 problems=() v settings exe
   local info="${app}/Info.plist"
   v=$(/usr/libexec/PlistBuddy -c 'Print :ITSAppUsesNonExemptEncryption' "${info}" 2>/dev/null || true)
-  [[ "${v}" == "true" ]] || problems+=("ITSAppUsesNonExemptEncryption '${v}', expected true")
+  [[ "${v}" == "false" ]] || problems+=("ITSAppUsesNonExemptEncryption '${v}', expected false (mass-market exempt)")
   v=$(plutil -extract UIDeviceFamily json -o - "${info}" 2>/dev/null | tr -d ' ' || true)
   [[ "${v}" == "[1]" ]] || problems+=("UIDeviceFamily ${v}, expected [1] (iPhone)")
   for key in LSMinimumSystemVersion LSMinimumSystemVersionByArchitecture; do
@@ -639,7 +639,7 @@ if [[ ${SELF_TEST} -eq 1 ]]; then
     echo "self-test: ${config} refuses an app ${what}"
   }
   for config in Release Staging; do
-    unship "${config}" "with ITSAppUsesNonExemptEncryption false" "plutil -replace ITSAppUsesNonExemptEncryption -bool false Info.plist"
+    unship "${config}" "with ITSAppUsesNonExemptEncryption true" "plutil -replace ITSAppUsesNonExemptEncryption -bool true Info.plist"
     unship "${config}" "without ITSAppUsesNonExemptEncryption" "plutil -remove ITSAppUsesNonExemptEncryption Info.plist"
     unship "${config}" "that also runs on an iPad" "plutil -replace UIDeviceFamily -json '[1,2]' Info.plist"
     unship "${config}" "with a Mac key" "plutil -insert LSMinimumSystemVersion -string 14.0 Info.plist"
