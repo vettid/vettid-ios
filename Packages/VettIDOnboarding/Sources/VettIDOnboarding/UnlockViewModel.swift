@@ -136,6 +136,7 @@ public final class UnlockViewModel: UnlockActions {
         if state.serviceWaitSeconds > 0 { return }
         // The result of an earlier check goes too: no PIN is asked for until this one has verified the vault's software.
         // So does an open erase confirmation: it does not come back by itself.
+        let ticked = state.preflight?.offer
         state.loading = true
         state.preflightError = nil
         state.preflight = nil
@@ -147,11 +148,15 @@ public final class UnlockViewModel: UnlockActions {
                 let p = try await vault.preflight()
                 state.loading = false
                 state.preflight = p
+                // A tick is for the offer it was given on: another release or PCR0 (or none) clears it; the same offer
+                // read again keeps it.
+                if ticked == nil || p.offer != ticked || p.rollback { state.approveOffer = false }
                 state.notes = nil
                 loadNotes(p)
             } catch let e as VaultFailure {
                 state.loading = false
                 state.preflightError = e.kind
+                state.approveOffer = false
                 if e.kind == .servicePaused { startServiceWait(e.retryAfterSeconds) }
             } catch {
                 state.loading = false

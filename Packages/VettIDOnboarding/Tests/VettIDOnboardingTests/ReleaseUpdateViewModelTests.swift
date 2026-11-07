@@ -293,6 +293,61 @@ import VettIDDataTesting
         #expect(locked.lastApproved == rel(5))
     }
 
+    /// (RELEASE-UPDATES §2 step 2) The approval is not gated on the notes: with the notes still loading or unavailable,
+    /// ticking it sends the same approval with the unlock as ever.
+    @Test func theApprovalDoesNotWaitForTheNotes() async {
+        for notes in [nil, FakeReleaseNotes(.unavailable)] {
+            let locked = FakeVaultRepository(.locked)
+            locked.preflightInfo = PreflightInfo(routed: rel(4), lastNumber: 4, softwareUpdated: false, rollback: false, offer: rel(5))
+            let vm = UnlockViewModel(vault: locked, account: locked, releaseNotes: notes)
+            await vm.settle()
+            #expect(!vm.state.updateHeld)
+            vm.setApproveOffer(true)
+            vm.setPin("40281795")
+            vm.submit()
+            await vm.settle()
+            #expect(locked.lastApproved == rel(5))
+        }
+        // A repository that never answers leaves the notes loading, and the approval still goes.
+        let locked = FakeVaultRepository(.locked)
+        locked.preflightInfo = PreflightInfo(routed: rel(4), lastNumber: 4, softwareUpdated: false, rollback: false, offer: rel(5))
+        let vm = UnlockViewModel(vault: locked, account: locked)
+        await vm.settle()
+        #expect(vm.state.notes == nil)
+        vm.setApproveOffer(true)
+        #expect(vm.state.approveOffer)
+    }
+
+    /// A tick belongs to the offer it was given on: a new check (a retry) clears it, so it never carries to another
+    /// release or PCR0, and nothing is approved with the next unlock unless it is ticked again.
+    @Test func theTickDoesNotCarryToAnotherOffer() async {
+        let locked = FakeVaultRepository(.locked)
+        locked.preflightInfo = PreflightInfo(routed: rel(4), lastNumber: 4, softwareUpdated: false, rollback: false, offer: rel(5))
+        let vm = UnlockViewModel(vault: locked, account: locked)
+        await vm.settle()
+        vm.setApproveOffer(true)
+        locked.preflightInfo = PreflightInfo(routed: rel(4), lastNumber: 4, softwareUpdated: false, rollback: false, offer: rel(6))
+        vm.retryPreflight()
+        await vm.settle()
+        #expect(vm.state.preflight?.offer == rel(6) && !vm.state.approveOffer)
+        vm.setPin("40281795")
+        vm.submit()
+        await vm.settle()
+        #expect(locked.lastApproved == nil)
+        // The same offer read again keeps its tick.
+        vm.setApproveOffer(true)
+        vm.retryPreflight()
+        await vm.settle()
+        #expect(vm.state.approveOffer)
+        // The same release with another PCR0 does not.
+        var other = rel(6)
+        other.pcr0 = String(repeating: "cd", count: 48)
+        locked.preflightInfo = PreflightInfo(routed: rel(4), lastNumber: 4, softwareUpdated: false, rollback: false, offer: other)
+        vm.retryPreflight()
+        await vm.settle()
+        #expect(vm.state.preflight?.offer == other && !vm.state.approveOffer)
+    }
+
     @Test func whatsNewIsLookedUpForTheUnlockOfferOnly() async {
         let notes = FakeReleaseNotes(.unavailable)
         let locked = FakeVaultRepository(.locked)
