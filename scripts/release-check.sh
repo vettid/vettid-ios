@@ -242,7 +242,7 @@ check_run_destinations() {
 
 # The shipping Info.plist and binary (App Store readiness): the export compliance answer (the app implements its own
 # end-to-end encryption and qualifies for the mass-market exemption, Category 5 Part 2 note 3, so
-# ITSAppUsesNonExemptEncryption is false; the owner gives the questionnaire's answers in App Store Connect), an iPhone-only app (the device family, the iOS platform of the executable, no Mac key; this does not
+# ITSAppUsesNonExemptEncryption is false, the owner's decision), an iPhone-only app (the device family, the iOS platform of the executable, no Mac key; this does not
 # show the store's Mac and Vision Pro availability, which is set in App Store Connect), the privacy manifest, the document
 # types as declared above, and the configuration's Xcode run destinations.
 check_shipping_plist() {

@@ -123,7 +123,8 @@ targets:
         # Export compliance: the app uses encryption beyond the system's (its own end-to-end encryption), and it qualifies
         # for the mass-market exemption (Category 5 Part 2, note 3), so it uses no *non-exempt* encryption: NO, which is
         # what this key states. YES would require export documentation in App Store Connect and its
-        # ITSEncryptionExportComplianceCode in the app. The owner gives the questionnaire's answers in App Store Connect.
+        # ITSEncryptionExportComplianceCode in the app. With the key set, App Store Connect asks nothing per build; the
+        # app is not offered in France until an ANSSI declaration exists (the owner's decision, 2026-11-06).
         INFOPLIST_KEY_ITSAppUsesNonExemptEncryption: NO
         # iPhone only (TARGETED_DEVICE_FAMILY 1). These three settings only turn off Xcode's Mac, Mac Catalyst and Vision Pro
         # run destinations; they do not set the store's availability. That is opted out in App Store Connect (Pricing and
