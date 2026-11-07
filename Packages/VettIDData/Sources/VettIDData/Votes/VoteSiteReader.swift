@@ -168,13 +168,17 @@ struct VoteSiteReader: Sendable {
         case down
     }
 
-    /// `rows.json` up to [cap] bytes, and never over ``VoteSiteLimits/rowsMax``.
-    func fetchRows(_ proposalID: String, cap: Int) async throws -> RowsFetch {
-        switch try await get("p/\(proposalID)/rows.json", min(VoteSiteLimits.rowsMax, cap)) {
-        case .found(let b): .rows(b)
-        case .absent: .absent
-        case .tooLarge: .tooLarge
-        case .unreachable: .down
+    /// `rows.json` up to [cap] bytes, and never over ``VoteSiteLimits/rowsMax``. [received] is told the bytes as they arrive,
+    /// also of a download that then drops (``VoteSite/getCounted(_:maxBytes:received:)``).
+    func fetchRows(_ proposalID: String, cap: Int, received: @escaping @Sendable (Int) -> Void = { _ in }) async throws -> RowsFetch {
+        try Task.checkCancellation()
+        let answer = await site.getCounted("p/\(proposalID)/rows.json", maxBytes: min(VoteSiteLimits.rowsMax, cap), received: received)
+        try Task.checkCancellation()
+        switch answer {
+        case .found(let b): return .rows(b)
+        case .absent: return .absent
+        case .tooLarge: return .tooLarge
+        case .unreachable: return .down
         }
     }
 }

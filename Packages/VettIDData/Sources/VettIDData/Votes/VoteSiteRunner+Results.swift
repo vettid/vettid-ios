@@ -5,12 +5,21 @@ import VettIDVault
 /// What one attempt at a vote's results saw, for its ``ResultsAttempt``.
 struct AttemptTrace {
     var gaveUp = false
+    /// The check's state in the list when the attempt began (nil when the list does not have the vote): the 7 days of a
+    /// `gave_up` record run from its first re-check, and a check back in `pending` starts them again (vettid-android #319
+    /// item 3).
+    var checkState: CheckState?
+    /// The bytes of `rows.json` as they arrive (also of a download that drops): any bytes count toward the weekly cap, and
+    /// stamp the recheck on open's cap (vettid-android #319 item 1, #321 L3). Set when the download starts.
+    var report: RowsReport?
+    /// The recheck stamps' epoch when the attempt began (a wipe since drops the stamp).
+    var recheckEpoch = 0
     var resultsSha256: String?
     var sigSha256: String?
     var bundleSha256: String?
     /// `rows.json`'s bytes were downloaded: such an attempt counts toward the daily limit, whatever follows.
     var rowsDownloaded = false
-    /// `rows.json` was fetched with a body (read, or cut at its cap): the time of the last rows download.
+    /// `rows.json`'s bytes were received (read, cut at its cap, or cut off partway): the time of the last rows download.
     var rowsSpent = false
     /// `rows.json` was had (read, found over its cap, or not needed): false when it was absent or could not be fetched.
     var rowsFetched = false
@@ -63,7 +72,8 @@ extension VoteSiteRunner {
     /// `rows.json` still counts toward the daily limit, with only its time and hashes. Never after a wipe (the epoch).
     private func attempt(_ key: VoteKey, quietly: Bool, due: Bool) async throws -> ResultsOutcome {
         guard let votes else { throw CancellationError() }
-        let gaveUp = votes.votes.first { $0.key == key }?.check?.state == .gaveUp
+        let checkState = votes.votes.first { $0.key == key }?.check?.state
+        let gaveUp = checkState == .gaveUp
         // Looked at again in the line of the attempts, so that two passes that both found it due (a `check_due` event and
         // the hourly run) do not run it back to back.
         if due, gaveUp, !votes.attempts.dailyDue(key, at: votes.now()) { return .unchanged }
@@ -71,9 +81,13 @@ extension VoteSiteRunner {
         let epoch = votes.attempts.epoch
         var trace = AttemptTrace()
         trace.gaveUp = gaveUp
+        trace.checkState = checkState
+        trace.recheckEpoch = votes.attempts.rechecks.epoch
         var out: ResultsOutcome?
         var cancelled = false
         defer {
+            // Bytes received count, also of a download that dropped.
+            if trace.report?.received == true { trace.rowsSpent = true }
             if (!cancelled && haltGeneration == generation) || trace.rowsDownloaded {
                 record(key, epoch: epoch, trace, cancelled ? nil : out, due: due)
             }
@@ -143,7 +157,12 @@ extension VoteSiteRunner {
                 trace.deferred = true
                 return .deferred
             }
-            switch try await reader.fetchRows(key.proposalID, cap: cap) {
+            let report = RowsReport(
+                votes.attempts.rechecks, key: ResultsAttempts.id(key), at: Int64(votes.now().timeIntervalSince1970 * 1000),
+                epoch: trace.recheckEpoch
+            )
+            trace.report = report
+            switch try await reader.fetchRows(key.proposalID, cap: cap, received: report.receive) {
             case .rows(let b):
                 rows = b
                 trace.rowsDownloaded = true
@@ -319,9 +338,10 @@ extension VoteSiteRunner {
     // MARK: The kept attempts
 
     /// Keeps what [trace] saw for the daily re-check and the download cap (no choice, row or proof). An attempt that ended in
-    /// a failure counts as not having had the rows. A **Check again** that ended unchanged or deferred (nothing sent) keeps
+    /// a failure counts as not having had the rows. A **Check again** that ended unchanged (nothing sent) keeps
     /// the last attempt's time, so it does not defer the daily re-check (owner decision, #317 item 3); the daily re-check's
-    /// own is its attempt of the day.
+    /// own is its attempt of the day. The 7 days of a `gave_up` record run from its first re-check; a check back in `pending`
+    /// starts them again (#319 item 3). A deferred download (the daily re-check only) keeps what the last attempt knew.
     private func record(_ key: VoteKey, epoch: Int, _ trace: AttemptTrace, _ out: ResultsOutcome?, due: Bool) {
         guard let votes else { return }
         var final = false
@@ -331,7 +351,7 @@ extension VoteSiteRunner {
             final = VotesManager.finalCheck(s)
         }
         let unchanged = out == .unchanged
-        let keepTime = !due && (unchanged || out == .deferred)
+        let keepTime = !due && unchanged
         let at = Int64(votes.now().timeIntervalSince1970 * 1000)
         let last = votes.attempts.attempt(key)
         var entry = ResultsAttempt(
@@ -339,12 +359,14 @@ extension VoteSiteRunner {
             vaultSide: trace.vaultSide, answered: submitted || (trace.answered && unchanged),
             sentRow: trace.sentRow && (submitted || unchanged), sigSha256: trace.sigSha256, bundleSha256: trace.bundleSha256
         )
-        entry.firstRecheckMs = last?.firstRecheckMs ?? (trace.gaveUp ? at : nil)
+        switch trace.checkState {
+        case .gaveUp: entry.firstRecheckMs = last?.firstRecheckMs ?? at
+        case .pending: entry.firstRecheckMs = nil
+        default: entry.firstRecheckMs = last?.firstRecheckMs
+        }
         entry.lastRowsMs = trace.rowsSpent ? at : last?.lastRowsMs
-        // A deferred download keeps what the last attempt knew (the skip's facts and hashes); only its time moves, and not
-        // for the member's Check again.
         if trace.deferred, var kept = last {
-            kept.atMs = keepTime ? kept.atMs : at
+            kept.atMs = at
             entry = kept
         } else if keepTime, let last {
             entry.atMs = last.atMs

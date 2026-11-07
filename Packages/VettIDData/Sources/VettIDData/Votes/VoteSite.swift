@@ -23,9 +23,19 @@ public protocol VoteSite: Sendable {
 
     /// The document at [path] under `/v1/`, read up to [maxBytes].
     func get(_ path: String, maxBytes: Int) async -> SiteAnswer
+
+    /// ``get(_:maxBytes:)``, telling [received] the body's bytes as they arrive, also when the answer is then no answer (a
+    /// download cut off partway still cost them: the weekly cap on a metered network counts them, vettid-android #319
+    /// item 1). A 404 reads no body, so it counts nothing. Called from any thread, possibly after a cancellation.
+    func getCounted(_ path: String, maxBytes: Int, received: @escaping @Sendable (Int) -> Void) async -> SiteAnswer
 }
 
 public extension VoteSite {
+    /// Reads without counting (a site that cannot tell how many bytes arrived).
+    func getCounted(_ path: String, maxBytes: Int, received: @escaping @Sendable (Int) -> Void) async -> SiteAnswer {
+        await get(path, maxBytes: maxBytes)
+    }
+
     func get(_ path: String) async -> SiteAnswer { await get(path, maxBytes: VoteSiteLimits.defaultMax) }
 }
 
@@ -86,10 +96,14 @@ public struct URLSessionVoteSite: VoteSite {
     }
 
     public func get(_ path: String, maxBytes: Int) async -> SiteAnswer {
+        await getCounted(path, maxBytes: maxBytes) { _ in }
+    }
+
+    public func getCounted(_ path: String, maxBytes: Int, received: @escaping @Sendable (Int) -> Void) async -> SiteAnswer {
         // A read of work that was cancelled (a lock, the app leaving) is not made.
         guard !Task.isCancelled, let root, let url = URL(string: "\(root)/v1/\(path.drop { $0 == "/" })") else { return .unreachable }
         do {
-            let answer = try await transport.send(policy: .idempotent, maxBody: maxBytes, readsBody: { $0 == 200 }) {
+            let answer = try await transport.send(policy: .idempotent, maxBody: maxBytes, readsBody: { $0 == 200 }, received: received) {
                 var r = URLRequest(url: url)
                 r.httpMethod = "GET"
                 r.setValue("*/*", forHTTPHeaderField: "Accept")
