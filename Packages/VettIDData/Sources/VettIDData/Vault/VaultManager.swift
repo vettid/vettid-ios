@@ -207,8 +207,8 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
             apiBase: config.apiOrigin, manifestURL: config.manifestURL, transport: config.transport,
             auth: .appKey(StoredAppKeySigner(store: config.keys.appKeys), vaultID: { ids.current })
         )
-        phoneSecrets = PhoneSecrets(
-            keys: config.keys.phone, store: config.file(VaultFiles.phoneSecrets), now: config.now, timeScale: { scale.value }
+        phoneSecrets = PhoneSecrets(keys: config.keys.phone, store: config.file(VaultFiles.phoneSecrets), now: config.now,
+            timeScale: { scale.value }, writeFails: config.phoneSecretsWriteFails
         )
         canary = Self.canaryManifests(config, member, ref)
         releaseUpdate = ReleaseUpdateManager(ops: VaultReleaseUpdateOps(ref: ref))
@@ -400,7 +400,7 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
         )
         let cfg = DeviceConfig(
             name: c.deviceName, relayURL: c.relayURL, transport: c.transport,
-            store: FileDeviceStateStore(file: c.file(VaultFiles.device(of: identity))),
+            store: FileDeviceStateStore(file: c.file(VaultFiles.device(of: identity)), failing: c.deviceSaveFails),
             enrolledAttestation: c.enrolledAttestation, now: c.now, collectMode: c.collectMode, pollWait: c.pollWait,
             requestTimeout: c.requestTimeout, requestTimeoutOf: c.requestTimeoutOf, uptime: c.uptime
         )

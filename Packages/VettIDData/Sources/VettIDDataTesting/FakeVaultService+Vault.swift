@@ -162,10 +162,27 @@ extension FakeVaultService {
         return .json(201, #"{"msg_id":"\#(Ulid.new())"}"#)
     }
 
+    /// A transfer's `hs.init`, taken: the first (a transfer's target has no device until the new phone's `hs.init` arrives,
+    /// FakeVaultService+Transfer.swift), or a second code's scanned over an earlier code's handshake (dropped by the phone, or
+    /// left open), whose `hs.init` replaces the earlier handshake as a vault that took another invitation's would. False when
+    /// [raw] is neither. Callers hold ``cond``.
+    private func acceptedTransferInit(_ raw: [UInt8]) throws -> Bool {
+        guard transfer.inviteID != nil else { return false }
+        if device == nil {
+            try acceptTransferInit(raw)
+            return true
+        }
+        guard transfer.rearmed else { return false }
+        let kem = kem
+        guard (try? PendingInit.open(raw, lookup: { k in k == kem.publicKey.kid ? kem : nil }, now: Date())) != nil else { return false }
+        (device, responder, transfer.rearmed, transfer.paired) = (nil, nil, false, false)
+        try acceptTransferInit(raw)
+        return true
+    }
+
     /// A deposit to the vault: the device's hs.init, its hs.fin, or a request in the session. Callers hold ``cond``.
     private func deposited(_ raw: [UInt8]) throws {
-        // A transfer's target has no device until the new phone's hs.init arrives (FakeVaultService+Transfer.swift).
-        if device == nil, transfer.inviteID != nil { return try acceptTransferInit(raw) }
+        if try acceptedTransferInit(raw) { return }
         guard let device else { return }
         // The recovered phone's `hs.init` again while the first is begun: the vault takes no other on the same invitation until an
         // unlock drops the begun one (VAULT-MESSAGING 0.67.0 §11.14.6 "Pairing"). Seen, never answered.

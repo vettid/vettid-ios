@@ -3,27 +3,6 @@ import VettIDAltChan
 import VettIDCrypto
 import VettIDVault
 
-/// The pending epoch-1 record and the bundle's traits, as the alternate channel's callback (off the main actor) leaves
-/// them.
-private final class TransferPath: @unchecked Sendable {
-    private let lock = NSLock()
-    private var epochID: String?
-    private var caps: [String] = []
-    private var scale: UInt64 = TimeScale.real
-
-    func set(_ id: String, _ capabilities: [String], _ timeScale: UInt64) {
-        lock.withLock { (epochID, caps, scale) = (id, capabilities, timeScale) }
-    }
-
-    struct Seen {
-        let id: String?
-        let capabilities: [String]
-        let timeScale: UInt64
-    }
-
-    var value: Seen { lock.withLock { Seen(id: epochID, capabilities: caps, timeScale: scale) } }
-}
-
 // A direct transfer (VAULT-MESSAGING §6.7.1, §11.14.10), on both phones: the new phone scans the old phone's code, shows
 // the SAS and takes the credential over; the old phone shows the code, compares the SAS and approves with the PIN and the
 // password. Mirrors vettid-android `VaultManager`'s direct transfer (`transferIn`, `awaitTransferIn`, `abandonTransferIn`,
@@ -65,6 +44,9 @@ extension VaultManager: MoveRepository {
             try refuseTransferIn(d)
             moveFlags.book.transferWaiter?.cancel()
             moveFlags.book.transferWaiter = nil
+            // A transfer still open and unpaired (refused above when paired) is dropped as an abandon drops it: its handshake,
+            // its attested key and its epoch-1 record go before this scan starts (§6.7.1, §11.14.10 rule 5).
+            if d.hasVault { await dropTransfer(d) }
             let rec = record.generation
             // The one deadline of 11 minutes counts from here, the start of the `hs.init` (owner decision, 2026-10-23), and is
             // stored: a restart keeps it, and nothing the member does extends it.
@@ -74,19 +56,17 @@ extension VaultManager: MoveRepository {
                 $0.transferStartedMs = started
             }
             let path = TransferPath()
-            let secrets = phoneSecrets
-            let policy = config.trust.timeScales
+            let fresh = FreshTransferSecret(secrets: phoneSecrets, policy: config.trust.timeScales, path: path)
             // Release R (§11.14.10): this phone's key and its secret of epoch 1 go in the hs.init. The vault id is not
-            // known yet: they are made for "" (IOS-PLAN §6.1). Stored before the hs.init is sent; a retry reuses them.
+            // known yet: they are made for "" (IOS-PLAN §6.1). Stored before the hs.init is sent. A scan never reuses an earlier
+            // attempt's secret (§6.7.1, §11.14.10 rule 5): the epoch-1 records still pending for "" (a transfer dropped before
+            // pairing and not cleaned up) are dropped first, so that an earlier code's vault never learns the secret this
+            // scan's vault is sent. Safe: ``refuseTransferIn(_:)`` guarantees this phone is not paired, so no such record is
+            // a paired transfer's secret. If the drop fails nothing is sent.
             do {
                 try await d.startTransfer(link: link, attester: config.attester) { [weak self] capabilities, scale in
-                    try ReleasePath.requireR(capabilities)
-                    try policy.check(scale)
-                    let epoch = try secrets.reuseOrCreate(keyVault: "")
-                    path.set(epoch.id, capabilities, scale)
-                    // Known at once, so that a failure after it can delete the record (``dropTransfer(_:)``).
-                    try await self?.noteTransferEpoch(epoch.id)
-                    return epoch.secret
+                    guard let self else { throw CancellationError() }
+                    return try await fresh.make(capabilities, scale) { try await self.noteTransferEpoch($0) }
                 }
             } catch {
                 // The device dropped the key it attested (``VaultDevice/startTransfer``); the epoch-1 record goes too.
@@ -128,11 +108,6 @@ extension VaultManager: MoveRepository {
         // One vault per phone: no transfer onto a phone that holds one, or may hold a provisional one.
         if d.deviceID != nil || d.vaultID != nil || d.recovering { throw VaultFailure(.vaultExists) }
         if let refusal = startOverRefusal(nil) { throw refusal }
-    }
-
-    /// The epoch-1 record of the transfer is stored with it, before anything is sent: a drop deletes this one (§11.14.10).
-    func noteTransferEpoch(_ id: String) throws {
-        try record.update(since: record.generation) { $0.transferEpochID = id }
     }
 
     /// The transfer code's link, or the failure of a text that is not one (nothing is fetched for it).
@@ -429,30 +404,40 @@ extension VaultManager: MoveRepository {
 
     /// The stored start of a transfer that nothing pinned, with what was made for it: its attested key and epoch-1 record.
     private func clearTransferStart(_ d: VaultDevice) async {
-        let key = d.altState.transferAttestKeyID
-        let id = record.value.transferEpochID
-        _ = try? record.update(since: record.generation) {
-            $0.transferStartedMs = nil
-            $0.transferEpochID = nil
-        }
-        if let key { try? config.attester.discard(keyID: key) }
-        if let id { _ = try? phoneSecrets.dropPending(id: id) }
-        usesPhoneSecret = phoneSecrets.inUse
+        discardTransferStart(attestKey: d.altState.transferAttestKeyID)
     }
 
     /// The device's transfer dropped, with the App Attest key it attested discarded and its epoch-1 record deleted: the one
     /// stored with the transfer (``LocalAccount/transferEpochID``), never another. Nothing is touched when the device is
-    /// paired.
+    /// paired, or when its own save failed (it throws): the device file may still hold the pinned vault and the open
+    /// handshake, which a relaunch reloads and an approval could still pair, so the record its secret needs stays. Nothing
+    /// is reused for that: every scan drops the pending records first (``FreshTransferSecret``).
     private func dropTransfer(_ d: VaultDevice) async {
         let key = d.altState.transferAttestKeyID
         guard (try? await d.abandonTransfer()) == true else { return }
-        let id = record.value.transferEpochID
+        discardTransferStart(attestKey: key)
+    }
+
+    /// Deletes what a transfer to this phone made, its pending epoch-1 record first: only once it is gone are the stored
+    /// start and record id cleared, so that a record that could not be deleted is retried by a later drop (a stored start
+    /// that nothing pinned is cleared at a resume, ``resumeTransferIn(_:)``). The attested key is discarded in any case.
+    private func discardTransferStart(attestKey: [UInt8]?) {
+        if let key = attestKey { try? config.attester.discard(keyID: key) }
+        if let id = record.value.transferEpochID {
+            do {
+                _ = try phoneSecrets.dropPending(id: id)
+            } catch let f as VaultFailure where f.kind == .deviceSecret {
+                // The records file is lost: no record is left to delete, and keeping the start would refuse every later scan
+                // (``abandonClosed``). The next scan's records file replaces it.
+            } catch {
+                usesPhoneSecret = phoneSecrets.inUse
+                return
+            }
+        }
         _ = try? record.update(since: record.generation) {
             $0.transferStartedMs = nil
             $0.transferEpochID = nil
         }
-        if let key { try? config.attester.discard(keyID: key) }
-        if let id { _ = try? phoneSecrets.dropPending(id: id) }
         usesPhoneSecret = phoneSecrets.inUse
     }
 
