@@ -53,6 +53,10 @@ struct FreshTransferSecret: Sendable {
 }
 
 extension VaultManager {
+    /// The code of a scan refused because the transfer still open could not be dropped (the device's state was not saved):
+    /// nothing changed and nothing was sent.
+    public nonisolated static let codeTransferNotDropped = "transfer_not_dropped"
+
     /// The epoch-1 record of the transfer is stored with it, before anything is sent: a drop deletes this one (§11.14.10).
     func noteTransferEpoch(_ id: String) throws {
         guard try record.update(since: record.generation, { $0.transferEpochID = id }) else {

@@ -44,9 +44,14 @@ extension VaultManager: MoveRepository {
             try refuseTransferIn(d)
             moveFlags.book.transferWaiter?.cancel()
             moveFlags.book.transferWaiter = nil
-            // A transfer still open and unpaired (refused above when paired) is dropped as an abandon drops it: its handshake,
-            // its attested key and its epoch-1 record go before this scan starts (§6.7.1, §11.14.10 rule 5).
-            if d.hasVault { await dropTransfer(d) }
+            // A transfer still open and unpaired (refused above when paired), in memory or only stored (an earlier drop whose
+            // save failed), is dropped as an abandon drops it, and saved: its handshake, its attested key and its epoch-1 record
+            // go before this scan starts (§6.7.1, §11.14.10 rule 5). When the drop cannot be saved, the scan stops before
+            // anything changes: the device file may still hold that handshake, which a relaunch reloads and the old phone could
+            // still approve with that record's secret, so the record stays (chosen; not in the spec).
+            if d.hasVault || record.value.transferEpochID != nil {
+                guard await dropTransfer(d) else { throw VaultFailure(.phoneLocked, code: Self.codeTransferNotDropped) }
+            }
             let rec = record.generation
             // The one deadline of 11 minutes counts from here, the start of the `hs.init` (owner decision, 2026-10-23), and is
             // stored: a restart keeps it, and nothing the member does extends it.
@@ -412,10 +417,13 @@ extension VaultManager: MoveRepository {
     /// paired, or when its own save failed (it throws): the device file may still hold the pinned vault and the open
     /// handshake, which a relaunch reloads and an approval could still pair, so the record its secret needs stays. Nothing
     /// is reused for that: every scan drops the pending records first (``FreshTransferSecret``).
-    private func dropTransfer(_ d: VaultDevice) async {
+    /// True when the transfer was dropped and the device's state saved.
+    @discardableResult
+    private func dropTransfer(_ d: VaultDevice) async -> Bool {
         let key = d.altState.transferAttestKeyID
-        guard (try? await d.abandonTransfer()) == true else { return }
+        guard (try? await d.abandonTransfer()) == true else { return false }
         discardTransferStart(attestKey: key)
+        return true
     }
 
     /// Deletes what a transfer to this phone made, its pending epoch-1 record first: only once it is gone are the stored

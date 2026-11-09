@@ -172,6 +172,41 @@ extension VaultManagerTransferInTests {
         try await expectFreshSecondScan()
     }
 
+    /// A scan over an open transfer whose drop cannot be saved stops before anything changes: the device file may still
+    /// hold that handshake, so its record, its start and its id stay, and no second `hs.init` goes out.
+    @Test func aScanOverAnOpenTransferWhoseDropCannotBeSavedChangesNothing() async throws {
+        defer { phone.close() }
+        _ = try await scanned()
+        let id = try #require(m.record.value.transferEpochID)
+        let started = try #require(m.record.value.transferStartedMs)
+        let qr = try code()
+        phone.deviceSaveFails.on = true
+        let failure = await vaultFailure { _ = try await m.transferIn(code: qr) }
+        phone.deviceSaveFails.on = false
+        #expect(failure?.code == VaultManager.codeTransferNotDropped)
+        #expect(service.transferInits.count == 1, "no second hs.init")
+        #expect(pendingRecord && m.record.value.transferEpochID == id && m.record.value.transferStartedMs == started)
+        try await expectFreshSecondScan()
+    }
+
+    /// ... and so does a scan after an abandon whose save failed, while saves still fail: the transfer is gone from memory
+    /// but still stored, and is dropped (and saved) before the next scan, or the scan stops.
+    @Test func aScanWhileTheSavesStillFailAfterAFailedAbandonChangesNothing() async throws {
+        defer { phone.close() }
+        _ = try await scanned()
+        let id = try #require(m.record.value.transferEpochID)
+        let started = try #require(m.record.value.transferStartedMs)
+        phone.deviceSaveFails.on = true
+        try? await m.abandonTransferIn()
+        #expect(!deviceHoldsVault, "the device dropped its transfer in memory")
+        let failure = await vaultFailure { _ = try await m.transferIn(code: try code()) }
+        phone.deviceSaveFails.on = false
+        #expect(failure?.code == VaultManager.codeTransferNotDropped)
+        #expect(service.transferInits.count == 1, "no second hs.init")
+        #expect(pendingRecord && m.record.value.transferEpochID == id && m.record.value.transferStartedMs == started)
+        try await expectFreshSecondScan()
+    }
+
     /// A paired transfer is never dropped, with or without a failing save: its pending record is this phone's secret.
     @Test func aPairedTransferKeepsItsRecordWhateverFails() async throws {
         defer { phone.close() }
