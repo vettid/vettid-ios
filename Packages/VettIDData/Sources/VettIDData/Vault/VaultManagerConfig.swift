@@ -166,6 +166,10 @@ public struct VaultManagerConfig: Sendable {
     /// (iPhone) Told whether no vault made or being made here can hold an App Attest key of this phone, from the account
     /// record (``AttestStartOver``); nil where nothing listens.
     public var attestStartOver: AttestStartOver?
+    /// TEST ONLY. Whether the device state's write fails now (a full or locked disk); false in the app.
+    public var deviceSaveFails: @Sendable () -> Bool = { false }
+    /// TEST ONLY. Whether the phone secrets' records write fails now (a full or locked disk); false in the app.
+    public var phoneSecretsWriteFails: @Sendable () -> Bool = { false }
     /// The release update's waits: for the member API to see the vault locked, and for the API to route an unlock to the
     /// release a vault just moved to (a virtual clock in the tests).
     public var releaseUpdateSleep: LockSleep = realLockSleep
@@ -306,9 +310,13 @@ struct StoredAppKeySigner: AppKeySigner {
 /// The device state in the encrypted file store (secret: it holds session keys).
 struct FileDeviceStateStore: DeviceStateStore {
     let file: EncryptedFileStore
+    var failing: @Sendable () -> Bool = { false }
 
     func load() throws -> [UInt8]? { try file.load() }
-    func save(_ state: [UInt8]) throws { try file.save(state) }
+    func save(_ state: [UInt8]) throws {
+        if failing() { throw KeysError.unavailable("device state write") }
+        try file.save(state)
+    }
     func clear() throws { try file.clear() }
 }
 

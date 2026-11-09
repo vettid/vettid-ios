@@ -48,6 +48,8 @@ public final class PhoneSecrets: @unchecked Sendable {
     let ephemeral: @Sendable () -> P256.KeyAgreement.PrivateKey
     /// The vault's time scale now (STAGING-TIME-SCALE §5.2).
     let timeScale: @Sendable () -> UInt64
+    /// TEST ONLY. Whether the records file's write fails now (a full or locked disk); false in the app.
+    let writeFails: @Sendable () -> Bool
     /// ``pinGeneration``, read and written under ``generationLock``. In memory only.
     private var generation = 0
     private let generationLock = NSLock()
@@ -59,7 +61,8 @@ public final class PhoneSecrets: @unchecked Sendable {
         store: EncryptedFileStore,
         now: @escaping @Sendable () -> Date = { Date() },
         ephemeral: @escaping @Sendable () -> P256.KeyAgreement.PrivateKey = { P256.KeyAgreement.PrivateKey() },
-        timeScale: @escaping @Sendable () -> UInt64 = { 1 }
+        timeScale: @escaping @Sendable () -> UInt64 = { 1 },
+        writeFails: @escaping @Sendable () -> Bool = { false }
     ) {
         let claimed = PhoneSecretsRegistry.claim(source: keys.sourceID, records: store.url)
         precondition(claimed, "one PhoneSecrets records file per phone key source")
@@ -68,6 +71,7 @@ public final class PhoneSecrets: @unchecked Sendable {
         self.now = now
         self.ephemeral = ephemeral
         self.timeScale = timeScale
+        self.writeFails = writeFails
     }
 
     // MARK: - Epoch 1
@@ -201,6 +205,28 @@ public final class PhoneSecrets: @unchecked Sendable {
             try write(recs)
             try? keys.delete(keyVault: p.record.keyVault, keyID: p.keyID)
             return true
+        }
+    }
+
+    /// Drops every pending epoch-1 record of [keyVault] and deletes their keys: a new transfer to this phone never reuses an
+    /// earlier attempt's secret (VAULT-MESSAGING §6.7.1, §11.14.10 rule 5), so what an earlier attempt left is dropped before
+    /// the new record is made. The records are written first and the keys deleted after, as ``dropPending(id:)`` does. Throws
+    /// when the records cannot be written (nothing is deleted then). Never touches the current record, a candidate, a replaced
+    /// record or a record of another `key_vault`. A records file that is lost has no pending record to drop (``create(keyVault:)``
+    /// replaces it).
+    public func dropPendings(keyVault: String) throws {
+        try store.exclusive {
+            var recs: PhoneRecords
+            do {
+                recs = try readRecords()
+            } catch let f as VaultFailure where f.kind == .deviceSecret {
+                return
+            }
+            let gone = recs.pendings.filter { $0.record.keyVault == keyVault }
+            guard !gone.isEmpty else { return }
+            recs.pendings.removeAll { $0.record.keyVault == keyVault }
+            try write(recs)
+            for p in gone { try? keys.delete(keyVault: p.record.keyVault, keyID: p.keyID) }
         }
     }
 
@@ -343,6 +369,7 @@ public final class PhoneSecrets: @unchecked Sendable {
     /// record names.
     func write(_ recs: PhoneRecords) throws {
         let kept = Self.pruned(recs, nowMs: nowMs(), keepMs: keepNowMs())
+        if writeFails() { throw Self.locked }
         do {
             try store.save(kept.marshal())
         } catch {

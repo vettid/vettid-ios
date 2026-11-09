@@ -21,6 +21,8 @@ struct FakeTransferStore {
     var unlockSecret: [UInt8]?
     var inits: [FakeVaultService.TransferInitSeen] = []
     var paired = false
+    /// A new code was armed while an earlier one's handshake was open: its next `hs.init` starts afresh.
+    var rearmed = false
     // The vault as the old phone's (the approving side).
     var open: String?
     var offers = 0
@@ -113,6 +115,7 @@ extension FakeVaultService {
             )
             let sealed = try InviteBundle.seal(try bundle.marshal())
             let claimID = Self.claimID()
+            transfer.rearmed = device != nil
             transfer.inviteID = inviteID
             transfer.claimID = claimID
             transfer.claimBlob = sealed.blob
