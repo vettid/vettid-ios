@@ -386,6 +386,14 @@ extension VaultManager: MoveRepository {
             await clearTransferStart(d)
             return nil
         }
+        if d.deviceID == nil, !d.holdsTransferSas {
+            // (0.88.4) A handshake the vault had not answered when the process ended: it was in memory only, so no `hs.fin`
+            // can follow and the vault cannot approve it (its comparison code is saved in the write that owes the fin, so
+            // none saved means no fin). The transfer is over: dropped, its code and start with it, so that nothing waits
+            // for it and no new code or enrollment is refused for it.
+            await dropTransfer(d)
+            return nil
+        }
         if d.deviceID != nil {
             return await settleTransfer(s, collect: false, guid: nil)
         } else if d.hasVault, transferDeadline != nil {

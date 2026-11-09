@@ -135,9 +135,10 @@ extension VaultManagerTransferInTests {
         #expect(await vaultFailure { _ = try await m.transferIn(code: qr) }?.kind == .vaultExists)
     }
 
-    /// A restart before the vault's `hs.resp` ends the handshake (it was in memory only): no `hs.fin` can follow, so the
-    /// transfer is over and its code is a spent code, never "not answered" again and again.
-    @Test func aHandshakeARestartCutOffBeforeItsHsRespIsNotOpen() async throws {
+    /// A restart before the vault's `hs.resp` ends the transfer (0.88.4): its handshake was in memory only, so no `hs.fin`
+    /// can follow. Dropped at the start, its code and start with it: a new code is not refused for it in what would have
+    /// been its closed window, and its own code is a spent code.
+    @Test func aRestartBeforeTheHsRespEndsTheTransfer() async throws {
         defer { phone.close() }
         service.transferIgnoresInit = true
         let qr = try code()
@@ -146,12 +147,36 @@ extension VaultManagerTransferInTests {
         #expect(m.isOpenTransferCode(qr), "open while its scan waits for the hs.resp")
         try await phone.restart()
         first.cancel()
+        #expect(m.session == nil && !m.isOpenTransferCode(qr), "without a session: not open")
         try await m.refresh()
+        #expect(m.record.value.transferStartedMs == nil && m.record.value.transferCode == nil)
+        #expect(!deviceHoldsVault && !pendingRecord && !m.abandonClosed)
         let inits = service.transferInits.count
-        #expect(!m.isOpenTransferCode(qr))
         let failure = await vaultFailure { _ = try await m.transferIn(code: qr) }
-        #expect(failure != nil && failure?.code != MoveCodes.hsUnanswered)
-        #expect(service.transferInits.count == inits)
+        #expect(failure != nil && failure?.code != MoveCodes.hsUnanswered && failure?.code != VaultManager.codeTransferWaiting)
+        #expect(service.transferInits.count == inits && m.record.value.transferCode == nil, "a failed fetch keeps no code")
+        // A new code, in what would have been the first transfer's closed window, starts at once.
+        phone.clockAhead = 620
+        try await expectFreshSecondScan()
+    }
+
+    /// A scan cancelled while its `hs.init` waits for the answer leaves the handshake waiting in this process: still open,
+    /// so the same code waits for it (and ends "not answered" with nothing dropped), never a scan of its own.
+    @Test func aCancelledScanWhoseHsInitStillWaitsIsOpen() async throws {
+        defer { phone.close() }
+        service.transferIgnoresInit = true
+        let qr = try code()
+        let first = Task { try await m.transferIn(code: qr) }
+        #expect(await eventually { phone.transferPauses.lengths == [60] })
+        first.cancel()
+        _ = try? await first.value
+        #expect(m.moveFlags.book.startingIn == 0 && m.session?.device.awaitsPairingResp == true)
+        let before = try openTransfer()
+        #expect(m.isOpenTransferCode(qr))
+        phone.clockAhead = 61
+        let failure = await vaultFailure { _ = try await m.transferIn(code: qr) }
+        #expect(failure?.code == MoveCodes.hsUnanswered)
+        #expect(try openTransfer() == before && deviceHoldsVault && pendingRecord)
     }
 
     @Test func aDifferentCodeWhileOpenStartsAFreshTransfer() async throws {

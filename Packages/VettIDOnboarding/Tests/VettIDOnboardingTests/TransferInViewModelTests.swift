@@ -211,9 +211,26 @@ import VettIDDataTesting
         vm.scan()
         let code = try qr()
         vault.openTransferCodes = [code]
+        vault.transferStartedAt = clock.now().addingTimeInterval(-30)
         vm.scanned(code)
         await clock.advance(seconds: 61)
         #expect(vm.state.step == .notAnswered && !vault.calls.contains("abandonTransferIn"))
+    }
+
+    /// Decided by what the repository did, not by what the screen thought before: a scan it handled as a new one (it
+    /// wrote a new start) is abandoned as any other when its `hs.resp` never comes.
+    @Test func aScanTheRepositoryStartedAfreshIsAbandonedAsAnyOther() async throws {
+        let hs = TestDeferred<String>()
+        vault.transferHsResp = hs
+        let vm = model()
+        vm.scan()
+        let code = try qr()
+        vault.openTransferCodes = [code]
+        vault.transferStartedAt = clock.now().addingTimeInterval(-30)
+        vault.transferInStartsAt = clock.now()
+        vm.scanned(code)
+        await clock.advance(seconds: 61)
+        #expect(vm.state.step == .notAnswered && vault.calls.contains("abandonTransferIn"))
     }
 
     @Test func aPastedCodeIsCheckedTheSameWay() async throws {

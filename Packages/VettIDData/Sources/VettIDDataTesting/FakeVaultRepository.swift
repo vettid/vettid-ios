@@ -131,6 +131,8 @@ public final class FakeVaultRepository: CustomStringConvertible {
     public var abandonClosed = false
     /// The codes ``TransferInBackground/isOpenTransferCode(_:)`` says are the open transfer's.
     public var openTransferCodes: Set<String> = []
+    /// When set, ``transferIn(code:)`` starts a new transfer: the stored start becomes this.
+    public var transferInStartsAt: Date?
     public func isOpenTransferCode(_ text: String) -> Bool { openTransferCodes.contains(text) }
     /// (VAULT-MESSAGING §11.14.9 "A lost answer") Where the decision of a lost change stands, set by a test.
     public var changeCheck: ChangeCheck?

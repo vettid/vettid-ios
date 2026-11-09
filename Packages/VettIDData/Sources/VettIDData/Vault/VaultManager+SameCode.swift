@@ -71,13 +71,12 @@ extension VaultManager {
     }
 
     /// (0.88.4) Whether [text] is the code of the transfer to this phone that is open now, by what this phone stored
-    /// (``sameCodeOpen(_:_:startedMs:)``; without a session, by the stored code alone). The screen asks it before it
-    /// refuses an expired code: the same code, whatever its expiry, goes to ``transferIn(code:)``, which gives the move
-    /// back.
+    /// (``sameCodeOpen(_:_:startedMs:)``; false without a session, which is opened at the start and only goes in the
+    /// background, where nothing is scanned). The screen asks it before it refuses an expired code: the same code,
+    /// whatever its expiry, goes to ``transferIn(code:)``, which gives the move back.
     public func isOpenTransferCode(_ text: String) -> Bool {
         guard let id = InviteLinks.transferCodeID(text), let startedMs = record.value.transferStartedMs,
-              record.value.transferCode == id else { return false }
-        guard let d = session?.device else { return true }
+              record.value.transferCode == id, let d = session?.device else { return false }
         return sameCodeOpen(d, id, startedMs: startedMs)
     }
 

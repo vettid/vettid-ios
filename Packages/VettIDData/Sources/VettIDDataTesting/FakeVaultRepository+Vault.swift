@@ -296,6 +296,7 @@ extension FakeVaultRepository: MoveRepository {
     public func transferIn(code: String) async throws -> String {
         try call("transferIn")
         lastTransferCode = code
+        if let fresh = transferInStartsAt { transferStartedAt = fresh }
         if let hs = transferHsResp { return try await hs.value() }
         return transferSas
     }
