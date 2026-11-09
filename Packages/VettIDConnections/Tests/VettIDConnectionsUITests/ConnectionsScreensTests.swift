@@ -58,6 +58,25 @@ import VettIDUI
         )
     }
 
+    /// The warning card is on the page when the vault reported a key change, and only then (VAULT-MESSAGING §10.4): the
+    /// same page scrolls further by the card. (The screen fills the window, so its scroll content is what grows.)
+    @Test func theKeyChangeWarningShowsOnlyWhenReported() throws {
+        let plainState = try #require(detailStates().first { $0.connection != nil && !$0.keyChanged && $0.error == nil && !$0.loading })
+        var warned = plainState
+        warned.keyChanged = true
+        let plain = try contentHeight(ConnectionDetailScreen(state: plainState, actions: DetailActions()))
+        let withCard = try contentHeight(ConnectionDetailScreen(state: warned, actions: DetailActions()))
+        #expect(withCard > plain + 20, "warned \(withCard), plain \(plain)")
+    }
+
+    /// The content height of the first scroll view of [view], hosted in a phone-sized window.
+    private func contentHeight(_ view: some View) throws -> CGFloat {
+        let window = host(view)
+        defer { window.isHidden = true }
+        let scroll = try #require(views(in: window).compactMap { $0 as? UIScrollView }.first)
+        return scroll.contentSize.height
+    }
+
     @Test func everyDetailStateRenders() {
         for s in detailStates() {
             var actions = DetailActions()

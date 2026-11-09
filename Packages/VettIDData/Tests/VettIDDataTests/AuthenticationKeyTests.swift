@@ -105,6 +105,16 @@ func testKey(_ n: UInt8, count: Int = 32) -> String { Data(repeating: n, count: 
         #expect(m.authentication["c1"]?.keyChanged == false)
     }
 
+    /// Today's order rule, pinned: verdicts apply in the order they arrive, so an older success that arrives after a newer
+    /// `key_changed: true` clears the warning and puts its key back. Not what §10.4 wants in the end (a follow-up keeps the
+    /// last applied verdict per connection and ignores older ones); this test is what such a fix must change.
+    @Test func anOlderSuccessArrivingLateIsAppliedInArrivalOrder() async throws {
+        let m = try await warned() // r1: key B, key_changed true
+        result(m, #"{"connection_id":"c1","request_id":"r0","authenticated":true,"key":"\#(keyA)","key_changed":false}"#)
+        #expect(m.authentication["c1"]?.keyChanged == false)
+        #expect(m.authentication["c1"]?.key == keyA)
+    }
+
     /// The party a key-change warning is about must not be able to erase it by declining the member's next request.
     @Test(arguments: [
         #"{"connection_id":"c1","request_id":"r2","authenticated":false,"reason":"denied"}"#,
