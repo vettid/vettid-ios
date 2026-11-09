@@ -49,6 +49,15 @@ import VettIDUI
         }
     }
 
+    /// vettid-android's `connections_auth_key_changed`, word for word, with the name bidi-isolated (§10.8).
+    @Test func theKeyChangeWarningIsAndroids() {
+        let name = AccountNames.isolate("Ada")
+        #expect(
+            ConnectStrings.authKeyChanged(name)
+                == "The credential key of \(name) changed since their last authentication. Check with them before you trust it."
+        )
+    }
+
     @Test func everyDetailStateRenders() {
         for s in detailStates() {
             var actions = DetailActions()
@@ -146,7 +155,10 @@ import VettIDUI
         var failed = ConnectionDetailState(connectionID: "c1")
         failed.loading = false
         failed.error = .network
-        return [loading, bare, full, cooled, failed]
+        // A key change the vault reported (VAULT-MESSAGING §10.4): the warning card is part of the page.
+        var warned = full
+        warned.keyChanged = true
+        return [loading, bare, full, cooled, failed, warned]
     }
 
     /// The add sheet (the view the add button presents) scrolls its options at the largest text size, so the last one

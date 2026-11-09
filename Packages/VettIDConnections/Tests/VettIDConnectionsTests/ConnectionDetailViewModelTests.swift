@@ -273,4 +273,32 @@ import VettIDDataTesting
         await m.settle()
         #expect(m.state.sharing == DetailSharing())
     }
+
+    /// VAULT-MESSAGING §10.4 `key_changed`: apps MUST show it. The page's flag is the repository's, only for a state that
+    /// says so, and it goes with the state (a lock, a removal) and with the connection.
+    @Test func theKeyChangeWarningFollowsTheAuthenticationState() async {
+        fake.connections = [Samples.active("c1")]
+        let m = await model()
+        #expect(!m.state.keyChanged, "no state: no warning")
+        fake.authentication["c1"] = AuthenticationState(connectionID: "c1", verifiedAt: Date(), lastResult: "authenticated")
+        #expect(!m.state.keyChanged, "a state that says nothing of a change: no warning")
+        fake.authentication["c1"]?.keyChanged = true
+        #expect(m.state.keyChanged)
+        fake.authentication["c1"]?.lastResult = "denied"
+        #expect(m.state.keyChanged, "a failed verdict does not hide it")
+        fake.authentication["other"] = AuthenticationState(connectionID: "other", keyChanged: true)
+        fake.authentication["c1"] = nil
+        #expect(!m.state.keyChanged, "another connection's warning is not this one's")
+    }
+
+    @Test func aGoneConnectionShowsNoWarning() async {
+        fake.connections = [Samples.active("c1")]
+        fake.authentication["c1"] = AuthenticationState(connectionID: "c1", keyChanged: true)
+        let m = await model()
+        #expect(m.state.keyChanged)
+        m.ask(.remove)
+        m.confirm()
+        await m.settle()
+        #expect(m.state.gone && !m.state.keyChanged)
+    }
 }

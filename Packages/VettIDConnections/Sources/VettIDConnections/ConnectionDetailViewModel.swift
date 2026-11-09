@@ -55,6 +55,10 @@ public struct ConnectionDetailState: Equatable, Sendable, CustomStringConvertibl
     public var deleteRule: ShareRule?
     /// This connection's votes; nothing where the vault has none.
     public var votes = ConnectionVotes()
+    /// The vault reported that this connection's credential key changed since its last authentication and it did not
+    /// verify the step (§10.4 `key_changed`): the page MUST show it. Read from the repository's authentication state;
+    /// false once the connection is gone.
+    public var keyChanged = false
 
     public init(connectionID: String) { self.connectionID = connectionID }
 
@@ -227,6 +231,7 @@ public final class ConnectionDetailViewModel {
     public var state: ConnectionDetailState {
         var s = local
         if !s.gone, let c = connections.connections.first(where: { $0.id == s.connectionID }) { s.connection = c }
+        s.keyChanged = !s.gone && connections.authentication[s.connectionID]?.keyChanged == true
         s.votes = s.gone ? ConnectionVotes() : ConnectionVotes.of(s.connectionID, votes)
         return s
     }

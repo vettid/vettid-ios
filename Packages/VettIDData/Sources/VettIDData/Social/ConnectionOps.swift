@@ -25,6 +25,8 @@ public protocol ConnectionOps: Sendable {
     func blockAdd(connectionID: String?, pendingID: String?, note: String?) async throws -> String
     func connectionAsksMute(_ connectionID: String, muted: Bool) async throws
     func connectionAsksResume(_ connectionID: String) async throws
+    /// `connection.authenticate.list`: `{states: [{connection_id, key?, verified_at?, last_result?, last_at?}]}` (§10.4).
+    func authenticateList() async throws -> JsonObject
 }
 
 extension VaultApi: ConnectionOps {

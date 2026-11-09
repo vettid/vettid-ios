@@ -21,11 +21,74 @@ extension ConnectionsManager {
             if let r = ConnectionParser.outgoing(b, at: now()) { onRequest(.outgoing(r)) }
         case "connection.event":
             onConnectionEvent(b)
+        case "connection.authenticate.result":
+            onAuthenticateResult(b)
+        case "connection.authenticate.key":
+            onAuthenticateKey(b)
         case "sync.event":
             onSync(VaultJSON.string(b, "kind") ?? "", b)
         default:
             break
         }
+    }
+
+    /// `connection.authenticate.result` (§10.4): built from the state held now, so a list read taken in meanwhile is not
+    /// undone (see ``ConnectionParser/authResult(_:now:previous:)``: only a successful verdict decides the key warning).
+    private func onAuthenticateResult(_ b: JsonObject) {
+        guard let id = VaultJSON.string(b, "connection_id"),
+              let s = ConnectionParser.authResult(b, now: now(), previous: authentication[id]) else { return }
+        authentication[id] = s
+    }
+
+    /// `connection.authenticate.key {connection_id, key}` (VAULT-MESSAGING 0.88.1 §10.4): this vault followed a delivered
+    /// `connection.authenticate.rotated` chain from the key it had pinned and pinned the chain's last key. The vault did
+    /// every check; the app follows no chain (it never sees `rotated` or `rotations`).
+    ///
+    /// What it does: re-reads `connection.list` and `connection.authenticate.list` and takes them in as ``refresh()`` does.
+    /// The list is authoritative: the event's `key` is only checked for form (an event without a `connection_id` and a
+    /// well-formed `key` is ignored, no read) and is never written.
+    ///
+    /// What it does NOT do: change ``AuthenticationState/keyChanged``. A standing `keyChanged` came from a successful
+    /// `.result` with `key_changed: true`: the vault saw a key its pin did not lead to and re-pinned to it without
+    /// verifying the step. A `.key` event follows a chain from the vault's pin at that moment, which after such a result is
+    /// that unverified key, so it verifies nothing about the change the warning is about. Only the next successful
+    /// `.result` decides the warning again.
+    ///
+    /// Off the event path and conflated: a peer controls how often it rotates, so one re-read runs at a time, and an event
+    /// that comes while it runs only marks one more read due (a burst costs at most two reads, the last starting after the
+    /// last event). The write needs the ``generation`` of the event (the lock, a hold and a wipe each advance it).
+    private func onAuthenticateKey(_ b: JsonObject) {
+        guard VaultJSON.string(b, "connection_id") != nil, ConnectionParser.credentialKey(b) != nil else { return }
+        let g = generation
+        if keyRereadRunning {
+            keyRereadQueued = g
+            return
+        }
+        keyRereadRunning = true
+        Task { [weak self] in await self?.rereadAuthentication(first: g) }
+    }
+
+    /// The re-read job: reads for [first], then once more for the mark left while it read, until none is left. Each read
+    /// ends: every vault request has a reply timeout (``VaultDevice/requestTimeout``), so the job always frees its slot.
+    private func rereadAuthentication(first: Int) async {
+        var next: Int? = first
+        while let g = next {
+            await rereadAuthenticationOnce(at: g)
+            next = keyRereadQueued
+            keyRereadQueued = nil
+            if next == nil { keyRereadRunning = false }
+        }
+    }
+
+    /// One re-read for an event taken at [g]: written only if the vault was not locked, held or wiped since (the check and
+    /// the write have no suspension between them). A failed read, in either half, writes nothing (the next
+    /// ``refresh()`` reads both), and nothing is raised to the member: it is a read nobody asked for (``quietOps``).
+    private func rereadAuthenticationOnce(at g: Int) async {
+        let asked = Set(connections.map(\.id))
+        guard let read = try? await readConnections(quietOps) else { return }
+        await keyRereadHook?()
+        guard read.states != nil, read.authFailure == nil, g == generation else { return }
+        take(read, asked: asked)
     }
 
     /// A request event (`connection.request.pending` / `.outgoing`): shown at once; an event never takes back what a

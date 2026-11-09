@@ -25,6 +25,12 @@ final class FakeConnectionOps: ConnectionOps, @unchecked Sendable {
     var invites = #"{"invites":[]}"#
     var requests = #"{"incoming":[],"outgoing":[]}"#
     var connections: [String] = []
+    /// `connection.authenticate.list`: its answer, how often it was asked, an error it throws, and a gate it waits for. Kept
+    /// apart from ``calls`` (every read of the connections now also reads it).
+    var authStates = #"{"states":[]}"#
+    var authCalls = 0
+    var authError: Error?
+    var authGate: TestDeferred<Void>?
 
     private func call(_ name: String) throws {
         calls.append(name)
@@ -80,6 +86,12 @@ final class FakeConnectionOps: ConnectionOps, @unchecked Sendable {
 
     func connectionAsksMute(_ connectionID: String, muted: Bool) async throws { try call("mute:\(connectionID):\(muted)") }
     func connectionAsksResume(_ connectionID: String) async throws { try call("resume:\(connectionID)") }
+    func authenticateList() async throws -> JsonObject {
+        authCalls += 1
+        if let authError { throw authError }
+        if let g = authGate { try await g.value() }
+        return try StrictJson.parseObject(authStates)
+    }
 }
 
 /// The connections manager over its vault calls: invitations, accepting every form of link, the outgoing request that

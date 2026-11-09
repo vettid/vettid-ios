@@ -151,6 +151,8 @@ struct DetailContent: View {
                     ConnectionsError(kind: error, actionLabel: ConnectStrings.ok, action: actions.onDismissNotice)
                         .padding(.horizontal, Spacing.s)
                 }
+                // A key change must be shown (VAULT-MESSAGING §10.4 `key_changed`).
+                if state.keyChanged { keyChangedCard }
                 if let asks, asks.prominent { asksCard(asks, asksName) }
                 // A person connection that VettID's service list names as a service (made before it said so): it can't take part
                 // in votes, and the app changes nothing about it on its own (screen 8).
@@ -173,6 +175,13 @@ struct DetailContent: View {
             }
             .padding(.bottom, 104)
         }
+    }
+
+    /// "The credential key of <name> changed since their last authentication. Check with them before you trust it."
+    private var keyChangedCard: some View {
+        NoticeCard(.warning, title: ConnectStrings.authKeyChanged(sharedName), announce: .polite)
+            .padding(.horizontal, Spacing.s)
+            .accessibilityIdentifier("auth_key_changed")
     }
 
     private var sharedName: String { AccountNames.isolateOrNull(connection.displayName) ?? ConnectStrings.nameNotShared }

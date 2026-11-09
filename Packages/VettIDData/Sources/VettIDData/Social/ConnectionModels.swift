@@ -19,6 +19,49 @@ public enum ConnectionState: Equatable, Sendable {
     }
 }
 
+/// What this vault knows of a connection's member authentication (§10.4: `connection.authenticate.list` and
+/// `connection.authenticate.result`). Mirrors vettid-android `AuthenticationState` (without `waitingUntil`: the app has
+/// no screen that sends an authentication request yet).
+public struct AuthenticationState: Equatable, Sendable, CustomStringConvertible, CustomDebugStringConvertible, CustomReflectable {
+    public var connectionID: String
+    public var verifiedAt: Date?
+    /// `authenticated`, `denied`, `bad_signature` or `requested`, as the vault reported it.
+    public var lastResult: String?
+    public var lastAt: Date?
+    /// The vault's last successful verdict said the connection's credential key was not the pinned one and the pin did not
+    /// lead to it (§10.4 `key_changed`): apps MUST show it. Only a successful `connection.authenticate.result` decides it;
+    /// a list read carries it over (the list has no such member), and neither a failed verdict nor a
+    /// `connection.authenticate.key` clears it.
+    public var keyChanged = false
+    /// The credential key the vault has pinned for the connection: canonical standard base64 of 32 bytes (an Ed25519
+    /// public key), checked by ``ConnectionParser/credentialKey(_:)``; nil when the vault sent none or a malformed one. A
+    /// String, so the state stays a comparable value. Nothing shows it and the description leaves it out. The vault
+    /// follows rotation chains itself (§10.4 "Following a credential-key rotation"); the app only records what the vault
+    /// reports. It can be one read stale (a list read answered before a verdict may land after it): read the list again
+    /// before showing it.
+    public var key: String?
+
+    public init(
+        connectionID: String, verifiedAt: Date? = nil, lastResult: String? = nil, lastAt: Date? = nil, keyChanged: Bool = false,
+        key: String? = nil
+    ) {
+        self.connectionID = connectionID
+        self.verifiedAt = verifiedAt
+        self.lastResult = lastResult
+        self.lastAt = lastAt
+        self.keyChanged = keyChanged
+        self.key = key
+    }
+
+    /// Prints no connection id and no key.
+    public var description: String {
+        "AuthenticationState(verifiedAt: \(verifiedAt.map { "\($0)" } ?? "nil"), lastResult: \(lastResult ?? "nil"), "
+            + "keyChanged: \(keyChanged), hasKey: \(key != nil))"
+    }
+    public var debugDescription: String { description }
+    public var customMirror: Mirror { Mirror(self, children: [:]) }
+}
+
 /// A connection (§10.4). [firstName] and [lastName] are the names on the peer's VettID account, from the shared
 /// profile's core (VAULT-MESSAGING 0.18.0 §10.8; on the inviter's side, before the first `profile.update`, from the
 /// request): nil before they arrived, never verified. [name] (the display name), [photo] and [sharedItems] are the peer's

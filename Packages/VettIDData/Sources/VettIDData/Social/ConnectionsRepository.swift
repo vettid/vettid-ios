@@ -9,6 +9,10 @@ public protocol ConnectionsRepository: AnyObject, Observable, Sendable {
     /// The vault's connections, as last read (re-read on connection events).
     var connections: [ConnectionInfo] { get }
 
+    /// What the vault says of each connection's member authentication (§10.4), by connection id; its `keyChanged` is the
+    /// warning every app MUST show.
+    var authentication: [String: AuthenticationState] { get }
+
     func refresh() async throws
 
     func connection(_ id: String) async throws -> ConnectionInfo

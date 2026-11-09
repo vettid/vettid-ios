@@ -72,7 +72,7 @@ extension VaultManager {
     func forgetHeld() {
         items.clear()
         sharing.clear()
-        connections.forgetOpenVault()
+        connections.forgetOpenVault(keepingAuthentication: true)
         messages.forgetOpenVault()
         attachments.clear()
         forgetActivity()

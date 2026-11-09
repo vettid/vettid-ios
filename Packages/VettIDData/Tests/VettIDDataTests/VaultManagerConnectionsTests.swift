@@ -190,8 +190,10 @@ import VettIDVault
         let r = try await c.acceptInvite(try service.peerInvite(first: "Sam", last: "Ray", name: "Sam"))
         #expect(await eventually { c.requests.first?.sas != nil })
         let sas = c.requests.first?.sas
+        c.authentication[id] = AuthenticationState(connectionID: id, keyChanged: true)
         try await m.lock()
         #expect(c.connections.isEmpty && c.requests.isEmpty && c.local.requestNames.isEmpty)
+        #expect(c.authentication.isEmpty, "the lock drops the states a hold keeps")
         #expect(try await m.unlock(pin: pin) == .success)
         #expect(await eventually { c.connections.map(\.id) == [id] && c.requests.map(\.sas) == [sas] })
         try await m.lock()
