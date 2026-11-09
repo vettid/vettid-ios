@@ -26,7 +26,7 @@ enum RelayRefusedNotice {
     /// Title and body, two lines.
     static var text: String { ShellStrings.relayRefusedTitle + "\n" + ShellStrings.relayRefusedBody }
 
-    @ViewBuilder static func banner(onReplaceKeys: @escaping @MainActor () -> Void) -> some View {
+    @MainActor @ViewBuilder static func banner(onReplaceKeys: @escaping @MainActor @Sendable () -> Void) -> some View {
         UrgentBanner(text, actionLabel: ShellStrings.relayRefusedAction, action: onReplaceKeys)
             .accessibilityIdentifier("relay_refused_notice")
     }
