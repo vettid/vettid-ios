@@ -60,6 +60,12 @@ public extension View {
         modifier(Announced(text: text, priority: priority))
     }
 
+    /// Like ``announced(_:_:)``, but only when [text] changes to another text, never when the view appears: a line that is
+    /// already there when its screen is read (Android's polite live region says what replaces it, not what it starts with).
+    func announcedOnChange(_ text: String?, _ priority: Announce = .polite) -> some View {
+        onChange(of: text) { _, now in if let now { Announcer.announce(now, priority) } }
+    }
+
     /// [text] spoken once, when this view appears, and not when it changes: a wait that counts down.
     func announcedOnce(_ text: String, _ priority: Announce = .polite) -> some View {
         onAppear { Announcer.announce(text, priority) }

@@ -114,9 +114,9 @@ final class StagingTests: VaultUITestCase {
         lock(app)
     }
 
-    /// The unlock screen's own offer (§11.10.3): "Update available: release N" before the PIN, "Approve the update with
-    /// this unlock", the PIN; the unlock carries the approval, the vault moves and the app opens on the new release. Then
-    /// the vault is locked. Skipped when the unlock offers no update.
+    /// The unlock screen's own offer (§11.10.3): "Update available: release N" under the keypad (RELEASE-UPDATES §2 step
+    /// 2), "Approve the update with this unlock", the PIN; the unlock carries the approval, the vault moves and the app
+    /// opens on the new release. Then the vault is locked. Skipped when the unlock offers no update.
     @MainActor
     func testStagingApproveUpdateAtUnlock() throws {
         let pin = try Self.pin()
@@ -126,8 +126,12 @@ final class StagingTests: VaultUITestCase {
         guard lockedAtStart(app, pin: pin, password: password) else { return }
         guard shown(app)["release_offer"] != nil else { throw XCTSkip("The unlock screen offers no release update.") }
         let approve = app.switches["approve_offer"]
+        // The offer is under the keypad and the results of the unlock: scroll to it, then back up to the keypad.
+        XCTAssertTrue(approve.waitForExistence(timeout: 30), "approve_offer not found")
+        scrollToHittable(app, approve)
         tap(approve)
         if !waitUntil(timeout: 10, { (approve.value as? String) == "1" }) { return fail(app, "The approval could not be turned on.") }
+        for _ in 0..<3 { app.swipeDown() }
         enterUnlock(app, pin: pin, password: password)
         // The unlock with the approval, the move, and the unlock that reaches the new release (which may start first).
         switch waitForAny(app, ["app_shell", "owner_check"], timeout: Self.releaseUpdate) {

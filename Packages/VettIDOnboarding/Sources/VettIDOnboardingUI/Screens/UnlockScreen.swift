@@ -104,20 +104,25 @@ public struct UnlockScreen: View {
             }
         ) {
             VStack(alignment: .leading, spacing: Spacing.m) {
-                UnlockNotices(state: state, actions: actions)
-                if state.showsPin {
-                    pinEntry
-                    UnlockMessageNotice(state: state)
+                ForEach(UnlockBlock.blocks(for: state), id: \.self) { block in
+                    switch block {
+                    case .notices: UnlockNotices(state: state, actions: actions)
+                    case .pin:
+                        pinEntry
+                        UnlockMessageNotice(state: state)
+                    case .offer:
+                        if let p = state.preflight, let offer = p.offer {
+                            ReleaseOfferNotice(preflight: p, offer: offer, state: state, actions: actions)
+                        }
+                    case .signerRefused:
+                        SignerRefusedNotice(
+                            help: state.signerHelp, recovery: state.recoveryText, stagingNote: state.stagingNote, actions: actions
+                        )
+                    case .returnCancel:
+                        TextLink(OnboardingStrings.releaseUpdateNotNow, identifier: "unlock_return_cancel") { actions.cancelReturn() }
+                    case .wayForward: wayForward
+                    }
                 }
-                if state.signerRefused {
-                    SignerRefusedNotice(
-                        help: state.signerHelp, recovery: state.recoveryText, stagingNote: state.stagingNote, actions: actions
-                    )
-                }
-                if state.returnAsksPin {
-                    TextLink(OnboardingStrings.releaseUpdateNotNow, identifier: "unlock_return_cancel") { actions.cancelReturn() }
-                }
-                wayForward
             }
         }
         .confirmDialog(
@@ -221,6 +226,24 @@ public struct UnlockScreen: View {
     private func contactSupport(_ done: @escaping @MainActor (Bool) -> Void) {
         if let onContactSupport { return onContactSupport(done) }
         openURL(SupportMail.url) { accepted in done(accepted) }
+    }
+}
+
+/// The unlock screen's blocks in the order they are shown, and read by VoiceOver: the PIN keypad first, the results of the
+/// unlock under it, the release offer (RELEASE-UPDATES §2 step 2) last, a compact notice. "Unlock" is the pinned button
+/// under all of them.
+enum UnlockBlock: Hashable {
+    case notices, pin, offer, signerRefused, returnCancel, wayForward
+
+    static func blocks(for state: UnlockState) -> [UnlockBlock] {
+        var out: [UnlockBlock] = [.notices]
+        if state.showsPin { out.append(.pin) }
+        if state.signerRefused { out.append(.signerRefused) }
+        if state.returnAsksPin { out.append(.returnCancel) }
+        out.append(.wayForward)
+        // Last: after the PIN and every result of the unlock, as the Android app does.
+        if let p = state.preflight, p.offer != nil, !p.rollback { out.append(.offer) }
+        return out
     }
 }
 

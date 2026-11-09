@@ -13,8 +13,11 @@ public struct WhatsNew: View {
     let release: UInt64
     let notes: ReleaseNotes?
     let notesURL: String
+    /// The offer with its fingerprint, shown before "Full release notes" (the unlock screen's sheet).
+    let offerText: String?
 
-    public init(release: UInt64, notes: ReleaseNotes?, notesURL: String) {
+    public init(release: UInt64, notes: ReleaseNotes?, notesURL: String, offerText: String? = nil) {
+        self.offerText = offerText
         self.release = release
         self.notes = notes
         self.notesURL = notesURL
@@ -41,6 +44,10 @@ public struct WhatsNew: View {
                         .accessibilityIdentifier("whats_new_unavailable")
                 case .available(let host, let entry, let earlier):
                     WhatsNewEntry(host: host, entry: entry, earlier: earlier)
+                }
+                if let offerText {
+                    Text(offerText).vettIDFont(.bodyMedium).foregroundStyle(colors.onSurfaceVariant)
+                        .accessibilityIdentifier("whats_new_fingerprint")
                 }
                 if ReleaseLog.openable(notesURL), let url = URL(string: notesURL) {
                     Button { openURL(url) } label: {
