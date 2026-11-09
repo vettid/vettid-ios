@@ -52,6 +52,11 @@ struct LocalAccount: Codable, Equatable, Sendable {
     /// a drop deletes, and no other (recovery makes records of the same kind). It is this phone's secret once the transfer is
     /// paired (chosen; not in the spec).
     var transferEpochID: String?
+    /// (VAULT-MESSAGING 0.88.4 §11.14.10 rule 5, "A second scan of the same code") The code the transfer to this phone
+    /// started from: its payload's relay `r` and claim id `c`, stored with ``transferStartedMs`` before the claim is
+    /// fetched. A scan of the same code while the transfer is open changes nothing (``VaultManager/transferIn(code:)``).
+    /// Removed with ``transferStartedMs``.
+    var transferCode: TransferCodeID?
     /// This phone registered for a recovery (VAULT-MESSAGING §11.11.3): the vault bound its App Attest key at the register
     /// (IOS-PLAN §6.2), and the recovery that follows is this phone's way to the vault until the member leaves onboarding.
     var recoveryRegistered = false
@@ -123,6 +128,7 @@ struct LocalAccount: Codable, Equatable, Sendable {
         case transferGen = "transfer_gen"
         case transferStartedMs = "transfer_started_ms"
         case transferEpochID = "transfer_epoch_id"
+        case transferCode = "transfer_code"
         case recoveryRegistered = "recovery_registered"
         case setupComplete = "setup_complete"
         case capabilities
@@ -166,6 +172,7 @@ struct LocalAccount: Codable, Equatable, Sendable {
         transferGen = try c.decodeIfPresent(Int.self, forKey: .transferGen) ?? 0
         transferStartedMs = try c.decodeIfPresent(Int64.self, forKey: .transferStartedMs)
         transferEpochID = try c.decodeIfPresent(String.self, forKey: .transferEpochID)
+        transferCode = try c.decodeIfPresent(TransferCodeID.self, forKey: .transferCode)
         recoveryRegistered = try c.decodeIfPresent(Bool.self, forKey: .recoveryRegistered) ?? false
         setupComplete = try c.decodeIfPresent(Bool.self, forKey: .setupComplete) ?? false
         capabilities = try c.decodeIfPresent([String].self, forKey: .capabilities) ?? []

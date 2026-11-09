@@ -24,4 +24,32 @@ extension InviteLinks {
         if exp <= now { return .expired }
         return .ok(link: link, exp: exp)
     }
+
+    /// The `r` and `c` of a scanned or pasted transfer code, in every form ``parseTransfer(_:now:)`` accepts; nil for
+    /// anything else. **Its expiry is not looked at** (0.88.4): the code expires 10 minutes after the old phone made it,
+    /// before the transfer it started ends, and the same code scanned in that gap is still the same code.
+    public static func transferCodeID(_ text: String) -> TransferCodeID? {
+        let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !t.isEmpty, let q = candidates(t).lazy.compactMap(decode).first, (try? q.link()) != nil, q.kind == .app else {
+            return nil
+        }
+        return TransferCodeID(relay: q.relay, claim: q.claimID)
+    }
+}
+
+/// What makes a transfer code the same code (VAULT-MESSAGING 0.88.4 §11.14.10 rule 5): its payload's relay `r` and
+/// claim id `c`. There is one code per transfer, so any new code from the old phone has a new `c`.
+public struct TransferCodeID: Codable, Equatable, Sendable {
+    public let relay: String
+    public let claim: String
+
+    public init(relay: String, claim: String) {
+        self.relay = relay
+        self.claim = claim
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case relay = "r"
+        case claim = "c"
+    }
 }

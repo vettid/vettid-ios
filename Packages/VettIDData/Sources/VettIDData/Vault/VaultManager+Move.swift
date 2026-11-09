@@ -23,6 +23,9 @@ extension VaultManager: MoveRepository {
     /// `hs.resp` within ``MoveCodes/hsRespWait`` the transfer is dropped and fails with ``FailureKind/noResponse`` and
     /// ``MoveCodes/hsUnanswered`` (§6.7.1 step 2). **Honours task cancellation**, also while waiting for the SAS.
     public func transferIn(code: String) async throws -> String {
+        // A scan of the open transfer's own code changes nothing (§11.14.10 rule 5, 0.88.4), and is decided first: before
+        // the notice below, the window's and the deadline's refusals, the code's expiry, the claim fetch and any drop.
+        if let sas = try await sameCodeMove(code) { return sas }
         // A new move: the notice of how the last one ended goes, whatever this one does.
         transferEnd = nil
         // A refresh while this runs resumes nothing: the start may be written before its handshake is saved, and a start
@@ -56,9 +59,13 @@ extension VaultManager: MoveRepository {
             // The one deadline of 11 minutes counts from here, the start of the `hs.init` (owner decision, 2026-10-23), and is
             // stored: a restart keeps it, and nothing the member does extends it.
             let started = nowMs
+            // The code's `r` and `c` are stored with the start, before the claim is fetched: from the fetch on, a scan of the
+            // same code is this transfer's (§11.14.10 rule 5, 0.88.4).
+            let codeID = InviteLinks.transferCodeID(code)
             try record.update(since: rec) {
                 $0.transferIn = true
                 $0.transferStartedMs = started
+                $0.transferCode = codeID
             }
             let path = TransferPath()
             let fresh = FreshTransferSecret(secrets: phoneSecrets, policy: config.trust.timeScales, path: path)
@@ -147,6 +154,24 @@ extension VaultManager: MoveRepository {
     /// Any other failure before the deadline is rethrown and the transfer kept. True when the vault gave this phone the
     /// member's `user_guid` (§6.7.1, 0.17.0), which its unlocks need.
     public func awaitTransferIn() async throws -> Bool {
+        do {
+            return try await awaitTransferInOnce()
+        } catch {
+            // A failure that keeps the transfer (one before the deadline, rethrown): something must still wait for it, the
+            // background's wait when this was the screen's (a same-code scan stopped the background's, ``sameCodeMove(_:)``).
+            // A cancelled wait is the screen's to settle (Back, or the screen gone); an ended session, a halt, a wipe and a
+            // paired phone (or one without a session) start nothing; and the background's own failure starts nothing either
+            // (its waiter is still set).
+            let ended = (error as? VaultFailure)?.code == Self.codeTransferSessionEnded
+            if !(error is CancellationError), !Task.isCancelled, !ended, !halted, !record.closed,
+               record.value.transferStartedMs != nil, let d = session?.device, d.deviceID == nil {
+                waitForTransferInBackground()
+            }
+            throw error
+        }
+    }
+
+    private func awaitTransferInOnce() async throws -> Bool {
         try await guarded {
             let s = try await openSession()
             // One device per transfer: a foreground after a background takes this session back (``takeBackTransferSession()``).
@@ -326,6 +351,7 @@ extension VaultManager: MoveRepository {
         _ = try? record.update(since: record.generation) {
             $0.transferStartedMs = nil
             $0.transferEpochID = nil
+            $0.transferCode = nil
         }
         try? await d.transferCompleted()
         phase = .setup(.finishing)
@@ -445,6 +471,7 @@ extension VaultManager: MoveRepository {
         _ = try? record.update(since: record.generation) {
             $0.transferStartedMs = nil
             $0.transferEpochID = nil
+            $0.transferCode = nil
         }
         usesPhoneSecret = phoneSecrets.inUse
     }

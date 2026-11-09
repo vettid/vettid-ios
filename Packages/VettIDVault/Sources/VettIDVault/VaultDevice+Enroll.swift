@@ -112,6 +112,7 @@ extension VaultDevice {
             // (IOS-PLAN 0.1.39 §4.9) The recovered phone's handshake the vault answered: its `ctx` names the registration whose
             // attested key the vault binds. Saved with the epoch.
             if let ctx = st.recovery?.pairing { st.recoveryPairedCtx = ctx }
+            keepTransferSas(res.sas)
             if let tok = res.resp.token, let exp = heldFromVault(tok) {
                 st.vault?.token = tok
                 st.vault?.tokenExpMs = Self.ms(exp)
@@ -140,12 +141,24 @@ extension VaultDevice {
             } catch {
                 // A passing failure: the fin stays owed, and the code is shown.
             }
-            // Only while this handshake is the current one: a new one bumps ``handshakeGeneration``, and its flow must not be
-            // handed the old code.
-            if let s = shown, mem.withLock({ guard handshakeGeneration == mine else { return false }; sas = s; return true }) {
-                sasBroadcast.emit(s)
-            }
+            if let s = shown { await show(s, generation: mine) }
         }
+    }
+
+    /// Shows the comparison code [s] of the handshake of [generation], only while it is the current one: a new one bumps
+    /// ``handshakeGeneration``, and its flow must not be handed the old code.
+    private func show(_ s: String, generation mine: UInt64) async {
+        guard mem.withLock({ guard handshakeGeneration == mine else { return false }; sas = s; return true }) else { return }
+        sasBroadcast.emit(s)
+    }
+
+    /// A transfer to this phone (unpaired, with the key its `hs.init` attested): its comparison code is saved with the
+    /// handshake's epoch, in the same write as the `hs.fin` it owes (``DeviceState/transferSas``); it is handed out once
+    /// shown, or after a restart (``transferSas``). Callers hold ``mem``.
+    private func keepTransferSas(_ sas: String?) {
+        guard st.deviceID == nil, alt().transferAttestKeyID != nil, let sas else { return }
+        st.transferSas = sas
+        sasRestored = false
     }
 
     /// Stores the `hs.fin` in the outbox, marked in flight until its deposit, and saves. Dropped when the token it is sent

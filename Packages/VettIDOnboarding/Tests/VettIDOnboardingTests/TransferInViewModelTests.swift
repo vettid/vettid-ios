@@ -190,6 +190,32 @@ import VettIDDataTesting
         #expect(vm.state.inputProblem == nil)
     }
 
+    /// (VAULT-MESSAGING 0.88.4 §11.14.10 rule 5) The open transfer's own code, expired by now, is not refused as expired:
+    /// it goes to the repository, which gives the move back.
+    @Test func theOpenTransfersExpiredCodeGoesBackToTheMove() async throws {
+        let vm = model()
+        vm.scan()
+        let code = try qr(seconds: 0)
+        vault.openTransferCodes = [code]
+        vm.scanned(code)
+        await clock.runCurrent()
+        #expect(await eventually { vault.lastTransferCode == code && vm.state.step == .compare && vm.state.sas == "042817" })
+        #expect(vm.state.inputProblem == nil)
+    }
+
+    /// Its wait for the `hs.resp` ending on the screen's side never abandons the transfer: this scan did not start it.
+    @Test func theOpenTransfersCodeNeverAbandonsIt() async throws {
+        let hs = TestDeferred<String>()
+        vault.transferHsResp = hs
+        let vm = model()
+        vm.scan()
+        let code = try qr()
+        vault.openTransferCodes = [code]
+        vm.scanned(code)
+        await clock.advance(seconds: 61)
+        #expect(vm.state.step == .notAnswered && !vault.calls.contains("abandonTransferIn"))
+    }
+
     @Test func aPastedCodeIsCheckedTheSameWay() async throws {
         let vm = model()
         vm.paste()

@@ -42,6 +42,11 @@ final class DeviceState: Codable, @unchecked Sendable {
     /// settlement window falls back on it when the relay cannot be asked (VAULT-MESSAGING §11.14.10 rule 5). Optional:
     /// older states have none.
     var relayVisibilitySeconds: UInt64?
+    /// (VAULT-MESSAGING 0.88.4 §11.14.10 rule 5, "A second scan of the same code") The comparison code of a transfer to
+    /// this phone, once the vault's `hs.resp` checked out; saved with the handshake's epoch, so that a scan of the same code
+    /// after a restart goes back to it. Not a secret: both phones show it. Gone with the handshake. Optional: older states
+    /// have none.
+    var transferSas: String?
 
     init(role: String, name: String, relayURL: String) {
         self.role = role

@@ -59,6 +59,8 @@ extension VaultDevice {
                 setVault(b.vault)
                 st.vaultID = nil
                 sas = nil
+                st.transferSas = nil
+                sasRestored = false
             }
             let at = Date(timeIntervalSince1970: Double(Self.ms(t)) / 1000)
             let id = Ulid.new(at)
@@ -142,13 +144,31 @@ extension VaultDevice {
         throw CancellationError()
     }
 
+    /// The comparison code of the transfer to this phone once shown (its `hs.fin` went out), or, after a restart, as saved
+    /// with its handshake (the `hs.fin` is out or in the outbox; ``pairingSas`` is gone then); nil before, and once the
+    /// handshake is dropped or the move done.
+    public var transferSas: String? {
+        mem.withLock { st.transferSas == nil ? nil : (sas ?? (sasRestored ? st.transferSas : nil)) }
+    }
+
+    /// The transfer's handshake was answered and its comparison code saved: its `hs.fin` is out or owed, so the vault may
+    /// approve it (``transferSas`` may still be nil while the fin's first deposit runs).
+    public var holdsTransferSas: Bool { mem.withLock { st.transferSas != nil } }
+
+    /// A pairing handshake's `hs.init` waits for the vault's `hs.resp` in this process (its state is in memory only: a
+    /// restart ends it, and no `hs.fin` can follow).
+    public var awaitsPairingResp: Bool { mem.withLock { ini != nil } }
+
     /// The `user_guid` of a transfer's `device.paired` that was applied and whose take-over is not completed.
     public var transferUserGuid: String? { mem.withLock { st.transferUserGuid } }
 
     /// The take-over is completed: the kept `user_guid` goes.
     public func transferCompleted() async throws {
         try await lock.withLock {
-            mem.withLock { st.transferUserGuid = nil }
+            mem.withLock {
+                st.transferUserGuid = nil
+                st.transferSas = nil
+            }
             try save()
         }
     }
