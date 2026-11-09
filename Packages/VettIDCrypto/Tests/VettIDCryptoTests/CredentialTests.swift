@@ -46,7 +46,9 @@ private let otherRequestID = "01JB2Z6V9K3M4N5P6Q7R8S9T31"
         #expect(try CredentialKeyRotation.create(old: keys[0], new: keys[1]).marshal() == want[0])
         #expect(try CredentialKeyRotation.create(old: keys[1], new: keys[2]).marshal() == want[1])
         let chain = try want.map { try CredentialKeyRotation.parse(try StrictJson.parseObject(Array($0.utf8))) }
-        #expect(try CredentialKeyRotation.followChain(pinned: keys[0].publicKey, chain) == keys[2].publicKey)
+        #expect(chain.map(\.oldKey) == [keys[0].publicKey, keys[1].publicKey])
+        #expect(chain.map(\.newKey) == [keys[1].publicKey, keys[2].publicKey])
+        for statement in chain { try statement.verify() }
     }
 
     /// The other direction: what the Swift code seals with fixed HPKE randomness (64 × 0x71, 0x72, 0x73) was opened by
@@ -127,20 +129,20 @@ private let otherRequestID = "01JB2Z6V9K3M4N5P6Q7R8S9T31"
         expectCrypto(.format) { _ = try CredentialBlobHeader.parse([1] + Bytes.uintBE(StrictJson.maxSafeInteger + 1, 8) + Array(blob[9...])) }
     }
 
-    @Test func credentialKeyRotationChain() throws {
+    @Test func credentialKeyRotationStatement() throws {
         let k1 = Ed25519PrivateKey.generate()
         let k2 = Ed25519PrivateKey.generate()
         let k3 = Ed25519PrivateKey.generate()
         let r1 = try CredentialKeyRotation.create(old: k1, new: k2)
         let r2 = try CredentialKeyRotation.parse(try StrictJson.parseObject(Array(try CredentialKeyRotation.create(old: k2, new: k3).marshal().utf8)))
-        #expect(try CredentialKeyRotation.followChain(pinned: k1.publicKey, [r1, r2]) == k3.publicKey)
-        expectCrypto(.signature) { _ = try CredentialKeyRotation.followChain(pinned: k1.publicKey, [r2]) }
-        expectCrypto(.signature) { _ = try CredentialKeyRotation.followChain(pinned: k1.publicKey, []) }
+        try r1.verify()
+        try r2.verify()
         expectCrypto(.signature) { _ = try CredentialKeyRotation.create(old: k1, new: k1) }
         // A statement whose new-key signature is another statement's does not verify.
         let forged = CredentialKeyRotation(oldKey: r1.oldKey, newKey: r1.newKey, sigOld: r1.sigOld, sigNew: r2.sigNew)
         expectCrypto(.signature) { try forged.verify() }
-        expectCrypto(.signature) { _ = try CredentialKeyRotation.followChain(pinned: k1.publicKey, Array(repeating: r1, count: 33)) }
+        let forgedOld = CredentialKeyRotation(oldKey: r1.oldKey, newKey: r1.newKey, sigOld: r2.sigOld, sigNew: r1.sigNew)
+        expectCrypto(.signature) { try forgedOld.verify() }
     }
 }
 
