@@ -187,6 +187,9 @@ import VettIDDataTesting
     @Test func killedBeforeTheDeadlineAndStartedAfterItAWaitingPairedIsApplied() async throws {
         defer { phone.close() }
         _ = try await scanned()
+        // The relay leases what a collect takes (RELAY-PROTOCOL §6.3): a collect whose caller went away in this process (the
+        // window's collector going fresh) gives it back.
+        service.leasesCollected = 1
         try await phone.restart()
         service.approveTransferIn()
         phone.clockAhead = 700

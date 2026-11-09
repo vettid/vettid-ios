@@ -89,6 +89,14 @@ public final class FakeHTTPServer: @unchecked Sendable {
         return URLSession(configuration: c)
     }
 
+    /// A session like ``session`` whose requests all carry [headers].
+    public func session(headers: [String: String]) -> URLSession {
+        let c = URLSessionConfiguration.ephemeral
+        c.protocolClasses = [FakeURLProtocol.self]
+        c.httpAdditionalHeaders = headers
+        return URLSession(configuration: c)
+    }
+
     /// Queues answers, served in order.
     public func enqueue(_ answers: Answer...) { lock.withLock { queue += answers } }
 
