@@ -474,6 +474,17 @@
         }
       }
     },
+    "nav_devices": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Devices & agents"
+          }
+        }
+      }
+    },
     "nav_history": {
       "extractionState": "manual",
       "localizations": {

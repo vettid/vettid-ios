@@ -91,6 +91,7 @@ public final class ShellModel {
         case .security: navigate(.settings)
         case .conversation(let id): openConversation(id)
         case .voteList: navigate(.votes)
+        case .deviceList: navigate(.devices)
         case .sheet: break
         default: if let r = Self.screen(t) { pushOnce(r) }
         }
@@ -124,9 +125,10 @@ public final class ShellModel {
     }
 
     /// The screen a feed target opens over the current one.
-    static func screen(_ t: FeedTarget) -> ShellRoute? {
+    static func screen(_ t: FeedTarget) -> ShellRoute? { // swiftlint:disable:this cyclomatic_complexity
         switch t {
         case .devices: .vaultStatus
+        case .device(let id): .device(id)
         case .approval(let key): .approval(key)
         case .connection(let id): .connection(id)
         case .sharedWithYou(let id): .sharedWithYou(connectionID: id, ask: false)
@@ -138,6 +140,12 @@ public final class ShellModel {
         default: nil
         }
     }
+
+    /// A device's page over Devices & agents (or the screen on top), once.
+    public func openDevice(_ id: String) { pushOnce(.device(id)) }
+
+    /// History searched for a device's name, over its page, once (vettid-android's `launchSingleTop` for `DeviceHistoryRoute`).
+    public func openDeviceHistory(_ query: String) { pushOnce(.deviceHistory(query: query)) }
 
     /// A vote over the Votes list (or the screen on top), once.
     public func openVote(_ connectionID: String, _ proposalID: String) {

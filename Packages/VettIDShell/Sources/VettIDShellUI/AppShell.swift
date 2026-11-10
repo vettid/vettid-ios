@@ -5,6 +5,8 @@ import VettIDApprovalsUI
 import VettIDConnections
 import VettIDConnectionsUI
 import VettIDData
+import VettIDDevices
+import VettIDDevicesUI
 import VettIDHistory
 import VettIDHistoryUI
 import VettIDItems
@@ -49,7 +51,7 @@ public struct AppShell: View {
     let connections: (any ConnectionsRepository)?
     private let connectionRequests: (any ConnectionRequestsRepository)?
     private let inviteInbox: InviteLinkInbox?
-    private let messages: (any MessagesRepository)?
+    let messages: (any MessagesRepository)?
     private let attachments: (any AttachmentsRepository)?
     let feed: (any FeedRepository)?
     let approvals: (any ApprovalsRepository)?
@@ -58,6 +60,7 @@ public struct AppShell: View {
     let items: (any ItemsRepository)?
     let sharing: (any SharingRepository)?
     let votes: (any VotesRepository)?
+    let devices: (any DevicesRepository)?
     private let move: (any MoveRepository)?
     private let onOpenPortal: @MainActor () -> Void
     /// The member's own profile photo (VAULT-MESSAGING §10.8), decoded once per photo, for the top bar's avatar, the avatar
@@ -76,7 +79,8 @@ public struct AppShell: View {
     /// [connections]; [attachments]: their photos and the viewer (§10.5.1). [feed]: the bell and the Notifications screen (§10.9); [approvals]: Approvals and its decisions
     /// (§10.4, §10.12, §10.13), with [connections]. [history] and [historyExport]: History, its entries and its export
     /// (§10.9). [items] and [sharing]: the Vault, its items and their tags (§10.7, §10.8). [votes]: Votes, a vote and a
-    /// service's votes (§10.19, IOS-PLAN §4.16), with [connections].
+    /// service's votes (§10.19, IOS-PLAN §4.16), with [connections]. [devices]: Devices & agents and a device's page (§10.3,
+    /// ANDROID-PLAN 0.1.53 AA1).
     public init(
         account: any AccountRepository,
         vault: any VaultRepository,
@@ -107,6 +111,7 @@ public struct AppShell: View {
         items: (any ItemsRepository)? = nil,
         sharing: (any SharingRepository)? = nil,
         votes: (any VotesRepository)? = nil,
+        devices: (any DevicesRepository)? = nil,
         move: (any MoveRepository)? = nil,
         onOpenPortal: @escaping @MainActor () -> Void
     ) {
@@ -139,6 +144,7 @@ public struct AppShell: View {
         self.items = items
         self.sharing = sharing
         self.votes = votes
+        self.devices = devices
         self.move = move
         self.onOpenPortal = onOpenPortal
     }
@@ -294,17 +300,7 @@ public struct AppShell: View {
         if connections != nil, connectionRequests != nil { model.openInvite(link) }
     }
 
-    /// The drawer's counts (vettid-android `ShellBadges`): the approvals waiting for a decision, the conversations with
-    /// unread messages, the open votes not yet voted on.
-    private var badges: [TopLevelDestination: Int] {
-        [
-            .approvals: approvals?.approvals.count { $0.needsDecision } ?? 0,
-            .messages: messages?.conversations.count { $0.unread > 0 } ?? 0,
-            .votes: votes?.entry.badge ?? 0,
-        ]
-    }
-
-    private var chrome: ShellChrome {
+    var chrome: ShellChrome {
         let model = model
         return ShellChrome(
             accountName: AccountHeader.name(account.account, placeholder: ShellStrings.accountPlaceholderName),
@@ -361,6 +357,7 @@ public struct AppShell: View {
             } else {
                 ComingLaterScreen(destination: model.destination, chrome: chrome)
             }
+        case .devices: devicesRoot
         case .connections:
             if let connections, let connectionRequests {
                 ConnectionsRoute(
@@ -373,7 +370,7 @@ public struct AppShell: View {
         }
     }
 
-    @ViewBuilder private func detail(_ route: ShellRoute) -> some View {
+    @ViewBuilder private func detail(_ route: ShellRoute) -> some View { // swiftlint:disable:this cyclomatic_complexity
         switch route {
         case .vaultStatus:
             VaultStatusRoute(vault: vault, installedFrom: installedFrom) { model.pop() }
@@ -395,6 +392,7 @@ public struct AppShell: View {
             itemsDetail(route)
         case .vote, .connectionVotes:
             votesDetail(route)
+        case .device, .deviceHistory: devicesDetail(route)
         }
     }
 

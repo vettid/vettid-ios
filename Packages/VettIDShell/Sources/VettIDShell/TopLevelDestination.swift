@@ -2,7 +2,7 @@ import Foundation
 import VettIDConnections
 
 /// The drawer's destinations (ANDROID-PLAN §4 "Drawer"; IOS-PLAN ID14), in drawer order and groups: Messages,
-/// Connections, Approvals, Votes | Vault, History | Settings, Help. The only top-level navigation: no tab bar. Mirrors
+/// Connections, Approvals, Votes | Vault, Devices & agents, History | Settings, Help. The only top-level navigation: no tab bar. Mirrors
 /// vettid-android `TopLevelDestination`.
 public enum TopLevelDestination: String, CaseIterable, Sendable {
     case messages, connections, approvals
@@ -11,6 +11,9 @@ public enum TopLevelDestination: String, CaseIterable, Sendable {
     case votes
     /// "Vault" in the UI; the code keeps the Items names (as vettid-android does).
     case items
+    /// "Devices & agents" (ANDROID-PLAN 0.1.53 AA1, decision 13): this phone, the paired agents and desktops. After Vault, before
+    /// History; no badge (what a device asks for waits in Approvals).
+    case devices
     /// The member's audit log (VAULT-MESSAGING §10.9).
     case history
     case settings, help
@@ -19,7 +22,7 @@ public enum TopLevelDestination: String, CaseIterable, Sendable {
     public var group: Int {
         switch self {
         case .messages, .connections, .approvals, .votes: 0
-        case .items, .history: 1
+        case .items, .devices, .history: 1
         case .settings, .help: 3
         }
     }
@@ -76,6 +79,11 @@ public enum ShellRoute: Hashable, Sendable {
     case connect(ConnectDestination)
     /// A connection's detail (VAULT-MESSAGING §10.4), from the Connections list, the accept screen or a conversation.
     case connection(String)
+    /// A device's page in Devices & agents (ANDROID-PLAN 0.1.53 AA1), by its `device_id`: from the list or a feed item.
+    case device(String)
+    /// History searched for a device's name (ANDROID-PLAN 0.1.53 AA1; the vault's search matches device names, §10.9), from the
+    /// device's page. [query] is the name as the device gave it; the search cuts it as it cuts every search.
+    case deviceHistory(query: String)
     /// A conversation with a connection (VAULT-MESSAGING §10.5), from Messages, the new-message picker, a connection's
     /// detail or the screens of connecting.
     case conversation(String)

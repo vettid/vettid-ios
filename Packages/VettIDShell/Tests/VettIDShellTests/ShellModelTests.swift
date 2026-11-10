@@ -8,10 +8,14 @@ import VettIDData
 @Suite struct ShellModelTests {
     let now = Date(timeIntervalSince1970: 1_791_384_000)
 
-    /// vettid-android `TopLevelDestination`: Messages, Connections, Approvals | Vault, History | Settings, Help.
+    /// vettid-android `TopLevelDestination`: Messages, Connections, Approvals, Votes | Vault, Devices & agents, History | Settings,
+    /// Help.
     @Test func theDrawerIsAndroids() {
-        #expect(TopLevelDestination.sections == [[.messages, .connections, .approvals, .votes], [.items, .history], [.settings, .help]])
-        let keys = ["messages", "connections", "approvals", "votes", "items", "history", "settings", "help"]
+        let sections: [[TopLevelDestination]] = [
+            [.messages, .connections, .approvals, .votes], [.items, .devices, .history], [.settings, .help],
+        ]
+        #expect(TopLevelDestination.sections == sections)
+        let keys = ["messages", "connections", "approvals", "votes", "items", "devices", "history", "settings", "help"]
         #expect(TopLevelDestination.allCases.map(\.key) == keys)
         #expect(TopLevelDestination.fromKey("settings") == .settings && TopLevelDestination.fromKey("nope") == nil)
         #expect(TopLevelDestination.start == .messages)
