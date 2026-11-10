@@ -444,7 +444,7 @@ public final class VaultDevice: @unchecked Sendable {
         guard let round = begin else { return }
         let task = Task { [weak self] in
             guard let self else { return }
-            let flush = Task { await self.flushOutbox() }
+            let flush = Task { await self.tickConfirm(); await self.flushOutbox() } // (0.88.1) hs.confirm again after 12 days
             defer { flush.cancel() }
             do {
                 try await collector(of: round).run { m in try await self.handle(m) }

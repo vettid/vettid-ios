@@ -251,6 +251,7 @@ final class FakeVault: @unchecked Sendable {
         let kem = kem
         let p = try PendingInit.open(raw, lookup: { k in k == kem.publicKey.kid ? kem : nil }, now: Date())
         #expect(p.body.purpose == .app && p.body.ctx == (ctx ?? vaultID))
+        #expect(p.inner.features == ["hs_confirm"]) // §5.3, §10.8 (0.87.0): every message the device deposits
         let (r, env) = try p.respond(ResponderConfig(identity: ik, token: try token(for: d), policy: .vaultToDevice, collectSender: d.relayAddr.pk))
         responder = r
         return (msg(env), p.body)
@@ -258,6 +259,7 @@ final class FakeVault: @unchecked Sendable {
 
     func fin(_ raw: [UInt8], _ d: VaultDevice) throws {
         let fr = try #require(responder).handleFin(raw, collectSender: d.relayAddr.pk, now: Date())
+        #expect(fr.inner.features == ["hs_confirm"])
         keyring.activate(fr.epoch, now: Date())
     }
 
@@ -277,3 +279,16 @@ final class FakeVault: @unchecked Sendable {
 }
 
 // swiftlint:enable line_length
+
+extension FakeRelay {
+    /// Takes the `device.features` the device deposits after each epoch it activates (VAULT-MESSAGING §10.2, 0.87.0) and
+    /// checks it: this app's list, in the body and as the inner `features`.
+    @discardableResult
+    func takeFeatures(_ v: FakeVault) async throws -> Inner {
+        let m = try v.open(try await nextDeposit().payload)
+        #expect(m.type == "device.features")
+        #expect(String(bytes: m.body, encoding: .utf8) == #"{"features":["hs_confirm"]}"#)
+        #expect(m.features == ["hs_confirm"])
+        return m
+    }
+}

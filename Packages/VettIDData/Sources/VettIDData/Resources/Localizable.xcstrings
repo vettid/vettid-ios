@@ -1944,6 +1944,28 @@
         }
       }
     },
+    "data_feed_device_update_needed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ needs an update to keep working with your vault. Update the app."
+          }
+        }
+      }
+    },
+    "data_feed_device_update_needed_any": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "One of your devices needs an update to keep working with your vault. Update the app on it."
+          }
+        }
+      }
+    },
     "data_feed_device_transferred": {
       "extractionState": "manual",
       "localizations": {

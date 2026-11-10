@@ -205,6 +205,7 @@ extension InitDepositTests {
         try await d.handle(v.msg(res.fin))
         #expect(d.mem.withLock { d.st.outbox.count } == 1)
         try await d.handle(try v.seal("device.paired", #"{"device_id":"dev-2","role":"app","vault_id":"\#(v.vaultID)","transfer":true,"user_guid":"guid-1234"}"#))
+        // The fin is gone, and the pairing's device.features (§10.2) went out.
         #expect(d.mem.withLock { d.st.outbox.isEmpty })
     }
 
@@ -249,7 +250,8 @@ extension InitDepositTests {
         try v.fin(try await base.relay.nextDeposit().payload, d)
         #expect(d.mem.withLock { d.st.outbox.count } == 1)
         try await d.handle(try v.seal("device.paired", #"{"device_id":"dev-2","role":"app","vault_id":"\#(v.vaultID)","transfer":true,"user_guid":"guid-1234"}"#))
-        #expect(d.mem.withLock { d.st.outbox.isEmpty })
+        // The fin is gone; what is left is the pairing's device.features (§10.2), refused like every deposit here.
+        #expect(d.mem.withLock { d.st.outbox.map(\.type) } == ["device.features"])
     }
 
     /// The first handshake's `device.paired` of an enrollment clears a fin still owed too.

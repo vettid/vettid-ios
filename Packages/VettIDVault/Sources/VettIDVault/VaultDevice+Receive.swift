@@ -31,7 +31,7 @@ extension VaultDevice {
             let before = mem.withLock {
                 HandlingStart(
                     seen: st.seen, seenInner: st.seenInner, issuedExpMs: st.issuedExpMs,
-                    outbox: Set(st.outbox.map(\.id)), awaiting: awaiting.map(\.resp)
+                    outbox: Set(st.outbox.map(\.id)), awaiting: awaiting.map(\.resp), confirmAtMs: st.vault?.confirmAtMs
                 )
             }
             mem.withLock { memory.keptOnError = [] }
@@ -62,6 +62,8 @@ extension VaultDevice {
         let issuedExpMs: Int64
         let outbox: Set<String>
         let awaiting: [Responder]
+        /// When `hs.confirm` was last queued: one the failed handling queued is taken out, so its time goes too.
+        let confirmAtMs: Int64?
     }
 
     /// A failed handling is undone: its message ids are forgotten, the entries it queued are taken out (and are no longer in
@@ -72,6 +74,10 @@ extension VaultDevice {
             st.seen = before.seen
             st.seenInner = before.seenInner
             st.issuedExpMs = before.issuedExpMs
+            // Unless the hs.confirm of an activation that stands is kept (``queueConfirmed(_:)``).
+            if !st.outbox.contains(where: { $0.type == HsTypes.confirm && memory.keptOnError.contains($0.id) }) {
+                st.vault?.confirmAtMs = before.confirmAtMs
+            }
             let gone = Set(st.outbox.map(\.id)).subtracting(before.outbox).subtracting(memory.keptOnError)
             st.outbox.removeAll { gone.contains($0.id) }
             outboxInFlight.subtract(gone)
@@ -123,11 +129,11 @@ extension VaultDevice {
         guard Ed25519.equalPublic(sender, try Base64s.decodeStd(v.relayPk)) else { return }
         let opened = mem.withLock { try? keyring.open(env, now: t) }
         guard let (inner, ep) = opened else {
-            try mem.withLock {
+            let activated: Bool = try mem.withLock {
                 pruneAwaiting(t)
                 let match = awaiting.firstIndex { $0.resp.kids.recipient == env.recipientKid && $0.resp.kids.sender == env.senderKid }
                 guard let i = match else {
-                    return
+                    return false
                 }
                 // CryptoError.early: a message of the new epoch ahead of its hs.fin (handle leaves it for redelivery).
                 let fr = try awaiting[i].resp.handleFin(raw, collectSender: sender, now: t)
@@ -137,16 +143,23 @@ extension VaultDevice {
                         if st.outbox[j].epochIDs?.contains(fr.epoch.ctx) != true { st.outbox[j].epochIDs?.append(fr.epoch.ctx) }
                     }
                 }
-                keyring.activate(fr.epoch, now: t)
+                // §6.3.1 "Responder": activated at the verified hs.fin, hs.confirm queued in the same write.
+                activateRekeyLocked(fr.epoch, t)
                 awaiting.remove(at: i)
+                return true
             }
+            if activated { queueConfirmed(t) }
             return
         }
         resetRefusals() // the vault spoke to this device under its session
+        // §6.3.1: any message but hs.fin tells which epoch the vault uses (a redelivered hs.fin of an active epoch opens here).
+        if inner.type != Self.typeHsFin { noteConfirmed(ep, t) }
         if inner.type == Self.typeHsInit {
             try await handleRekey(raw, epoch: ep, sender: sender, t)
             return
         }
+        // Not a request, so never answered; a device starts no rekey, so one confirms nothing here (§6.3.1).
+        if inner.type == HsTypes.confirm { return }
         do {
             try inner.checkTime(now: t, durable: inner.exp == nil)
         } catch let e as CryptoError where e.kind == .time {
@@ -179,6 +192,8 @@ extension VaultDevice {
         // hs.resp before maintain() looks at it.
         case "device.paired":
             storeVaultToken(body)
+            // §10.2 (0.87.0): device.features after each epoch it activates; the pairing's is this one.
+            try? queueFeatures()
             // The first handshake's `device.paired` (pairing, enrollment, transfer): a fin still owed for it is of no use, and
             // its age must not later tell a paired device that the pairing failed.
             // Only the fins of the epoch it opened under: a retired epoch's message must not clear a newer handshake's fin.
@@ -233,6 +248,8 @@ extension VaultDevice {
             keyring = Keyring()
             st.vault?.token = ""
             st.vault?.tokenExpMs = 0
+            st.vault?.confirmed = nil
+            st.vault?.confirmAtMs = nil
             // The fin of the handshake that is dropped is of no use to anyone.
             st.outbox.removeAll { $0.type == Self.typeHsFin }
         }
@@ -242,12 +259,14 @@ extension VaultDevice {
     /// to the new epoch on `hs.resp`, so a restart that lost it would leave this device unable to read anything.
     func handleRekey(_ raw: [UInt8], epoch ep: Epoch, sender: [UInt8], _ t: Date) async throws {
         let prepared: (Awaiting, [UInt8], VaultRecord)? = try mem.withLock { // swiftlint:disable:this large_tuple
-            guard keyring.current() === ep else { return nil }
+            // §6.3.1: a rekey under the confirmed epoch while it is not current is accepted as if current.
+            guard keyring.current() === ep || isConfirmedLocked(ep) else { return nil }
             let v = try requireVault()
             let pi = try PendingInit.openRekey(raw, current: ep, now: t)
             let (resp, env) = try pi.respond(ResponderConfig(
                 identity: secrets.identity, pinnedSuite: v.suite, policy: .vaultToDevice, collectSender: sender,
-                recordRelayKey: try Base64s.decodeStd(v.relayPk), knownInitiatorIk: try Base64s.decodeStd(v.ik), now: t
+                recordRelayKey: try Base64s.decodeStd(v.relayPk), knownInitiatorIk: try Base64s.decodeStd(v.ik), now: t,
+                features: DeviceFeatures.all
             ))
             let a = Awaiting(resp: resp, createdMs: Self.ms(t))
             awaiting.append(a)
@@ -338,5 +357,6 @@ extension VaultDevice {
         } catch {
             // retried at the next message
         }
+        tickConfirmLocked(t, save: false)
     }
 }

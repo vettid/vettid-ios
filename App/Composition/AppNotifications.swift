@@ -50,7 +50,8 @@ final class AppNotifications: NSObject, UNUserNotificationCenterDelegate {
                 guard let vault else { return FeedNames() }
                 return FeedNames(
                     connections: vault.connections.connections, items: vault.items.names ?? [:],
-                    approvals: vault.approvals.approvals, votes: vault.votes.votes
+                    approvals: vault.approvals.approvals, votes: vault.votes.votes,
+                    devices: vault.history.knownDevices?.names ?? [:]
                 )
             },
             messageText: { [weak vault] connectionID, messageID in

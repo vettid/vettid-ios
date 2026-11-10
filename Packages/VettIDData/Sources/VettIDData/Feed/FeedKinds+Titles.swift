@@ -16,20 +16,27 @@ public struct FeedNames: Equatable, Sendable {
     /// give-up one (VAULT-MESSAGING 0.83.6 §10.19.6 step 4; the item itself carries no check state). A vote not in the list
     /// reads as a result.
     public var votesGaveUp: Set<String>
+    /// The vault's devices' names by device id (`device.list`, cleaned as History keeps them; "" for a device without one),
+    /// for `device.update_needed` (VAULT-MESSAGING 0.87.0 §10.9). Empty when the list was not read.
+    public var devices: [String: String]
 
     public init(
         connections: [String: ConnectionInfo] = [:], items: [String: String] = [:], approvals: [String: PendingApproval] = [:],
-        votes: [String: String] = [:], votesGaveUp: Set<String> = []
+        votes: [String: String] = [:], votesGaveUp: Set<String> = [], devices: [String: String] = [:]
     ) {
         self.connections = connections
         self.items = items
         self.approvals = approvals
         self.votes = votes
         self.votesGaveUp = votesGaveUp
+        self.devices = devices
     }
 
     /// From the lists the repositories hold.
-    public init(connections: [ConnectionInfo], items: [String: String] = [:], approvals: [PendingApproval], votes: [VoteSummary] = []) {
+    public init(
+        connections: [ConnectionInfo], items: [String: String] = [:], approvals: [PendingApproval], votes: [VoteSummary] = [],
+        devices: [String: String] = [:]
+    ) {
         self.init(
             connections: Dictionary(connections.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a }),
             items: items,
@@ -38,7 +45,8 @@ public struct FeedNames: Equatable, Sendable {
                 votes.compactMap { v in AccountNames.isolateOrNull(v.title).map { (VoteTitles.key(v.connectionID, v.proposalID), $0) } },
                 uniquingKeysWith: { a, _ in a }
             ),
-            votesGaveUp: Self.votesGaveUp(votes)
+            votesGaveUp: Self.votesGaveUp(votes),
+            devices: devices
         )
     }
 
@@ -99,7 +107,7 @@ public extension FeedKinds {
     /// The row's title. [details] false (a notification with names only, ANDROID-PLAN §4 Notification modes 8): the
     /// connection's or device's name and the kind only, no item names or tags.
     static func title(_ item: FeedItem, _ names: FeedNames, details: Bool = true) -> String {
-        if let t = connectionTitle(item, names) ?? askTitle(item, names, details: details) ?? deviceTitle(item)
+        if let t = connectionTitle(item, names) ?? askTitle(item, names, details: details) ?? deviceTitle(item, names)
             ?? checkTitle(item) ?? laterTitle(item, names) ?? eventTitle(item, names, details: details) {
             return t
         }
@@ -222,8 +230,18 @@ public extension FeedKinds {
         }
     }
 
-    private static func deviceTitle(_ item: FeedItem) -> String? {
+    /// (0.87.0 §6.3.1, the owner's wording of 2026-11-06) The device by its name in `device.list`; without one (not listed,
+    /// not read, or nameless) the wording that names no device.
+    private static func updateNeededTitle(_ item: FeedItem, _ names: FeedNames) -> String {
+        guard let name = AccountNames.isolateOrNull(item.deviceID.flatMap { names.devices[$0] }) else {
+            return DataStrings.feedDeviceUpdateNeededAny
+        }
+        return DataStrings.feedDeviceUpdateNeeded(name)
+    }
+
+    private static func deviceTitle(_ item: FeedItem, _ names: FeedNames) -> String? {
         switch item.kind {
+        case "device.update_needed": updateNeededTitle(item, names)
         case "device.pair.pending": DataStrings.feedDevicePairPending
         case "device.paired": DataStrings.feedDevicePaired
         case "device.unlinked": DataStrings.feedDeviceUnlinked

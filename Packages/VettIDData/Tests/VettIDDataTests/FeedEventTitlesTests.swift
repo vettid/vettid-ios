@@ -150,6 +150,25 @@ import VettIDVault
         #expect(title(Self.item("item.revealed", "01ITEM"), details: false) == "A critical item was revealed")
     }
 
+    /// VAULT-MESSAGING 0.87.0 §6.3.1 "An app from before release 29": the device by its name in `device.list`, else the
+    /// wording that names none; it leads to Devices.
+    @Test func anotherDeviceNeedsAnUpdate() {
+        var i = Self.item("device.update_needed", nil, "high")
+        i.deviceID = "d1"
+        let named = FeedNames(devices: ["d1": "Al's iPad", "d2": ""])
+        #expect(FeedKinds.title(i, named) == "\u{2068}Al's iPad\u{2069} needs an update to keep working with your vault. Update the app.")
+        let any = "One of your devices needs an update to keep working with your vault. Update the app on it."
+        #expect(FeedKinds.title(i, FeedNames()) == any) // the list not read
+        i.deviceID = "d2"
+        #expect(FeedKinds.title(i, named) == any) // listed without a name
+        i.deviceID = "gone"
+        #expect(FeedKinds.title(i, named) == any)
+        i.deviceID = nil
+        #expect(FeedKinds.title(i, named) == any)
+        #expect(FeedKinds.isKnown("device.update_needed") && FeedKinds.classify("device.update_needed") == .shown)
+        #expect(FeedKinds.target(i) == .devices)
+    }
+
     @Test func devicesCredentialAndTheDailyCheck() {
         let t = { (k: String, ref: String?) in title(Self.item(k, ref)) }
         #expect(t("device.pair.pending", nil) == "A device asks to pair" && t("device.paired", nil) == "A device was paired")

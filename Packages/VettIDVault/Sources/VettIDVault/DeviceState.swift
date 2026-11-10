@@ -70,6 +70,13 @@ struct VaultRecord: Codable, Sendable {
     /// The vault's rekeys this device answered with `hs.resp` whose `hs.fin` has not arrived (§6.5): kept across a
     /// restart, so that the `hs.fin` still finds its handshake. Secret, like [sessions].
     var awaiting: [AwaitingRekey] = []
+    /// (0.87.0, VAULT-MESSAGING §6.3.1 "Responder") The device's confirmed epoch with its vault (the id, base64): the
+    /// newest in which the vault sent it anything but `hs.fin`. Nil: the current epoch. Optional, as a state written
+    /// before release 29 has none.
+    var confirmed: String?
+    /// When the device last queued `hs.confirm` (ms): it queues one again 12 days later while its current epoch is not
+    /// its confirmed one (0.88.1, "`hs.confirm` again").
+    var confirmAtMs: Int64?
 }
 
 /// A responder awaiting `hs.fin` (its export, base64) and when it began.

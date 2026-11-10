@@ -53,6 +53,74 @@ import VettIDVault
         #expect(FeedKinds.target(item) == .vote(connectionID: "c1", proposalID: "p1"))
     }
 
+    /// `device.update_needed` names a device by its id only: the device list is read when such an item is listed (History's
+    /// kept list first), asked again after a failed read, and read afresh for an id the list lacked (VAULT-MESSAGING
+    /// 0.87.0 §10.9).
+    @Test func anUpdateNeededItemReadsTheDeviceNames() async {
+        let calls = Counter()
+        let refreshes = Counter()
+        let answer = Counter()
+        let devices: @MainActor (Bool) async -> HistoryDevices? = { refresh in
+            calls.n += 1
+            if refresh { refreshes.n += 1 }
+            switch answer.n {
+            case 0: return nil
+            case 1: return HistoryDevices(names: ["d1": "iPad"])
+            default: return HistoryDevices(names: ["d1": "iPad", "d2": "Mac"])
+            }
+        }
+        feed.items = [Self.item("m1")]
+        let m = NotificationsViewModel(feed: feed, connections: connections, approvals: approvals, devices: devices)
+        await m.settle()
+        #expect(calls.n == 0) // nothing names a device
+        var u = Self.item("u1", "device.update_needed", priority: "high")
+        u.deviceID = "d1"
+        feed.items = [u, Self.item("m1")]
+        #expect(await eventually { calls.n == 1 })
+        #expect(m.state.names.devices.isEmpty) // the read failed
+        answer.n = 1
+        feed.items = [u]
+        #expect(await eventually { m.state.names.devices == ["d1": "iPad"] })
+        #expect(FeedKinds.title(u, m.state.names).hasPrefix("\u{2068}iPad\u{2069} needs an update"))
+        #expect(refreshes.n == 0)
+        // A named id is not asked for again.
+        feed.items = [u, Self.item("m2")]
+        try? await Task.sleep(for: .milliseconds(50))
+        #expect(calls.n == 2)
+        // A device the kept list lacks: read afresh, once.
+        var u2 = Self.item("u2", "device.update_needed", priority: "high")
+        u2.deviceID = "d2"
+        answer.n = 2
+        feed.items = [u2, u]
+        #expect(await eventually { m.state.names.devices["d2"] == "Mac" })
+        #expect(refreshes.n == 1)
+        feed.items = [u2, u, Self.item("m3")]
+        try? await Task.sleep(for: .milliseconds(50))
+        #expect(calls.n == 3)
+    }
+
+    /// History's kept list lacks the id (a desktop paired since it was read): read afresh at once; a failed fresh read is
+    /// tried again with the next change of the list.
+    @Test func aKeptListWithoutTheDeviceIsReadAfresh() async {
+        let refreshes = Counter()
+        let freshWorks = Counter()
+        let devices: @MainActor (Bool) async -> HistoryDevices? = { refresh in
+            guard refresh else { return HistoryDevices(names: ["d0": "Phone"]) }
+            refreshes.n += 1
+            return freshWorks.n == 0 ? nil : HistoryDevices(names: ["d0": "Phone", "d1": "Mac"])
+        }
+        var u = Self.item("u1", "device.update_needed", priority: "high")
+        u.deviceID = "d1"
+        feed.items = [u]
+        let m = NotificationsViewModel(feed: feed, connections: connections, approvals: approvals, devices: devices)
+        #expect(await eventually { refreshes.n == 1 })
+        #expect(m.state.names.devices == ["d0": "Phone"]) // the fresh read failed
+        freshWorks.n = 1
+        feed.items = [u, Self.item("m1")]
+        #expect(await eventually { m.state.names.devices["d1"] == "Mac" })
+        #expect(refreshes.n == 2)
+    }
+
     @Test func sectionsPutUrgentUnreadFirstThenDays() {
         let items = [
             Self.item("a", at: "2026-10-19T09:00:00.000Z"), Self.item("b", "credential.alarm", at: "2026-10-18T09:00:00.000Z", priority: "urgent"),
@@ -285,6 +353,11 @@ import VettIDVault
         #expect(FeedCategories.of("message.received") == .messages && FeedCategories.of("recovery.attempt") == .security)
         #expect(FeedCategories.of("owner_check.failed") == .vaultAccess && FeedCategories.of("grant.request") == .items)
     }
+}
+
+@MainActor
+final class Counter {
+    var n = 0
 }
 
 func eventually(_ condition: @MainActor () -> Bool) async -> Bool {
