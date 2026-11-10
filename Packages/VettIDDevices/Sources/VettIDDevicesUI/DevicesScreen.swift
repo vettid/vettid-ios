@@ -10,14 +10,19 @@ public struct DevicesActions {
     public var onRetry: @MainActor () -> Void = {}
     /// The "<name> was removed" message was shown (it is told once).
     public var onRemovedShown: @MainActor () -> Void = {}
+    /// **Pair an agent** (AA2) and **Pair a desktop** (vettid-android #291), from the floating button.
+    public var onPair: @MainActor () -> Void = {}
+    public var onPairDesktop: @MainActor () -> Void = {}
 
     public init() {}
 }
 
 /// Devices & agents (ANDROID-PLAN 0.1.53 AA1): this phone first, then the member's agents, then desktops, each newest first. A
 /// row is the name, the role, the access ("Access until 15:40" / "No access") and the last activity; an agent the vault paused
-/// carries a "Paused" chip. With this phone alone: "Nothing paired yet". A list that could not be read says so, above what was
-/// read before. Mirrors vettid-android `DevicesScreen`.
+/// carries a "Paused" chip. With this phone alone: "Nothing paired yet" (agents and desktops alike). A list that could not be read
+/// says so, above what was read before. The floating button opens a menu of **Pair an agent** (AA2) and **Pair a desktop**
+/// (vettid-android #291), also with only this phone listed, but not while the list could not be read at all. Mirrors
+/// vettid-android `DevicesScreen`.
 public struct DevicesScreen: View {
     @Environment(\.vettIDTimeScale) private var timeScale
     let state: DevicesState
@@ -38,11 +43,26 @@ public struct DevicesScreen: View {
     private var removedText: String? { state.removedDevice.map { DeviceStrings.devicesRemoved(DeviceTexts.sentenceName($0)) } }
 
     public var body: some View {
-        TopLevelScaffold(title: DeviceStrings.devicesTitle, chrome: chrome) { content }
+        TopLevelScaffold(title: DeviceStrings.devicesTitle, chrome: chrome) {
+            content
+        } overlay: {
+            if offersPairing {
+                BottomFloatingControls {
+                    EmptyView()
+                } trailing: {
+                    PairChooser(onPair: actions.onPair, onPairDesktop: actions.onPairDesktop)
+                }
+            }
+        }
             .deviceToast(removedText, onShown: actions.onRemovedShown)
             .accessibilityElement(children: .contain)
             .accessibilityIdentifier("devices_screen")
     }
+
+    /// Not while the list is loading, nor when it could not be read at all.
+    private var offersPairing: Bool { Self.offersPairing(state) }
+
+    static func offersPairing(_ state: DevicesState) -> Bool { !state.loading && !(state.devices.isEmpty && state.error != nil) }
 
     @ViewBuilder private var content: some View {
         if state.loading {
@@ -64,6 +84,9 @@ public struct DevicesScreen: View {
         }
     }
 
+    /// Room under the last row for the floating button (vettid-android `FAB_SPACE`).
+    static let fabSpace: CGFloat = 96
+
     private var list: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 0) {
@@ -77,9 +100,33 @@ public struct DevicesScreen: View {
                     DeviceRow(device: d, now: now, calendar: calendar) { actions.onOpen(d.id) }
                 }
             }
-            .padding(.bottom, Spacing.xxl)
+            // Room under the last row for the floating button.
+            .padding(.bottom, Self.fabSpace)
         }
         .accessibilityIdentifier("devices")
+    }
+}
+
+/// The floating button: a menu of the two pairings (owner decision 2026-11-05).
+private struct PairChooser: View {
+    @Environment(\.vettIDColors) private var colors
+    let onPair: @MainActor () -> Void
+    let onPairDesktop: @MainActor () -> Void
+
+    var body: some View {
+        Menu {
+            Button(DeviceStrings.devicesPair, action: onPair).accessibilityIdentifier("pair_agent")
+            Button(DeviceStrings.devicesPairDesktop, action: onPairDesktop).accessibilityIdentifier("pair_desktop")
+        } label: {
+            VettIDSymbol.add.image
+                .scaledIcon(size: 22)
+                .foregroundStyle(colors.primary)
+                .frame(width: 56, height: 56)
+                .background(colors.surfaceContainer, in: Circle())
+                .shadow(color: .black.opacity(0.18), radius: 2, y: 1)
+        }
+        .accessibilityLabel(DeviceStrings.devicesPairNew)
+        .accessibilityIdentifier("pair_new")
     }
 }
 

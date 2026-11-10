@@ -4,13 +4,18 @@ import VettIDData
 import VettIDDevices
 import VettIDUI
 
-/// Where the Devices & agents screens go: a device's page, back, and History searched for a device's name. Mirrors vettid-android
-/// `DevicesHost`.
+/// Where the Devices & agents screens go: a device's page, the two pairings, back, History searched for a device's name, and the daily
+/// check. Mirrors vettid-android `DevicesHost`.
 public struct DevicesHost {
     public var onOpen: @MainActor (String) -> Void = { _ in }
     public var onBack: @MainActor () -> Void = {}
     /// Opens History with its search set to the device's name (§10.9: the vault's search matches device names).
     public var onOpenHistory: @MainActor (String) -> Void = { _ in }
+    /// The pairing screens (AA2): **Pair an agent**, and **Pair a desktop** (vettid-android #291).
+    public var onPair: @MainActor () -> Void = {}
+    public var onPairDesktop: @MainActor () -> Void = {}
+    /// The daily owner check (a refused pairing request says it is due).
+    public var onOwnerCheck: @MainActor () -> Void = {}
 
     public init() {}
 }
@@ -48,6 +53,8 @@ public struct DevicesRoute: View {
     private var actions: DevicesActions {
         var a = DevicesActions()
         a.onOpen = host.onOpen
+        a.onPair = host.onPair
+        a.onPairDesktop = host.onPairDesktop
         guard let m = model else { return a }
         a.onRetry = { m.refresh() }
         a.onRemovedShown = { m.removedShown() }
@@ -105,4 +112,71 @@ public struct DeviceRoute: View {
 
 /// How long the page shows "<name> was removed" before it leaves.
 private let removedNoticeSeconds = 3.0
+
+/// Pairing an agent (AA2) or, with [desktop], a desktop (vettid-android #291), with its view model, made when the screen first
+/// appears and released when it goes: leaving it with a pairing not approved rejects it. [held]: opened from the feed item "A device
+/// asks to pair", so it shows what is held, never a new code (what is held says its own role).
+public struct PairRoute: View {
+    private let pairing: any PairingRepository
+    private let ownerChecks: (any OwnerCheckRepository)?
+    private let held: Bool
+    private let desktop: Bool
+    private let host: DevicesHost
+    @State private var model: PairViewModel?
+
+    public init(
+        held: Bool = false, desktop: Bool = false, pairing: any PairingRepository, ownerChecks: (any OwnerCheckRepository)? = nil,
+        host: DevicesHost
+    ) {
+        self.held = held
+        self.desktop = desktop
+        self.pairing = pairing
+        self.ownerChecks = ownerChecks
+        self.host = host
+    }
+
+    public var body: some View {
+        PairScreen(state: model?.state ?? PairState(), actions: actions)
+            .onAppear {
+                if model == nil { model = PairViewModel(held: held, desktop: desktop, repo: pairing, ownerChecks: ownerChecks) }
+            }
+    }
+
+    private var actions: PairActions {
+        var a = PairActions()
+        a.onOwnerCheck = host.onOwnerCheck
+        guard let m = model else {
+            a.onBack = host.onBack
+            return a
+        }
+        let host = host
+        // Leaving a pairing not approved rejects it (the view model's end); a final stage is read.
+        a.onBack = {
+            m.done()
+            host.onBack()
+        }
+        a.onNewCode = { m.newCode() }
+        a.onCopied = { m.copied() }
+        a.onCancel = {
+            m.cancel()
+            host.onBack()
+        }
+        a.onCodesMatch = { m.codesMatch() }
+        a.onCloseSheet = { m.closeSheet() }
+        a.onChoose = { m.choose($0) }
+        a.onPair = { m.pair() }
+        a.onReject = { m.reject() }
+        a.onDone = {
+            m.done()
+            host.onBack()
+        }
+        // **Open its page**: the new agent's page over the list.
+        a.onOpenPage = { id in
+            m.done()
+            host.onBack()
+            host.onOpen(id)
+        }
+        return a
+    }
+}
 #endif
