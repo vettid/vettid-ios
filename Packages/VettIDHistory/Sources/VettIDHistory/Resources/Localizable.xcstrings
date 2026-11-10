@@ -3240,7 +3240,7 @@
       }
     },
     "history_kind_connection_active_again_any": {
-      "comment": "Without the name (the connection is gone or not known): chosen, not in the spec.",
+      "comment": "Without the name (the connection is gone or not known); owner-approved 2026-11-10 (GC #7655).",
       "extractionState": "manual",
       "localizations": {
         "en": {
