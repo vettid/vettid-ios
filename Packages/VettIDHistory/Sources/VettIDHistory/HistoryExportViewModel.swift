@@ -307,6 +307,9 @@ public final class HistoryExportViewModel {
     }
 
     private func read(_ g: Int, _ c: ExportContext, _ format: ExportFormat, _ answer: AuditExportAnswer) async {
+        // An export closed meanwhile (a lock, a cancel) reads nothing: no device list and no `audit.list` (which checks for
+        // cancellation itself) for records nobody will see.
+        guard g == generation, !Task.isCancelled else { return }
         set(g, .reading(done: 0, total: answer.count))
         do {
             // Device names are best effort: without them the file has the ids alone.
