@@ -284,7 +284,7 @@ extension VaultDevice {
             token: tok, profile: profile, deviceAttest: deviceAttest, apiKey: apiKey, unlockSecret: unlockSecret,
             responderIk: try Base64s.decodeStd(v.ik),
             responderEk: try KemPublicKey.parse(try Base64s.decodeStd(v.kem)), responderRelayKey: try Base64s.decodeStd(v.relayPk),
-            policy: .vaultToDevice, id: id, now: at ?? now()
+            policy: .vaultToDevice, id: id, now: at ?? now(), features: DeviceFeatures.all
         ))
         try refuseSending()
         let claims = (try? Base64s.decodeStd(v.relayPk)).flatMap { try? DepositTokens.verify(depositToken, issuer: $0) }

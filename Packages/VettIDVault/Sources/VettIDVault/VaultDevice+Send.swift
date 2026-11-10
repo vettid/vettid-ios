@@ -42,7 +42,7 @@ extension VaultDevice {
             let v = try requireVault()
             guard let ep = keyring.current() else { throw VaultStateError(message: "no session with the vault") }
             guard !v.token.isEmpty else { throw VaultStateError(message: "no token for the vault") }
-            return (v, try ep.seal(Inner(id: id, type: type, ts: now(), exp: exp, body: body)))
+            return (v, try ep.seal(Inner(id: id, type: type, ts: now(), exp: exp, features: DeviceFeatures.all, body: body)))
         }
         try save() // the epoch's send counter
         return (v, env)
@@ -87,7 +87,9 @@ extension VaultDevice {
             guard !v.token.isEmpty else { throw VaultStateError(message: "no token for the vault") }
             let t = now()
             let iid = id ?? Ulid.new(t)
-            let env = try ep.seal(Inner(id: iid, type: type, ts: t, re: re, exp: exp, status: status, body: body))
+            let env = try ep.seal(
+                Inner(id: iid, type: type, ts: t, re: re, exp: exp, status: status, features: DeviceFeatures.all, body: body)
+            )
             let e = OutboxEntry(
                 id: iid, type: type, relayURL: v.relayURL, mailbox: v.mailbox, token: v.token, envelope: Base64s.encodeStd(env)
             )
@@ -265,7 +267,11 @@ extension VaultDevice {
     /// (§7.2), which mean the same when they arrive late, and the `hs.fin` of a handshake (§6.2), which is the same message
     /// whenever it arrives and is lost with its code if it does not (chosen; not in the spec: vettid-android's outbox types
     /// have no `hs.fin`). Anything else an earlier version left there is dropped at load.
-    static let outboxTypes: Set<String> = ["relay.token.issued", "relay.token.refresh", VaultDevice.typeHsFin]
+    /// (0.87.0) `hs.confirm` and `device.features` too: durable, never answered, and the same whenever they arrive
+    /// (VAULT-MESSAGING §6.3.1 "Responder": "queues `hs.confirm` … durable"; §10.2).
+    static let outboxTypes: Set<String> = [
+        "relay.token.issued", "relay.token.refresh", VaultDevice.typeHsFin, HsTypes.confirm, VaultDevice.typeDeviceFeatures,
+    ]
 
     /// Re-deposits what the outbox still holds (after a restart or a transport failure). The deposits are made outside the
     /// device lock, one flush at a time: a slow relay holds up the flush and nothing else.
@@ -533,6 +539,9 @@ struct EventMemory {
     var sparedEvents: Set<String> = []
     /// Outbox entries a handling stored by a write of its own (an `hs.fin`): kept if it fails.
     var keptOnError: Set<String> = []
+    /// When `hs.confirm` was last queued again for a message under the confirmed epoch (VAULT-MESSAGING §6.3.1): at most
+    /// once a minute. Memory only, as vettid-vault's `client`.
+    var reconfirmedAt: Date?
     /// The ids of the events published (``VaultDevice/publishOnce(_:)``), in order and as a set.
     var publishedOrder: [String] = []
     var publishedIDs: Set<String> = []
