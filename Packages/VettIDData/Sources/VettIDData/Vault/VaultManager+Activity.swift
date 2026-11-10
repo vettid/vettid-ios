@@ -62,6 +62,7 @@ extension VaultManager {
         approvals.onEvent(m)
         votes.onEvent(m)
         devices.onEvent(m)
+        pairing.onEvent(m)
     }
 
     /// Held or due (§3.6.3): IOS-PLAN §6.9 clears vault content at a hold as at the vault lock. The feed, the photos, the

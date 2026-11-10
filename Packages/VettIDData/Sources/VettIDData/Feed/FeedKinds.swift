@@ -17,6 +17,9 @@ public enum FeedTarget: Equatable, Sendable {
     case deviceList
     /// A device's page in Devices & agents (`device.paired` with its `device_id`).
     case device(String)
+    /// The pairing screen of what this phone holds (`device.pair.pending`, ANDROID-PLAN 0.1.53 AA2): the comparison, or, with
+    /// nothing held (the process ended since), that the pairing can't be checked on this phone any more.
+    case pairing
     /// The clone alarm's screen.
     case alarm
     /// History (its Security entries).
@@ -135,7 +138,8 @@ public enum FeedKinds {
         // 0.1.53: the device and the list are in Devices & agents; the transfer, the replacement and the signer's notices stay in
         // Settings → Vault. (0.87.0) Another device that needs an update opens its page, as a paired one does.
         case "device.paired", "device.update_needed": return item.deviceID.flatMap { $0.isEmpty ? nil : .device($0) } ?? .deviceList
-        case "device.pair.pending", "device.unlinked": return .deviceList
+        case "device.unlinked": return .deviceList
+        case "device.pair.pending": return .pairing
         case "device.transferred", "device.replaced", "device.signer_changed": return .devices
         case "credential.alarm": return .alarm
         case "credential.password_failed": return .history
