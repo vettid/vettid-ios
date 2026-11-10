@@ -76,7 +76,7 @@ import VettIDData
             c.update(file, host: host)
             #expect(entries(root).count == 1, "the file exists while the picker is up")
             #expect((try? Data(contentsOf: c.temp?.url ?? root)) == file.bytes)
-            end(c, UIDocumentPickerViewController(forOpeningContentTypes: [.json]))
+            end(c, c.picker ?? UIDocumentPickerViewController(forOpeningContentTypes: [.json]))
             #expect(entries(root).isEmpty, "removed")
             return answers
         }
@@ -97,7 +97,7 @@ import VettIDData
         c.presentPicker = { _, _ in }
         let controller = try #require(windowed(UIViewController()).rootViewController)
         c.update(file, host: controller)
-        let picker = UIDocumentPickerViewController(forOpeningContentTypes: [.json])
+        let picker = try #require(c.picker)
         c.presentationControllerDidDismiss(UIPresentationController(presentedViewController: picker, presenting: controller))
         c.documentPickerWasCancelled(picker)
         #expect(entries(root).isEmpty && answers == [false])
@@ -198,10 +198,9 @@ import VettIDData
         #expect(presented == 1 && failed == 1 && entries(root).isEmpty, "the same file is not taken up again")
         // Taken away, then offered again: a new picker, and after its answer the same file opens nothing more.
         c.update(nil, host: controller)
-        c.presentPicker = { _, picker in
+        c.presentPicker = { _, _ in
             presented += 1
-            c.documentPickerWasCancelled(UIDocumentPickerViewController(forOpeningContentTypes: [.json]))
-            _ = picker
+            if let current = c.picker { c.documentPickerWasCancelled(current) }
         }
         c.update(file, host: controller)
         try await Task.sleep(for: .seconds(0.1))
@@ -334,6 +333,174 @@ import VettIDData
     @Test func thePresentationStartsFromTheHostWhenNothingIsPresented() {
         let host = UIViewController()
         #expect(HistoryExportCoordinator.topmost(host) === host)
+    }
+
+    /// The app going to the background closes the picker and removes the file but ends nothing: no answer and no failure are
+    /// told, only the close; with no picker up it tells nothing. "Save to Files" again opens a new picker with a new file.
+    @Test func theBackgroundClosesThePickerButKeepsTheExport() throws {
+        let root = try scratch()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let c = HistoryExportCoordinator()
+        c.root = root
+        var answers: [Bool] = []
+        var failed = 0
+        var closed = 0
+        c.onAnswered = { answers.append($0) }
+        c.onFailed = { failed += 1 }
+        c.onClosed = { closed += 1 }
+        c.didEnterBackground()
+        #expect(closed == 0, "nothing was up")
+        let host = UIViewController()
+        c.update(file, host: host)
+        let first = try #require(c.temp)
+        #expect(entries(root).count == 1)
+        c.didEnterBackground()
+        #expect(entries(root).isEmpty && c.temp == nil && c.picker == nil)
+        #expect(closed == 1 && answers.isEmpty && failed == 0, "the export is not ended")
+        c.didEnterBackground()
+        #expect(closed == 1, "told once")
+        // The screen sets the file to nil, then offers it again ("Save again"): a new picker and a new file.
+        c.update(nil, host: host)
+        c.update(file, host: host)
+        let second = try #require(c.temp)
+        #expect(entries(root).count == 1 && second.directory != first.directory && c.picker != nil)
+        #expect(try Data(contentsOf: second.url) == file.bytes)
+        c.leave()
+        #expect(entries(root).isEmpty)
+    }
+
+    /// In the background nothing is written or presented: an offer there leaves no entry, makes no picker, and tells the screen
+    /// the close (the export stays); an offer that turned background between the update and the presentation removes its file.
+    /// Back in the foreground the same file opens again.
+    @Test func nothingIsWrittenOrPresentedInTheBackground() async throws {
+        let root = try scratch()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let host = windowed(UIViewController()).rootViewController ?? UIViewController()
+        let c = HistoryExportCoordinator()
+        c.root = root
+        var closed = 0, failed = 0, answers = 0, presented = 0
+        c.onClosed = { closed += 1 }
+        c.onFailed = { failed += 1 }
+        c.onAnswered = { _ in answers += 1 }
+        c.presentPicker = { _, _ in presented += 1 }
+        c.inBackground = { true }
+        c.update(file, host: host)
+        #expect(entries(root).isEmpty && c.picker == nil && c.temp == nil, "no file")
+        try await Task.sleep(for: .seconds(0.1))
+        #expect(closed == 1 && failed == 0 && answers == 0 && presented == 0)
+        // The offer is not taken up: the next one, in the foreground, opens normally.
+        c.inBackground = { false }
+        c.update(file, host: host)
+        #expect(entries(root).count == 1 && c.picker != nil)
+        // Turned background before the presentation: the file goes, nothing is presented.
+        c.inBackground = { true }
+        try await Task.sleep(for: .seconds(0.2))
+        #expect(entries(root).isEmpty && presented == 0 && closed == 2 && failed == 0)
+        c.leave()
+    }
+
+    /// The phone locking ends the export, with or without a picker up: the file goes and the screen is told.
+    @Test func aLockEndsTheExportWithOrWithoutAPicker() throws {
+        let root = try scratch()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let c = HistoryExportCoordinator()
+        c.root = root
+        var locked = 0, answers: [Bool] = []
+        c.onLocked = { locked += 1 }
+        c.onAnswered = { answers.append($0) }
+        c.setKept(true)
+        c.didLock()
+        #expect(locked == 1, "a kept export (no picker) ends too")
+        c.setKept(false)
+        c.setKept(true)
+        c.update(file, host: UIViewController())
+        #expect(entries(root).count == 1)
+        c.didLock()
+        #expect(locked == 2 && entries(root).isEmpty && c.picker == nil && answers.isEmpty)
+        c.update(nil, host: UIViewController())
+    }
+
+    /// The system's lock notification reaches the coordinator; a background close alone does not end the export.
+    @Test func theLockNotificationIsWiredToTheCoordinator() throws {
+        let root = try scratch()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let c = HistoryExportCoordinator()
+        c.root = root
+        var locked = 0
+        c.onLocked = { locked += 1 }
+        c.setKept(true)
+        c.update(file, host: UIViewController())
+        c.didEnterBackground()
+        #expect(locked == 0, "no lock, the export stays")
+        NotificationCenter.default.post(name: UIApplication.protectedDataWillBecomeUnavailableNotification, object: nil)
+        #expect(locked == 1)
+    }
+
+    /// Either protected-data notification means a lock happened: "did become available" alone ends a kept export (a suspended
+    /// app may miss the "will become unavailable" one), both together end it once, neither leaves it, and no export means
+    /// nothing to end.
+    @Test func eitherProtectedDataNotificationEndsAKeptExportOnce() throws {
+        let will = UIApplication.protectedDataWillBecomeUnavailableNotification
+        let did = UIApplication.protectedDataDidBecomeAvailableNotification
+        func run(_ names: [Notification.Name], kept: Bool = true) -> Int {
+            let c = HistoryExportCoordinator()
+            var locked = 0
+            c.onLocked = { locked += 1 }
+            c.setKept(kept)
+            for n in names { NotificationCenter.default.post(name: n, object: nil) }
+            // A later update that still carries the export does not arm it again.
+            c.setKept(kept)
+            for n in names { NotificationCenter.default.post(name: n, object: nil) }
+            return locked
+        }
+        #expect(run([did]) == 1, "did become available alone")
+        #expect(run([will]) == 1)
+        #expect(run([will, did]) == 1, "both: once")
+        #expect(run([did, will]) == 1, "both: once")
+        #expect(run([]) == 0, "neither")
+        #expect(run([will, did], kept: false) == 0, "no export")
+        // The export gone and offered again is armed again.
+        let c = HistoryExportCoordinator()
+        var locked = 0
+        c.onLocked = { locked += 1 }
+        c.setKept(true)
+        c.didLock()
+        c.setKept(false)
+        c.setKept(true)
+        c.didLock()
+        #expect(locked == 2)
+    }
+
+    /// The notification itself reaches the coordinator.
+    @Test func theBackgroundNotificationIsWiredToTheCoordinator() throws {
+        let root = try scratch()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let c = HistoryExportCoordinator()
+        c.root = root
+        var closed = 0
+        c.onClosed = { closed += 1 }
+        c.update(file, host: UIViewController())
+        NotificationCenter.default.post(name: UIApplication.didEnterBackgroundNotification, object: nil)
+        #expect(closed == 1 && entries(root).isEmpty)
+    }
+
+    /// An earlier picker answering late (or a stranger) changes nothing: the current picker and its file stay.
+    @Test func aStalePickersCallbacksChangeNothing() throws {
+        let root = try scratch()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let c = HistoryExportCoordinator()
+        c.root = root
+        var answers: [Bool] = []
+        c.onAnswered = { answers.append($0) }
+        let host = UIViewController()
+        c.update(file, host: host)
+        let stale = UIDocumentPickerViewController(forOpeningContentTypes: [.json])
+        c.documentPicker(stale, didPickDocumentsAt: [])
+        c.documentPickerWasCancelled(stale)
+        c.presentationControllerDidDismiss(UIPresentationController(presentedViewController: stale, presenting: host))
+        #expect(answers.isEmpty && entries(root).count == 1 && c.picker != nil && c.temp != nil)
+        c.documentPickerWasCancelled(try #require(c.picker))
+        #expect(answers == [false] && entries(root).isEmpty)
     }
 }
 #endif

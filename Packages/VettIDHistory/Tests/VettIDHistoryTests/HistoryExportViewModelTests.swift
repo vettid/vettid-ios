@@ -345,3 +345,222 @@ import VettIDVault
 }
 
 // swiftlint:enable line_length
+
+/// A lock ends an export that holds data in memory and not a finished or idle one (the owner's rule).
+extension HistoryExportViewModelTests {
+    // MARK: A lock ends an export that is not saved yet
+
+    /// A model with its own notification center and availability, up to the PIN step.
+    func lockModel(
+        center: NotificationCenter, available: @escaping @MainActor @Sendable () -> Bool = { true }
+    ) async -> HistoryExportViewModel {
+        let m = HistoryExportViewModel(
+            repo: HistoryExportManager(ops: { [log] in log }), now: { Self.t0 },
+            lockWatch: HistoryLockWatch(names: [Self.willLock, Self.didUnlock], center: center, protectedDataAvailable: available)
+        )
+        m.start(ctx)
+        await m.settle()
+        m.chooseFormat(.json)
+        m.confirm()
+        return m
+    }
+
+    nonisolated static let willLock = Notification.Name("test.willLock")
+    nonisolated static let didUnlock = Notification.Name("test.didUnlock")
+
+    /// (a) A lock and an unlock while the read is in flight: when it finishes the export ends and never shows the save step.
+    @Test func aLockAndUnlockDuringTheReadEndTheExport() async {
+        log.answerExports([{ Self.success() }])
+        log.script([{ AuditPage(entries: Self.entries(3), seq: 31) }])
+        let center = NotificationCenter()
+        let m = await lockModel(center: center)
+        m.submitPin("123456")
+        center.post(name: Self.willLock, object: nil)
+        center.post(name: Self.didUnlock, object: nil)
+        await m.settle()
+        #expect(m.step == .closed && m.exportFile == nil)
+    }
+
+    /// The "did become available" one alone (the "will become unavailable" one was missed) ends it too.
+    @Test func aMissedWillLockStillEndsTheExport() async {
+        log.answerExports([{ Self.success() }])
+        log.script([{ AuditPage(entries: Self.entries(3), seq: 31) }])
+        let center = NotificationCenter()
+        let m = await lockModel(center: center)
+        m.submitPin("123456")
+        center.post(name: Self.didUnlock, object: nil)
+        await m.settle()
+        #expect(m.step == .closed)
+    }
+
+    /// (b) The read finishes while protected data is unavailable: it ends.
+    @Test func aReadThatFinishesWhileProtectedDataIsUnavailableEnds() async {
+        log.answerExports([{ Self.success() }])
+        log.script([{ AuditPage(entries: Self.entries(3), seq: 31) }])
+        let m = await lockModel(center: NotificationCenter(), available: { false })
+        m.submitPin("123456")
+        await m.settle()
+        #expect(m.step == .closed && m.exportFile == nil)
+    }
+
+    /// A lock on the save step ends it, once; no lock leaves it.
+    @Test func aLockOnTheSaveStepEndsItOnceAndNoLockLeavesIt() async {
+        log.answerExports([{ Self.success() }, { Self.success() }])
+        log.script([{ AuditPage(entries: Self.entries(3), seq: 31) }, { AuditPage(entries: Self.entries(3), seq: 31) }])
+        let center = NotificationCenter()
+        let m = await lockModel(center: center)
+        m.submitPin("123456")
+        await m.settle()
+        guard case .save = m.step else { Issue.record("not the save step: \(m.step)"); return }
+        #expect(m.exportFile != nil, "no lock: it stays")
+        center.post(name: Self.willLock, object: nil)
+        #expect(m.step == .closed && m.exportFile == nil)
+        center.post(name: Self.didUnlock, object: nil)
+        #expect(m.step == .closed, "ended once")
+    }
+
+    /// A lock before the PIN was sent is not "since the PIN": the next export is not ended by it.
+    @Test func aLockBeforeThePinDoesNotEndTheNextExport() async {
+        log.answerExports([{ Self.success() }])
+        log.script([{ AuditPage(entries: Self.entries(3), seq: 31) }])
+        let center = NotificationCenter()
+        let m = await lockModel(center: center)
+        center.post(name: Self.willLock, object: nil)
+        m.submitPin("123456")
+        await m.settle()
+        guard case .save = m.step else { Issue.record("not the save step: \(m.step)"); return }
+    }
+
+    /// A lock during the read ends it at once: the read is cancelled and nothing it would read is kept.
+    @Test func aLockDuringTheReadEndsItAtOnce() async {
+        let gate = TestDeferred<Void>()
+        log.listGate = gate
+        log.answerExports([{ Self.success() }])
+        log.script([{ AuditPage(entries: Self.entries(3), seq: 31) }])
+        let center = NotificationCenter()
+        let m = await lockModel(center: center)
+        m.submitPin("123456")
+        #expect(await eventually { m.step == .reading(done: 0, total: 3) })
+        center.post(name: Self.willLock, object: nil)
+        #expect(m.step == .closed && m.exportFile == nil, "at once, not at the finish")
+        gate.complete()
+        await m.settle()
+        #expect(m.step == .closed && m.exportFile == nil, "the cancelled read writes nothing")
+    }
+
+    /// A lock while the PIN is being checked ends the export; a new export with a fresh PIN then works, and the old lock does
+    /// not count against it.
+    @Test func aLockWhileThePinIsCheckedEndsItAndANewAttemptWorks() async {
+        log.answerExports([{ Self.success() }, { Self.success() }])
+        log.script([{ AuditPage(entries: Self.entries(3), seq: 31) }, { AuditPage(entries: Self.entries(3), seq: 31) }])
+        let center = NotificationCenter()
+        let m = await lockModel(center: center)
+        m.submitPin("123456")
+        guard case .pin(let busy) = m.step, busy.busy else { Issue.record("not busy: \(m.step)"); return }
+        center.post(name: Self.willLock, object: nil)
+        #expect(m.step == .closed)
+        await m.settle()
+        #expect(m.step == .closed && m.exportFile == nil, "the cancelled work writes nothing")
+        m.start(ctx)
+        await m.settle()
+        m.chooseFormat(.json)
+        m.confirm()
+        m.submitPin("654321")
+        await m.settle()
+        guard case .save = m.step else { Issue.record("not the save step: \(m.step)"); return }
+        #expect(m.exportFile != nil)
+    }
+
+    /// A lock on a finished or idle export changes nothing: done, failed, and a PIN step that is not being checked.
+    @Test func aLockOnAFinishedOrIdleExportChangesNothing() async {
+        log.answerExports([{ Self.success() }])
+        log.script([{ AuditPage(entries: Self.entries(3), seq: 31) }])
+        let center = NotificationCenter()
+        let m = await lockModel(center: center)
+        m.submitPin("123456")
+        await m.settle()
+        m.saved(true)
+        guard case .done = m.step else { Issue.record("not done: \(m.step)"); return }
+        center.post(name: Self.willLock, object: nil)
+        center.post(name: Self.didUnlock, object: nil)
+        guard case .done = m.step else { Issue.record("done changed: \(m.step)"); return }
+
+        // Failed: the owner check is required.
+        log.answerExports([{ throw VaultFailure(.ownerCheckRequired, code: "owner_check_required") }])
+        let f = await lockModel(center: center)
+        f.submitPin("123456")
+        await f.settle()
+        guard case .failed = f.step else { Issue.record("not failed: \(f.step)"); return }
+        let failed = f.step
+        center.post(name: Self.willLock, object: nil)
+        center.post(name: Self.didUnlock, object: nil)
+        #expect(f.step == failed)
+
+        // A PIN step that is not being checked (after a wrong PIN): unchanged by a lock.
+        log.answerExports([{ throw VaultFailure(.badPin, code: "bad_pin") }])
+        let w = await lockModel(center: center)
+        w.submitPin("123456")
+        await w.settle()
+        guard case .pin(let idle) = w.step, !idle.busy else { Issue.record("not an idle PIN step: \(w.step)"); return }
+        let before = w.step
+        center.post(name: Self.willLock, object: nil)
+        center.post(name: Self.didUnlock, object: nil)
+        #expect(w.step == before)
+    }
+
+    /// A lock while `audit.export` is in flight: when it answers, no `audit.list` is made and nothing is held.
+    @Test func aLockWhileTheExportIsInFlightReadsNothing() async {
+        let deviceCalls = Counter()
+        log.devices = { deviceCalls.bump(); return FakeAuditLog.deviceEntries([("d1", "Pixel 7")]) }
+        log.answerExports([{ Self.success() }])
+        log.script([{ AuditPage(entries: Self.entries(3), seq: 31) }])
+        let center = NotificationCenter()
+        let m = await lockModel(center: center)
+        m.submitPin("123456")
+        center.post(name: Self.willLock, object: nil)
+        #expect(m.step == .closed)
+        await m.settle()
+        #expect(log.exportCalls == ["json:30:123456"], "the export was already on its way")
+        #expect(deviceCalls.count == 0 && log.calls.isEmpty, "no device list and no audit.list after the lock")
+        #expect(m.step == .closed && m.exportFile == nil)
+    }
+
+    /// A notification of an earlier export (posted from another thread, handled late) ends nothing of a later one; one posted
+    /// from another thread for the current export ends it.
+    @Test func aLateNotificationOfAnEarlierExportEndsNothingOfALaterOne() async {
+        log.answerExports([{ Self.success() }, { Self.success() }])
+        log.script([{ AuditPage(entries: Self.entries(3), seq: 31) }, { AuditPage(entries: Self.entries(3), seq: 31) }])
+        let center = NotificationCenter()
+        let m = await lockModel(center: center)
+        m.submitPin("123456")
+        let old = m.lockSessionForTesting
+        await m.settle()
+        m.close()
+        // A new export, its PIN sent: the old session's late hop is stale.
+        m.start(ctx)
+        await m.settle()
+        m.chooseFormat(.json)
+        m.confirm()
+        m.submitPin("654321")
+        await m.settle()
+        guard case .save = m.step else { Issue.record("not the save step: \(m.step)"); return }
+        m.locked(session: old)
+        guard case .save = m.step else { Issue.record("the stale one ended it: \(m.step)"); return }
+        // From another thread, for the current export: handled on the main actor, and it ends it.
+        await withCheckedContinuation { c in
+            DispatchQueue.global().async {
+                center.post(name: Self.willLock, object: nil)
+                c.resume()
+            }
+        }
+        #expect(await eventually { m.step == .closed })
+    }
+}
+
+/// A call counter the fake's closures can bump from any thread.
+private final class Counter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var n = 0
+    func bump() { lock.withLock { n += 1 } }
+    var count: Int { lock.withLock { n } }
+}

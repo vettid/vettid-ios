@@ -106,6 +106,52 @@ public struct ExportContext: Equatable, Sendable {
     }
 }
 
+/// What tells the export that the phone locked since its PIN was sent (VAULT-LOCK; the owner's rule: a lock ends an export
+/// that is not yet saved): the protected-data notifications, either of which means a lock happened (a suspended app may
+/// miss the "will become unavailable" one), and whether protected data is available now. The screens pass UIKit's; tests
+/// pass their own.
+public struct HistoryLockWatch: Sendable {
+    public var names: [Notification.Name]
+    public var center: NotificationCenter
+    public var protectedDataAvailable: @MainActor @Sendable () -> Bool
+
+    public init(
+        names: [Notification.Name], center: NotificationCenter = .default,
+        protectedDataAvailable: @escaping @MainActor @Sendable () -> Bool
+    ) {
+        self.names = names
+        self.center = center
+        self.protectedDataAvailable = protectedDataAvailable
+    }
+
+    /// Nothing watched (no lock is ever seen).
+    public static let none = HistoryLockWatch(names: [], protectedDataAvailable: { true })
+}
+
+/// The observers of a ``HistoryLockWatch``, removed with the model.
+private final class LockObservers: @unchecked Sendable {
+    private var tokens: [NSObjectProtocol] = []
+    private var center: NotificationCenter?
+
+    func start(_ watch: HistoryLockWatch, _ handler: @escaping @Sendable () -> Void) {
+        stop()
+        center = watch.center
+        tokens = watch.names.map { watch.center.addObserver(forName: $0, object: nil, queue: nil) { _ in handler() } }
+    }
+
+    func stop() {
+        tokens.forEach { center?.removeObserver($0) }
+        tokens = []
+    }
+
+    deinit { stop() }
+}
+
+/// A weak reference the observers' handler can hold.
+private final class ModelBox: @unchecked Sendable {
+    weak var model: HistoryExportViewModel?
+}
+
 /// History export (VAULT-MESSAGING 0.22.0 §10.9, ANDROID-PLAN §4 History "Export"): exports what the list's filters show,
 /// never more. The preview counts; the vault PIN, sealed to a UTK, authorises the export (`audit.export`); the entries
 /// are then read with `audit.list` below the answer's `upto_seq` and held in memory only: the file's bytes
@@ -124,11 +170,55 @@ public final class HistoryExportViewModel {
     /// Bumped at every start and close: the answer to work started before is dropped.
     @ObservationIgnored private var generation = 0
     public private(set) var step = ExportStep.closed
+    @ObservationIgnored private let lockWatch: HistoryLockWatch
+    @ObservationIgnored private let lockObservers = LockObservers()
+    /// Whether the phone locked since the PIN was sent. The one place that is known: an export that would reach the save
+    /// step after a lock (or with protected data unavailable) ends instead, and one on the save step ends when a lock is seen.
+    @ObservationIgnored private var lockSeen = false
 
-    /// [now]: the clock (tests set it).
-    public init(repo: any HistoryExportRepository, now: @escaping @MainActor () -> Date = { Date() }) {
+    /// [now]: the clock (tests set it). [lockWatch]: how a lock is seen.
+    public init(
+        repo: any HistoryExportRepository, now: @escaping @MainActor () -> Date = { Date() }, lockWatch: HistoryLockWatch = .none
+    ) {
         self.repo = repo
         self.now = now
+        self.lockWatch = lockWatch
+    }
+
+    /// Which watch the observers belong to: bumped when a new one starts (at each PIN), so a notification
+    /// that was posted for an earlier export (a hop from another thread that runs late) ends nothing of a later one.
+    @ObservationIgnored private var lockSession = 0
+
+    /// A lock was seen (by the watch of [session]): remembered from the PIN on, and an export holding data in memory ends
+    /// at once (the member then needs the PIN and a fresh read): the PIN being checked, the read (cancelled, its records
+    /// dropped) and the save step. A finished export (done) or one that holds nothing yet is left alone. The remaining
+    /// risk: if UIKit delivers neither protected-data notification on resume, a read that finishes after the unlock still
+    /// reaches the save step (``protectedDataAvailable`` is checked then); the picker's coordinator relies on the same
+    /// delivery.
+    func locked(session: Int) {
+        guard session == lockSession else { return }
+        lockSeen = true
+        switch step {
+        case .save, .reading: close()
+        case .pin(let s) where s.busy: close()
+        default: break
+        }
+    }
+
+    private func watchLocks() {
+        lockSeen = false
+        lockSession += 1
+        let session = lockSession
+        let box = ModelBox()
+        box.model = self
+        lockObservers.start(lockWatch) { [box] in
+            // The notifications come on the main thread; one from elsewhere is handled there, if it is still current.
+            if Thread.isMainThread {
+                MainActor.assumeIsolated { box.model?.locked(session: session) }
+            } else {
+                Task { @MainActor in box.model?.locked(session: session) }
+            }
+        }
     }
 
     /// The file "Save to Files" writes: only while the step is ``ExportStep/save(_:)``, else nil.
@@ -186,6 +276,7 @@ public final class HistoryExportViewModel {
         s.busy = true
         s.error = nil
         step = .pin(s)
+        watchLocks()
         let repo = repo
         let g = generation
         job = work.launch { [weak self] in
@@ -216,6 +307,9 @@ public final class HistoryExportViewModel {
     }
 
     private func read(_ g: Int, _ c: ExportContext, _ format: ExportFormat, _ answer: AuditExportAnswer) async {
+        // An export closed meanwhile (a lock, a cancel) reads nothing: no device list and no `audit.list` (which checks for
+        // cancellation itself) for records nobody will see.
+        guard g == generation, !Task.isCancelled else { return }
         set(g, .reading(done: 0, total: answer.count))
         do {
             // Device names are best effort: without them the file has the ids alone.
@@ -224,6 +318,11 @@ public final class HistoryExportViewModel {
                 self?.set(g, .reading(done: n, total: answer.count))
             }
             guard g == generation else { return }
+            // A lock since the PIN was sent, or protected data unavailable now: the export ends, the save step is not shown.
+            if lockSeen || !lockWatch.protectedDataAvailable() {
+                close()
+                return
+            }
             let rows = records.map { row($0, c, devices) }
             let at = answer.answeredAt ?? now()
             let header = ExportHeader(exportedAt: at, filters: exportFilters(c), answer: answer)
@@ -278,6 +377,7 @@ public final class HistoryExportViewModel {
     }
 
     private func drop() {
+        lockObservers.stop()
         generation += 1
         job?.cancel()
         job = nil
@@ -320,6 +420,9 @@ public final class HistoryExportViewModel {
 
     /// TEST ONLY: returns once the work started has run.
     func settle() async { await work.settle() }
+
+    /// TEST ONLY: the current lock watch's session.
+    var lockSessionForTesting: Int { lockSession }
 }
 
 private extension Character {

@@ -1,5 +1,6 @@
 #if os(iOS)
 import SwiftUI
+import UIKit
 import VettIDData
 import VettIDHistory
 import VettIDUI
@@ -78,7 +79,16 @@ public struct HistoryRoute: View {
             if exportModel == nil {
                 // An export left in tmp/ by an app that was killed with the picker up.
                 HistoryExportLeftovers.remove()
-                exportModel = HistoryExportViewModel(repo: export)
+                exportModel = HistoryExportViewModel(
+                    repo: export,
+                    lockWatch: HistoryLockWatch(
+                        names: [
+                            UIApplication.protectedDataWillBecomeUnavailableNotification,
+                            UIApplication.protectedDataDidBecomeAvailableNotification,
+                        ],
+                        protectedDataAvailable: { UIApplication.shared.isProtectedDataAvailable }
+                    )
+                )
             }
         }
         .onDisappear { if exportModel?.step != .closed { exportModel?.close() } }
