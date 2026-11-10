@@ -49,4 +49,27 @@ import VettIDDataTesting
         try service.deviceEventArrives(kind: "device.paired", deviceID: "dev-2")
         #expect(await eventually { m.devices.load == .loaded && m.devices.devices.count == 2 })
     }
+
+    /// A removal or an end of access takes the device's asks out of Approvals here (the vault tells the member's other
+    /// devices only, §10.1), and ends its session in the renewal book.
+    @Test func removingADeviceTakesItsAsksOutOfApprovals() async throws {
+        defer { phone.close() }
+        try await open()
+        try service.deviceAsksSession(deviceID: "dev-2")
+        #expect(await eventually { m.approvals.approvals.contains { $0.key.hasPrefix("device:device.session.pending:") } })
+        try await m.devices.refresh()
+        try await m.devices.remove("dev-2")
+        #expect(!m.approvals.approvals.contains { $0.key.hasPrefix("device:") })
+        #expect(m.devices.removed?.id == "dev-2")
+    }
+
+    /// A hold forgets the list, as a lock does (IOS-PLAN §6.9).
+    @Test func theHoldForgetsTheList() async throws {
+        defer { phone.close() }
+        try await open()
+        try await m.devices.refresh()
+        #expect(m.devices.load == .loaded)
+        m.ownerChecks.onHeldChange(true)
+        #expect(m.devices.devices.isEmpty && m.devices.load == .notLoaded)
+    }
 }

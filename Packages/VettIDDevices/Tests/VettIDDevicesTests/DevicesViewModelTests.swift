@@ -62,6 +62,20 @@ import VettIDDataTesting
         #expect(await eventually { m.state.error == nil && fake.calls.filter { $0 == "refresh" }.count == 2 })
     }
 
+    /// A hold cleared the list while the screen was open (nothing failed): the end of the hold reads it again.
+    @Test func aListTheHoldClearedReadsAgainWhenTheHoldEnds() async {
+        let owner = FakeVaultRepository()
+        owner.ownerCheck = OwnerCheckView(state: .ok, deadline: Date(), hold: false)
+        let m = await list(owner)
+        let before = fake.calls.filter { $0 == "refresh" }.count
+        owner.ownerCheck = OwnerCheckView(state: .held, deadline: nil, hold: true)
+        fake.load = .notLoaded // cleared by the hold
+        await m.settle()
+        owner.ownerCheck = OwnerCheckView(state: .ok, deadline: Date(), hold: true)
+        await m.settle()
+        #expect(await eventually { fake.calls.filter { $0 == "refresh" }.count == before + 1 })
+    }
+
     @Test func aPassedCheckReadsNothingWhenTheListWasNotRefused() async {
         let owner = FakeVaultRepository()
         owner.ownerCheck = OwnerCheckView(state: .held, deadline: nil, hold: true)

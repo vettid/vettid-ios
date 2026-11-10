@@ -12,6 +12,11 @@ private func obj(_ s: String) throws -> JsonObject { try StrictJson.parseObject(
 
 /// TEST ONLY. The vault calls of ``DevicesManager``: what `device.list` and `leash.grant.list` answer, the calls in order, a
 /// gate for the list and the failures by name.
+/// Whether the fake session is open yet.
+final class OpenFlag: @unchecked Sendable {
+    var value = false
+}
+
 final class FakeDevicesOps: DevicesOps, @unchecked Sendable {
     var devices = (try? obj(#"{"devices":[]}"#))!
     var grantsAll = (try? obj(#"{"grants":[],"suspended":[]}"#))!
@@ -402,6 +407,22 @@ final class FakeDevicesOps: DevicesOps, @unchecked Sendable {
         #expect(DeviceWire.statusTtls(try obj("{}")) == [3_600])
         let ttls = DeviceWire.statusTtls(try obj(#"{"grants":[{"status_ttl":"x"},{"status_ttl":99999},"junk",{"status_ttl":10},{"status_ttl":1.5},{"status_ttl":null},{}]}"#))
         #expect(ttls == [3_600, 3_600, 3_600, 60, 3_600, 3_600, 900])
+        // An object or an array does not read either: the longest, never the default.
+        #expect(DeviceWire.statusTtls(try obj(#"{"grants":[{"status_ttl":{"s":5}},{"status_ttl":[5]}]}"#)) == [3_600, 3_600])
+    }
+
+    /// This phone's id is read once the session is open: a read that starts while it reopens (after the foreground) still
+    /// finds this phone, as Android reads it after the list.
+    @Test func thisPhoneIsFoundWhenTheSessionOpensDuringTheRead() async throws {
+        let ops = FakeDevicesOps()
+        ops.devices = try fleet()
+        let open = OpenFlag()
+        let m = DevicesManager(
+            ops: { open.value = true; return ops }, quietOps: { open.value = true; return ops },
+            selfID: { open.value ? "me" : nil }, onDeviceGone: { _ in }
+        )
+        try await m.refresh()
+        #expect(m.devices.first?.thisPhone == true && m.devices.first?.id == "me")
     }
 
     /// `device.list` entries with an unreadable member are skipped one by one, not as a whole.

@@ -58,9 +58,11 @@ public final class DevicesViewModel {
         return s
     }
 
-    /// The daily check passed (or the hold ended): a list refused because it was due reads again by itself.
+    /// The daily check passed (or the hold ended): a list refused because it was due reads again by itself, and so does one
+    /// the hold cleared while the screen was open (chosen; not in the spec: Android's screen stays on its spinner then).
     private func onOwnerCheck(_ v: OwnerCheckView?) {
-        guard v?.state == .ok, local.error == .ownerCheckRequired else { return }
+        guard v?.state == .ok else { return }
+        guard local.error == .ownerCheckRequired || (local.error == nil && repo.load == .notLoaded) else { return }
         refresh()
     }
 

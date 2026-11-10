@@ -123,7 +123,9 @@ public enum DeviceWire {
         return grants.map { g in
             guard let o = try? g.asObject() else { return maxStatusTtl }
             switch o["status_ttl"] {
-            case nil, .object?, .array?: return defaultStatusTtl
+            case nil: return defaultStatusTtl
+            // An object or an array does not read either: the longest, so the bound is never shorter than the truth (Android
+            // counts these as the default; chosen; not in the spec).
             case .number(let raw)?: return Int64(raw).map { min(max($0, minStatusTtl), maxStatusTtl) } ?? maxStatusTtl
             default: return maxStatusTtl // a string, a boolean, null
             }

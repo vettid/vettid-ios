@@ -52,27 +52,31 @@ public struct DevicePageScreen: View {
         }
         .onChange(of: leave, initial: true) { _, leaving in if leaving { actions.onBack() } }
         .deviceToast(state.accessEnded ? DeviceStrings.devicesAccessEnded : nil, bottom: 88, onShown: actions.onAccessEndedShown)
+        // One dialog per confirmation, each worded from the device only: its text stays while it closes.
         .confirmDialog(
-            isPresented: confirming, title: dialog.title, message: dialog.message, confirmLabel: dialog.confirm,
-            destructive: state.confirm == .remove, onConfirm: actions.onConfirm
+            isPresented: confirming(.endAccess), title: dialog(.endAccess).title, message: dialog(.endAccess).message,
+            confirmLabel: dialog(.endAccess).confirm, onConfirm: actions.onConfirm
+        )
+        .confirmDialog(
+            isPresented: confirming(.remove), title: dialog(.remove).title, message: dialog(.remove).message,
+            confirmLabel: dialog(.remove).confirm, destructive: true, onConfirm: actions.onConfirm
         )
         .accessibilityIdentifier("device_page")
     }
 
-    /// One dialog for both confirmations (one alert to a view): End access names the device, Remove says what follows.
-    private var dialog: Dialog {
+    /// A confirmation's words: End access names the device, Remove says what follows.
+    private func dialog(_ kind: DeviceConfirm) -> Dialog {
         guard let d = state.device else { return Dialog() }
         let name = DeviceTexts.sentenceName(d)
-        switch state.confirm {
-        case .endAccess?:
+        switch kind {
+        case .endAccess:
             return Dialog(
                 title: DeviceStrings.devicesEndAccessTitle(name), message: DeviceStrings.devicesEndAccessBody,
                 confirm: DeviceStrings.devicesEndAccess
             )
-        case .remove?:
+        case .remove:
             let text = Self.removeText(agent: d.isAgent, boundSeconds: state.removalBoundSeconds)
             return Dialog(title: DeviceStrings.devicesRemoveTitle(name), message: text, confirm: DeviceStrings.devicesRemove)
-        case nil: return Dialog()
         }
     }
 
@@ -82,8 +86,8 @@ public struct DevicePageScreen: View {
         var confirm = ""
     }
 
-    private var confirming: Binding<Bool> {
-        Binding(get: { state.confirm != nil && state.device != nil }, set: { if !$0 { actions.onDismissConfirm() } })
+    private func confirming(_ kind: DeviceConfirm) -> Binding<Bool> {
+        Binding(get: { state.confirm == kind && state.device != nil }, set: { if !$0 { actions.onDismissConfirm() } })
     }
 
     /// The remove confirmation: an agent's names how long a service may still accept its permissions, only while it has one.

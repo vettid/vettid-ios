@@ -113,9 +113,11 @@ public final class DevicesManager: DevicesRepository {
         let gen = generation
         if devices.isEmpty { load = .loading }
         do {
-            let me = selfID()
             let o: any DevicesOps = try await Self.guarded { [self] in quietly ? try quietOps() : try await ops() }
-            let parsed = DeviceWire.devices(try await Self.guarded { try await o.list() }, selfID: me)
+            let body = try await Self.guarded { try await o.list() }
+            // This phone's id once the session is open (as Android reads it after the list): read before it, a page opened
+            // while the session reopens after the foreground would list this phone as another device.
+            let parsed = DeviceWire.devices(body, selfID: selfID())
             // The paused agents: only asked when there is an agent. A failure never fails the list and never clears a
             // pause: nil keeps the paused flags already held (fail closed).
             var paused: Set<String>? = []

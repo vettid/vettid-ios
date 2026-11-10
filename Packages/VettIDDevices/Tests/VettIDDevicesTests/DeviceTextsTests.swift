@@ -67,7 +67,7 @@ import Testing
         // 15:40 UTC is 20:40 at +5: still the 21st there, the time alone.
         let text = DeviceTexts.access(end, now: now, calendar: Samples.calendar(offsetHours: 5))
         #expect(text.contains("8:40") && !text.contains("3:40"), "\(text)")
-        // 12:00 UTC is 02:00 on the 22nd at +14: an end at 15:40 UTC is on the 22nd, the day after "now" there? Both are the 22nd.
+        // At +14, now (12:00 UTC) is 02:00 on the 22nd and the end (15:40 UTC) is 05:40 on the 22nd: the same day, the time alone.
         let far = Samples.calendar(offsetHours: 14)
         let sameDay = DeviceTexts.access(end, now: now, calendar: far)
         #expect(!sameDay.contains("Oct"), "\(sameDay)")
