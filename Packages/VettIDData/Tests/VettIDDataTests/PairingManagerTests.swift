@@ -533,6 +533,11 @@ final class FakePairingOps: PairingOps {
         #expect(paired(m) != nil && paired(m)?.deviceID == nil)
     }
 
+}
+
+extension PairingManagerTests {
+    // MARK: The daily check, the end of the comparison, rejecting, cancelling and the lock
+
     @Test func aDueDailyCheckKeepsTheComparisonForAnotherTry() async throws {
         let ops = try ops()
         ops.refuse["approve"] = "owner_check_required"
