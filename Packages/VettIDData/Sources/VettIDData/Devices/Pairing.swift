@@ -33,8 +33,9 @@ public protocol PairingRepository: AnyObject, Observable, Sendable {
     /// superseded (its answer is dropped and rejected).
     func start(_ role: PairRole) async
 
-    /// Step 3: `device.pair.approve`, with the first access length in seconds (nil: no access yet); never any grants.
-    func approve(sessionSeconds: Int?) async
+    /// Step 3: `device.pair.approve`, with the first access length in seconds (nil: no access yet); never any grants. Only for the
+    /// comparison of [pairingID]: one that is no longer the one held (the screen's sheet was for an older one) is not approved.
+    func approve(pairingID: String, sessionSeconds: Int?) async
 
     /// "They don't match": `device.pair.reject`; the stage becomes ``PairingStage/rejected(told:)``.
     func reject() async
@@ -42,11 +43,15 @@ public protocol PairingRepository: AnyObject, Observable, Sendable {
     /// Cancel on the code screen, or leaving the compare screen: a pairing not approved is rejected, and nothing is held.
     func cancel() async
 
-    /// The screen left without an answer: the same as ``cancel()``, without waiting for it.
-    func leave()
+    /// The screen left without an answer: the same as ``cancel()``, without waiting for it, but only while the repository still holds
+    /// the pairing of [token] (``PairingState/token``): a late leave of an old screen never reaches a newer screen's pairing.
+    func leave(token: Int)
 
     /// A final stage was read (rejected, paired, ended, expired): back to nothing held.
     func acknowledge()
+
+    /// ``acknowledge()`` for the pairing of [token] only (see ``leave(token:)``).
+    func acknowledge(token: Int)
 }
 
 /// ``PairingRepository`` over ``PairingOps``. Fails secure: nothing is approved except by the member's tap on a code that can be
@@ -112,6 +117,7 @@ public final class PairingManager: PairingRepository {
     private func set(_ v: PairingState) {
         var v = v
         v.role = role
+        v.token = generation
         state = v
     }
 
@@ -207,6 +213,8 @@ public final class PairingManager: PairingRepository {
             if case .code(let c) = s.stage, c.exp > now() { return }
             // "New code" after an expiry: the expired pairing may still be answered for a minute, and the vault is told it is not wanted.
             if case .codeExpired(let id, _) = s.stage { replaced = id }
+            // The same for a code past its end whose timer has not run yet (a live one returned above).
+            if case .code(let c) = s.stage { replaced = c.pairingID }
             // Every start is a new pairing: what the earlier one still has running (an id search) is not applied to it.
             generation += 1
         }
@@ -281,8 +289,8 @@ public final class PairingManager: PairingRepository {
         return VaultFailure(.other, code: "unreadable_result")
     }
 
-    public func approve(sessionSeconds: Int?) async {
-        guard case .compare(let p) = state.stage else { return }
+    public func approve(pairingID: String, sessionSeconds: Int?) async {
+        guard case .compare(let p) = state.stage, p.pairingID == pairingID else { return }
         let forRole = role
         // Never an approval of what cannot be compared, nor after this phone's time ran out, nor twice.
         if state.busy || !p.comparable || p.ends <= now() { return }
@@ -378,7 +386,10 @@ public final class PairingManager: PairingRepository {
         }
     }
 
-    public func cancel() async {
+    public func cancel() async { await cancel(token: nil) }
+
+    private func cancel(token: Int?) async {
+        if let token, token != generation { return }
         let s = state
         let id: String
         switch s.stage {
@@ -407,8 +418,12 @@ public final class PairingManager: PairingRepository {
         _ = await sendReject(id)
     }
 
-    public func leave() {
-        Task { [weak self] in await self?.cancel() }
+    public func leave(token: Int) {
+        Task { [weak self] in await self?.cancel(token: token) }
+    }
+
+    public func acknowledge(token: Int) {
+        if token == generation { acknowledge() }
     }
 
     public func acknowledge() {

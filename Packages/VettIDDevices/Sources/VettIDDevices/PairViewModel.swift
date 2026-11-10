@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import os
 import VettIDData
 
 /// The first access offered when a pairing is approved (ANDROID-PLAN 0.1.53 AA2 step 3, decision 5): every choice is a whole number
@@ -68,6 +69,14 @@ public final class PairViewModel {
     /// A stage other than nothing was seen, and the screen is not being closed.
     @ObservationIgnored private var sawStage = false
     @ObservationIgnored private var closing = false
+    /// The pairing this screen saw (``PairingState/token``) and whether it already ended it: read by `deinit`, which is not on the
+    /// main actor.
+    @ObservationIgnored private let own = OSAllocatedUnfairLock(initialState: Own())
+
+    private struct Own {
+        var token: Int?
+        var finished = false
+    }
 
     /// [held]: opened from the feed item (what is held, never a new code; the held pairing says its own role). [desktop]: "Pair a
     /// desktop" rather than "Pair an agent". [ownerChecks]: the daily check passing clears a refused approval.
@@ -97,8 +106,14 @@ public final class PairViewModel {
         work.cancelAll()
         follows.cancelAll()
         // The screen is gone: a code not used or a comparison not answered is rejected (best effort), never kept.
-        let repo = repo
-        Task { @MainActor in Self.finish(repo, leaving: true) }
+        // Only the pairing this screen saw, and only if it did not end it already: a screen released late must not reach the pairing of
+        // a newer one (the member leaves and opens Pair again).
+        let (repo, mine) = (repo, own.withLock { o -> Int? in
+            defer { o.finished = true }
+            return o.finished ? nil : o.token
+        })
+        guard let mine else { return }
+        Task { @MainActor in Self.finish(repo, token: mine, leaving: true) }
     }
 
     /// What a new code is made for: the button's role, or for a held screen the role of what it last showed.
@@ -110,6 +125,8 @@ public final class PairViewModel {
             sawStage = true
             seenRole = p.role
         }
+        // A pairing of this screen's: a stage of one, or a failure of its code.
+        if p.stage != .idle || p.error != nil { own.withLock { $0.token = p.token } }
         recompute()
     }
 
@@ -152,7 +169,10 @@ public final class PairViewModel {
     public func cancel() {
         closing = true
         recompute()
-        repo.leave()
+        if let token = own.withLock({ o -> Int? in
+            o.finished = true
+            return o.token
+        }) { repo.leave(token: token) }
     }
 
     public func codesMatch() {
@@ -174,7 +194,8 @@ public final class PairViewModel {
         // Only the comparison the sheet was opened for: a sheet of an older one never approves the new one.
         guard case .compare(let c) = repo.state.stage, sheetFor == c.pairingID else { return }
         let (repo, seconds) = (repo, local.session.seconds)
-        work.launch { await repo.approve(sessionSeconds: seconds) }
+        let id = c.pairingID
+        work.launch { await repo.approve(pairingID: id, sessionSeconds: seconds) }
     }
 
     /// "They don't match", and Reject for a pairing that cannot be compared.
@@ -189,24 +210,27 @@ public final class PairViewModel {
     public func done() {
         closing = true
         recompute()
-        Self.finish(repo, leaving: false)
+        if let token = own.withLock({ o -> Int? in
+            o.finished = true
+            return o.token
+        }) { Self.finish(repo, token: token, leaving: false) }
     }
 
     /// The screen's end. A code that expired is still taken for a late answer for a minute, and the vault is told it is not wanted:
-    /// that rejection (``PairingRepository/leave()``) is asked for before anything else, since acknowledging first would leave nothing
-    /// held to reject. A pairing that was approved, rejected or ended is never rejected (nothing is held then: ``PairingRepository/leave()`` does nothing
+    /// that rejection (``PairingRepository/leave(token:)``) is asked for before anything else, since acknowledging first would leave nothing
+    /// held to reject. A pairing that was approved, rejected or ended is never rejected (nothing is held then: ``PairingRepository/leave(token:)`` does nothing
     /// for it); a comparison or a live code is rejected when [leaving] (the model going), by the repository.
-    private static func finish(_ repo: any PairingRepository, leaving: Bool) {
+    private static func finish(_ repo: any PairingRepository, token: Int, leaving: Bool) {
         switch repo.state.stage {
         // Not left to the model going: a screen that is popped is released late.
         case .codeExpired, .code, .compare:
-            repo.leave()
+            repo.leave(token: token)
             return
         default:
             break
         }
-        if leaving { repo.leave() }
-        repo.acknowledge()
+        if leaving { repo.leave(token: token) }
+        repo.acknowledge(token: token)
     }
 
     /// TEST ONLY: returns once the work started so far has run.

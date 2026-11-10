@@ -282,6 +282,50 @@ import VettIDDataTesting
         #expect(!pairing.calls.contains { $0.hasPrefix("approve") })
     }
 
+    /// A screen that saw nothing, or that already ended its pairing, leaves nothing when it is released: a late release never reaches the
+    /// pairing of a newer screen.
+    @Test func aScreenThatSawNothingOrAlreadyEndedLeavesNothingWhenReleased() async {
+        var none: PairViewModel? = vm()
+        await sync(none!)
+        pairing.calls = []
+        none = nil
+        for _ in 0..<50 { await Task.yield() }
+        #expect(pairing.calls.isEmpty)
+
+        var ended: PairViewModel? = vm()
+        pairing.state = PairingState(stage: .code(PairingCode(pairingID: "p1", link: "L", exp: exp)))
+        await sync(ended!)
+        ended!.cancel()
+        pairing.calls = []
+        ended = nil
+        for _ in 0..<50 { await Task.yield() }
+        #expect(pairing.calls.isEmpty, "done or cancel already handled it")
+    }
+
+    /// The token of what the screen saw is what it leaves and acknowledges with, and the approval names the comparison.
+    @Test func theScreenLeavesAcknowledgesAndApprovesOnlyWhatItSaw() async {
+        let m = vm()
+        var s = PairingState(stage: .compare(pending))
+        s.token = 9
+        pairing.state = s
+        await sync(m)
+        m.codesMatch()
+        await sync(m)
+        m.pair()
+        await sync(m)
+        #expect(pairing.approvedIDs == ["p1"])
+        m.cancel()
+        #expect(pairing.leftTokens == [9])
+        let n = vm()
+        s = PairingState(stage: .ended)
+        s.token = 11
+        pairing.state = s
+        await sync(n)
+        pairing.calls = []
+        n.done()
+        #expect(pairing.acknowledgedTokens == [11])
+    }
+
     // MARK: Leaving (iOS)
 
     /// Leaving an expired code by Back tells the vault (the code may still be answered for a minute): it is rejected first, never
@@ -318,9 +362,13 @@ import VettIDDataTesting
     /// `onCleared`).
     @Test func theScreenGoingLeavesAndAcknowledgesTheRepository() async {
         var m: PairViewModel? = vm()
+        pairing.state = PairingState(stage: .code(PairingCode(pairingID: "p1", link: "L", exp: exp)))
+        pairing.state.token = 4
         await sync(m!)
         pairing.calls = []
         m = nil
-        #expect(await eventually { pairing.calls == ["leave", "acknowledge"] })
+        #expect(await eventually { pairing.calls.contains("leave") })
+        // Only the pairing this screen saw.
+        #expect(pairing.leftTokens == [4])
     }
 }

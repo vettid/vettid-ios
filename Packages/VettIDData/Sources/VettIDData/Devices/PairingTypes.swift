@@ -120,7 +120,7 @@ public enum PairingStage: Equatable, Sendable, CustomStringConvertible, CustomDe
 
 /// The pairing as the screen sees it: the stage, a request in flight, and the last request's failure. Mirrors vettid-android
 /// `PairingState`.
-public struct PairingState: Equatable, Sendable, CustomStringConvertible, CustomDebugStringConvertible, CustomReflectable {
+public struct PairingState: Sendable, CustomStringConvertible, CustomDebugStringConvertible, CustomReflectable {
     public var stage = PairingStage.idle
     public var busy = false
     public var error: FailureKind?
@@ -130,6 +130,10 @@ public struct PairingState: Equatable, Sendable, CustomStringConvertible, Custom
     public var agentName: String?
     /// What this pairing is for: the screens say "agent" or "desktop" by it. Set by ``PairingManager/start(_:)``.
     public var role = PairRole.agent
+    /// Which pairing this state is of: the manager's generation when it was published (it moves with every start, lock and
+    /// cancellation). A screen keeps the one it saw and leaves only that pairing (``PairingRepository/leave(token:)``), so a late
+    /// leave of an old screen never reaches the pairing of a newer one. Not part of equality.
+    public var token = 0
 
     public init(
         stage: PairingStage = .idle, busy: Bool = false, error: FailureKind? = nil, unknownOutcome: Bool = false,
@@ -149,4 +153,11 @@ public struct PairingState: Equatable, Sendable, CustomStringConvertible, Custom
 
     public var debugDescription: String { description }
     public var customMirror: Mirror { Mirror(self, children: [:]) }
+}
+
+extension PairingState: Equatable {
+    public static func == (a: PairingState, b: PairingState) -> Bool {
+        a.stage == b.stage && a.busy == b.busy && a.error == b.error && a.unknownOutcome == b.unknownOutcome &&
+            a.agentName == b.agentName && a.role == b.role
+    }
 }

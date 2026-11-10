@@ -11,6 +11,10 @@ public final class FakePairing: PairingRepository {
     public var state = PairingState()
 
     @ObservationIgnored public var calls: [String] = []
+    /// The pairing ids approved, the tokens left and the tokens acknowledged.
+    @ObservationIgnored public var approvedIDs: [String] = []
+    @ObservationIgnored public var leftTokens: [Int] = []
+    @ObservationIgnored public var acknowledgedTokens: [Int] = []
 
     public init() {}
 
@@ -19,8 +23,9 @@ public final class FakePairing: PairingRepository {
         state.role = role
     }
 
-    public func approve(sessionSeconds: Int?) async {
+    public func approve(pairingID: String, sessionSeconds: Int?) async {
         calls.append("approve:\(sessionSeconds.map(String.init) ?? "nil")")
+        approvedIDs.append(pairingID)
     }
 
     public func reject() async {
@@ -30,7 +35,15 @@ public final class FakePairing: PairingRepository {
 
     public func cancel() async { calls.append("cancel") }
 
-    public func leave() { calls.append("leave") }
+    public func leave(token: Int) {
+        calls.append("leave")
+        leftTokens.append(token)
+    }
 
     public func acknowledge() { calls.append("acknowledge") }
+
+    public func acknowledge(token: Int) {
+        calls.append("acknowledge")
+        acknowledgedTokens.append(token)
+    }
 }

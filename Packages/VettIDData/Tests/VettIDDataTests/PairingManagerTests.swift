@@ -33,6 +33,15 @@ final class ReadCounter {
     var n = 0
 }
 
+extension PairingManager {
+    /// The approval of the comparison held now (what a screen's sheet does for the comparison it was opened for).
+    func approve(sessionSeconds: Int?) async {
+        var id = "none"
+        if case .compare(let p) = state.stage { id = p.pairingID }
+        await approve(pairingID: id, sessionSeconds: sessionSeconds)
+    }
+}
+
 /// TEST ONLY. `device.pair.*` as the vault answers them: the calls in order, the roles asked for, an answer per role, and gates that
 /// hold the next create or approval until a test completes them.
 @MainActor
@@ -952,22 +961,27 @@ extension PairingManagerTests {
         #expect(ops.calls == ["create", "reject:p1"])
     }
 
-    /// A late answer of a code whose end has passed but whose timer has not run yet is taken, as for an expired one.
+    /// A late answer of a code whose end has passed but whose timer has not run yet is taken, as for an expired one. (This is the test
+    /// that pins the change: before it a `.code` took an answer only before its end.)
     @Test func aLateAnswerBeforeTheExpiryTimerRanIsTaken() async throws {
         let m = manager(try ops())
         await m.start()
         // The comparison's timer waits for the end; the clock is past it, within the late minute.
         await time.runCurrent()
         skew.value = 630
+        guard case .code = m.state.stage else { Issue.record("the timer ran"); return }
         m.onEvent(pending())
         #expect(compared(m)?.sas == "123456")
-        // Past the late minute it is not.
-        let late = manager(try ops())
-        await late.start()
+    }
+
+    /// Past the late minute it is not taken (the same with or without the change above).
+    @Test func anAnswerPastTheLateMinuteIsNotTaken() async throws {
+        let m = manager(try ops())
+        await m.start()
         await time.runCurrent()
         skew.value = 661
-        late.onEvent(pending())
-        #expect(compared(late) == nil)
+        m.onEvent(pending())
+        #expect(compared(m) == nil)
     }
 
     /// "New code" after an expiry tells the vault that the expired pairing is not wanted.
@@ -1043,6 +1057,82 @@ extension PairingManagerTests {
         await time.advance(seconds: 11)
         await second.value
         #expect(paired(m)?.deviceID == "agent-B")
+    }
+
+    /// "New code" on a code past its end whose timer has not run yet rejects it too: it could be answered for another minute.
+    @Test func aNewCodeOnACodePastItsEndBeforeItsTimerRanRejectsIt() async throws {
+        let ops = try ops()
+        let m = manager(ops)
+        await m.start()
+        await time.runCurrent()
+        skew.value = 601
+        guard case .code = m.state.stage else { Issue.record("the timer ran"); return }
+        // The new code lives past the skewed clock.
+        let later = t0.addingTimeInterval(900)
+        ops.created = try obj(#"{"pairing_id":"p2","link":"\#(try link(exp: later))","exp":"\#(iso(later))"}"#)
+        await m.start()
+        #expect(code(m)?.pairingID == "p2")
+        #expect(await eventually { ops.calls.contains("reject:p1") })
+    }
+
+    /// An approval names the comparison it is for: one that is no longer the held one does nothing.
+    @Test func anApprovalOfAnotherComparisonDoesNothing() async throws {
+        let ops = try ops()
+        let m = manager(ops)
+        await m.start()
+        m.onEvent(pending())
+        // Sent as a task and the time moved on, so that a guard that fails is a count of calls and not a wait.
+        let other = Task { await m.approve(pairingID: "other", sessionSeconds: 3600) }
+        await time.advance(seconds: 11)
+        await other.value
+        #expect(ops.calls == ["create"])
+        #expect(compared(m) != nil && !m.state.busy)
+        await approve(m)
+        #expect(ops.calls == ["create", "approve:p1:3600"])
+    }
+
+    // MARK: A late leave of an old screen (PairingState.token)
+
+    /// Model A is done and model B starts: A's late leave, with the token it saw, reaches none of B's pairing: not while B's code is
+    /// being made, not its code and not its comparison.
+    @Test func anOldScreensLateLeaveNeverReachesTheNewerPairing() async throws {
+        let ops = try ops()
+        let m = manager(ops)
+        await m.start()
+        let a = m.state.token
+        #expect(code(m) != nil)
+        await m.cancel()
+        // B starts: its create is held.
+        let gate = TestDeferred<Void>()
+        ops.holdNext = gate
+        let b = Task { await m.start(.agent) }
+        #expect(await eventually { ops.held.isCompleted })
+        #expect(m.state.stage == .creating)
+        #expect(m.state.token != a)
+        m.leave(token: a)
+        await time.runCurrent()
+        #expect(m.state.stage == .creating, "B's create is not cancelled")
+        gate.complete(())
+        await b.value
+        #expect(code(m) != nil, "B's code stays")
+        m.leave(token: a)
+        await time.runCurrent()
+        #expect(code(m) != nil)
+        m.onEvent(pending())
+        #expect(compared(m) != nil)
+        m.leave(token: a)
+        m.acknowledge(token: a)
+        await time.runCurrent()
+        #expect(compared(m) != nil)
+        // Nothing of B's was rejected; A's own cancel rejected A's.
+        #expect(ops.calls.filter { $0.hasPrefix("reject") } == ["reject:p1"])
+        // A final stage of B's is not acknowledged away by A either; B's own token does.
+        await m.reject()
+        #expect(m.state.stage == .rejected(told: true))
+        m.acknowledge(token: a)
+        #expect(m.state.stage == .rejected(told: true))
+        m.acknowledge(token: m.state.token)
+        #expect(m.state.stage == .idle)
     }
 
     // MARK: What the screens rely on (iOS)
