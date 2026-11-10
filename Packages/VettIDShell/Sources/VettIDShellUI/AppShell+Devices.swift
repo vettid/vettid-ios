@@ -7,8 +7,8 @@ import VettIDHistory
 import VettIDHistoryUI
 import VettIDShell
 
-/// The Devices & agents screens over the shell (vettid-android's `devicesDestination`): a device's page, and History searched
-/// for its name.
+/// The Devices & agents screens over the shell (vettid-android's `devicesDestination`): a device's page, pairing an agent or a
+/// desktop, and History searched for its name.
 extension AppShell {
     /// Devices & agents, the drawer's destination (a placeholder without the vault's devices).
     @ViewBuilder var devicesRoot: some View {
@@ -23,6 +23,8 @@ extension AppShell {
         switch route {
         case .device(let id):
             if let devices { DeviceRoute(id, devices: devices, ownerChecks: ownerChecks, host: devicesHost) }
+        case .pair(let held, let desktop):
+            if let pairing { PairRoute(held: held, desktop: desktop, pairing: pairing, ownerChecks: ownerChecks, host: devicesHost) }
         case .deviceHistory(let query):
             if let history, let historyExport {
                 HistoryRoute(
@@ -36,13 +38,16 @@ extension AppShell {
     }
 
     /// Where the Devices & agents screens go (vettid-android `DevicesHost`): a device's page over the list, back, and the
-    /// device's History (once).
+    /// device's History (once), pairing (once) and the daily check.
     var devicesHost: DevicesHost {
         let model = model
         var h = DevicesHost()
         h.onOpen = { model.openDevice($0) }
         h.onBack = { model.pop() }
         h.onOpenHistory = { model.openDeviceHistory($0) }
+        h.onPair = { model.openPair(desktop: false) }
+        h.onPairDesktop = { model.openPair(desktop: true) }
+        h.onOwnerCheck = { model.ownerCheck(holdOff: false) }
         return h
     }
 }

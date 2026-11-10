@@ -129,6 +129,7 @@ public final class ShellModel {
         switch t {
         case .devices: .vaultStatus
         case .device(let id): .device(id)
+        case .pairing: .pair(held: true, desktop: false)
         case .approval(let key): .approval(key)
         case .connection(let id): .connection(id)
         case .sharedWithYou(let id): .sharedWithYou(connectionID: id, ask: false)
@@ -143,6 +144,10 @@ public final class ShellModel {
 
     /// A device's page over Devices & agents (or the screen on top), once.
     public func openDevice(_ id: String) { pushOnce(.device(id)) }
+
+    /// Pairing an agent, or [desktop] a desktop, over Devices & agents, once. The drawer drops it (``navigate(_:)``): a pairing not
+    /// approved is then rejected by its screen going.
+    public func openPair(desktop: Bool) { pushOnce(.pair(held: false, desktop: desktop)) }
 
     /// History searched for a device's name, over its page, once (vettid-android's `launchSingleTop` for `DeviceHistoryRoute`).
     public func openDeviceHistory(_ query: String) { pushOnce(.deviceHistory(query: query)) }

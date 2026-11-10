@@ -84,6 +84,9 @@ public enum ShellRoute: Hashable, Sendable {
     /// History searched for a device's name (ANDROID-PLAN 0.1.53 AA1; the vault's search matches device names, §10.9), from the
     /// device's page. [query] is the name as the device gave it; the search cuts it as it cuts every search.
     case deviceHistory(query: String)
+    /// Pairing an agent, or [desktop] a desktop (ANDROID-PLAN 0.1.53 AA2; vettid-android #291), from the list's floating button;
+    /// [held]: from the feed item "A device asks to pair", showing what is held and never a new code.
+    case pair(held: Bool, desktop: Bool)
     /// A conversation with a connection (VAULT-MESSAGING §10.5), from Messages, the new-message picker, a connection's
     /// detail or the screens of connecting.
     case conversation(String)
