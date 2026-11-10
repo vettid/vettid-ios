@@ -155,4 +155,22 @@ struct VectorsTests {
         #expect(IkFingerprint.formatB64("not base64!") == nil)
         #expect(IkFingerprint.formatB64(Base64s.encodeStd(rep(0, 33))) == nil)
     }
+
+    /// VAULT-MESSAGING 0.83.8 §10.8, the vector in §16 ("credential-key fingerprint"): the key is 32 x 0x09. vettid-vault
+    /// has no file for it; the values are the specification's.
+    @Test func credentialKeyFingerprint() throws {
+        let key = rep(0x09, 32)
+        #expect(Base64s.encodeStd(key) == "CQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQk=")
+        #expect(Bytes.hex(try CredentialKeyFingerprint.digest(key)) == "e939754d09aaa93a6bd164b82df791506a5224bdd42a19e1dc023176ee6fe9b5")
+        #expect(try CredentialKeyFingerprint.format(key) == "e939 754d 09aa a93a")
+        #expect(CredentialKeyFingerprint.formatB64(Base64s.encodeStd(key)) == "e939 754d 09aa a93a")
+        // Labelled: not the plain hash of the key, nor the ik fingerprint's.
+        #expect(!Bytes.hex(Bytes.sha256(key)).hasPrefix("e939754d"))
+        #expect(!(try IkFingerprint.format(key)).hasPrefix("e939 754d"))
+        // Only 32 bytes.
+        expectCrypto(.format) { _ = try CredentialKeyFingerprint.format(rep(0x09, 31)) }
+        #expect(CredentialKeyFingerprint.formatB64("") == nil)
+        #expect(CredentialKeyFingerprint.formatB64("not base64!") == nil)
+        #expect(CredentialKeyFingerprint.formatB64(Base64s.encodeStd(rep(0x09, 33))) == nil)
+    }
 }

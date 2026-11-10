@@ -65,3 +65,34 @@ public enum IkFingerprint {
         try? format(Base64s.decodeStd(ikB64, ikSize))
     }
 }
+
+/// The fingerprint of the member's credential key (VAULT-MESSAGING 0.83.8 §10.8, vector in §16): what Settings → Vault
+/// status shows, and what the other admins of a service may ask the member to read out (BALLOT-PROTOCOL §3.4). Not a
+/// secret.
+///
+/// `ck_fp = SHA-256("vettid/vms/2/ck-fp" || key)`, `key` the 32 raw bytes of the credential key (an Ed25519 public key),
+/// shown as its first 8 bytes in lowercase hex, in 4 groups of 4 digits separated by spaces. Mirrors vettid-android
+/// `CredentialKeyFingerprint`.
+public enum CredentialKeyFingerprint {
+    /// The credential key's size (an Ed25519 public key).
+    public static let keySize = 32
+    private static let shownBytes = 8
+    private static let group = 4
+
+    /// The full SHA-256 fingerprint of [key] (32 raw bytes).
+    public static func digest(_ key: [UInt8]) throws -> [UInt8] {
+        guard key.count == keySize else { throw CryptoError.format("key") }
+        return Bytes.labeledHash(Labels.ckFP, key)
+    }
+
+    /// The fingerprint as shown: `e939 754d 09aa a93a`.
+    public static func format(_ key: [UInt8]) throws -> String {
+        let hex = Array(Bytes.hex(Array(try digest(key).prefix(shownBytes))))
+        return stride(from: 0, to: hex.count, by: group).map { String(hex[$0..<$0 + group]) }.joined(separator: " ")
+    }
+
+    /// ``format(_:)`` of a standard-base64 `key`; nil when it is not the base64 of 32 bytes.
+    public static func formatB64(_ keyB64: String) -> String? {
+        try? format(Base64s.decodeStd(keyB64, keySize))
+    }
+}

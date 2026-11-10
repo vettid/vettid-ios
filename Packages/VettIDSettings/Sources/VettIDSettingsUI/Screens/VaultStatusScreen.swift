@@ -16,17 +16,27 @@ public struct VaultStatusContent: View {
     let installedFrom: InstalledFrom
     let retry: @MainActor () -> Void
     let onBack: @MainActor () -> Void
+    let credentialKey: CredentialKeyRow?
+    let retryCredentialKey: @MainActor () -> Void
+    let copy: @MainActor (String) -> Void
 
+    /// [credentialKey]: the Credential key row (nil: not shown); [copy]: its Copy (local to this phone, and expiring).
     public init(
         state: LoadState<VaultOverview>,
         installedFrom: InstalledFrom,
         retry: @escaping @MainActor () -> Void = {},
-        onBack: @escaping @MainActor () -> Void = {}
+        onBack: @escaping @MainActor () -> Void = {},
+        credentialKey: CredentialKeyRow? = nil,
+        retryCredentialKey: @escaping @MainActor () -> Void = {},
+        copy: @escaping @MainActor (String) -> Void = { SecurePasteboard.copy($0) }
     ) {
         self.state = state
         self.installedFrom = installedFrom
         self.retry = retry
         self.onBack = onBack
+        self.credentialKey = credentialKey
+        self.retryCredentialKey = retryCredentialKey
+        self.copy = copy
     }
 
     public var body: some View {
@@ -41,6 +51,8 @@ public struct VaultStatusContent: View {
                     } else {
                         LoadFailure(error: state.error ?? .other, retry: retry)
                     }
+                    // Whatever the overview did (loading, failed, loaded): the key is asked on its own.
+                    if let credentialKey { credentialKeyRow(credentialKey) }
                 }
             }
         }
@@ -88,6 +100,43 @@ public struct VaultStatusContent: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, Spacing.gutter + Spacing.xs)
             .padding(.vertical, Spacing.l)
+    }
+
+    /// The Credential key row (ANDROID-PLAN 0.1.119 §4 "Owner check and status"): the fingerprint with the line for admins
+    /// and Copy; a progress line while it is asked; "cannot be checked right now" with Try again; "none yet". Never blank.
+    @ViewBuilder private func credentialKeyRow(_ ck: CredentialKeyRow) -> some View {
+        SettingsGroup {
+            switch ck {
+            case .loading:
+                SettingsInfoRow(SettingsStrings.statusCredentialKey, value: SettingsStrings.loading, icon: .key)
+                    .accessibilityIdentifier("credential_key_loading")
+            case .none:
+                SettingsInfoRow(SettingsStrings.statusCredentialKeyNone, value: "", icon: .key)
+                    .accessibilityIdentifier("credential_key_none")
+            case .unknown:
+                SettingsInfoRow(SettingsStrings.statusCredentialKeyUnknown, value: "", icon: .key)
+                    .accessibilityIdentifier("credential_key_unknown")
+                SettingsDivider()
+                Button(SettingsStrings.retry) { retryCredentialKey() }
+                    .padding(Spacing.gutter)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .accessibilityIdentifier("credential_key_retry")
+            case .shown(let fp):
+                SettingsInfoRow(SettingsStrings.statusCredentialKey, value: fp, icon: .key, code: true)
+                    .accessibilityIdentifier("credential_key")
+                Text(SettingsStrings.statusCredentialKeyAdmins)
+                    .vettIDFont(.bodySmall)
+                    .foregroundStyle(colors.onSurfaceVariant)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, Spacing.gutter)
+                    .padding(.bottom, Spacing.s)
+                SettingsDivider()
+                Button(TransferStrings.transferCopy) { copy(fp) }
+                    .padding(Spacing.gutter)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .accessibilityIdentifier("credential_key_copy")
+            }
+        }
     }
 
     /// The counter unavailable for a day (STAGING-TIME-SCALE 0.1.1 S8, S7): the clock's period as it started and the quiet

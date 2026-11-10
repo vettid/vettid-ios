@@ -2,6 +2,34 @@ import Foundation
 
 /// The texts of Vault status and Attestation (vettid-android `feature/settings` `strings.xml`; IOS-PLAN ID15 and §14).
 extension SettingsStrings {
+    // The Credential key row (ANDROID-PLAN 0.1.119 §4 "Owner check and status"; vettid-android's texts, owner-approved).
+    static var statusCredentialKey: String {
+        String(localized: "settings_status_credential_key_label", defaultValue: "Credential key", bundle: .module)
+    }
+
+    static var statusCredentialKeyAdmins: String {
+        String(
+            localized: "settings_status_credential_key_admins",
+            defaultValue: """
+                If you are an admin of a service, the other admins may ask you to read this out when you become an admin, \
+                or after you reset your credential. It is not a secret.
+                """,
+            bundle: .module
+        )
+    }
+
+    static var statusCredentialKeyUnknown: String {
+        String(
+            localized: "settings_status_credential_key_unknown",
+            defaultValue: "Credential key: cannot be checked right now.",
+            bundle: .module
+        )
+    }
+
+    static var statusCredentialKeyNone: String {
+        String(localized: "settings_status_credential_key_none", defaultValue: "Credential key: none yet", bundle: .module)
+    }
+
     static var statusTitle: String {
         String(localized: "settings_status_title", defaultValue: "Vault status", bundle: .module)
     }

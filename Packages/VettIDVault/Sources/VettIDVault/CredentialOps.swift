@@ -21,6 +21,8 @@ struct CredentialOps: Sendable {
     static let codeUtkEmpty = "utk_empty"
     /// A resync within 10 minutes (scaled) of the device's last one, with body `{allowed_after}` (VAULT-MESSAGING §10.1).
     static let codeTooSoon = "too_soon"
+    /// The operations whose answer replaces the credential's key (§10.6). A recovery (IOS-PLAN ID8) joins them when built.
+    static let keyReplacing: Set<String> = ["credential.create", VaultApi.typeRotate, VaultApi.typeReset]
 
     let device: VaultDevice
     let normalizePasswords: @Sendable () -> Bool
@@ -31,8 +33,10 @@ struct CredentialOps: Sendable {
 
     /// Stores the UTKs and the blob a response carries, and confirms the blob (`credential.ack`, §3.5.3). Returns how
     /// many UTKs it carried.
+    /// [replacesKey]: the answer is of an operation that replaces the credential's key (``keyReplacing``); one that names
+    /// no `key` then says the key is not known (``VaultDevice/credentialKeyChanges()``).
     @discardableResult
-    func keep(_ body: [UInt8]) async throws -> Int {
+    func keep(_ body: [UInt8], replacesKey: Bool = false) async throws -> Int {
         let o = try StrictJson.parseObject(body.isEmpty ? VaultJSON.empty : body)
         var utks = 0
         if let arr = try o.optArray("utks") {
@@ -49,6 +53,12 @@ struct CredentialOps: Sendable {
             throw VaultStateError(message: "credential without version")
         }
         try await device.keepCredential(blob: blob, version: v, awaitingAck: true)
+        // Vault status's Credential key row (VAULT-MESSAGING 0.83.8 §10.8): the key the answer names, once the blob is stored.
+        if let key = VaultJSON.string(o, "key"), !key.isEmpty {
+            device.noteCredentialKey(key)
+        } else if replacesKey {
+            device.noteCredentialKey(nil)
+        }
         // The blob is stored: that is the outcome of the operation. A confirmation that is lost does not undo it
         // (chosen; not in the spec, and unlike vettid-android, which throws): the ack stays pending and goes out at the
         // next outbox flush (an unlock, a return to the foreground or the background;
@@ -293,7 +303,7 @@ struct CredentialOps: Sendable {
                 body: r.inner.body.isEmpty ? nil : r.inner.body
             )
         }
-        try await keep(r.body)
+        try await keep(r.body, replacesKey: Self.keyReplacing.contains(type))
         return r.body
     }
 

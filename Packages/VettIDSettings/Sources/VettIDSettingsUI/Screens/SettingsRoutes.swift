@@ -176,7 +176,8 @@ public struct VaultStatusRoute: View {
 
     public var body: some View {
         VaultStatusContent(
-            state: model?.state ?? LoadState(), installedFrom: installedFrom, retry: { model?.load() }, onBack: onBack
+            state: model?.state ?? LoadState(), installedFrom: installedFrom, retry: { model?.load() }, onBack: onBack,
+            credentialKey: model?.credentialKey ?? .loading, retryCredentialKey: { model?.loadCredentialKey() }
         )
         .onAppear { if model == nil { model = VaultStatusViewModel(vault: vault) } }
     }

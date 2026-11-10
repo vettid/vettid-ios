@@ -24,24 +24,92 @@ public struct LoadState<T: Equatable & Sendable>: Equatable, Sendable {
     }
 }
 
-/// Vault status: the member API's advisory status and the vault's own `vault.status`. Mirrors vettid-android
-/// `VaultStatusViewModel`.
+/// Vault status's Credential key row (ANDROID-PLAN 0.1.119 §4 "Owner check and status"; VAULT-MESSAGING 0.83.8 §10.8):
+/// never blank, and never an old value without saying so. Mirrors vettid-android `CredentialKeyUi`.
+public enum CredentialKeyRow: Equatable, Sendable, CustomStringConvertible {
+    /// `credential.version` is being asked.
+    case loading
+    /// The vault could not be asked right now (an error, a timeout, a locked vault): "Try again" asks again.
+    case unknown
+    /// `exists: false`.
+    case none
+    /// The fingerprint of the credential key, `e939 754d 09aa a93a`. Not a secret.
+    case shown(String)
+
+    public var description: String {
+        switch self {
+        case .loading: "loading"
+        case .unknown: "unknown"
+        case .none: "none"
+        case .shown: "shown"
+        }
+    }
+}
+
+/// Vault status: the member API's advisory status and the vault's own `vault.status`, and the Credential key row, asked
+/// on its own (``credentialKey``). Mirrors vettid-android `VaultStatusViewModel`.
 @MainActor
 @Observable
 public final class VaultStatusViewModel {
     public private(set) var state = LoadState<VaultOverview>()
+    public private(set) var credentialKey = CredentialKeyRow.loading
 
     @ObservationIgnored private let vault: any VaultRepository
     @ObservationIgnored private let work = Work()
+    @ObservationIgnored private let followers = TaskBag()
+    @ObservationIgnored private var keyAsk: Task<Void, Never>?
+    /// The ``VaultRepository/credentialKeyChange`` this screen has taken into account.
+    @ObservationIgnored private var keySeq: Int
 
     public init(vault: any VaultRepository) {
         self.vault = vault
+        keySeq = vault.credentialKeyChange?.seq ?? 0
         load()
+        // A create, rotate or reset answered while this screen is up: the new fingerprint, or, when the
+        // answer named no key, a new ask (the old fingerprint is not shown unflagged).
+        followers.add(follow(self, read: { $0.vault.credentialKeyChange }, apply: { $0.keyChanged($1) }))
     }
 
-    deinit { work.cancelAll() }
+    deinit {
+        work.cancelAll()
+        followers.cancelAll()
+        keyAsk?.cancel()
+    }
+
+    /// Asks `credential.version` (each time the screen opens, and Try again). A newer ask replaces an older one.
+    public func loadCredentialKey() {
+        keyAsk?.cancel()
+        credentialKey = .loading
+        let vault = vault
+        keyAsk = Task { @MainActor [weak self] in
+            let row: CredentialKeyRow
+            do {
+                let a = try await vault.credentialKey()
+                row = !a.exists ? .none : a.fingerprint.map(CredentialKeyRow.shown) ?? .unknown
+            } catch {
+                row = .unknown
+            }
+            guard !Task.isCancelled else { return }
+            self?.credentialKey = row
+        }
+    }
+
+    private func keyChanged(_ change: CredentialKeyChange?) {
+        guard let change, change.seq > keySeq else { return }
+        keySeq = change.seq
+        guard let fp = change.fingerprint else {
+            loadCredentialKey()
+            return
+        }
+        keyAsk?.cancel() // an ask still out may be older than this answer
+        credentialKey = .shown(fp)
+    }
+
+    /// TEST ONLY: returns once the key's ask under way has ended.
+    func settleKey() async { await keyAsk?.value }
 
     public func load() {
+        loadCredentialKey() // Try again asks the key too
         state.loading = true
         state.error = nil
         // The model is held only to write the answer back: a screen that went away cancels the read.

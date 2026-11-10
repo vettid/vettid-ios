@@ -135,7 +135,7 @@ public extension AccountRepository {
 /// The vault on this device: enrollment, unlock and lock, status, PIN, deletion, recovery. Mirrors vettid-android
 /// `VaultRepository`.
 @MainActor
-public protocol VaultRepository: AnyObject, Observable, Sendable, RelayNoticeRepository, TransferEndNotice {
+public protocol VaultRepository: AnyObject, Observable, Sendable, RelayNoticeRepository, TransferEndNotice, CredentialKeyRepository {
     /// The open app was sent to the unlock screen because the relay kept refusing this phone's messages to the vault
     /// (`token_revoked`): the vault may no longer know it. Not proof: the PIN asks the enclave. Cleared by any sealed
     /// unlock result or message from the vault.

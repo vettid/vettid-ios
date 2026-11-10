@@ -54,7 +54,15 @@ extension FakeVaultService {
     /// The open alarm's state, nil without one.
     public var alarmState: String? { locked { alarmValue?.state } }
     /// The credential key `credential.version` shows.
-    public var credentialKey: String { locked { credentialKeyValue } }
+    public var credentialKey: String {
+        get { locked { credentialKeyValue } }
+        set { locked { credentialKeyValue = newValue } }
+    }
+    /// The key (standard base64) the next `credential.rotate` or `credential.reset` names; nil: a made-up one.
+    public var nextCredentialKey: String? {
+        get { locked { nextCredentialKeyValue } }
+        set { locked { nextCredentialKeyValue = newValue } }
+    }
     /// The next [times] requests of [type] that reach the open vault are refused with [code] before anything is done (a
     /// `forbidden` to a phone that is no longer the holder; a `credential.ack` refused after the operation's own `ok`).
     public func refuse(_ type: String, with code: String, times: Int = Int.max) {
@@ -233,7 +241,7 @@ extension FakeVaultService {
             return try reply(m.type, "{}", re: m.id, error: "bad_password")
         }
         passwordFailures = 0
-        credentialKeyValue = "\(Self.credentialKeyID)-\(rotationsValue.count)"
+        credentialKeyValue = nextCredentialKeyValue ?? "\(Self.credentialKeyID)-\(rotationsValue.count)"
         windowUntil = nil
         try reply(m.type, try rotated() + #","key":"\#(credentialKeyValue)"}"#, re: m.id)
         if let a = alarmValue {
@@ -258,7 +266,7 @@ extension FakeVaultService {
         // A new credential: no blob of the old one is accepted again.
         credentialGeneration += 1
         credentialVersion = 0
-        credentialKeyValue = "\(Self.credentialKeyID)-new-\(resetsValue.count)"
+        credentialKeyValue = nextCredentialKeyValue ?? "\(Self.credentialKeyID)-new-\(resetsValue.count)"
         windowUntil = nil
         startCheckClock()
         try reply(m.type, try rotated() + #","key":"\#(credentialKeyValue)"}"#, re: m.id)

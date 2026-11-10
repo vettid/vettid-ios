@@ -353,6 +353,37 @@ public struct CredentialStatus: Equatable, Sendable {
     }
 }
 
+/// `credential.version` as Vault status needs it (VAULT-MESSAGING 0.83.8 §10.8): whether the vault holds a credential,
+/// and the fingerprint of its `key` as shown (`e939 754d 09aa a93a`; nil when the answer named no key, or one that is not
+/// 32 bytes). The key itself does not leave VettIDData. Not a secret, but never printed. Mirrors vettid-android
+/// `CredentialKeyAnswer`.
+public struct CredentialKeyAnswer: Equatable, Sendable, CustomStringConvertible {
+    public let exists: Bool
+    public let fingerprint: String?
+
+    public init(exists: Bool, fingerprint: String?) {
+        self.exists = exists
+        self.fingerprint = fingerprint
+    }
+
+    public var description: String { "CredentialKeyAnswer" }
+}
+
+/// The credential key of the latest create, rotate or reset answer the vault gave this phone, as Vault
+/// status shows it: [fingerprint], or nil when the credential changed and its key is not known (the screen asks again).
+/// [seq] counts the changes, so the same key named twice is two changes. Never printed.
+public struct CredentialKeyChange: Equatable, Sendable, CustomStringConvertible {
+    public let seq: Int
+    public let fingerprint: String?
+
+    public init(seq: Int, fingerprint: String?) {
+        self.seq = seq
+        self.fingerprint = fingerprint
+    }
+
+    public var description: String { "CredentialKeyChange(\(seq))" }
+}
+
 /// Vault status for Settings: the member API's advisory status plus the vault's own. Mirrors vettid-android
 /// `VaultOverview`.
 public struct VaultOverview: Equatable, Sendable {

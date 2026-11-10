@@ -75,6 +75,7 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
 
     // CredentialRepository.
     public internal(set) var alarm: CredentialAlarm?
+    public internal(set) var credentialKeyChange: CredentialKeyChange? // VaultManager+Events.followCredentialKeys
     /// Until when the unlock window is open (§3.5.3), as this app opened it.
     public internal(set) var unlockWindow: Date?
     /// (IOS-PLAN §4.2) The vault being deleted, and the one-time notice on "no vault" after it.
@@ -433,8 +434,7 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
         return VaultFailure(.enrollmentStarted, code: Self.codeEnrollmentStarted, retryAfterSeconds: Int64(left.rounded(.up)))
     }
 
-    /// Cancels a session being opened and waits until it stopped (a wipe: nothing it writes outlives the erase). True
-    /// when one was.
+    /// Cancels a session being opened and waits until it stopped (a wipe: nothing it writes outlives the erase); true if so.
     func cancelOpening() async -> Bool {
         guard let task = opening else { return false }
         sessionGeneration += 1
