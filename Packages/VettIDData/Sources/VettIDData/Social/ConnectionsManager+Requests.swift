@@ -116,9 +116,17 @@ extension ConnectionsManager {
                 endRequest(conn, .failed)
             }
         case "removed": forget(conn)
+        // VAULT-MESSAGING 0.88.7 §3.4.1 "Stale is not final": the peer's rekey or reconnect makes a stale connection
+        // active again; shown at once, before the list read below says so (the vault's list is authoritative).
+        case "rekeyed", "reconnected": activateIfStale(conn)
         default: break
         }
         Task { [weak self] in try? await self?.refresh(quietly: true) }
+    }
+
+    private func activateIfStale(_ id: String) {
+        guard let i = connections.firstIndex(where: { $0.id == id }), connections[i].state == .stale else { return }
+        connections[i].state = .active
     }
 
     /// A new connection: the request it came from ([request], §10.4 `pending_id`) is done with.

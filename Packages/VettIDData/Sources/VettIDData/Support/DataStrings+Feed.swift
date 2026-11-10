@@ -58,6 +58,15 @@ extension DataStrings {
         )
     }
 
+    /// VAULT-MESSAGING 0.88.7 §10.9 (owner-approved text): `connection.active_again`.
+    static func feedConnectionActiveAgain(_ value: String) -> String {
+        String(
+            localized: "data_feed_connection_active_again",
+            defaultValue: "Your connection with \(value) works again.",
+            bundle: .module
+        )
+    }
+
     static func feedAsksPaused(_ value: String) -> String {
         String(
             localized: "data_feed_asks_paused",

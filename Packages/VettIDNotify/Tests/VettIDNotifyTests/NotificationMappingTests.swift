@@ -24,7 +24,7 @@ import VettIDVault
             "recovery.change_required", "recovery.counter_unavailable", "recovery.generation_closed",
         ],
         .activity: [
-            "connection.added", "connection.request.peer_declined", "connection.asks_paused", "connection.stale", "connection.removed",
+            "connection.added", "connection.request.peer_declined", "connection.asks_paused", "connection.stale", "connection.active_again", "connection.removed",
             "grant.shared", "grant.revoked", "share.rate_limited", "item.revealed", "device.paired", "device.unlinked",
             "credential.rotated",
             "leash.rate_limited", "leash.item.read", "leash.agent.suspended", "leash.referrals_limited", "location.shared",
@@ -48,6 +48,11 @@ import VettIDVault
 
     @Test func anotherDeviceNeedingAnUpdateNotifiesAsVaultActivity() {
         #expect(NotificationMapping.category(item("device.update_needed", priority: "high")) == .activity)
+    }
+
+    @Test func aConnectionActiveAgainNotifiesLikeAStaleOne() {
+        #expect(NotificationMapping.category(item("connection.active_again")) == .activity)
+        #expect(NotificationMapping.category(item("connection.active_again")) == NotificationMapping.category(item("connection.stale")))
     }
 
     @Test func theHistoryOnlyKindsNeverNotify() {
