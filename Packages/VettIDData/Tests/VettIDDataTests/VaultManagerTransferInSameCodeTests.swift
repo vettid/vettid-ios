@@ -147,17 +147,59 @@ extension VaultManagerTransferInTests {
         #expect(m.isOpenTransferCode(qr), "open while its scan waits for the hs.resp")
         try await phone.restart()
         first.cancel()
-        #expect(m.session == nil && !m.isOpenTransferCode(qr), "without a session: not open")
         try await m.refresh()
         #expect(m.record.value.transferStartedMs == nil && m.record.value.transferCode == nil)
-        #expect(!deviceHoldsVault && !pendingRecord && !m.abandonClosed)
+        #expect(!deviceHoldsVault && !pendingRecord && !m.isOpenTransferCode(qr))
+        // In what would have been the first transfer's closed window: its code is a spent code (never `transfer_waiting`),
+        // and a new code starts at once.
+        phone.clockAhead = 620
+        #expect(!m.abandonClosed)
         let inits = service.transferInits.count
         let failure = await vaultFailure { _ = try await m.transferIn(code: qr) }
         #expect(failure != nil && failure?.code != MoveCodes.hsUnanswered && failure?.code != VaultManager.codeTransferWaiting)
         #expect(service.transferInits.count == inits && m.record.value.transferCode == nil, "a failed fetch keeps no code")
-        // A new code, in what would have been the first transfer's closed window, starts at once.
-        phone.clockAhead = 620
+        // A new code is not refused for it (the fake's answers, 620 s behind this phone's clock, are not taken, so the scan
+        // ends otherwise once its wait is over: its pauses last five seconds, whenever it reaches them).
+        let next = try service.armTransferTarget(pin: pin, password: password, validFor: 1_300)
+        phone.transferPauses.holding = false
+        let ended = await vaultFailure { _ = try await m.transferIn(code: next) }
+        #expect(ended?.code != VaultManager.codeTransferWaiting && ended?.code != VaultManager.codeTransferNotDropped)
+    }
+
+    /// A drop at the start that cannot be saved changes nothing on disk: the transfer is waited for in the background,
+    /// and the next scan clears it once saves work again.
+    @Test func aRestartDropThatCannotBeSavedIsLeftToTheBackgroundAndTheNextScan() async throws {
+        defer { phone.close() }
+        service.transferIgnoresInit = true
+        let qr = try code()
+        let first = Task { try await m.transferIn(code: qr) }
+        #expect(await eventually { phone.transferPauses.lengths == [60] })
+        let started = try #require(m.record.value.transferStartedMs)
+        try await phone.restart()
+        first.cancel()
+        phone.deviceSaveFails.on = true
+        try await m.refresh()
+        phone.deviceSaveFails.on = false
+        #expect(m.record.value.transferStartedMs == started && m.record.value.transferCode != nil && pendingRecord)
+        #expect(m.moveFlags.book.transferWaiter != nil, "waited for in the background")
         try await expectFreshSecondScan()
+    }
+
+    /// A scan cancelled while its `hs.init` still waits, before this process's first resume (a fresh install's first
+    /// evaluation is `.signedOut`): the resume never drops that handshake, which can still be answered.
+    @Test func theResumeKeepsAHandshakeThatStillWaitsInThisProcess() async throws {
+        defer { phone.close() }
+        service.transferIgnoresInit = true
+        let qr = try code()
+        let first = Task { try await m.transferIn(code: qr) }
+        #expect(await eventually { phone.transferPauses.lengths == [60] })
+        first.cancel()
+        _ = try? await first.value
+        let before = try openTransfer()
+        m.moveFlags.book.transferResumed = false
+        try await m.refresh()
+        #expect(try openTransfer() == before && deviceHoldsVault && pendingRecord && m.record.value.transferCode != nil)
+        #expect(m.isOpenTransferCode(qr))
     }
 
     /// A scan cancelled while its `hs.init` waits for the answer leaves the handshake waiting in this process: still open,

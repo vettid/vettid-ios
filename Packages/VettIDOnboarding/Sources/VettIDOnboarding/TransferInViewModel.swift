@@ -130,7 +130,8 @@ public final class TransferInViewModel: TransferInActions {
         /// a new start.
         let startedBefore: Date?
 
-        func gaveTheMoveBack(now: Date?) -> Bool { sameCode && startedBefore != nil && now == startedBefore }
+        /// The repository gave an open transfer back rather than start one: the stored start is the one before.
+        func gaveTheMoveBack(now: Date?) -> Bool { startedBefore != nil && now == startedBefore }
     }
 
     /// The model, held weakly (a task's frame must not keep it alive across an await).

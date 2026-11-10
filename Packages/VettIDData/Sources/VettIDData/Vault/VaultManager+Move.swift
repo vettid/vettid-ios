@@ -386,12 +386,14 @@ extension VaultManager: MoveRepository {
             await clearTransferStart(d)
             return nil
         }
-        if d.deviceID == nil, !d.holdsTransferSas {
+        if d.deviceID == nil, !d.holdsTransferSas, !d.awaitsPairingResp {
             // (0.88.4) A handshake the vault had not answered when the process ended: it was in memory only, so no `hs.fin`
             // can follow and the vault cannot approve it (its comparison code is saved in the write that owes the fin, so
             // none saved means no fin). The transfer is over: dropped, its code and start with it, so that nothing waits
-            // for it and no new code or enrollment is refused for it.
-            await dropTransfer(d)
+            // for it and no new code or enrollment is refused for it. Never a handshake of this process still waiting for
+            // its answer (a scan cancelled during its wait, before this first resume). A drop that cannot be saved leaves
+            // it to the background's wait, which drops it at its deadline (or the next scan does).
+            if await !dropTransfer(d) { waitForTransferInBackground() }
             return nil
         }
         if d.deviceID != nil {
