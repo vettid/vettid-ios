@@ -265,7 +265,7 @@ import VettIDVault
         m.openPair(desktop: false)
         #expect(m.path == [.pair(held: false, desktop: false)])
         m.openPair(desktop: true)
-        #expect(m.path == [.pair(held: false, desktop: false), .pair(held: false, desktop: true)])
+        #expect(m.path == [.pair(held: false, desktop: false)], "one pairing screen at a time")
         m.navigate(.devices)
         #expect(m.path.isEmpty && m.destination == .devices)
         // The feed item of a pairing in wait: what is held, never a new code (once).
