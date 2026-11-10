@@ -24,7 +24,8 @@ import VettIDVault
             "recovery.change_required", "recovery.counter_unavailable", "recovery.generation_closed",
         ],
         .activity: [
-            "connection.added", "connection.request.peer_declined", "connection.asks_paused", "connection.stale", "connection.active_again", "connection.removed",
+            "connection.added", "connection.request.peer_declined", "connection.asks_paused", "connection.stale", "connection.removed",
+            "connection.active_again",
             "grant.shared", "grant.revoked", "share.rate_limited", "item.revealed", "device.paired", "device.unlinked",
             "credential.rotated",
             "leash.rate_limited", "leash.item.read", "leash.agent.suspended", "leash.referrals_limited", "location.shared",

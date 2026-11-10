@@ -126,7 +126,8 @@ public enum FeedKinds {
         let ref = item.ref
         switch item.kind {
         case "connection.request.peer_declined": return c.map { .connection($0) } ?? .connections
-        case "connection.added", "connection.stale", "connection.active_again", "connection.asks_paused": return c.map { .connection($0) } ?? .sheet
+        case "connection.added", "connection.stale", "connection.active_again", "connection.asks_paused":
+            return c.map { .connection($0) } ?? .sheet
         case "message.received", "call.missed", "message.attachment_failed", "message.attachment_refused":
             return c.map { .conversation($0) } ?? .sheet
         case "grant.shared", "grant.revoked": return c.map { .sharedWithYou($0) } ?? .sheet
