@@ -299,6 +299,9 @@ public final class HistoryManager: HistoryRepository {
         searchUnsupported = false
     }
 
+    /// The devices as last read (``devices(refresh:)``), without asking the vault: nil when not read since the vault opened.
+    public var knownDevices: HistoryDevices? { devicesRead }
+
     public func devices(refresh: Bool = false) async -> HistoryDevices? {
         if let devicesRead, !refresh { return devicesRead }
         let g = generation

@@ -24,6 +24,7 @@ public struct NotificationsRoute: View {
     private let approvals: (any ApprovalsRepository)?
     private let items: (any ItemsRepository)?
     private let votes: (any VotesRepository)?
+    private let history: (any HistoryRepository)?
     private let archived: Bool
     private let host: NotificationsHost
     @Environment(\.scenePhase) private var scenePhase
@@ -31,14 +32,15 @@ public struct NotificationsRoute: View {
 
     public init(
         feed: any FeedRepository, connections: (any ConnectionsRepository)? = nil, approvals: (any ApprovalsRepository)? = nil,
-        items: (any ItemsRepository)? = nil, votes: (any VotesRepository)? = nil, archived: Bool = false,
-        host: NotificationsHost
+        items: (any ItemsRepository)? = nil, votes: (any VotesRepository)? = nil, history: (any HistoryRepository)? = nil,
+        archived: Bool = false, host: NotificationsHost
     ) {
         self.feed = feed
         self.connections = connections
         self.approvals = approvals
         self.items = items
         self.votes = votes
+        self.history = history
         self.archived = archived
         self.host = host
     }
@@ -47,8 +49,11 @@ public struct NotificationsRoute: View {
         NotificationsScreen(state: model?.state ?? NotificationsState(archived: archived), actions: actions)
             .onAppear {
                 if model == nil {
+                    var devices: (@MainActor () async -> HistoryDevices?)?
+                    if let history { devices = { await history.devices(refresh: false) } }
                     model = NotificationsViewModel(
-                        feed: feed, connections: connections, approvals: approvals, items: items, votes: votes, archived: archived
+                        feed: feed, connections: connections, approvals: approvals, items: items, votes: votes, archived: archived,
+                        devices: devices
                     )
                 }
                 if scenePhase == .active { model?.shown() }

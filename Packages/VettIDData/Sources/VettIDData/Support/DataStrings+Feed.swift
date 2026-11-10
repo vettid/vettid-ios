@@ -250,6 +250,24 @@ extension DataStrings {
         )
     }
 
+    /// (VAULT-MESSAGING 0.87.0 §6.3.1 "An app from before release 29"; wording approved by the owner 2026-11-06.)
+    static func feedDeviceUpdateNeeded(_ value: String) -> String {
+        String(
+            localized: "data_feed_device_update_needed",
+            defaultValue: "\(value) needs an update to keep working with your vault. Update the app.",
+            bundle: .module
+        )
+    }
+
+    /// The same notice when the device has no name this app knows. (Placeholder wording, awaiting the owner's approval.)
+    static var feedDeviceUpdateNeededAny: String {
+        String(
+            localized: "data_feed_device_update_needed_any",
+            defaultValue: "One of your devices needs an update to keep working with your vault. Update the app on it.",
+            bundle: .module
+        )
+    }
+
     static var feedDeviceUnlinked: String {
         String(
             localized: "data_feed_device_unlinked",

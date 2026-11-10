@@ -60,6 +60,8 @@ public enum FeedKinds {
         "critical-secret.use.request", "item.revealed",
         "device.pair.pending", "device.paired", "device.unlinked", "device.transferred", "device.replaced",
         "device.signer_changed", "device.session.pending", "approval.pending",
+        // VAULT-MESSAGING 0.87.0 §10.9, §6.3.1 "An app from before release 29": another device's app lacks `hs_confirm`.
+        "device.update_needed",
         "credential.alarm", "credential.password_failed", "credential.rotated", "credential.reset",
         "owner_check.failed", "owner_check.locked", "owner_check.hold_changed",
         "guide",
@@ -127,7 +129,7 @@ public enum FeedKinds {
             return .shareRule(connectionID: c, ruleID: ref)
         case "item.revealed": return ref.map { .item($0) } ?? .sheet
         case "device.pair.pending", "device.paired", "device.unlinked", "device.transferred", "device.replaced",
-             "device.signer_changed":
+             "device.signer_changed", "device.update_needed":
             return .devices
         case "credential.alarm": return .alarm
         case "credential.password_failed": return .history

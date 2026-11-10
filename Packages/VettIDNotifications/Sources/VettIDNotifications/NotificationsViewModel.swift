@@ -73,6 +73,10 @@ public final class NotificationsViewModel {
     @ObservationIgnored private let approvals: (any ApprovalsRepository)?
     @ObservationIgnored private let items: (any ItemsRepository)?
     @ObservationIgnored private let votes: (any VotesRepository)?
+    @ObservationIgnored private let devices: (@MainActor () async -> HistoryDevices?)?
+    @ObservationIgnored private var devicesAsked = false
+    /// The devices' names for `device.update_needed` (VAULT-MESSAGING 0.87.0 §10.9), read once such an item is listed.
+    private var deviceNames: [String: String] = [:]
     @ObservationIgnored private let work = Work()
     @ObservationIgnored private let follows = TaskBag()
     /// Whether the screen is in view.
@@ -84,20 +88,24 @@ public final class NotificationsViewModel {
     private var local: NotificationsState
 
     /// [archived]: the Archived view. [connections], [approvals], [items] and [votes]: the names, followed as they change; the Vault
-    /// list is read quietly when it has not been read (an `item.revealed` opens its item).
+    /// list is read quietly when it has not been read (an `item.revealed` opens its item). [devices]: the device list
+    /// (History's, read once), asked for only when a `device.update_needed` item is listed.
     public init(
         feed: any FeedRepository, connections: (any ConnectionsRepository)? = nil, approvals: (any ApprovalsRepository)? = nil,
-        items: (any ItemsRepository)? = nil, votes: (any VotesRepository)? = nil, archived: Bool = false
+        items: (any ItemsRepository)? = nil, votes: (any VotesRepository)? = nil, archived: Bool = false,
+        devices: (@MainActor () async -> HistoryDevices?)? = nil
     ) {
         self.feed = feed
         self.connections = connections
         self.approvals = approvals
         self.items = items
         self.votes = votes
+        self.devices = devices
         local = NotificationsState(archived: archived)
         if feed.load == .notLoaded { refresh() }
         items?.readIfNotLoaded()
         follows.add(follow(self, read: { $0.feed.items }, apply: { m, _ in m.onItems() }))
+        readDevicesIfNeeded()
     }
 
     deinit {
@@ -111,13 +119,27 @@ public final class NotificationsViewModel {
         s.load = feed.load
         s.names = FeedNames(
             connections: connections?.connections ?? [], items: items?.names ?? [:], approvals: approvals?.approvals ?? [],
-            votes: votes?.votes ?? []
+            votes: votes?.votes ?? [], devices: deviceNames
         )
         return s
     }
 
     private func onItems() {
         if inView { markViewed(arrivalsOnly: true) }
+        readDevicesIfNeeded()
+    }
+
+    /// The device list once, when an item names a device by its id only (`device.update_needed`).
+    private func readDevicesIfNeeded() {
+        guard !devicesAsked, let devices, feed.items.contains(where: { $0.kind == "device.update_needed" }) else { return }
+        devicesAsked = true
+        Task { @MainActor [weak self] in
+            guard let d = await devices() else {
+                self?.devicesAsked = false // not read (the call failed): asked again with the next change of the list
+                return
+            }
+            self?.deviceNames = d.names
+        }
     }
 
     /// The screen came into view: the unread items that are not urgent are marked read.
