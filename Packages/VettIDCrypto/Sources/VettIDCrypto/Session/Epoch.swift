@@ -138,6 +138,18 @@ public final class Epoch: @unchecked Sendable, CustomStringConvertible {
         }
     }
 
+    /// Deletes only the send key: a responder's confirmed epoch keeps its rk and receive key while a newer epoch is
+    /// current (§6.3.1 "Responder").
+    func retireSendOnly() {
+        lock.withLock {
+            if var k = sendKey { Bytes.wipe(&k) }
+            sendKey = nil
+        }
+    }
+
+    /// Whether the epoch still holds its rk (a rekey under it can be opened, §6.2).
+    public var hasRK: Bool { lock.withLock { rk != nil } }
+
     public func destroy() {
         lock.withLock {
             if var k = sendKey { Bytes.wipe(&k) }
@@ -244,6 +256,40 @@ public final class Keyring: @unchecked Sendable {
             }
             currentEpoch = e
             pruneLocked(now)
+        }
+    }
+
+    /// Makes [e] current while the previous current epoch stays the responder's confirmed epoch (§6.3.1 "Responder"):
+    /// only its send key is deleted, and its rk and receive key are kept until [until]. Mirrors vettid-vault
+    /// `Keyring.ActivateKeeping(…, KeepRK)`.
+    public func activateKeeping(_ e: Epoch, now: Date, until: Date) {
+        lock.withLock {
+            if let c = currentEpoch {
+                c.retireSendOnly()
+                retired.append((c, until))
+            }
+            currentEpoch = e
+            pruneLocked(now)
+        }
+    }
+
+    /// Ends a retained epoch's extra life once it stops being the confirmed epoch (§6.3.1 table): its rk goes at once,
+    /// and its receive key is kept until [until] at most (never longer than it already was). Mirrors vettid-vault
+    /// `Keyring.Release`.
+    public func release(_ id: [UInt8], until: Date) {
+        lock.withLock {
+            for i in retired.indices where retired[i].epoch.id == id {
+                retired[i].epoch.retireSend()
+                if until < retired[i].until { retired[i].until = until }
+            }
+        }
+    }
+
+    /// The current or retained epoch with [id], while its receive key is kept.
+    public func find(_ id: [UInt8], now: Date) -> Epoch? {
+        lock.withLock {
+            if let c = currentEpoch, c.id == id { return c }
+            return retired.first { now <= $0.until && $0.epoch.id == id }?.epoch
         }
     }
 

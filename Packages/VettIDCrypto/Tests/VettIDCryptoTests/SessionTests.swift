@@ -363,3 +363,62 @@ struct SessionTests {
         expectCrypto(.format) { _ = try parse(#"{"capabilities":"recovery_r"}"#) }
     }
 }
+
+/// §6.3.1 "Responder" (0.87.0): the device keeps its confirmed epoch's rk and receive key while a newer one is current.
+extension SessionTests {
+    /// The vault's rekey of the device: the device (`v`, the responder here) answers, the vault (`a`) finishes.
+    private func rekey(device current: Epoch, vault initiatorCurrent: Epoch) throws -> (device: Epoch, vault: Epoch) {
+        let i = try rekeyInitiator(initiatorCurrent)
+        let (r, resp) = try PendingInit.openRekey(i.envelope, current: current, now: now).respond(rekeyRespCfg)
+        let res = try i.handleResp(resp, collectSender: vault.relaySigner.publicKey, now: now)
+        return (try r.handleFin(res.fin, collectSender: app.relaySigner.publicKey, now: now).epoch, res.epoch)
+    }
+
+    @Test func aKeptConfirmedEpochStillOpensAndTakesARekey() throws {
+        let (a1, v1) = try pair()
+        let k = Keyring()
+        k.activate(v1, now: now)
+        let (v2, a2) = try rekey(device: v1, vault: a1)
+        let until = now.addingTimeInterval(48 * 86_400)
+        k.activateKeeping(v2, now: now, until: until)
+        #expect(!v1.canSend())
+        #expect(v1.hasRK)
+        #expect(k.find(v1.id, now: now) === v1)
+        // Survives a restart with its rk.
+        let restored = try Keyring.import(try k.export())
+        let kept = try #require(restored.find(v1.id, now: now))
+        #expect(kept.hasRK)
+        #expect(try restored.open(try Envelope.parse(try a1.seal(ping())), now: now).inner.type == "x.y")
+        // A rekey under the confirmed epoch opens with its rk (§6.2: K_s is the epoch's rk).
+        _ = try PendingInit.openRekey(try rekeyInitiator(a1).envelope, current: kept, now: now)
+        // After 16 days a plain activation would have dropped it; kept, it still opens up to `until`.
+        let day20 = now.addingTimeInterval(20 * 86_400)
+        restored.prune(now: day20)
+        #expect(try restored.open(try Envelope.parse(try a1.seal(ping())), now: day20).inner.type == "x.y")
+        restored.prune(now: until.addingTimeInterval(1))
+        #expect(restored.find(v1.id, now: until.addingTimeInterval(1)) == nil)
+        _ = a2
+    }
+
+    @Test func releaseDropsTheRkAndOnlyShortensTheKeys() throws {
+        let (a1, v1) = try pair()
+        let k = Keyring()
+        k.activate(v1, now: now)
+        let (v2, _) = try rekey(device: v1, vault: a1)
+        k.activateKeeping(v2, now: now, until: now.addingTimeInterval(48 * 86_400))
+        // A release never lengthens the life.
+        k.release(v1.id, until: now.addingTimeInterval(60 * 86_400))
+        #expect(!v1.hasRK)
+        k.release(v1.id, until: now.addingTimeInterval(16 * 86_400))
+        let day17 = now.addingTimeInterval(17 * 86_400)
+        #expect(k.find(v1.id, now: day17) == nil)
+        expectCrypto(.protocolViolation) { _ = try k.open(try Envelope.parse(try a1.seal(ping())), now: day17) }
+        // A plain activation deletes the rk at once, as before.
+        let k2 = Keyring()
+        let (_, w1) = try pair()
+        k2.activate(w1, now: now)
+        let (w2, _) = try pair()
+        k2.activate(w2, now: now)
+        #expect(!w1.hasRK)
+    }
+}

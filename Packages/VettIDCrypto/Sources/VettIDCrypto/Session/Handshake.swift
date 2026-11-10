@@ -35,6 +35,8 @@ public struct InitiatorConfig {
     public let id: String?
     public let finID: String?
     public let now: Date?
+    /// (0.86.0, §5.3, §10.8) The inner `features` list hs.init and hs.fin carry; nil: none.
+    public let features: [String]?
 
     public init(
         purpose: Purpose,
@@ -59,7 +61,8 @@ public struct InitiatorConfig {
         policy: Policy,
         id: String? = nil,
         finID: String? = nil,
-        now: Date? = nil
+        now: Date? = nil,
+        features: [String]? = nil
     ) {
         self.purpose = purpose
         self.ctx = ctx
@@ -84,6 +87,7 @@ public struct InitiatorConfig {
         self.id = id
         self.finID = finID
         self.now = now
+        self.features = features
     }
 }
 
@@ -194,6 +198,7 @@ public final class Initiator: @unchecked Sendable {
                 id: cfg.finID ?? Ulid.new(now),
                 type: HsTypes.fin,
                 ts: now,
+                features: cfg.features,
                 body: try HsFin(sig: try Schedule.signFin(cfg.identity, th: th), sasNonce: nI).marshal(cfg.purpose)
             )
         )
@@ -242,7 +247,7 @@ public final class Initiator: @unchecked Sendable {
             // (Release R) A transfer's unlock secret: the message's copy and the marshalled body are zeroed once sealed.
             body.wipeUnlockSecret()
             defer { if cfg.unlockSecret != nil { Bytes.wipe(&bodyBytes) } }
-            let inner = Inner(id: id, type: HsTypes.initType, ts: now, body: bodyBytes)
+            let inner = Inner(id: id, type: HsTypes.initType, ts: now, features: cfg.features, body: bodyBytes)
             if rekey {
                 // §6.2: a rekey hs.init travels in session mode under the current epoch, and K_s is that epoch's rk.
                 guard let cur = cfg.current else { throw CryptoError.protocolViolation("config") }
@@ -287,6 +292,8 @@ public struct ResponderConfig {
     public let expectedCtx: String?
     public let id: String?
     public let now: Date?
+    /// (0.86.0, §5.3) The inner `features` list hs.resp carries; nil: none.
+    public let features: [String]?
 
     public init(
         identity: Ed25519PrivateKey,
@@ -300,7 +307,8 @@ public struct ResponderConfig {
         knownInitiatorIk: [UInt8]? = nil,
         expectedCtx: String? = nil,
         id: String? = nil,
-        now: Date? = nil
+        now: Date? = nil,
+        features: [String]? = nil
     ) {
         self.identity = identity
         self.token = token
@@ -314,6 +322,7 @@ public struct ResponderConfig {
         self.expectedCtx = expectedCtx
         self.id = id
         self.now = now
+        self.features = features
     }
 }
 
@@ -366,7 +375,9 @@ public final class PendingInit: @unchecked Sendable {
                     token: cfg.token, reconnectToken: cfg.reconnectToken, suite: chosen, rotations: cfg.rotations,
                     sig: try Schedule.signResp(cfg.identity, th: th), sasNonce: nR
                 )
-                let inner = Inner(id: cfg.id ?? Ulid.new(now), type: HsTypes.resp, ts: now, body: try resp.marshal(body.purpose))
+                let inner = Inner(
+                    id: cfg.id ?? Ulid.new(now), type: HsTypes.resp, ts: now, features: cfg.features, body: try resp.marshal(body.purpose)
+                )
                 var padded = try Inner.encode(inner, .sealed)
                 defer { Bytes.wipe(&padded) }
                 let out = try sealer.seal(padded)
