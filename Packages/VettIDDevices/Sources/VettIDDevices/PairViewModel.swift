@@ -69,13 +69,11 @@ public final class PairViewModel {
     /// A stage other than nothing was seen, and the screen is not being closed.
     @ObservationIgnored private var sawStage = false
     @ObservationIgnored private var closing = false
-    /// The pairing this screen saw (``PairingState/token``) and whether it already ended it: read by `deinit`, which is not on the
-    /// main actor.
+    /// The pairing this screen saw (``PairingState/token``): read by `deinit`, which is not on the main actor.
     @ObservationIgnored private let own = OSAllocatedUnfairLock(initialState: Own())
 
     private struct Own {
         var token: Int?
-        var finished = false
     }
 
     /// [held]: opened from the feed item (what is held, never a new code; the held pairing says its own role). [desktop]: "Pair a
@@ -106,12 +104,10 @@ public final class PairViewModel {
         work.cancelAll()
         follows.cancelAll()
         // The screen is gone: a code not used or a comparison not answered is rejected (best effort), never kept.
-        // Only the pairing this screen saw, and only if it did not end it already: a screen released late must not reach the pairing of
-        // a newer one (the member leaves and opens Pair again).
-        let (repo, mine) = (repo, own.withLock { o -> Int? in
-            defer { o.finished = true }
-            return o.finished ? nil : o.token
-        })
+        // Always leave the pairing this screen saw, whatever done() or cancel() did (some stages are not ended by them: a comparison
+        // with an approval in flight, a code still being made), but only that one: a screen released late must not reach the pairing
+        // of a newer one (the member leaves and opens Pair again).
+        let (repo, mine) = (repo, own.withLock { $0.token })
         guard let mine else { return }
         Task { @MainActor in Self.finish(repo, token: mine, leaving: true) }
     }
@@ -169,10 +165,7 @@ public final class PairViewModel {
     public func cancel() {
         closing = true
         recompute()
-        if let token = own.withLock({ o -> Int? in
-            o.finished = true
-            return o.token
-        }) { repo.leave(token: token) }
+        if let token = own.withLock({ $0.token }) { repo.leave(token: token) }
     }
 
     public func codesMatch() {
@@ -210,10 +203,7 @@ public final class PairViewModel {
     public func done() {
         closing = true
         recompute()
-        if let token = own.withLock({ o -> Int? in
-            o.finished = true
-            return o.token
-        }) { Self.finish(repo, token: token, leaving: false) }
+        if let token = own.withLock({ $0.token }) { Self.finish(repo, token: token, leaving: false) }
     }
 
     /// The screen's end. A code that expired is still taken for a late answer for a minute, and the vault is told it is not wanted:
@@ -223,7 +213,7 @@ public final class PairViewModel {
     private static func finish(_ repo: any PairingRepository, token: Int, leaving: Bool) {
         switch repo.state.stage {
         // Not left to the model going: a screen that is popped is released late.
-        case .codeExpired, .code, .compare:
+        case .codeExpired, .code, .compare, .creating:
             repo.leave(token: token)
             return
         default:

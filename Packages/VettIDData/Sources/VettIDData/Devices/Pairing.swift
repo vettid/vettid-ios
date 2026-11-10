@@ -85,6 +85,9 @@ public final class PairingManager: PairingRepository {
     /// The ids listed before the approval, and when it started: an arrival that was listed before, or older, is not it.
     @ObservationIgnored private var baseline: Set<String>?
     @ObservationIgnored private var watchFrom = Date.distantPast
+    /// The screen of the comparison left while its approval was in flight: if that approval comes back refused with the comparison
+    /// kept (the daily check was due), the pairing is rejected instead of staying live with no screen.
+    @ObservationIgnored private var abandoned = false
 
     /// The pending's own window: 10 minutes after the event.
     static let window: TimeInterval = 600
@@ -129,6 +132,7 @@ public final class PairingManager: PairingRepository {
         arrivals = []
         watching = false
         role = .agent
+        abandoned = false
         set(PairingState())
     }
 
@@ -219,6 +223,7 @@ public final class PairingManager: PairingRepository {
             generation += 1
         }
         gen = generation
+        abandoned = false
         timer?.cancel()
         self.role = role
         set(PairingState(stage: .creating, busy: true))
@@ -296,6 +301,7 @@ public final class PairingManager: PairingRepository {
         if state.busy || !p.comparable || p.ends <= now() { return }
         if let s = sessionSeconds, !(Self.sessionMin...Self.sessionMax).contains(s) { return }
         let gen = generation
+        abandoned = false
         arrivals = []
         watching = true
         // What the list shows now, and nothing is read first (the list may never have been loaded: then no guess).
@@ -343,6 +349,15 @@ public final class PairingManager: PairingRepository {
         }
         // The daily check is due: the approval was not sent for it, and the same code may still be compared.
         if e.kind == .ownerCheckRequired, p.ends > now() {
+            if abandoned {
+                // Its screen left meanwhile: the comparison is not kept with nobody to answer it.
+                abandoned = false
+                timer?.cancel()
+                timer = nil
+                set(PairingState())
+                _ = await sendReject(p.pairingID)
+                return
+            }
             set(PairingState(stage: .compare(p), error: e.kind))
             return
         }
@@ -395,7 +410,12 @@ public final class PairingManager: PairingRepository {
         switch s.stage {
         case .code(let c): id = c.pairingID
         case .compare(let p):
-            if s.busy { return }
+            if s.busy {
+                // An approval is in flight: it settles the pairing by its answer (paired: the member tapped Approve), unless it comes
+                // back refused with the comparison kept, which then rejects it (``failed(_:_:_:_:)``).
+                abandoned = true
+                return
+            }
             id = p.pairingID
         // A late handshake of the expired code may still be live: the vault is told this one is not wanted.
         case .codeExpired(let pairingID, _): id = pairingID

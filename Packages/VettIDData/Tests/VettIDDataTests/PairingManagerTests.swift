@@ -1135,6 +1135,82 @@ extension PairingManagerTests {
         #expect(m.state.stage == .idle)
     }
 
+    // MARK: A screen that goes (leave by token)
+
+    /// Back during "Making a pairing code", then the screen released: the answer is rejected and no code is installed.
+    @Test func leavingByTokenWhileTheCodeIsBeingMadeRejectsItsAnswer() async throws {
+        let ops = try ops()
+        let gate = TestDeferred<Void>()
+        ops.holdNext = gate
+        let m = manager(ops)
+        let starting = Task { await m.start(.agent) }
+        #expect(await eventually { ops.held.isCompleted })
+        let token = m.state.token
+        m.leave(token: token)
+        m.leave(token: token)
+        await time.runCurrent()
+        gate.complete(())
+        #expect(await eventually { ops.calls.contains("reject:p1") })
+        await starting.value
+        #expect(m.state == PairingState())
+    }
+
+    /// Back on the comparison, then released: it is rejected, and cannot be approved any more.
+    @Test func leavingByTokenOnTheComparisonRejectsIt() async throws {
+        let ops = try ops()
+        let m = manager(ops)
+        await m.start()
+        m.onEvent(pending())
+        let token = m.state.token
+        m.leave(token: token)
+        #expect(await eventually { ops.calls.contains("reject:p1") })
+        #expect(m.state == PairingState())
+        await m.approve(sessionSeconds: 3600)
+        #expect(!ops.calls.contains { $0.hasPrefix("approve") })
+    }
+
+    /// Cancel while the approval is in flight, and the approval then comes back refused with the daily check due: the comparison is
+    /// not kept with no screen, it is rejected.
+    @Test func anApprovalRefusedForTheDailyCheckAfterItsScreenLeftIsRejected() async throws {
+        let ops = try ops()
+        ops.refuse["approve"] = "owner_check_required"
+        let gate = TestDeferred<Void>()
+        ops.holdApprove = gate
+        let m = manager(ops)
+        await m.start()
+        m.onEvent(pending())
+        let token = m.state.token
+        let approving = Task { await m.approve(sessionSeconds: 3600) }
+        #expect(await eventually { ops.approveEntered.isCompleted })
+        m.leave(token: token)
+        await time.runCurrent()
+        #expect(compared(m) != nil, "the approval in flight settles it by its answer")
+        gate.complete(())
+        await approving.value
+        #expect(await eventually { ops.calls.contains("reject:p1") })
+        #expect(m.state == PairingState())
+    }
+
+    /// The same approval that succeeds is paired: the member tapped Approve.
+    @Test func anApprovalThatSucceedsAfterItsScreenLeftIsPaired() async throws {
+        let ops = try ops()
+        let gate = TestDeferred<Void>()
+        ops.holdApprove = gate
+        let m = manager(ops)
+        await m.start()
+        m.onEvent(pending())
+        let token = m.state.token
+        let approving = Task { await m.approve(sessionSeconds: 3600) }
+        #expect(await eventually { ops.approveEntered.isCompleted })
+        m.leave(token: token)
+        await time.runCurrent()
+        gate.complete(())
+        await time.advance(seconds: 11)
+        await approving.value
+        #expect(paired(m) != nil)
+        #expect(!ops.calls.contains { $0.hasPrefix("reject") })
+    }
+
     // MARK: What the screens rely on (iOS)
 
     /// A lock during the search for the new device's id stops it: the list is never read afterwards (that could open a session and fill

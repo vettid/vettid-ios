@@ -249,9 +249,9 @@ import VettIDDataTesting
 
     // MARK: Review fixes
 
-    /// Done on a live code or a comparison asks the repository to leave, not left to the model going.
+    /// Done on a code being made, a live code or a comparison asks the repository to leave, not left to the model going.
     @Test func doneOnACodeOrAComparisonLeavesTheRepository() async {
-        for stage in [PairingStage.code(PairingCode(pairingID: "p1", link: "L", exp: exp)), .compare(pending)] {
+        for stage in [PairingStage.code(PairingCode(pairingID: "p1", link: "L", exp: exp)), .compare(pending), .creating] {
             let m = vm()
             pairing.state = PairingState(stage: stage)
             await sync(m)
@@ -282,9 +282,10 @@ import VettIDDataTesting
         #expect(!pairing.calls.contains { $0.hasPrefix("approve") })
     }
 
-    /// A screen that saw nothing, or that already ended its pairing, leaves nothing when it is released: a late release never reaches the
-    /// pairing of a newer screen.
-    @Test func aScreenThatSawNothingOrAlreadyEndedLeavesNothingWhenReleased() async {
+    /// A screen that saw no pairing leaves nothing when it is released. One that did always leaves its own pairing then, whatever
+    /// done() or cancel() did (some stages are not ended by them: a code still being made, a comparison with an approval in flight);
+    /// it is idempotent for the repository.
+    @Test func aScreenLeavesItsOwnPairingWhenReleasedAndNothingWhenItSawNone() async {
         var none: PairViewModel? = vm()
         await sync(none!)
         pairing.calls = []
@@ -292,14 +293,20 @@ import VettIDDataTesting
         for _ in 0..<50 { await Task.yield() }
         #expect(pairing.calls.isEmpty)
 
-        var ended: PairViewModel? = vm()
-        pairing.state = PairingState(stage: .code(PairingCode(pairingID: "p1", link: "L", exp: exp)))
-        await sync(ended!)
-        ended!.cancel()
-        pairing.calls = []
-        ended = nil
-        for _ in 0..<50 { await Task.yield() }
-        #expect(pairing.calls.isEmpty, "done or cancel already handled it")
+        for stage in [
+            PairingStage.creating, .code(PairingCode(pairingID: "p1", link: "L", exp: exp)), .compare(pending),
+        ] {
+            var m: PairViewModel? = vm()
+            var s = PairingState(stage: stage)
+            s.token = 5
+            pairing.state = s
+            await sync(m!)
+            m!.done()
+            pairing.calls = []
+            pairing.leftTokens = []
+            m = nil
+            #expect(await eventually { pairing.leftTokens == [5] }, "\(stage)")
+        }
     }
 
     /// The token of what the screen saw is what it leaves and acknowledges with, and the approval names the comparison.
