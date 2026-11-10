@@ -73,6 +73,12 @@ public final class NotificationsViewModel {
     @ObservationIgnored private let approvals: (any ApprovalsRepository)?
     @ObservationIgnored private let items: (any ItemsRepository)?
     @ObservationIgnored private let votes: (any VotesRepository)?
+    @ObservationIgnored private let devices: (@MainActor (_ refresh: Bool) async -> HistoryDevices?)?
+    /// The device ids a read was made for (or is under way): asked again only for an id still unnamed after it.
+    @ObservationIgnored private var devicesAsked: Set<String> = []
+    @ObservationIgnored private var devicesRead = false
+    /// The devices' names for `device.update_needed` (VAULT-MESSAGING 0.87.0 §10.9), read once such an item is listed.
+    private var deviceNames: [String: String] = [:]
     @ObservationIgnored private let work = Work()
     @ObservationIgnored private let follows = TaskBag()
     /// Whether the screen is in view.
@@ -84,20 +90,24 @@ public final class NotificationsViewModel {
     private var local: NotificationsState
 
     /// [archived]: the Archived view. [connections], [approvals], [items] and [votes]: the names, followed as they change; the Vault
-    /// list is read quietly when it has not been read (an `item.revealed` opens its item).
+    /// list is read quietly when it has not been read (an `item.revealed` opens its item). [devices]: the device list
+    /// (History's, read once), asked for only when a `device.update_needed` item is listed.
     public init(
         feed: any FeedRepository, connections: (any ConnectionsRepository)? = nil, approvals: (any ApprovalsRepository)? = nil,
-        items: (any ItemsRepository)? = nil, votes: (any VotesRepository)? = nil, archived: Bool = false
+        items: (any ItemsRepository)? = nil, votes: (any VotesRepository)? = nil, archived: Bool = false,
+        devices: (@MainActor (_ refresh: Bool) async -> HistoryDevices?)? = nil
     ) {
         self.feed = feed
         self.connections = connections
         self.approvals = approvals
         self.items = items
         self.votes = votes
+        self.devices = devices
         local = NotificationsState(archived: archived)
         if feed.load == .notLoaded { refresh() }
         items?.readIfNotLoaded()
         follows.add(follow(self, read: { $0.feed.items }, apply: { m, _ in m.onItems() }))
+        readDevicesIfNeeded()
     }
 
     deinit {
@@ -111,13 +121,42 @@ public final class NotificationsViewModel {
         s.load = feed.load
         s.names = FeedNames(
             connections: connections?.connections ?? [], items: items?.names ?? [:], approvals: approvals?.approvals ?? [],
-            votes: votes?.votes ?? []
+            votes: votes?.votes ?? [], devices: deviceNames
         )
         return s
     }
 
     private func onItems() {
         if inView { markViewed(arrivalsOnly: true) }
+        readDevicesIfNeeded()
+    }
+
+    /// The device list when an item names a device by its id only (`device.update_needed`) and no name is known for it: the
+    /// list as History keeps it the first time, then read afresh at once if it lacks an id (a device paired or renamed
+    /// since), and afresh for any later unnamed id. Once per id; an id still unnamed after a failed read is asked again
+    /// with the next change of the list. [devices] with `refresh` true answers nil when the read fails.
+    private func readDevicesIfNeeded() {
+        guard let devices else { return }
+        let ids = Set(feed.items.filter { $0.kind == "device.update_needed" }.compactMap(\.deviceID))
+        let missing = ids.subtracting(deviceNames.keys).subtracting(devicesAsked)
+        guard !missing.isEmpty else { return }
+        devicesAsked.formUnion(missing)
+        let refresh = devicesRead
+        Task { @MainActor [weak self] in
+            guard let first = await devices(refresh) else {
+                self?.devicesAsked.subtract(missing)
+                return
+            }
+            var names = first.names
+            var failed = false
+            if !refresh, !missing.isSubset(of: names.keys) {
+                if let fresh = await devices(true) { names = fresh.names } else { failed = true }
+            }
+            guard let self else { return }
+            devicesRead = true
+            deviceNames = names
+            if failed { devicesAsked.subtract(missing.subtracting(names.keys)) }
+        }
     }
 
     /// The screen came into view: the unread items that are not urgent are marked read.

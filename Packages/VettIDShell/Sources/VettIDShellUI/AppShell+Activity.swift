@@ -18,8 +18,8 @@ extension AppShell {
         case .notifications(let archived):
             if let feed {
                 NotificationsRoute(
-                    feed: feed, connections: connections, approvals: approvals, items: items, votes: votes, archived: archived,
-                    host: notificationsHost
+                    feed: feed, connections: connections, approvals: approvals, items: items, votes: votes, history: history,
+                    archived: archived, host: notificationsHost
                 )
             }
         case .approval(let key):

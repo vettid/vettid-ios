@@ -419,6 +419,19 @@ public enum HsTypes {
     public static let initType = "hs.init"
     public static let resp = "hs.resp"
     public static let fin = "hs.fin"
+    /// (0.86.0, §6.3.1) The responder's confirmation of a new epoch: body `{}`, session mode under that epoch, durable,
+    /// not a request (never answered).
+    public static let confirm = "hs.confirm"
+}
+
+/// The receiving-side capability names this app advertises to its vault (§10.8, §10.2 `device.features`).
+public enum DeviceFeatures {
+    /// (0.87.0, §6.3.1 "Capability") It runs §6.3.1's responder half toward its vault: `hs.confirm` and the confirmed
+    /// epoch. A device starts no rekey, so the initiator half does not arise.
+    public static let hsConfirm = "hs_confirm"
+    /// What this app advertises, sorted: the inner `features` of every message it deposits to its vault and the
+    /// `device.features` list. `relay_follow` is not implemented, so not advertised (as vettid-vault's `client`).
+    public static let all: [String] = [hsConfirm]
 }
 
 /// Constant-time check that a relay key equals the one on record (§6.3).

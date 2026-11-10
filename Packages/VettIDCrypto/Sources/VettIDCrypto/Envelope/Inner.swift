@@ -18,7 +18,7 @@ public struct InnerError: Equatable, Sendable {
 }
 
 /// The inner plaintext (§5.3). Marshalling writes members in the order v, id, type, ts, seq, re, exp, status, error,
-/// body, exactly as the Go reference does; parsing is strict (unknown members ignored, known members exactly typed,
+/// features, body, exactly as the Go reference does; parsing is strict (unknown members ignored, known members exactly typed,
 /// duplicate names rejected at any depth). Mirrors vettid-android `Inner`.
 public struct Inner: Sendable, CustomStringConvertible {
     public let id: String
@@ -32,6 +32,9 @@ public struct Inner: Sendable, CustomStringConvertible {
     /// Responses: `ok` or `error`.
     public let status: String?
     public let error: InnerError?
+    /// (0.86.0, §5.3, §10.8) The sender's capability names as it advertises them to this recipient: sorted, each once,
+    /// each `[a-z0-9_]{1,32}`, 1 to ``maxFeatures``; nil when the member is absent.
+    public let features: [String]?
     /// The body object's JSON (`{}` when empty).
     public let body: [UInt8]
 
@@ -44,6 +47,8 @@ public struct Inner: Sendable, CustomStringConvertible {
     public static let maxClockSkewFuture: TimeInterval = 5 * 60
     public static let maxDurableAge: TimeInterval = 16 * 86_400
     public static let emptyBody = Array("{}".utf8)
+    /// The bound on the inner `features` list (as `device.features` is bounded, §10.2).
+    public static let maxFeatures = 32
 
     public init(
         id: String,
@@ -54,6 +59,7 @@ public struct Inner: Sendable, CustomStringConvertible {
         exp: Date? = nil,
         status: String? = nil,
         error: InnerError? = nil,
+        features: [String]? = nil,
         body: [UInt8] = Inner.emptyBody
     ) {
         self.id = id
@@ -64,12 +70,28 @@ public struct Inner: Sendable, CustomStringConvertible {
         self.exp = exp
         self.status = status
         self.error = error
+        self.features = features
         self.body = body
     }
 
     /// A copy with [seq] set (sealing in an epoch assigns it).
     public func withSeq(_ seq: UInt64) -> Inner {
-        Inner(id: id, type: type, ts: ts, seq: seq, re: re, exp: exp, status: status, error: error, body: body)
+        Inner(id: id, type: type, ts: ts, seq: seq, re: re, exp: exp, status: status, error: error, features: features, body: body)
+    }
+
+    /// Whether [names] is a well-formed `features` list (§5.3): 1 to ``maxFeatures`` names, in ascending byte order,
+    /// each once, each `[a-z0-9_]{1,32}`.
+    public static func validFeatures(_ names: [String]) -> Bool {
+        guard (1...maxFeatures).contains(names.count) else { return false }
+        for (i, n) in names.enumerated() {
+            let u = Array(n.utf8)
+            guard (1...32).contains(u.count), u.allSatisfy({ c in
+                (UInt8(ascii: "a")...UInt8(ascii: "z")).contains(c) || (UInt8(ascii: "0")...UInt8(ascii: "9")).contains(c)
+                    || c == UInt8(ascii: "_")
+            }) else { return false }
+            if i > 0, !Array(names[i - 1].utf8).lexicographicallyPrecedes(u) { return false }
+        }
+        return true
     }
 
     func validate(_ mode: Mode) throws { // swiftlint:disable:this cyclomatic_complexity
@@ -90,6 +112,7 @@ public struct Inner: Sendable, CustomStringConvertible {
         if let error, !Self.validErrorCode(error.code) || error.message.utf8.count > Self.maxErrorMessageLen {
             throw CryptoError.format("inner error")
         }
+        if let features, !Self.validFeatures(features) { throw CryptoError.format("inner features") }
     }
 
     /// Encodes the inner plaintext as compact JSON.
@@ -110,6 +133,7 @@ public struct Inner: Sendable, CustomStringConvertible {
             if !error.message.isEmpty { eb.string("message", error.message) }
             jb.raw("error", eb.build())
         }
+        if let features { jb.raw("features", JsonBuilder.array(features.map(JsonBuilder.quote))) }
         jb.raw("body", b)
         return jb.bytes()
     }
@@ -166,8 +190,12 @@ public struct Inner: Sendable, CustomStringConvertible {
         let status = try o.optString("status")
         if let status, status.isEmpty { throw CryptoError.format("inner status") }
         let error = try o.optObj("error").map { InnerError(try $0.string("code"), try $0.optString("message") ?? "") }
+        // 0.86.0 (§5.3): a known member, so its form is checked.
+        let features = try o.optArray("features").map { try $0.map { try $0.asString() } }
         let body = try o.obj("body").rawBytes
-        let inner = Inner(id: id, type: type, ts: ts, seq: seq ?? 0, re: re, exp: exp, status: status, error: error, body: body)
+        let inner = Inner(
+            id: id, type: type, ts: ts, seq: seq ?? 0, re: re, exp: exp, status: status, error: error, features: features, body: body
+        )
         try inner.validate(mode)
         return inner
     }

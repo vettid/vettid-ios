@@ -41,7 +41,20 @@ import VettIDTesting
         try await d.handle(try v.seal("device.paired", #"{"device_id":"dev-1","role":"app","vault_id":"\#(v.vaultID)","release":"\#(String(repeating: "a3", count: 48))","release_number":3}"#))
         try await paired.value
         #expect(d.deviceID == "dev-1" && d.paired && d.altState.releaseNumber == 3)
+        try await relay.takeFeatures(v)
         return (d, v)
+    }
+
+    /// After a rekey's verified `hs.fin`: `hs.confirm` (body `{}`, not a request) under the new epoch, then
+    /// `device.features` (VAULT-MESSAGING §6.3.1 "Responder", §10.2).
+    func expectConfirm(_ v: FakeVault, _ epoch: Epoch) async throws {
+        let raw = try await relay.nextDeposit().payload
+        #expect(try Envelope.parse(raw).recipientKid == epoch.recvKid)
+        let c = try v.open(raw)
+        #expect(c.type == "hs.confirm" && c.re == nil && c.exp == nil)
+        #expect(String(bytes: c.body, encoding: .utf8) == "{}")
+        #expect(c.features == ["hs_confirm"])
+        try await relay.takeFeatures(v)
     }
 
     func savedState(_ store: InMemoryDeviceStateStore) throws -> DeviceState {
@@ -149,6 +162,7 @@ import VettIDTesting
         let res = try ini.handleResp(try await relay.nextDeposit().payload, collectSender: d.relayAddr.pk, now: Date())
         v.keyring.activate(res.epoch, now: Date())
         try await d.handle(v.msg(res.fin))
+        try await expectConfirm(v, res.epoch)
         // The device now answers in the new epoch.
         let status = Task { try await d.op("vault.status") }
         let raw = try await relay.nextDeposit().payload
@@ -285,6 +299,7 @@ import VettIDTesting
         #expect(try savedState(store).seen[early.msgID] == nil)
         try await again.handle(v.msg(res.fin))
         #expect(try savedState(store).vault?.awaiting.isEmpty == true)
+        try await expectConfirm(v, res.epoch)
         try await again.handle(early) // the relay's redelivery: same msg_id
         #expect(VaultJSON.string(try await again.awaitEvent("message.new", timeout: 2).object, "text") == "early")
         let status = Task { try await again.op("vault.status") }

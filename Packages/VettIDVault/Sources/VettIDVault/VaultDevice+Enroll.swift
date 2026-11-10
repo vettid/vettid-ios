@@ -118,6 +118,9 @@ extension VaultDevice {
                 st.vault?.tokenExpMs = Self.ms(exp)
             }
             if res.epoch.suite > st.vault?.suite ?? 0 { st.vault?.suite = res.epoch.suite }
+            // A new pairing (enrollment, transfer, recovery) starts with its own epoch confirmed (§6.3.1), as dropPairing.
+            st.vault?.confirmed = nil
+            st.vault?.confirmAtMs = nil
             keyring.activate(res.epoch, now: t)
             return (res, try requireVault())
         }
@@ -284,7 +287,7 @@ extension VaultDevice {
             token: tok, profile: profile, deviceAttest: deviceAttest, apiKey: apiKey, unlockSecret: unlockSecret,
             responderIk: try Base64s.decodeStd(v.ik),
             responderEk: try KemPublicKey.parse(try Base64s.decodeStd(v.kem)), responderRelayKey: try Base64s.decodeStd(v.relayPk),
-            policy: .vaultToDevice, id: id, now: at ?? now()
+            policy: .vaultToDevice, id: id, now: at ?? now(), features: DeviceFeatures.all
         ))
         try refuseSending()
         let claims = (try? Base64s.decodeStd(v.relayPk)).flatMap { try? DepositTokens.verify(depositToken, issuer: $0) }

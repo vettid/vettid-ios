@@ -64,6 +64,8 @@ public enum FeedKinds {
         "critical-secret.use.request", "item.revealed",
         "device.pair.pending", "device.paired", "device.unlinked", "device.transferred", "device.replaced",
         "device.signer_changed", "device.session.pending", "approval.pending",
+        // VAULT-MESSAGING 0.87.0 §10.9, §6.3.1 "An app from before release 29": another device's app lacks `hs_confirm`.
+        "device.update_needed",
         "credential.alarm", "credential.password_failed", "credential.rotated", "credential.reset",
         "owner_check.failed", "owner_check.locked", "owner_check.hold_changed",
         "guide",
@@ -131,8 +133,8 @@ public enum FeedKinds {
             return .shareRule(connectionID: c, ruleID: ref)
         case "item.revealed": return ref.map { .item($0) } ?? .sheet
         // 0.1.53: the device and the list are in Devices & agents; the transfer, the replacement and the signer's notices stay in
-        // Settings → Vault.
-        case "device.paired": return item.deviceID.flatMap { $0.isEmpty ? nil : .device($0) } ?? .deviceList
+        // Settings → Vault. (0.87.0) Another device that needs an update opens its page, as a paired one does.
+        case "device.paired", "device.update_needed": return item.deviceID.flatMap { $0.isEmpty ? nil : .device($0) } ?? .deviceList
         case "device.pair.pending", "device.unlinked": return .deviceList
         case "device.transferred", "device.replaced", "device.signer_changed": return .devices
         case "credential.alarm": return .alarm
