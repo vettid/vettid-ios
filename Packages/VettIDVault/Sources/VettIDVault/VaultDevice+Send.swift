@@ -138,7 +138,10 @@ extension VaultDevice {
             // at once and the next successful save drops it from the file; if the app ends before that, the file's copy is
             // deposited once more. That is harmless: every outbox type is durable and means the same when it arrives again
             // (``outboxTypes``: standing tokens, an `hs.fin`, `hs.confirm`, `device.features`), and the vault takes a repeated
-            // inner id once (VAULT-MESSAGING §8.2). The same holds for the clean-ups below.
+            // inner id once (VAULT-MESSAGING §8.2). The same holds for the removal after a refusal for good below. Known residual:
+            // the removals of `keepOnFailure: false` (a request reported as failed, such as a failed standing-token renewal that
+            // ``enqueueLocked`` had stored) are not so: if their save is swallowed and the app ends before another save, a flush
+            // after the restart deposits the entry that was meant never to go out.
             try? await withLockSaving { st.outbox.removeAll { $0.id == e.id && $0.envelope == e.envelope } }
         } catch let x as RelayError {
             // §8.6: a quota the recipient's mailbox ran out of is not cured by a fresh token; the deposit waits in the

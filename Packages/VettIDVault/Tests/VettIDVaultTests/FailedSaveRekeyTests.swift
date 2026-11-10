@@ -110,7 +110,7 @@ extension VaultDeviceTests {
         #expect(d.mem.withLock { d.st.vault?.confirmed } == f.old.ctx)
         #expect(d.mem.withLock { d.st.vault?.confirmAtMs } == confirmAt)
         #expect(d.mem.withLock { d.awaiting.isEmpty })
-        #expect(outbox(d, "hs.confirm") <= 1 && outbox(d, "device.features") <= 1)
+        #expect(outbox(d, "hs.confirm") == 0 && outbox(d, "device.features") == 0)
         // The redelivery's save succeeded: the disk now holds the activation, and a restart from it agrees.
         let disk = try #require(f.store.state)
         #expect(disk.vault?.confirmed == f.old.ctx && disk.vault?.awaiting.isEmpty == true)
@@ -139,6 +139,24 @@ extension VaultDeviceTests {
         let answer = try await take(f.new)
         #expect(answer.type == "relay.token.refresh" && answer.re != nil)
         #expect(await relay.noDeposit(within: 0.5), "exactly one answer")
+    }
+
+    /// The activation's `hs.confirm` and `device.features` are kept when the handling fails, and they stay in the outbox when
+    /// their deposit fails in transport too: a flush deposits them once the relay and the store work.
+    @Test func theKeptEntriesStayInTheOutboxWhenTheirDepositFails() async throws {
+        let f = try await readyToFail()
+        relay.refuseDeposits = "unavailable" // retryable
+        relay.refuseStatus = 503
+        f.store.arm()
+        await #expect(throws: (any Error).self) { try await f.device.handle(f.fin) }
+        #expect(outbox(f.device, "hs.confirm") == 1 && outbox(f.device, "device.features") == 1)
+        relay.refuseDeposits = nil
+        relay.dropDeposits()
+        f.store.disarm()
+        await f.device.flushOutbox()
+        #expect(try await take(f.new).type == "hs.confirm")
+        #expect(try await take(f.new).type == "device.features")
+        #expect(outbox(f.device, "hs.confirm") == 0 && outbox(f.device, "device.features") == 0)
     }
 
     /// `send` stores its entry before it deposits (`enqueueLocked(save: true)`): while saves fail it throws, deposits nothing,
