@@ -36,10 +36,15 @@ public protocol TransferInBackground: AnyObject {
     var abandonClosed: Bool { get }
 
     func waitForTransferInBackground()
+    /// (VAULT-MESSAGING 0.88.4 §11.14.10 rule 5) Whether [text] is the open transfer's own code, whatever its expiry: the
+    /// screen then hands it to ``MoveRepository/transferIn(code:)`` (which gives the move back) instead of refusing it as
+    /// expired, and never abandons the transfer for it.
+    func isOpenTransferCode(_ text: String) -> Bool
 }
 
 public extension TransferInBackground {
     var transferStartedAt: Date? { nil }
     var abandonClosed: Bool { false }
     func waitForTransferInBackground() {}
+    func isOpenTransferCode(_ text: String) -> Bool { false }
 }

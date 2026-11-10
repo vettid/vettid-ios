@@ -212,6 +212,7 @@ public final class VaultDevice: @unchecked Sendable {
     var collectCutNoticed: TimeInterval?
     var isPaired: Bool
     var sas: String?
+    var sasRestored = true // a saved ``DeviceState/transferSas`` is the store's until a handshake here: shown as it is
     var refusals = 0
     var collector: Task<Void, Never>?
     var collectEnded: String?

@@ -190,6 +190,64 @@ import VettIDDataTesting
         #expect(vm.state.inputProblem == nil)
     }
 
+    /// (VAULT-MESSAGING 0.88.4 §11.14.10 rule 5) The open transfer's own code, expired by now, is not refused as expired:
+    /// it goes to the repository, which gives the move back.
+    @Test func theOpenTransfersExpiredCodeGoesBackToTheMove() async throws {
+        let vm = model()
+        vm.scan()
+        let code = try qr(seconds: 0)
+        vault.openTransferCodes = [code]
+        vm.scanned(code)
+        await clock.runCurrent()
+        #expect(await eventually { vault.lastTransferCode == code && vm.state.step == .compare && vm.state.sas == "042817" })
+        #expect(vm.state.inputProblem == nil)
+    }
+
+    /// Its wait for the `hs.resp` ending on the screen's side never abandons the transfer: this scan did not start it.
+    @Test func theOpenTransfersCodeNeverAbandonsIt() async throws {
+        let hs = TestDeferred<String>()
+        vault.transferHsResp = hs
+        let vm = model()
+        vm.scan()
+        let code = try qr()
+        vault.openTransferCodes = [code]
+        vault.transferStartedAt = clock.now().addingTimeInterval(-30)
+        vm.scanned(code)
+        await clock.advance(seconds: 61)
+        #expect(vm.state.step == .notAnswered && !vault.calls.contains("abandonTransferIn"))
+    }
+
+    /// Decided by what the repository did, not by what the screen thought before: a scan it handled as a new one (it
+    /// wrote a new start) is abandoned as any other when its `hs.resp` never comes.
+    @Test func aScanTheRepositoryStartedAfreshIsAbandonedAsAnyOther() async throws {
+        let hs = TestDeferred<String>()
+        vault.transferHsResp = hs
+        let vm = model()
+        vm.scan()
+        let code = try qr()
+        vault.openTransferCodes = [code]
+        vault.transferStartedAt = clock.now().addingTimeInterval(-30)
+        vault.transferInStartsAt = clock.now()
+        vm.scanned(code)
+        await clock.advance(seconds: 61)
+        #expect(vm.state.step == .notAnswered && vault.calls.contains("abandonTransferIn"))
+    }
+
+    /// Decided by the stored start alone: a scan the repository gave the open transfer back to (the start unchanged) is
+    /// never abandoned, whatever the screen thought of the code before.
+    @Test func aScanGivenTheOpenTransferBackIsNeverAbandoned() async throws {
+        let hs = TestDeferred<String>()
+        vault.transferHsResp = hs
+        let vm = model()
+        vm.scan()
+        vault.openTransferCodes = []
+        vault.transferStartedAt = clock.now().addingTimeInterval(-30)
+        vault.transferInStartsAt = nil
+        vm.scanned(try qr())
+        await clock.advance(seconds: 61)
+        #expect(vm.state.step == .notAnswered && !vault.calls.contains("abandonTransferIn"))
+    }
+
     @Test func aPastedCodeIsCheckedTheSameWay() async throws {
         let vm = model()
         vm.paste()

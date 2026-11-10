@@ -223,6 +223,8 @@ extension VaultDevice {
         mem.withLock {
             handshakeGeneration &+= 1 // an after-lock closure of the dropped handshake shows nothing
             sas = nil
+            st.transferSas = nil
+            sasRestored = false
             ini?.abort()
             ini = nil
             for a in awaiting { a.resp.abort() }

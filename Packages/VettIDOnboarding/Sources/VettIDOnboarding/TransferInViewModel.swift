@@ -88,9 +88,13 @@ public final class TransferInViewModel: TransferInActions {
 
     /// Checks the code locally first: nothing is fetched for a code of another kind or an expired one.
     private func start(_ text: String) {
+        // The open transfer's own code goes to the repository whatever its expiry (VAULT-MESSAGING 0.88.4 §11.14.10 rule 5):
+        // it gives the move back. It expires 10 minutes after the old phone made it, before the transfer ends.
+        let sameCode = move.isOpenTransferCode(text)
+        let startedBefore = move.transferStartedAt
         let problem: FailureKind? = switch InviteLinks.parseTransfer(text, now: now()) {
         case .ok: nil
-        case .expired: .inviteExpired
+        case .expired: sameCode ? nil : .inviteExpired
         case .notATransfer, .invalid: .inviteInvalid
         }
         if let problem {
@@ -107,13 +111,26 @@ public final class TransferInViewModel: TransferInActions {
         // The task holds the model weakly and never across an await, so a dropped model can deinit (and cancel it); and
         // after every await it stops if it was cancelled: Swift cannot interrupt an await, and a repository that returns
         // normally after `cancel()` must not move the state.
+        let scan = Scan(text: text, startedBefore: startedBefore)
         waiter = Task { @MainActor [weak self, move, vault, now, sleep] in
             let scanned = now()
-            guard let sas = await Self.connect(Weak(self), move, sleep, text, from: from) else { return }
+            guard let sas = await Self.connect(Weak(self), move, sleep, scan, from: from) else { return }
             // Counted from the stored start of the `hs.init`, as the manager's deadline is (the scan's moment without it).
             let started = move.transferStartedAt ?? scanned
             await Self.awaitApproval(Weak(self), move, vault, sas: sas, deadline: started.addingTimeInterval(Self.window))
         }
+    }
+
+    /// What was scanned or pasted, and the open transfer's start before it: a scan the repository answered with the
+    /// open transfer (its own code, VAULT-MESSAGING 0.88.4 §11.14.10 rule 5) did not start it, and never abandons it.
+    private struct Scan: Sendable {
+        let text: String
+        /// The stored start of the open transfer when the scan began: a scan the repository handled as a new one writes
+        /// a new start.
+        let startedBefore: Date?
+
+        /// The repository gave an open transfer back rather than start one: the stored start is the one before.
+        func gaveTheMoveBack(now: Date?) -> Bool { startedBefore != nil && now == startedBefore }
     }
 
     /// The model, held weakly (a task's frame must not keep it alive across an await).
@@ -124,12 +141,12 @@ public final class TransferInViewModel: TransferInActions {
 
     /// The SAS, or nil when the step ended (a failure, no `hs.resp` within 60 s, or cancelled; the state says which).
     private static func connect(
-        _ w: Weak, _ move: any MoveRepository, _ sleep: @escaping @Sendable (Duration) async throws -> Void, _ text: String,
+        _ w: Weak, _ move: any MoveRepository, _ sleep: @escaping @Sendable (Duration) async throws -> Void, _ scan: Scan,
         from: TransferInStep
     ) async -> String? {
         let sas: String?
         do {
-            sas = try await sasWithin(move, sleep, text)
+            sas = try await sasWithin(move, sleep, scan.text)
         } catch {
             if !Task.isCancelled { w.model?.connectFailed(from, failure(of: error)) }
             return nil
@@ -139,8 +156,9 @@ public final class TransferInViewModel: TransferInActions {
             // §6.7.1 step 2: stop waiting for hs.resp after 60 s; the handshake state is dropped.
             w.model?.state.step = .notAnswered
             w.model?.state.busy = false
-            // Nothing to drop when it fails.
-            try? await move.abandonTransferIn()
+            // Nothing to drop when it fails; nothing of this scan's own when the repository gave the open transfer back
+            // (0.88.4): decided by what it did (the stored start unchanged), not by what the screen thought before.
+            if !scan.gaveTheMoveBack(now: move.transferStartedAt) { try? await move.abandonTransferIn() }
             return nil
         }
         return sas
