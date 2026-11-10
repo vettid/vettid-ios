@@ -78,7 +78,13 @@ public struct DeviceRoute: View {
         .onAppear { if model == nil { model = DeviceViewModel(id: id, repo: devices) } }
         // The daily check passed or the hold ended: a page the hold left without its device reads again (opened from the feed
         // it has no list screen to do it). The route tells the model, which holds only the id and the repository.
-        .onChange(of: ownerChecks?.ownerCheck?.state == .ok) { _, passed in if passed { model?.ownerCheckPassed() } }
+        .onChange(of: ownerChecks?.ownerCheck) { _, check in if check?.state == .ok { model?.ownerCheckPassed() } }
+        // "<name> was removed" shows for a moment, then the page leaves; the wait ends with the page.
+        .task(id: model?.state.removedDevice?.id) {
+            guard model?.state.removedDevice != nil else { return }
+            try? await Task.sleep(for: .seconds(removedNoticeSeconds))
+            if !Task.isCancelled { model?.removedShown() }
+        }
     }
 
     private var actions: DevicePageActions {
@@ -93,12 +99,6 @@ public struct DeviceRoute: View {
         a.onDismissFailure = { m.dismissFailure() }
         a.onAccessEndedShown = { m.accessEndedShown() }
         a.onRetry = { m.refresh() }
-        a.onRemovedShown = {
-            Task { @MainActor in
-                try? await Task.sleep(for: .seconds(removedNoticeSeconds))
-                m.removedShown()
-            }
-        }
         return a
     }
 }

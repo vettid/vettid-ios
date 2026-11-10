@@ -213,6 +213,37 @@ import VettIDDataTesting
         #expect(m.state.device == nil && m.state.loadError == .ownerCheckRequired && !m.state.gone)
     }
 
+    /// A failed request whose list then reads without the device: the page is gone, it does not keep the copy.
+    @Test func aFailedRequestOnADeviceThatIsGoneLeavesThePage() async {
+        let m = await page("a1")
+        m.askEndAccess()
+        fake.fail["endAccess:a1"] = VaultFailure(.network)
+        m.confirm()
+        fake.devices = fake.devices.filter { $0.id != "a1" } // gone while the request is on its way
+        await m.settle()
+        #expect(m.state.failure == .endAccess && m.state.device == nil && m.state.gone)
+    }
+
+    /// While the notice of a removal shows, the device has no actions: nothing more is sent for it.
+    @Test func aRemovedDeviceHasNoActionsWhileItsNoticeShows() async {
+        let m = await page("a1")
+        m.askRemove()
+        await m.settle()
+        m.confirm()
+        await m.settle()
+        #expect(m.state.removedDevice != nil)
+        let calls = fake.calls.count
+        m.askEndAccess()
+        #expect(m.state.confirm == nil)
+        m.askRemove()
+        await m.settle()
+        #expect(m.state.confirm == nil && !m.state.busy)
+        // confirm() sends nothing either (no confirmation can be open now: the guard in confirm() is defence only).
+        m.confirm()
+        await m.settle()
+        #expect(fake.calls.count == calls)
+    }
+
     /// The end of the hold: a page the hold left without its device reads the list again, whoever opened it; a page that has
     /// its list does not.
     @Test func thePageReadsAgainWhenTheCheckPassesOnlyWithoutAList() async {

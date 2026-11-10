@@ -16,8 +16,6 @@ public struct DevicePageActions {
     public var onDismissFailure: @MainActor () -> Void = {}
     public var onAccessEndedShown: @MainActor () -> Void = {}
     public var onRetry: @MainActor () -> Void = {}
-    /// The "<name> was removed" notice was shown here; the page leaves a moment later.
-    public var onRemovedShown: @MainActor () -> Void = {}
 
     public init() {}
 }
@@ -50,13 +48,13 @@ public struct DevicePageScreen: View {
                 Unavailable(state: state, onRetry: actions.onRetry)
             }
         } overlay: {
-            if let d { pill(d) }
+            // Removed here: nothing more to do with the device while its notice shows.
+            if let d, state.removedDevice == nil { pill(d) }
         }
         .onChange(of: leave, initial: true) { _, leaving in if leaving { actions.onBack() } }
         // A page opened from the feed has no list under it: the removal is told here, once, before the page leaves.
         .deviceToast(
-            state.removedDevice.map { DeviceStrings.devicesRemoved(DeviceTexts.sentenceName($0)) }, bottom: 88,
-            onShown: actions.onRemovedShown
+            state.removedDevice.map { DeviceStrings.devicesRemoved(DeviceTexts.sentenceName($0)) }, bottom: 88
         )
         .deviceToast(state.accessEnded ? DeviceStrings.devicesAccessEnded : nil, bottom: 88, onShown: actions.onAccessEndedShown)
         // One dialog per confirmation, each worded from the device only: its text stays while it closes.
@@ -212,12 +210,12 @@ private struct PageContent: View {
             Text(DeviceTexts.access(d, now: now, calendar: calendar))
                 .vettIDFont(.bodyLarge)
                 .accessibilityIdentifier("access_status")
-            if d.actionable, d.hasAccess(now) {
+            if d.actionable, state.removedDevice == nil, d.hasAccess(now) {
                 SecondaryButton(DeviceStrings.devicesEndAccess, action: actions.onEndAccess)
                     .disabled(state.busy)
                     .padding(.top, Spacing.m)
                     .accessibilityIdentifier("end_access")
-            } else if d.actionable {
+            } else if d.actionable, state.removedDevice == nil {
                 Text(d.isAgent ? DeviceStrings.devicesNoAccessAgent : DeviceStrings.devicesNoAccessDesktop)
                     .vettIDFont(.bodyMedium)
                     .foregroundStyle(colors.onSurfaceVariant)

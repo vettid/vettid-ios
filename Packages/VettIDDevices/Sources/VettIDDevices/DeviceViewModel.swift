@@ -96,7 +96,7 @@ public final class DeviceViewModel {
     }
 
     public func askEndAccess() {
-        guard !local.busy, let d = state.device, d.actionable else { return }
+        guard !local.busy, local.removedDevice == nil, let d = state.device, d.actionable else { return }
         local.confirm = .endAccess
         local.failure = nil
         local.error = nil
@@ -105,7 +105,7 @@ public final class DeviceViewModel {
     /// Asks to remove the device. For an agent the confirmation names how long a service may still accept its permissions,
     /// which the vault is asked for first (the worst case when it cannot be: never a shorter time than true).
     public func askRemove() {
-        guard let d = state.device, !local.busy, d.actionable else { return }
+        guard let d = state.device, !local.busy, local.removedDevice == nil, d.actionable else { return }
         local.busy = true
         local.failure = nil
         local.error = nil
@@ -122,7 +122,7 @@ public final class DeviceViewModel {
     public func dismissConfirm() { local.confirm = nil }
 
     public func confirm() {
-        guard let d = state.device, d.actionable, !local.busy, let what = local.confirm else { return }
+        guard let d = state.device, d.actionable, !local.busy, local.removedDevice == nil, let what = local.confirm else { return }
         local.confirm = nil
         local.busy = true
         let repo = repo
@@ -165,7 +165,7 @@ public final class DeviceViewModel {
 
     public func accessEndedShown() { local.accessEnded = false }
 
-    /// "<name> was removed" was shown: the page leaves.
+    /// The notice's time is over: the page leaves.
     public func removedShown() { local.removed = true }
 
     public func dismissFailure() {

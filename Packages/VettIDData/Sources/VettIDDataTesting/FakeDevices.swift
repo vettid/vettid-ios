@@ -30,6 +30,7 @@ public final class FakeDevices: DevicesRepository {
         if clearsOnFailure.contains(name), fail[name] != nil || failError[name] != nil {
             devices = []
             load = .notLoaded
+            removed = nil
         }
         if let f = fail.removeValue(forKey: name) { throw f }
         if let e = failError.removeValue(forKey: name) { throw e }
