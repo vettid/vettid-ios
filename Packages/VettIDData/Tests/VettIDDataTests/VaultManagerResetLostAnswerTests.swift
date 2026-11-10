@@ -68,6 +68,17 @@ import VettIDVault
         try await expectApplied()
     }
 
+    /// The reset decided as applied without its answer: Vault status is told the key is not known, and asks it again.
+    @Test func aLostResetDecidedAppliedSaysTheKeyIsUnknown() async throws {
+        defer { phone.close() }
+        try await setUp()
+        let before = m.credentialKeyChange?.seq ?? 0
+        service.loseAnswers(["credential.reset"])
+        try await m.newCredential(pin: pin, password: password, newPassword: newPassword)
+        #expect(await eventually { (m.credentialKeyChange?.seq ?? 0) > before })
+        #expect(m.credentialKeyChange?.fingerprint == nil)
+    }
+
     /// From version 2 (the unlock window rotated the CEK): the lower version decides it applied, with the new key.
     @Test func aLostResetIsDecidedByTheLowerVersion() async throws {
         defer { phone.close() }

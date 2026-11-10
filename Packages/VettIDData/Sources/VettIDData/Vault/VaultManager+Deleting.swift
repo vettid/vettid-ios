@@ -151,6 +151,7 @@ extension VaultManager {
         forgetChangeCheck()
         unlockWindow = nil
         alarm = nil
+        credentialKeyChange = nil
         ownerChecks.clear()
         forgetOwnProfile()
         connections.clear()

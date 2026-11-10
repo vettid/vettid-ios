@@ -2924,6 +2924,50 @@
         }
       }
     },
+    "settings_status_credential_key_admins": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "If you are an admin of a service, the other admins may ask you to read this out when you become an admin, or after you reset your credential. It is not a secret."
+          }
+        }
+      }
+    },
+    "settings_status_credential_key_label": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Credential key"
+          }
+        }
+      }
+    },
+    "settings_status_credential_key_none": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Credential key: none yet"
+          }
+        }
+      }
+    },
+    "settings_status_credential_key_unknown": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Credential key: cannot be checked right now."
+          }
+        }
+      }
+    },
     "settings_status_devices": {
       "extractionState": "manual",
       "localizations": {

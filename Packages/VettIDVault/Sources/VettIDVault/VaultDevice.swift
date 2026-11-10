@@ -202,7 +202,7 @@ public final class VaultDevice: @unchecked Sendable {
     let eventBroadcast = Broadcast<VaultMessage>()
     let timeDropBroadcast = Broadcast<String>()
     let ownerCheckBroadcast = Broadcast<String>()
-    let refusalBroadcast = Broadcast<Int>()
+    let refusalBroadcast = Broadcast<Int>(), keyBroadcast = Broadcast<CredentialKeySeen>()
     let sasBroadcast = Broadcast<String>()
     let countedBroadcast = Broadcast<String>()
     let reconnectBroadcast = Broadcast<Int>()

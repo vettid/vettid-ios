@@ -21,7 +21,7 @@ import VettIDUI
             .appendingPathComponent("Sources/VettIDSettingsUI/Resources/Localizable.xcstrings")
         let doc = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
         let keys = try #require((doc["strings"] as? [String: Any])?.keys)
-        #expect(keys.count == 468)
+        #expect(keys.count == 472)
         let missing = "\u{0}missing"
         for key in keys {
             let text = Bundle.module.localizedString(forKey: key, value: missing, table: nil)
@@ -236,6 +236,28 @@ import VettIDUI
         #expect(height(VaultStatusContent(state: LoadState(loading: false, value: v), installedFrom: .apple)) > 0)
     }
 
+    /// The Credential key row (ANDROID-PLAN 0.1.119 §4 "Owner check and status"): vettid-android's texts word for word,
+    /// every state rendered whatever the overview did, and the fingerprint's line for admins only with a fingerprint.
+    @Test func theCredentialKeyRow() {
+        #expect(SettingsStrings.statusCredentialKey == "Credential key")
+        #expect(SettingsStrings.statusCredentialKeyAdmins
+            == "If you are an admin of a service, the other admins may ask you to read this out when you become an admin, "
+            + "or after you reset your credential. It is not a secret.")
+        #expect(SettingsStrings.statusCredentialKeyUnknown == "Credential key: cannot be checked right now.")
+        #expect(SettingsStrings.statusCredentialKeyNone == "Credential key: none yet")
+        #expect(SettingsStrings.retry == "Try again" && TransferStrings.transferCopy == "Copy")
+        let loaded = LoadState(loading: false, value: overview)
+        // The screen fills the window, so its scroll content is what grows.
+        func h(_ ck: CredentialKeyRow?, _ s: LoadState<VaultOverview>? = nil) -> CGFloat {
+            contentHeight(VaultStatusContent(state: s ?? loaded, installedFrom: .apple, credentialKey: ck))
+        }
+        for ck in [CredentialKeyRow.loading, .unknown, .none, .shown("e939 754d 09aa a93a")] {
+            #expect(h(ck) > h(nil), "\(ck)")
+            #expect(h(ck, LoadState(loading: false, error: .network)) > h(nil, LoadState(loading: false, error: .network)), "\(ck)")
+        }
+        #expect(h(.shown("e939 754d 09aa a93a")) > h(.none) + 20, "the line for admins and Copy")
+    }
+
     /// vettid-android `AccountCard`: the address and the membership under the names; without a snapshot, the default.
     @Test func theAccountCard() {
         let member = AccountInfo(
@@ -319,6 +341,17 @@ import VettIDUI
 
     static func release(_ n: UInt64, _ status: String = "active") -> ReleaseView {
         ReleaseView(number: n, pcr0: String(repeating: "a\(n)", count: 48), status: status, endsAt: nil, notes: "https://x/\(n)")
+    }
+
+    /// The content height of the first scroll view of [view], hosted in a phone-sized window (0 without one).
+    private func contentHeight(_ view: some View) -> CGFloat {
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
+        window.rootViewController = UIHostingController(rootView: view.vettIDTheme(.light))
+        window.isHidden = false
+        window.layoutIfNeeded()
+        defer { window.isHidden = true }
+        func views(in v: UIView) -> [UIView] { [v] + v.subviews.flatMap { views(in: $0) } }
+        return views(in: window).compactMap { $0 as? UIScrollView }.first?.contentSize.height ?? 0
     }
 
     private func height(_ view: some View) -> CGFloat {

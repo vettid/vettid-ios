@@ -62,7 +62,7 @@ import VettIDDataTesting
             let m = VaultStatusViewModel(vault: repo)
             gone = m
             for _ in 0..<5 { await Task.yield() }
-            #expect(repo.calls == ["overview"])
+            #expect(Set(repo.calls) == ["overview", "credentialKey"])
         }
         #expect(gone == nil, "the read under way does not keep the model")
         repo.overviewGate?.complete(())

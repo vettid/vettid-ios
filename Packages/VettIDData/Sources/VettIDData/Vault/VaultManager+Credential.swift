@@ -1,4 +1,5 @@
 import Foundation
+import VettIDCrypto
 import VettIDVault
 
 // The credential screen (VAULT-MESSAGING §3.5: status, the unlock window, the password, the backup and the window's
@@ -188,5 +189,14 @@ extension VaultManager {
     /// `pin.change` carries the password and the phone's next secret.
     public func changePin(pin: String, newPin: String) async throws {
         throw VaultFailure(.notSupported, code: ReleasePath.codeReleaseTooOld)
+    }
+
+    /// (VAULT-MESSAGING 0.83.8 §10.8) `credential.version` for Vault status: whether the vault holds a credential, and
+    /// its key's fingerprint as shown. Mirrors vettid-android `VaultManager.credentialKey`.
+    public func credentialKey() async throws -> CredentialKeyAnswer {
+        try await guarded {
+            let info = try await openApi(try await openSession()).credentialVersion()
+            return CredentialKeyAnswer(exists: info.exists, fingerprint: info.key.flatMap(CredentialKeyFingerprint.formatB64))
+        }
     }
 }

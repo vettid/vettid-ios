@@ -1,4 +1,5 @@
 import Foundation
+import VettIDCrypto
 import VettIDVault
 
 // What the vault sends that the unlock and the lock follow (VAULT-MESSAGING §10.1, §11.4, §12): `vault.locking`,
@@ -21,6 +22,7 @@ extension VaultManager {
         let dropped = s.device.droppedForTime()
         observers = [
             followTimeDrops(dropped),
+            followCredentialKeys(s.device.credentialKeyChanges()),
             // (VAULT-MESSAGING 0.73.0 §3.6.5) A reconnect reads the vault's state again while it is probably locked, and the
             // operations that count as failed checks (§3.6.4) spend the owner check's estimate of tries left.
             Task { @MainActor [weak self] in
@@ -55,6 +57,19 @@ extension VaultManager {
                 }
             },
         ]
+    }
+
+    /// Every credential key the vault named in an answer to this phone, for Vault status (``credentialKeyChange``): its
+    /// fingerprint, or "not known" when it named none or one that is not 32 bytes.
+    private func followCredentialKeys(_ keys: AsyncStream<CredentialKeySeen>) -> Task<Void, Never> {
+        Task { @MainActor [weak self] in
+            for await seen in keys {
+                guard let self else { return }
+                credentialKeyChange = CredentialKeyChange(
+                    seq: (credentialKeyChange?.seq ?? 0) + 1, fingerprint: seen.key.flatMap(CredentialKeyFingerprint.formatB64)
+                )
+            }
+        }
     }
 
     /// Notes when the device drops a message for its time (``timeDropAt``).

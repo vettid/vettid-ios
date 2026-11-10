@@ -237,7 +237,7 @@ public final class FakeVaultService: @unchecked Sendable {
     var registerGateValue: FakeHTTPServer.Gate?
     // The rotation, a new credential and the clone alarm (FakeVaultService+Credential.swift), under ``cond``.
     var alarmValue: FakeAlarm?
-    var credentialKeyValue = FakeVaultService.credentialKeyID
+    var credentialKeyValue = FakeVaultService.credentialKeyID, nextCredentialKeyValue: String? // ``nextCredentialKey``
     var rotationsValue: [String] = []
     var resetsValue: [ResetSeen] = []
     /// `credential.version` answers without its `key` (a vault before staging release 18).

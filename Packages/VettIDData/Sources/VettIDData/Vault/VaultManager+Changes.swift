@@ -362,7 +362,11 @@ extension VaultManager {
             guard stillUnresolved(marker, gen) else { return }
         }
         // Decided by the version: its request can no longer apply as anything else.
-        if answer == nil { await api.device.settleCredential(marker.id) }
+        if answer == nil {
+            await api.device.settleCredential(marker.id)
+            // A reset decided as applied replaced the key without its answer: Vault status asks it again (§10.8).
+            if marker.type == .reset { api.device.noteCredentialKey(nil) }
+        }
         confirmApplied(marker, epochAdvanced: answer.map(VaultApi.epochAdvanced) ?? true)
         heldChange = nil
         if marker.type == .reset { resetApplied() }

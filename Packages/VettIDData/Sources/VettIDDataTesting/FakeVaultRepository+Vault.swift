@@ -152,6 +152,18 @@ extension FakeVaultRepository: VaultRepository {
         phase = .locked
     }
 
+    public func credentialKey() async throws -> CredentialKeyAnswer {
+        try call("credentialKey")
+        let answer = credentialKeyAnswer
+        if let credentialKeyGate { try await credentialKeyGate.value() }
+        return answer
+    }
+
+    /// The vault answered a create, rotate or reset whose key has [fingerprint]; nil: it named no key.
+    public func answerWithKey(_ fingerprint: String?) {
+        credentialKeyChange = CredentialKeyChange(seq: (credentialKeyChange?.seq ?? 0) + 1, fingerprint: fingerprint)
+    }
+
     public func overview() async throws -> VaultOverview {
         try call("overview")
         if let overviewGate { try await overviewGate.value() }

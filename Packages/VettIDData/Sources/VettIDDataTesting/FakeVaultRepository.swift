@@ -65,6 +65,12 @@ public final class FakeVaultRepository: CustomStringConvertible {
     public var recoveryValue: RecoveryView?
     /// Set: ``overview()`` waits for it (a status read still under way).
     public var overviewGate: TestDeferred<Void>?
+    /// What the next ``credentialKey()`` answers (`credential.version`); a failure is `fail["credentialKey"]`. The answer
+    /// is the one set when asked, whatever is set before [credentialKeyGate] opens.
+    public var credentialKeyAnswer = CredentialKeyAnswer(exists: true, fingerprint: nil)
+    /// When set, ``credentialKey()`` waits for it (after recording the call), to hold an ask open.
+    public var credentialKeyGate: TestDeferred<Void>?
+    public var credentialKeyChange: CredentialKeyChange?
     /// What ``attestationInfo()`` answers: an Android phone's, by default.
     public var attestationValue = AttestationInfo(
         environment: "test",

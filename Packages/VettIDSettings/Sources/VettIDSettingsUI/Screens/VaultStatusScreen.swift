@@ -1,5 +1,6 @@
 #if os(iOS)
 import SwiftUI
+import UIKit
 import VettIDData
 import VettIDSettings
 import VettIDUI
@@ -16,17 +17,28 @@ public struct VaultStatusContent: View {
     let installedFrom: InstalledFrom
     let retry: @MainActor () -> Void
     let onBack: @MainActor () -> Void
+    let credentialKey: CredentialKeyRow?
+    let retryCredentialKey: @MainActor () -> Void
+    /// nil: ``secureCopy(_:lifetime:pasteboard:)``, the app's secure pasteboard.
+    let copy: (@MainActor (String) -> Void)?
 
+    /// [credentialKey]: the Credential key row (nil: not shown); [copy]: its Copy (local to this phone, and expiring).
     public init(
         state: LoadState<VaultOverview>,
         installedFrom: InstalledFrom,
         retry: @escaping @MainActor () -> Void = {},
-        onBack: @escaping @MainActor () -> Void = {}
+        onBack: @escaping @MainActor () -> Void = {},
+        credentialKey: CredentialKeyRow? = nil,
+        retryCredentialKey: @escaping @MainActor () -> Void = {},
+        copy: (@MainActor (String) -> Void)? = nil
     ) {
         self.state = state
         self.installedFrom = installedFrom
         self.retry = retry
         self.onBack = onBack
+        self.credentialKey = credentialKey
+        self.retryCredentialKey = retryCredentialKey
+        self.copy = copy
     }
 
     public var body: some View {
@@ -41,6 +53,8 @@ public struct VaultStatusContent: View {
                     } else {
                         LoadFailure(error: state.error ?? .other, retry: retry)
                     }
+                    // Whatever the overview did (loading, failed, loaded): the key is asked on its own.
+                    if let credentialKey { credentialKeyRow(credentialKey) }
                 }
             }
         }
@@ -88,6 +102,73 @@ public struct VaultStatusContent: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, Spacing.gutter + Spacing.xs)
             .padding(.vertical, Spacing.l)
+    }
+
+    /// The Credential key row (ANDROID-PLAN 0.1.119 §4 "Owner check and status"): the fingerprint with the line for admins
+    /// and Copy; a progress line while it is asked; "cannot be checked right now" with Try again; "none yet". Never blank.
+    @ViewBuilder private func credentialKeyRow(_ ck: CredentialKeyRow) -> some View {
+        SettingsGroup {
+            switch ck {
+            case .loading:
+                credentialKeyInfo(ck).accessibilityIdentifier("credential_key_loading")
+            case .none:
+                credentialKeyInfo(ck).accessibilityIdentifier("credential_key_none")
+            case .unknown:
+                credentialKeyInfo(ck).accessibilityIdentifier("credential_key_unknown")
+                SettingsDivider()
+                Button(SettingsStrings.retry) { retryCredentialKey() }
+                    .padding(Spacing.gutter)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .accessibilityIdentifier("credential_key_retry")
+            case .shown:
+                credentialKeyInfo(ck).accessibilityIdentifier("credential_key")
+                Text(SettingsStrings.statusCredentialKeyAdmins)
+                    .vettIDFont(.bodySmall)
+                    .foregroundStyle(colors.onSurfaceVariant)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, Spacing.gutter)
+                    .padding(.bottom, Spacing.s)
+                SettingsDivider()
+                Button(TransferStrings.transferCopy) { copyCredentialKey(ck) }
+                    .padding(Spacing.gutter)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .accessibilityIdentifier("credential_key_copy")
+            }
+        }
+    }
+
+    private func credentialKeyInfo(_ ck: CredentialKeyRow) -> SettingsInfoRow {
+        let line = Self.credentialKeyLine(ck)
+        return SettingsInfoRow(line.label, value: line.value, icon: .key, code: line.code)
+    }
+
+    /// What the Credential key row says: its label, its value, and whether the value is a code (monospaced).
+    struct CredentialKeyLine: Equatable {
+        let label: String
+        let value: String
+        let code: Bool
+    }
+
+    static func credentialKeyLine(_ ck: CredentialKeyRow) -> CredentialKeyLine {
+        switch ck {
+        case .loading: CredentialKeyLine(label: SettingsStrings.statusCredentialKey, value: SettingsStrings.loading, code: false)
+        case .none: CredentialKeyLine(label: SettingsStrings.statusCredentialKeyNone, value: "", code: false)
+        case .unknown: CredentialKeyLine(label: SettingsStrings.statusCredentialKeyUnknown, value: "", code: false)
+        case .shown(let fp): CredentialKeyLine(label: SettingsStrings.statusCredentialKey, value: fp, code: true)
+        }
+    }
+
+    /// The default Copy: the app's secure pasteboard, local to this phone and expiring ([pasteboard]: tests give a named one).
+    static func secureCopy(
+        _ text: String, lifetime: TimeInterval = SecurePasteboard.defaultLifetime, pasteboard: UIPasteboard = .general
+    ) {
+        SecurePasteboard.copy(text, lifetime: lifetime, pasteboard: pasteboard)
+    }
+
+    /// Copy: the fingerprint shown, through [copy]; nothing when none is shown.
+    func copyCredentialKey(_ ck: CredentialKeyRow) {
+        guard case .shown(let fp) = ck else { return }
+        if let copy { copy(fp) } else { Self.secureCopy(fp) }
     }
 
     /// The counter unavailable for a day (STAGING-TIME-SCALE 0.1.1 S8, S7): the clock's period as it started and the quiet

@@ -89,8 +89,11 @@ import VettIDVault
         defer { phone.close() }
         try await setUp()
         service.loseAnswers(["pin.change"])
+        let key = m.credentialKeyChange
         try await m.changePin(pin: pin, newPin: newPin, password: password)
         try expectApplied(.pin)
+        for _ in 0..<50 { await Task.yield() }
+        #expect(m.credentialKeyChange == key, "a PIN change keeps the key: Vault status is not told otherwise")
         #expect(service.requestsSeen.contains("credential.get") && service.pinFailureCount == 0 && service.pinChanges.count == 1)
         #expect(m.heldChange == nil && m.pinChangeOperation == nil)
         try await m.lock()
