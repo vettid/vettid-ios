@@ -249,6 +249,36 @@ import VettIDDataTesting
 
     // MARK: Leaving (iOS)
 
+    /// Leaving an expired code by Back tells the vault (the code may still be answered for a minute): it is rejected first, never
+    /// acknowledged away before that.
+    @Test func leavingAnExpiredCodeRejectsItBeforeAnythingIsAcknowledged() async {
+        let m = vm()
+        pairing.state = PairingState(stage: .codeExpired(pairingID: "p1", exp: exp))
+        await sync(m)
+        pairing.calls = []
+        m.done()
+        #expect(pairing.calls == ["leave"])
+        var other: PairViewModel? = vm(held: true)
+        await sync(other!)
+        pairing.calls = []
+        other = nil
+        #expect(await eventually { pairing.calls == ["leave"] })
+    }
+
+    /// A pairing that succeeded, or was rejected or ended, is only read: nothing is rejected.
+    @Test func readingAFinalStageRejectsNothing() async {
+        for stage in [
+            PairingStage.paired(name: "Claude", deviceID: "a1"), .rejected(told: true), .ended,
+        ] {
+            let m = vm()
+            pairing.state = PairingState(stage: stage)
+            await sync(m)
+            pairing.calls = []
+            m.done()
+            #expect(pairing.calls == ["acknowledge"], "\(stage)")
+        }
+    }
+
     /// The screen going, however it goes, rejects a pairing not approved: an abandoned pairing grants nothing (vettid-android's
     /// `onCleared`).
     @Test func theScreenGoingLeavesAndAcknowledgesTheRepository() async {

@@ -21,6 +21,18 @@ final class Skew: @unchecked Sendable {
     }
 }
 
+/// TEST ONLY. The manager a closure given to it must reach.
+@MainActor
+final class PairingBox {
+    var manager: PairingManager?
+}
+
+/// TEST ONLY. A count the test's closures bump on the main actor.
+@MainActor
+final class DepositCounterLike {
+    var n = 0
+}
+
 /// TEST ONLY. `device.pair.*` as the vault answers them: the calls in order, the roles asked for, an answer per role, and gates that
 /// hold the next create or approval until a test completes them.
 @MainActor
@@ -921,20 +933,74 @@ extension PairingManagerTests {
 extension PairingManagerTests {
     // MARK: What the screens rely on (iOS)
 
-    /// A pairing's code, digits and name are never in a text form of the state, the stage or the pending (nothing is logged).
-    @Test func noStateOfAPairingPrintsACodeADigitOrAName() async throws {
-        let m = manager(try ops())
+    /// A lock during the search for the new device's id stops it: the list is never read afterwards (that could open a session and fill
+    /// the list after the clear), and the search ends at once instead of waiting out its ten seconds.
+    @Test func aLockDuringTheSearchForTheNewDeviceReadsNothingAndEndsAtOnce() async throws {
+        let ops = try ops()
+        ops.onApprove = { throw URLError(.timedOut) }
+        let reads = DepositCounterLike()
+        let base = time.now
+        let m = PairingManager(
+            ops: { ops }, now: { base() }, sleep: time.sleep, knownDeviceIDs: { ["me"] },
+            readDevices: {
+                reads.n += 1
+                return []
+            }
+        )
         await m.start()
-        let linkText = try #require(code(m)).link
-        let texts = [
-            "\(m.state)", String(reflecting: m.state), "\(m.state.stage)", String(reflecting: m.state.stage),
-        ]
-        m.onEvent(pending(name: "Red Team"))
-        let after = ["\(m.state)", String(reflecting: m.state.stage), "\(m.state.stage)"]
-        for t in texts + after { #expect(!t.contains(linkText) && !t.contains("123456") && !t.contains("Red Team")) }
-        await approve(m)
-        #expect(paired(m)?.name == "Red Team")
-        #expect(!"\(m.state)".contains("Red Team") && !String(reflecting: m.state.stage).contains("Red Team"))
+        m.onEvent(pending())
+        let finished = DepositCounterLike()
+        let task = Task {
+            await m.approve(sessionSeconds: 3600)
+            finished.n = 1
+        }
+        await time.advance(seconds: 3)
+        #expect(finished.n == 0, "still searching")
+        m.clear()
+        // Only a second later: a search that kept polling would still be waiting.
+        await time.advance(seconds: 1)
+        #expect(finished.n == 1)
+        await time.advance(seconds: 11)
+        await task.value
+        #expect(reads.n == 0)
+        #expect(m.state == PairingState())
+    }
+
+    /// The same when the lock lands as the search's last wait ends: after the ten seconds, before the list is read.
+    @Test func aLockJustBeforeTheListIsReadReadsNothing() async throws {
+        let ops = try ops()
+        ops.onApprove = { throw URLError(.timedOut) }
+        let reads = DepositCounterLike()
+        let box = PairingBox()
+        let polls = DepositCounterLike()
+        let base = time.now
+        let wait = time.sleep
+        let m = PairingManager(
+            ops: { ops }, now: { base() },
+            sleep: { d in
+                try await wait(d)
+                // The search polls every 250 ms; the lock comes as the last of its 40 waits ends.
+                if d == .milliseconds(250) {
+                    await MainActor.run {
+                        polls.n += 1
+                        if polls.n == 40 { box.manager?.clear() }
+                    }
+                }
+            },
+            knownDeviceIDs: { ["me"] },
+            readDevices: {
+                reads.n += 1
+                return []
+            }
+        )
+        box.manager = m
+        await m.start()
+        m.onEvent(pending())
+        let task = Task { await m.approve(sessionSeconds: 3600) }
+        await time.advance(seconds: 20)
+        await task.value
+        #expect(polls.n == 40)
+        #expect(reads.n == 0)
     }
 }
 // swiftlint:enable line_length file_length

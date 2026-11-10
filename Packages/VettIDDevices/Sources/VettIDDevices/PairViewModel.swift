@@ -98,10 +98,7 @@ public final class PairViewModel {
         follows.cancelAll()
         // The screen is gone: a code not used or a comparison not answered is rejected (best effort), never kept.
         let repo = repo
-        Task { @MainActor in
-            repo.leave()
-            repo.acknowledge()
-        }
+        Task { @MainActor in Self.finish(repo, leaving: true) }
     }
 
     /// What a new code is made for: the button's role, or for a held screen the role of what it last showed.
@@ -190,6 +187,19 @@ public final class PairViewModel {
     public func done() {
         closing = true
         recompute()
+        Self.finish(repo, leaving: false)
+    }
+
+    /// The screen's end. A code that expired is still taken for a late answer for a minute, and the vault is told it is not wanted:
+    /// that rejection (``PairingRepository/leave()``) is asked for before anything else, since acknowledging first would leave nothing
+    /// held to reject. A pairing that was approved, rejected or ended is never rejected (nothing is held then: ``PairingRepository/leave()`` does nothing
+    /// for it); a comparison or a live code is rejected when [leaving] (the model going), by the repository.
+    private static func finish(_ repo: any PairingRepository, leaving: Bool) {
+        if case .codeExpired = repo.state.stage {
+            repo.leave()
+            return
+        }
+        if leaving { repo.leave() }
         repo.acknowledge()
     }
 

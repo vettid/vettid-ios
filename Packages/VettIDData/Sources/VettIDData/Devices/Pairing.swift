@@ -458,7 +458,7 @@ public final class PairingManager: PairingRepository {
         timer = nil
         set(PairingState(stage: .paired(name: p.name, deviceID: nil)))
         onPaired()
-        let id = await findDevice(p, forRole)
+        let id = await findDevice(p, forRole, gen)
         if gen == generation, case .paired = state.stage { set(PairingState(stage: .paired(name: p.name, deviceID: id))) }
     }
 
@@ -466,7 +466,7 @@ public final class PairingManager: PairingRepository {
         // No answer at all: the vault may have taken the approval (also a connection lost on the way: ``FailureKind/offline`` is
         // this phone's own kind, chosen; not in the spec). Look for the new device before saying anything.
         let unknown = e.kind == .network || e.kind == .offline || e.kind == .noResponse
-        let found = unknown ? await findDevice(p, forRole) : nil
+        let found = unknown ? await findDevice(p, forRole, gen) : nil
         watching = false
         if gen != generation { return }
         if let found {
@@ -491,16 +491,19 @@ public final class PairingManager: PairingRepository {
     /// The new device's `device_id` (ANDROID-PLAN 0.1.53 AA2 step 4): from the `device.paired` feed item, else within ``idWait``
     /// from the list, the one entry of the role that was not listed before and carries the compared name. Nil when none or more
     /// than one fits: the list opens instead.
-    private func findDevice(_ p: PendingPairing, _ forRole: PairRole) async -> String? {
+    private func findDevice(_ p: PendingPairing, _ forRole: PairRole, _ gen: Int) async -> String? {
+        // A lock, a hold or a wipe came meanwhile: nothing is searched any more, and the list is not read (that could open a session
+        // and fill the list after it was cleared).
         var waited = 0
         while waited < Int(Self.idWait * 1000) {
+            if gen != generation { return nil }
             if arrivals.count == 1 { return arrivals[0] }
             try? await sleep(.milliseconds(Self.pollMs))
             waited += Self.pollMs
         }
         if arrivals.count == 1 { return arrivals[0] }
         if arrivals.count > 1 { return nil }
-        guard let known = baseline else { return nil }
+        guard gen == generation, let known = baseline else { return nil }
         let list: [DeviceInfo]
         do { list = try await readDevices() } catch { return nil }
         let fits = list.filter { forRole.matches($0) && !known.contains($0.id) && $0.name == p.name }
