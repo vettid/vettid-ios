@@ -291,7 +291,11 @@ private struct ExportSaveStep: View {
                     exporting = false
                     actions.onSaveFailed()
                 },
-                onClosed: { exporting = false }
+                onClosed: { exporting = false },
+                onLocked: {
+                    exporting = false
+                    actions.onSaved(false)
+                }
             )
         )
     }

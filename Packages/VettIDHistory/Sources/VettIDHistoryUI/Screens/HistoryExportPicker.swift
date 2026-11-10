@@ -18,6 +18,8 @@ struct HistoryExportPicker: UIViewControllerRepresentable {
     /// The picker was closed and its file removed without an answer (the app went to the background): the export stays, and
     /// "Choose where to save" again opens a new picker.
     let onClosed: @MainActor () -> Void
+    /// The phone locked: the export ends (the member needs the PIN and a fresh read).
+    let onLocked: @MainActor () -> Void
 
     func makeCoordinator() -> HistoryExportCoordinator { HistoryExportCoordinator() }
 
@@ -33,6 +35,7 @@ struct HistoryExportPicker: UIViewControllerRepresentable {
         c.onAnswered = onAnswered
         c.onFailed = onFailed
         c.onClosed = onClosed
+        c.onLocked = onLocked
         c.update(file, host: host)
     }
 
@@ -46,6 +49,7 @@ final class HistoryExportCoordinator: NSObject, UIDocumentPickerDelegate, UIAdap
     var onAnswered: @MainActor (Bool) -> Void = { _ in }
     var onFailed: @MainActor () -> Void = {}
     var onClosed: @MainActor () -> Void = {}
+    var onLocked: @MainActor () -> Void = {}
     /// The temporary file while the picker is up.
     private(set) var temp: HistoryExportTempFile?
     /// Held while the file is, so that it is not released before it is presented.
@@ -56,11 +60,23 @@ final class HistoryExportCoordinator: NSObject, UIDocumentPickerDelegate, UIAdap
     /// without a file starts the next one. Updates that still carry it after an answer or a failure (the failure is told
     /// after a hop) open nothing again.
     private var taken = false
+    /// Whether the app is in the background (tests replace it). A picker is never made or presented there: a read that ends
+    /// inside the background task must not write the plaintext file after the background close, and no second
+    /// background notification comes.
+    var inBackground: @MainActor () -> Bool = { UIApplication.shared.applicationState == .background }
+    /// A picker the system did not take away while it was being presented: dismissed again on return to the foreground.
+    private weak var leaving: UIViewController?
 
     override init() {
         super.init()
         NotificationCenter.default.addObserver(
             self, selector: #selector(didEnterBackground), name: UIApplication.didEnterBackgroundNotification, object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(willEnterForeground), name: UIApplication.willEnterForegroundNotification, object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(didLock), name: UIApplication.protectedDataWillBecomeUnavailableNotification, object: nil
         )
     }
 
@@ -74,6 +90,11 @@ final class HistoryExportCoordinator: NSObject, UIDocumentPickerDelegate, UIAdap
             return
         }
         guard !taken else { return }
+        // In the background nothing is written or presented; `taken` stays false, so the next offer opens normally.
+        if inBackground() {
+            refuseInBackground()
+            return
+        }
         taken = true
         let t: HistoryExportTempFile
         do {
@@ -112,6 +133,10 @@ final class HistoryExportCoordinator: NSObject, UIDocumentPickerDelegate, UIAdap
         _ picker: UIDocumentPickerViewController, for t: HistoryExportTempFile, from host: UIViewController?, triesLeft: Int
     ) {
         guard self.picker === picker, temp?.url == t.url else { return }
+        if inBackground() {
+            refuseInBackground()
+            return
+        }
         guard let presenter = host.map(Self.topmost), presenter.viewIfLoaded?.window != nil else {
             fail()
             return
@@ -155,9 +180,24 @@ final class HistoryExportCoordinator: NSObject, UIDocumentPickerDelegate, UIAdap
 
     /// The picker is gone without an answer (the screen left, or the file was taken away): the file goes.
     func close() {
-        picker?.presentingViewController?.dismiss(animated: false)
+        let closing = picker
         picker = nil
         removeTemp()
+        dismiss(closing)
+    }
+
+    /// Dismisses [closing] itself (not only what is over it), after the file is gone and the picker is no longer current,
+    /// so a cancel the dismissal reports on the spot answers nothing.
+    private func dismiss(_ closing: UIDocumentPickerViewController?) {
+        guard let closing else { return }
+        closing.presentingViewController?.dismiss(animated: false)
+        leaving = closing
+    }
+
+    /// Back in the foreground: a picker UIKit did not dismiss mid-presentation is dismissed again.
+    @objc func willEnterForeground() {
+        if let leaving, leaving.presentingViewController != nil { leaving.presentingViewController?.dismiss(animated: false) }
+        leaving = nil
     }
 
     func leave() {
@@ -187,13 +227,27 @@ final class HistoryExportCoordinator: NSObject, UIDocumentPickerDelegate, UIAdap
     }
 
     /// The app went to the background: the picker closes and its file goes, but the export stays (``onClosed``), so the
-    /// member taps "Choose where to save" again on return without a second export. The app lock does not close it
-    /// (`vettIDLocked` closes nothing): the file stays through the lock window, unreadable while the phone is locked
-    /// (complete protection), and the background close covers the rest.
+    /// member taps "Choose where to save" again on return without a second export. (The app lock engages around a
+    /// background transition, so this covers it; the inactive states, such as Control Center or a call banner, keep the
+    /// file by design.)
     @objc func didEnterBackground() {
         guard picker != nil else { return }
         close()
         onClosed()
+    }
+
+    /// The phone locked: the picker and its file go, and the export ends whether or not a picker was up (a kept export
+    /// too): after a lock the member needs the PIN and a fresh read.
+    @objc func didLock() {
+        close()
+        onLocked()
+    }
+
+    /// In the background an offered file is refused: nothing was written (or the file goes), the export stays, and nothing
+    /// reopens until the member taps.
+    private func refuseInBackground() {
+        close()
+        DispatchQueue.main.async { [weak self] in self?.onClosed() }
     }
 
     /// The member's answer, told once for the picker that is up: its file goes first.

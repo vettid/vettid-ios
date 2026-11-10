@@ -369,6 +369,69 @@ import VettIDData
         #expect(entries(root).isEmpty)
     }
 
+    /// In the background nothing is written or presented: an offer there leaves no entry, makes no picker, and tells the screen
+    /// the close (the export stays); an offer that turned background between the update and the presentation removes its file.
+    /// Back in the foreground the same file opens again.
+    @Test func nothingIsWrittenOrPresentedInTheBackground() async throws {
+        let root = try scratch()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let host = windowed(UIViewController()).rootViewController ?? UIViewController()
+        let c = HistoryExportCoordinator()
+        c.root = root
+        var closed = 0, failed = 0, answers = 0, presented = 0
+        c.onClosed = { closed += 1 }
+        c.onFailed = { failed += 1 }
+        c.onAnswered = { _ in answers += 1 }
+        c.presentPicker = { _, _ in presented += 1 }
+        c.inBackground = { true }
+        c.update(file, host: host)
+        #expect(entries(root).isEmpty && c.picker == nil && c.temp == nil, "no file")
+        try await Task.sleep(for: .seconds(0.1))
+        #expect(closed == 1 && failed == 0 && answers == 0 && presented == 0)
+        // The offer is not taken up: the next one, in the foreground, opens normally.
+        c.inBackground = { false }
+        c.update(file, host: host)
+        #expect(entries(root).count == 1 && c.picker != nil)
+        // Turned background before the presentation: the file goes, nothing is presented.
+        c.inBackground = { true }
+        try await Task.sleep(for: .seconds(0.2))
+        #expect(entries(root).isEmpty && presented == 0 && closed == 2 && failed == 0)
+        c.leave()
+    }
+
+    /// The phone locking ends the export, with or without a picker up: the file goes and the screen is told.
+    @Test func aLockEndsTheExportWithOrWithoutAPicker() throws {
+        let root = try scratch()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let c = HistoryExportCoordinator()
+        c.root = root
+        var locked = 0, answers: [Bool] = []
+        c.onLocked = { locked += 1 }
+        c.onAnswered = { answers.append($0) }
+        c.didLock()
+        #expect(locked == 1, "a kept export (no picker) ends too")
+        c.update(file, host: UIViewController())
+        #expect(entries(root).count == 1)
+        c.didLock()
+        #expect(locked == 2 && entries(root).isEmpty && c.picker == nil && answers.isEmpty)
+        c.update(nil, host: UIViewController())
+    }
+
+    /// The system's lock notification reaches the coordinator; a background close alone does not end the export.
+    @Test func theLockNotificationIsWiredToTheCoordinator() throws {
+        let root = try scratch()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let c = HistoryExportCoordinator()
+        c.root = root
+        var locked = 0
+        c.onLocked = { locked += 1 }
+        c.update(file, host: UIViewController())
+        c.didEnterBackground()
+        #expect(locked == 0, "no lock, the export stays")
+        NotificationCenter.default.post(name: UIApplication.protectedDataWillBecomeUnavailableNotification, object: nil)
+        #expect(locked == 1)
+    }
+
     /// The notification itself reaches the coordinator.
     @Test func theBackgroundNotificationIsWiredToTheCoordinator() throws {
         let root = try scratch()
