@@ -1261,6 +1261,65 @@ extension PairingManagerTests {
         #expect(m.state.stage == .idle)
     }
 
+    /// Screen S approves and goes Back (its approval still in flight); another screen then shows the same comparison. If the approval is
+    /// refused for the daily check, the comparison is kept for the new owner, not rejected.
+    @Test func aTakeoverOfAnAbandonedComparisonKeepsItWhenTheApprovalIsRefused() async throws {
+        for viaStart in [false, true] {
+            let ops = try self.ops()
+            ops.refuse["approve"] = "owner_check_required"
+            let gate = TestDeferred<Void>()
+            ops.holdApprove = gate
+            let m = manager(ops)
+            await m.start(.agent, owner: 1)
+            m.onEvent(pending())
+            let token = m.state.token
+            let approving = Task { await m.approve(sessionSeconds: 3600) }
+            #expect(await eventually { ops.approveEntered.isCompleted })
+            m.leave(token: token, owner: 1)
+            await time.runCurrent()
+            if viaStart { await m.start(.agent, owner: 2) } else { m.claim(owner: 2) }
+            gate.complete(())
+            await approving.value
+            #expect(compared(m) != nil, "viaStart \(viaStart)")
+            #expect(m.state.error == .ownerCheckRequired)
+            #expect(!ops.calls.contains { $0.hasPrefix("reject") })
+        }
+    }
+
+    /// A screen that left before its first state (no token) still ends what it started: the owner alone decides; another owner's does
+    /// nothing.
+    @Test func aLeaveWithNoTokenEndsWhatItsOwnerStarted() async throws {
+        let ops = try ops()
+        let gate = TestDeferred<Void>()
+        ops.holdNext = gate
+        let m = manager(ops)
+        let starting = Task { await m.start(.agent, owner: 1) }
+        #expect(await eventually { ops.held.isCompleted })
+        m.leave(token: nil, owner: 2)
+        await time.runCurrent()
+        #expect(m.state.stage == .creating, "another owner's leave does nothing")
+        m.leave(token: nil, owner: 1)
+        await time.runCurrent()
+        gate.complete(())
+        #expect(await eventually { ops.calls.contains("reject:p1") })
+        await starting.value
+        #expect(m.state == PairingState())
+    }
+
+    /// A screen's start-up acknowledge leaves an expired code alone (it may still be answered for a minute); the next start rejects it.
+    @Test func anAcknowledgeLeavesAnExpiredCodeAndTheNextStartRejectsIt() async throws {
+        let ops = try ops()
+        let m = manager(ops)
+        await m.start(.agent, owner: 1)
+        await time.advance(seconds: 601)
+        m.acknowledge()
+        guard case .codeExpired = m.state.stage else { Issue.record("cleared"); return }
+        ops.created = try created("p2")
+        await m.start(.agent, owner: 2)
+        #expect(code(m)?.pairingID == "p2")
+        #expect(await eventually { ops.calls.contains("reject:p1") })
+    }
+
     /// The same when the new screen starts: it keeps the code already shown (the same role) and owns it from then on.
     @Test func aStartThatKeepsTheShownCodeHandsItToTheNewScreen() async throws {
         let ops = try ops()

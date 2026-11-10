@@ -96,7 +96,8 @@ import VettIDDataTesting
         #expect(m.state.copied)
         m.newCode()
         await sync(m)
-        #expect(pairing.calls == ["acknowledge", "start"])
+        // An expired code is not acknowledged away first: the repository's start rejects it.
+        #expect(pairing.calls == ["start"])
         #expect(!m.state.copied)
     }
 
@@ -179,9 +180,10 @@ import VettIDDataTesting
         #expect(pairing.state.role == .desktop)
         pairing.calls = []
         pairing.state = PairingState(stage: .codeExpired(pairingID: "p1", exp: exp), role: .desktop)
+        await sync(m)
         m.newCode()
         await sync(m)
-        #expect(pairing.calls == ["acknowledge", "start:desktop"])
+        #expect(pairing.calls == ["start:desktop"])
     }
 
     @Test func aPairingHeldForTheOtherRoleIsReplacedByTheRepositoryInOneCall() async {
@@ -282,16 +284,17 @@ import VettIDDataTesting
         #expect(!pairing.calls.contains { $0.hasPrefix("approve") })
     }
 
-    /// A screen that saw no pairing leaves nothing when it is released. One that did always leaves its own pairing then, whatever
+    /// A screen released before it saw any state leaves by its owner alone; one that did always leaves its own pairing, whatever
     /// done() or cancel() did (some stages are not ended by them: a code still being made, a comparison with an approval in flight);
     /// it is idempotent for the repository.
-    @Test func aScreenLeavesItsOwnPairingWhenReleasedAndNothingWhenItSawNone() async {
+    @Test func aScreenReleasedBeforeItsFirstStateStillEndsWhatItStarted() async {
+        // Released before its first state, it still ends what it started: by its owner alone.
         var none: PairViewModel? = vm()
-        await sync(none!)
-        pairing.calls = []
         none = nil
-        for _ in 0..<50 { await Task.yield() }
-        #expect(pairing.calls.isEmpty)
+        #expect(await eventually { pairing.leftOwners.count == 1 })
+        #expect(pairing.leftTokens == [nil])
+        pairing.leftOwners = []
+        pairing.leftTokens = []
 
         for stage in [
             PairingStage.creating, .code(PairingCode(pairingID: "p1", link: "L", exp: exp)), .compare(pending),

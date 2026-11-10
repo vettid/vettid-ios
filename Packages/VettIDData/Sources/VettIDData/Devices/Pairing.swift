@@ -49,11 +49,12 @@ public protocol PairingRepository: AnyObject, Observable, Sendable {
 
     /// The screen of [owner] left (Back, Cancel, or the screen released) without an answer: a pairing not approved is rejected, and
     /// nothing is held. Only while that screen still owns the pairing of [token] (``PairingState/token``): a late leave of an old
-    /// screen never reaches a newer screen's pairing, and a pairing is ended by its owner only.
-    func leave(token: Int, owner: Int)
+    /// screen never reaches a newer screen's pairing, and a pairing is ended by its owner only. A screen that saw no state yet
+    /// ([token] nil: it left before its first one) still ends what it started or took over: the owner alone decides then.
+    func leave(token: Int?, owner: Int)
 
     /// What a screen reads at its start: a final stage or a failure of the one before is cleared (the screen is about to ask for its
-    /// own). Every other end is ``acknowledge(token:owner:)``.
+    /// own). An expired code is left alone: ``start(_:owner:)`` rejects it. Every other end is ``acknowledge(token:owner:)``.
     func acknowledge()
 
     /// A final stage was read (rejected, paired, ended, expired) by the screen of [owner]: back to nothing held, but only for the
@@ -213,7 +214,7 @@ public final class PairingManager: PairingRepository {
     public func start(_ role: PairRole, owner: Int) async {
         // Ownership first, before any guard: a start that keeps the pairing already shown (the same role, a live code or a comparison)
         // hands it to this screen, so the screen it came from can no longer end it.
-        self.owner = owner
+        takeOwnership(owner)
         let gen: Int
         // A pairing of the other role that this start replaces: the vault is told it is not wanted.
         var replaced: String?
@@ -307,6 +308,8 @@ public final class PairingManager: PairingRepository {
         return VaultFailure(.other, code: "unreadable_result")
     }
 
+    /// Not owner-checked, on purpose: an old screen still alive after a takeover shows the same comparison, and what it sends is the
+    /// member's own tap on what they see; the id binding stops it from acting on another comparison.
     public func approve(pairingID: String, sessionSeconds: Int?) async {
         guard case .compare(let p) = state.stage, p.pairingID == pairingID else { return }
         let forRole = role
@@ -403,8 +406,16 @@ public final class PairingManager: PairingRepository {
         return fits.count == 1 ? fits[0].id : nil
     }
 
-    public func claim(owner: Int) { self.owner = owner }
+    public func claim(owner: Int) { takeOwnership(owner) }
 
+    /// [owner] now owns the pairing in hand. A comparison whose earlier owner left while its approval was in flight (``abandoned``) is
+    /// the new owner's to answer: it is not rejected when that approval comes back refused.
+    private func takeOwnership(_ owner: Int) {
+        if self.owner != owner { abandoned = false }
+        self.owner = owner
+    }
+
+    /// Not owner-checked either, for the reason given at ``approve(pairingID:sessionSeconds:)``.
     public func reject(pairingID: String) async {
         guard case .compare(let p) = state.stage, p.pairingID == pairingID, !state.busy else { return }
         set(PairingState(stage: .compare(p), busy: true))
@@ -456,7 +467,7 @@ public final class PairingManager: PairingRepository {
         _ = await sendReject(id)
     }
 
-    public func leave(token: Int, owner: Int) {
+    public func leave(token: Int?, owner: Int) {
         Task { [weak self] in await self?.cancel(token: token, owner: owner) }
     }
 
@@ -468,7 +479,8 @@ public final class PairingManager: PairingRepository {
         let s = state
         if s.busy { return }
         switch s.stage {
-        case .rejected, .paired, .ended, .codeExpired: set(PairingState())
+        // (An expired code is not cleared here: it may still be answered for a minute, and only a start or a leave tells the vault.)
+        case .rejected, .paired, .ended: set(PairingState())
         case .idle: if s.error != nil { set(PairingState()) }
         // The daily check passed: the refused approval may be sent again for the same comparison.
         case .compare: if s.error != nil { set(PairingState(stage: s.stage)) }

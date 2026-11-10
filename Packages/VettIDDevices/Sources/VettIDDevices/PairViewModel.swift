@@ -96,10 +96,15 @@ public final class PairViewModel {
         state.held = held
         // From the feed item the pairing is whatever is held; from the button, a new code (an unfinished one is kept).
         if !held {
+            // A final stage or a failure of an earlier pairing is cleared; an expired code is left alone (a start rejects it).
             repo.acknowledge()
             // A pairing held for the other role is rejected and replaced by the repository in this one call.
             let (role, owner) = (role, owner)
-            work.launch { await repo.start(role, owner: owner) }
+            work.launch {
+                // Not for a start whose screen is already gone (cancelled before it ran).
+                guard !Task.isCancelled else { return }
+                await repo.start(role, owner: owner)
+            }
         } else {
             // The feed item's screen takes over what is held: the screen it came from can no longer end it.
             repo.claim(owner: owner)
@@ -118,8 +123,8 @@ public final class PairViewModel {
         // Always leave the pairing this screen saw, whatever done() or cancel() did (some stages are not ended by them: a comparison
         // with an approval in flight, a code still being made), but only that one: a screen released late must not reach the pairing
         // of a newer one (the member leaves and opens Pair again).
+        // A screen released before it saw any state still ends what it started (its owner alone decides then).
         let (repo, mine, owner) = (repo, own.withLock { $0.token }, owner)
-        guard let mine else { return }
         Task { @MainActor in Self.finish(repo, token: mine, owner: owner, leaving: true) }
     }
 
@@ -161,8 +166,11 @@ public final class PairViewModel {
         sawStage = false
         recompute()
         let (repo, role, owner) = (repo, codeRole, owner)
+        let token = own.withLock { $0.token }
         work.launch {
-            repo.acknowledge()
+            // What the screen read of its last pairing is cleared, an expired code excepted: ``PairingRepository/start(_:owner:)``
+            // rejects that one (clearing it first would leave nothing to reject).
+            if let token, !Self.isExpired(repo.state.stage) { repo.acknowledge(token: token, owner: owner) }
             await repo.start(role, owner: owner)
         }
     }
@@ -176,7 +184,7 @@ public final class PairViewModel {
     public func cancel() {
         closing = true
         recompute()
-        if let token = own.withLock({ $0.token }) { repo.leave(token: token, owner: owner) }
+        repo.leave(token: own.withLock { $0.token }, owner: owner)
     }
 
     /// **The codes match** for the comparison [pairingID] the screen shows: the sheet opens for that one, and only while it is the one
@@ -216,14 +224,19 @@ public final class PairViewModel {
     public func done() {
         closing = true
         recompute()
-        if let token = own.withLock({ $0.token }) { Self.finish(repo, token: token, owner: owner, leaving: false) }
+        Self.finish(repo, token: own.withLock { $0.token }, owner: owner, leaving: false)
     }
 
     /// The screen's end. A code that expired is still taken for a late answer for a minute, and the vault is told it is not wanted:
-    /// that rejection (``PairingRepository/leave(token:)``) is asked for before anything else, since acknowledging first would leave nothing
-    /// held to reject. A pairing that was approved, rejected or ended is never rejected (nothing is held then: ``PairingRepository/leave(token:)`` does nothing
+    /// that rejection (``PairingRepository/leave(token:owner:)``) is asked for before anything else, since acknowledging first would leave nothing
+    /// held to reject. A pairing that was approved, rejected or ended is never rejected (nothing is held then: ``PairingRepository/leave(token:owner:)`` does nothing
     /// for it); a comparison or a live code is rejected when [leaving] (the model going), by the repository.
-    private static func finish(_ repo: any PairingRepository, token: Int, owner: Int, leaving: Bool) {
+    private static func finish(_ repo: any PairingRepository, token: Int?, owner: Int, leaving: Bool) {
+        // No state seen: only the owner can say what is this screen's.
+        guard let token else {
+            repo.leave(token: nil, owner: owner)
+            return
+        }
         switch repo.state.stage {
         // Not left to the model going: a screen that is popped is released late.
         case .codeExpired, .code, .compare, .creating:
@@ -234,6 +247,10 @@ public final class PairViewModel {
         }
         if leaving { repo.leave(token: token, owner: owner) }
         repo.acknowledge(token: token, owner: owner)
+    }
+
+    private static func isExpired(_ stage: PairingStage) -> Bool {
+        if case .codeExpired = stage { true } else { false }
     }
 
     /// TEST ONLY: returns once the work started so far has run.

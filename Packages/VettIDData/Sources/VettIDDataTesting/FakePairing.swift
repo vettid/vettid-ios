@@ -13,7 +13,7 @@ public final class FakePairing: PairingRepository {
     @ObservationIgnored public var calls: [String] = []
     /// The pairing ids approved, the tokens left and the tokens acknowledged.
     @ObservationIgnored public var approvedIDs: [String] = []
-    @ObservationIgnored public var leftTokens: [Int] = []
+    @ObservationIgnored public var leftTokens: [Int?] = []
     @ObservationIgnored public var leftOwners: [Int] = []
     @ObservationIgnored public var owners: [Int] = []
     @ObservationIgnored public var claimedOwners: [Int] = []
@@ -41,7 +41,7 @@ public final class FakePairing: PairingRepository {
         if case .compare = state.stage { state = PairingState(stage: .rejected(told: true)) }
     }
 
-    public func leave(token: Int, owner: Int) {
+    public func leave(token: Int?, owner: Int) {
         calls.append("leave")
         leftTokens.append(token)
         leftOwners.append(owner)

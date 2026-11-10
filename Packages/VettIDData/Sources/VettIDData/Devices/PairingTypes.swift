@@ -128,10 +128,10 @@ public struct PairingState: Sendable, CustomStringConvertible, CustomDebugString
     public var unknownOutcome = false
     /// With ``unknownOutcome``: the name the device gave itself (cleaned), for "If <name> is listed…".
     public var agentName: String?
-    /// What this pairing is for: the screens say "agent" or "desktop" by it. Set by ``PairingManager/start(_:)``.
+    /// What this pairing is for: the screens say "agent" or "desktop" by it. Set by ``PairingManager/start(_:owner:)``.
     public var role = PairRole.agent
     /// Which pairing this state is of: the manager's generation when it was published (it moves with every start, lock and
-    /// cancellation). A screen keeps the one it saw and leaves only that pairing (``PairingRepository/leave(token:)``), so a late
+    /// cancellation). A screen keeps the one it saw and leaves only that pairing (``PairingRepository/leave(token:owner:)``), so a late
     /// leave of an old screen never reaches the pairing of a newer one. Not part of equality.
     public var token = 0
 
@@ -155,6 +155,9 @@ public struct PairingState: Sendable, CustomStringConvertible, CustomDebugString
     public var customMirror: Mirror { Mirror(self, children: [:]) }
 }
 
+/// Equality leaves out ``PairingState/token``: a screen following the state sees a change of pairing by the stage (a new pairing starts
+/// at `.creating`, and every end passes through `.idle` or a final stage), never by the token alone with the same stage holding the
+/// same pairing, so nothing it follows is missed.
 extension PairingState: Equatable {
     public static func == (a: PairingState, b: PairingState) -> Bool {
         a.stage == b.stage && a.busy == b.busy && a.error == b.error && a.unknownOutcome == b.unknownOutcome &&
