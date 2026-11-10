@@ -187,7 +187,7 @@ import VettIDUI
             c.onAnswered = { answers.append($0) }
             c.update(file, host: host)
             #expect(entries(root).count == 1, "the file exists while the picker is up")
-            end(c, UIDocumentPickerViewController(forOpeningContentTypes: [.json]))
+            end(c, c.picker ?? UIDocumentPickerViewController(forOpeningContentTypes: [.json]))
             #expect(entries(root).isEmpty, "removed")
             return answers
         }
@@ -225,7 +225,7 @@ import VettIDUI
         let window = windowed(UIViewController())
         let controller = try #require(window.rootViewController)
         c.update(ProofFile(bytes: Data("evidence".utf8), name: "p.json"), host: controller)
-        let picker = UIDocumentPickerViewController(forOpeningContentTypes: [.json])
+        let picker = try #require(c.picker)
         c.presentationControllerDidDismiss(UIPresentationController(presentedViewController: picker, presenting: controller))
         #expect(entries(root).isEmpty && c.temp == nil && answers == [false])
         c.documentPickerWasCancelled(picker)
@@ -266,10 +266,9 @@ import VettIDUI
         #expect(presented == 1 && failed == 1 && entries(root).isEmpty, "the same file is not taken up again")
         // Taken away, then offered again: a new picker, and after its answer the same file opens nothing more.
         c.update(nil, host: controller)
-        c.presentPicker = { _, picker in
+        c.presentPicker = { _, _ in
             presented += 1
-            c.documentPickerWasCancelled(UIDocumentPickerViewController(forOpeningContentTypes: [.json]))
-            _ = picker
+            if let current = c.picker { c.documentPickerWasCancelled(current) }
         }
         c.update(file, host: controller)
         try await Task.sleep(for: .seconds(0.1))
@@ -402,6 +401,48 @@ import VettIDUI
     @Test func thePresentationStartsFromTheHostWhenNothingIsPresented() {
         let host = UIViewController()
         #expect(ProofExportCoordinator.topmost(host) === host)
+    }
+
+    /// The app going to the background closes the picker and removes the file, as a cancel, once; with no picker up it tells
+    /// nothing. The next file opens again.
+    @Test func theBackgroundClosesThePickerAsACancel() throws {
+        let root = try scratch()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let c = ProofExportCoordinator()
+        c.root = root
+        var answers: [Bool] = []
+        c.onAnswered = { answers.append($0) }
+        NotificationCenter.default.post(name: UIApplication.didEnterBackgroundNotification, object: nil)
+        #expect(answers.isEmpty, "nothing was up")
+        c.update(ProofFile(bytes: Data("evidence".utf8), name: "p.json"), host: UIViewController())
+        #expect(entries(root).count == 1)
+        NotificationCenter.default.post(name: UIApplication.didEnterBackgroundNotification, object: nil)
+        #expect(entries(root).isEmpty && c.temp == nil && c.picker == nil && answers == [false])
+        NotificationCenter.default.post(name: UIApplication.didEnterBackgroundNotification, object: nil)
+        #expect(answers == [false], "told once")
+        c.update(nil, host: UIViewController())
+        c.update(ProofFile(bytes: Data("evidence".utf8), name: "p.json"), host: UIViewController())
+        #expect(entries(root).count == 1)
+        c.leave()
+    }
+
+    /// An earlier picker answering late (or a stranger) changes nothing: the current picker and its file stay.
+    @Test func aStalePickersCallbacksChangeNothing() throws {
+        let root = try scratch()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let c = ProofExportCoordinator()
+        c.root = root
+        var answers: [Bool] = []
+        c.onAnswered = { answers.append($0) }
+        let host = UIViewController()
+        c.update(ProofFile(bytes: Data("evidence".utf8), name: "p.json"), host: host)
+        let stale = UIDocumentPickerViewController(forOpeningContentTypes: [.json])
+        c.documentPicker(stale, didPickDocumentsAt: [])
+        c.documentPickerWasCancelled(stale)
+        c.presentationControllerDidDismiss(UIPresentationController(presentedViewController: stale, presenting: host))
+        #expect(answers.isEmpty && entries(root).count == 1 && c.picker != nil && c.temp != nil)
+        c.documentPickerWasCancelled(try #require(c.picker))
+        #expect(answers == [false] && entries(root).isEmpty)
     }
 
     /// The vote screen holds no exporter of its own: nothing is written until the evidence is ready.

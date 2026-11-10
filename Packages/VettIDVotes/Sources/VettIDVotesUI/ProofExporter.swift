@@ -77,13 +77,20 @@ final class ProofExportCoordinator: NSObject, UIDocumentPickerDelegate, UIAdapti
     /// The temporary file while the picker is up.
     private(set) var temp: ProofTempFile?
     /// Held while the file is, so that it is not released before it is presented.
-    private var picker: UIDocumentPickerViewController?
+    private(set) var picker: UIDocumentPickerViewController?
     /// The directory the files are made in (tests set it).
     var root = FileManager.default.temporaryDirectory
     /// Whether the file now offered was already taken up: it is presented, answered or failed once, and only an update
     /// without a file starts the next one. Updates that still carry it after an answer or a failure (the failure is told
     /// after a hop) open nothing again.
     private var taken = false
+
+    override init() {
+        super.init()
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(didEnterBackground), name: UIApplication.didEnterBackgroundNotification, object: nil
+        )
+    }
 
     /// [file] set: the picker opens (once for this file); nil: whatever is up closes. A picker that cannot be presented (no
     /// window, another presentation still under way after a few tries, or refused by UIKit) is told as a failure, and its
@@ -189,15 +196,28 @@ final class ProofExportCoordinator: NSObject, UIDocumentPickerDelegate, UIAdapti
         temp = nil
     }
 
+    // A picker that is not the current one (an earlier one answering late) changes nothing.
     func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
+        guard controller === picker else { return }
         answer(true)
     }
 
     func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
+        guard controller === picker else { return }
         answer(false)
     }
 
     func presentationControllerDidDismiss(_ presentationController: UIPresentationController) {
+        guard presentationController.presentedViewController === picker else { return }
+        answer(false)
+    }
+
+    /// The app went to the background: the picker closes and its file goes, as a cancel (the member opens it again on
+    /// return). The app lock does not close it (`vettIDLocked` closes nothing): the file stays through the lock window,
+    /// unreadable while the phone is locked (complete protection), and the background close covers the rest.
+    @objc func didEnterBackground() {
+        guard let picker else { return }
+        picker.dismiss(animated: false)
         answer(false)
     }
 
