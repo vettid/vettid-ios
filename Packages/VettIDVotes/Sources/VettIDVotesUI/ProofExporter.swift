@@ -181,7 +181,7 @@ final class ProofExportCoordinator: NSObject, UIDocumentPickerDelegate, UIAdapti
 
     /// The picker is gone without an answer (the screen left, or the file was taken away): the file goes.
     func close() {
-        picker?.dismiss(animated: false)
+        picker?.presentingViewController?.dismiss(animated: false)
         picker = nil
         removeTemp()
     }
@@ -217,7 +217,7 @@ final class ProofExportCoordinator: NSObject, UIDocumentPickerDelegate, UIAdapti
     /// unreadable while the phone is locked (complete protection), and the background close covers the rest.
     @objc func didEnterBackground() {
         guard let picker else { return }
-        picker.dismiss(animated: false)
+        picker.presentingViewController?.dismiss(animated: false)
         answer(false)
     }
 

@@ -412,18 +412,31 @@ import VettIDUI
         c.root = root
         var answers: [Bool] = []
         c.onAnswered = { answers.append($0) }
-        NotificationCenter.default.post(name: UIApplication.didEnterBackgroundNotification, object: nil)
+        c.didEnterBackground()
         #expect(answers.isEmpty, "nothing was up")
         c.update(ProofFile(bytes: Data("evidence".utf8), name: "p.json"), host: UIViewController())
         #expect(entries(root).count == 1)
-        NotificationCenter.default.post(name: UIApplication.didEnterBackgroundNotification, object: nil)
+        c.didEnterBackground()
         #expect(entries(root).isEmpty && c.temp == nil && c.picker == nil && answers == [false])
-        NotificationCenter.default.post(name: UIApplication.didEnterBackgroundNotification, object: nil)
+        c.didEnterBackground()
         #expect(answers == [false], "told once")
         c.update(nil, host: UIViewController())
         c.update(ProofFile(bytes: Data("evidence".utf8), name: "p.json"), host: UIViewController())
         #expect(entries(root).count == 1)
         c.leave()
+    }
+
+    /// The notification itself reaches the coordinator.
+    @Test func theBackgroundNotificationIsWiredToTheCoordinator() throws {
+        let root = try scratch()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let c = ProofExportCoordinator()
+        c.root = root
+        var answers: [Bool] = []
+        c.onAnswered = { answers.append($0) }
+        c.update(ProofFile(bytes: Data("evidence".utf8), name: "p.json"), host: UIViewController())
+        NotificationCenter.default.post(name: UIApplication.didEnterBackgroundNotification, object: nil)
+        #expect(answers == [false] && entries(root).isEmpty)
     }
 
     /// An earlier picker answering late (or a stranger) changes nothing: the current picker and its file stay.

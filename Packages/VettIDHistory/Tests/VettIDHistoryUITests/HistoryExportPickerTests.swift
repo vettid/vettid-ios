@@ -335,27 +335,51 @@ import VettIDData
         #expect(HistoryExportCoordinator.topmost(host) === host)
     }
 
-    /// The app going to the background closes the picker and removes the file, as a cancel, once; with no picker up it tells
-    /// nothing. The next file opens again.
-    @Test func theBackgroundClosesThePickerAsACancel() throws {
+    /// The app going to the background closes the picker and removes the file but ends nothing: no answer and no failure are
+    /// told, only the close; with no picker up it tells nothing. "Save to Files" again opens a new picker with a new file.
+    @Test func theBackgroundClosesThePickerButKeepsTheExport() throws {
         let root = try scratch()
         defer { try? FileManager.default.removeItem(at: root) }
         let c = HistoryExportCoordinator()
         c.root = root
         var answers: [Bool] = []
+        var failed = 0
+        var closed = 0
         c.onAnswered = { answers.append($0) }
-        NotificationCenter.default.post(name: UIApplication.didEnterBackgroundNotification, object: nil)
-        #expect(answers.isEmpty, "nothing was up")
-        c.update(file, host: UIViewController())
+        c.onFailed = { failed += 1 }
+        c.onClosed = { closed += 1 }
+        c.didEnterBackground()
+        #expect(closed == 0, "nothing was up")
+        let host = UIViewController()
+        c.update(file, host: host)
+        let first = try #require(c.temp)
         #expect(entries(root).count == 1)
-        NotificationCenter.default.post(name: UIApplication.didEnterBackgroundNotification, object: nil)
-        #expect(entries(root).isEmpty && c.temp == nil && c.picker == nil && answers == [false])
-        NotificationCenter.default.post(name: UIApplication.didEnterBackgroundNotification, object: nil)
-        #expect(answers == [false], "told once")
-        c.update(nil, host: UIViewController())
-        c.update(file, host: UIViewController())
-        #expect(entries(root).count == 1)
+        c.didEnterBackground()
+        #expect(entries(root).isEmpty && c.temp == nil && c.picker == nil)
+        #expect(closed == 1 && answers.isEmpty && failed == 0, "the export is not ended")
+        c.didEnterBackground()
+        #expect(closed == 1, "told once")
+        // The screen sets the file to nil, then offers it again ("Save again"): a new picker and a new file.
+        c.update(nil, host: host)
+        c.update(file, host: host)
+        let second = try #require(c.temp)
+        #expect(entries(root).count == 1 && second.directory != first.directory && c.picker != nil)
+        #expect(try Data(contentsOf: second.url) == file.bytes)
         c.leave()
+        #expect(entries(root).isEmpty)
+    }
+
+    /// The notification itself reaches the coordinator.
+    @Test func theBackgroundNotificationIsWiredToTheCoordinator() throws {
+        let root = try scratch()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let c = HistoryExportCoordinator()
+        c.root = root
+        var closed = 0
+        c.onClosed = { closed += 1 }
+        c.update(file, host: UIViewController())
+        NotificationCenter.default.post(name: UIApplication.didEnterBackgroundNotification, object: nil)
+        #expect(closed == 1 && entries(root).isEmpty)
     }
 
     /// An earlier picker answering late (or a stranger) changes nothing: the current picker and its file stay.

@@ -289,7 +289,8 @@ private struct ExportSaveStep: View {
                 onFailed: {
                     exporting = false
                     actions.onSaveFailed()
-                }
+                },
+                onClosed: { exporting = false }
             )
         )
     }
