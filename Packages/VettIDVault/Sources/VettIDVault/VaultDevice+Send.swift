@@ -309,6 +309,10 @@ extension VaultDevice {
                 try? await withLockSaving { st.outbox.removeAll { $0.id == e.id } }
                 continue
             }
+            if e.type == HsTypes.confirm {
+                await deliverConfirm(e) // its time follows a refusal for good
+                continue
+            }
             do {
                 try await deliver(e)
             } catch {} // (a fin refused for good is told to the flow, or not, by ``deliver``)

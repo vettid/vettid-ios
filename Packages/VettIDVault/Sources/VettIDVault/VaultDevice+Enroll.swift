@@ -118,6 +118,9 @@ extension VaultDevice {
                 st.vault?.tokenExpMs = Self.ms(exp)
             }
             if res.epoch.suite > st.vault?.suite ?? 0 { st.vault?.suite = res.epoch.suite }
+            // A new pairing (enrollment, transfer, recovery) starts with its own epoch confirmed (§6.3.1), as dropPairing.
+            st.vault?.confirmed = nil
+            st.vault?.confirmAtMs = nil
             keyring.activate(res.epoch, now: t)
             return (res, try requireVault())
         }

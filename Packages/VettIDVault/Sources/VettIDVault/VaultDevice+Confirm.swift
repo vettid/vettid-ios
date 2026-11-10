@@ -46,11 +46,12 @@ extension VaultDevice {
     }
 
     /// After an activation: `hs.confirm` and `device.features` into the outbox, stored by the save that ends the handling,
-    /// deposited after it. A failure to queue (no token, halted) is left to the 12-day re-send (``tickConfirm()``): the
-    /// activation stands. Callers hold ``lock``.
+    /// deposited after it. A failure to queue (no token, halted) is left to the 12-day re-send (``tickConfirm()``). Both are
+    /// kept, and still deposited, if the handling then fails, as the fin is (``EventMemory/keptOnError``): the activation
+    /// stands in memory, and a redelivered `hs.fin` would not queue them again. Callers hold ``lock``.
     func queueConfirmed(_ t: Date) {
-        try? queueConfirm(t, save: false)
-        try? queueFeatures()
+        let kept = [try? queueConfirm(t, save: false, keep: true), try? queueFeatures(keep: true)].compactMap { $0?.id }
+        mem.withLock { memory.keptOnError.formUnion(kept) }
     }
 
     /// A message other than `hs.fin` opened under [ep]. Under the current epoch it confirms it: the previous confirmed
@@ -96,21 +97,22 @@ extension VaultDevice {
         if let e { await deliverConfirm(e) }
     }
 
-    /// Deposits an `hs.confirm`. One the relay refuses for good is gone from the outbox (``deliver(_:keepOnFailure:)``):
-    /// its time is forgotten, so the next start or message queues one again instead of 12 days later (chosen; not in the
-    /// spec).
-    private func deliverConfirm(_ e: OutboxEntry) async {
+    /// Deposits an `hs.confirm` (also from ``flushOutbox()``). One the relay refuses for good (``isTerminal(_:)``) is gone
+    /// from the outbox: the next is due a minute later, not 12 days later (chosen; not in the spec), so a refusal is
+    /// retried at most once a minute.
+    func deliverConfirm(_ e: OutboxEntry) async {
         do {
             try await deliver(e)
-        } catch let x as RelayError where !x.retryable {
-            try? await withLockSaving { st.vault?.confirmAtMs = nil }
+        } catch let x as RelayError where Self.isTerminal(x) {
+            let due = Self.ms(now()) - Self.ms(Date(timeIntervalSince1970: Self.confirmResend - Self.reconfirmEvery))
+            try? await withLockSaving { st.vault?.confirmAtMs = due }
         } catch {}
     }
 
     /// Queues `hs.confirm` (body `{}`, durable, not a request) and records when, in the same write. [save]: true outside
     /// a handling, where the caller delivers the entry returned; false inside one, delivered after the lock.
     @discardableResult
-    private func queueConfirm(_ t: Date, save saves: Bool) throws -> OutboxEntry {
+    private func queueConfirm(_ t: Date, save saves: Bool, keep: Bool = false) throws -> OutboxEntry {
         let before: Int64? = mem.withLock {
             defer { st.vault?.confirmAtMs = Self.ms(t) }
             return st.vault?.confirmAtMs
@@ -119,7 +121,7 @@ extension VaultDevice {
             let e = try enqueueLocked(
                 id: nil, type: HsTypes.confirm, body: VaultJSON.empty, re: nil, status: nil, exp: nil, save: saves
             )
-            if !saves { afterLock { [self] in await deliverConfirm(e) } }
+            if !saves { afterLock(keep: keep) { [self] in await deliverConfirm(e) } }
             return e
         } catch {
             mem.withLock { st.vault?.confirmAtMs = before }
@@ -129,9 +131,11 @@ extension VaultDevice {
 
     /// Queues `device.features` with this app's list (§10.2), while a message is being handled: stored by the save that
     /// ends it, deposited after the lock.
-    func queueFeatures() throws {
+    @discardableResult
+    func queueFeatures(keep: Bool = false) throws -> OutboxEntry {
         let body = JsonBuilder().raw("features", JsonBuilder.array(DeviceFeatures.all.map(JsonBuilder.quote))).bytes()
         let e = try enqueueLocked(id: nil, type: Self.typeDeviceFeatures, body: body, re: nil, status: nil, exp: nil, save: false)
-        afterLock { [self] in try? await deliver(e) }
+        afterLock(keep: keep) { [self] in try? await deliver(e) }
+        return e
     }
 }

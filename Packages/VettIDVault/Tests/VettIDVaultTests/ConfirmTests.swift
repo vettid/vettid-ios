@@ -21,8 +21,8 @@ extension VaultDeviceTests {
         let secrets: DeviceSecrets
     }
 
-    private func message(_ id: String = Ulid.new()) -> Inner {
-        Inner(id: id, type: "message.new", ts: Date(), body: Array(#"{"connection_id":"c1","message_id":"m1","direction":"in","text":"hi","sent_at":"x"}"#.utf8))
+    private func message(_ id: String = Ulid.new(), at: Date = Date()) -> Inner {
+        Inner(id: id, type: "message.new", ts: at, body: Array(#"{"connection_id":"c1","message_id":"m1","direction":"in","text":"hi","sent_at":"x"}"#.utf8))
     }
 
     /// A paired device that answered the vault's rekey and got its `hs.fin`; the confirmation and `device.features` are taken.
@@ -55,8 +55,11 @@ extension VaultDeviceTests {
         // Within the minute, nothing more.
         try await r.device.handle(r.vault.msg(try r.old.seal(message())))
         #expect(await relay.noDeposit(within: 0.5))
-        // After it, again.
-        clock.value = clock.value.addingTimeInterval(61)
+        // At +30 s, still nothing; after the minute, again.
+        clock.value = clock.value.addingTimeInterval(30)
+        try await r.device.handle(r.vault.msg(try r.old.seal(message())))
+        #expect(await relay.noDeposit(within: 0.3))
+        clock.value = clock.value.addingTimeInterval(31)
         try await r.device.handle(r.vault.msg(try r.old.seal(message())))
         #expect(try await take(r.new).type == "hs.confirm")
     }
@@ -163,15 +166,38 @@ extension VaultDeviceTests {
         #expect(saved.vault?.confirmAtMs != nil)
     }
 
-    @Test func aConfirmationRefusedForGoodIsQueuedAgainWithoutWaiting() async throws {
+    /// A refusal for good (`token_revoked`) takes the entry out; the next is due a minute later, not 12 days later, and
+    /// not at once. A retryable refusal or `quota_exceeded` keeps its time (the entry stays, or goes 12 days on).
+    @Test func aConfirmationRefusedForGoodIsDueAgainAMinuteLater() async throws {
         let clock = Box(Date())
         let r = try await rekeyed(clock)
         relay.refuseDeposits = RelayError.tokenRevoked
         clock.value = clock.value.addingTimeInterval(12 * 86_400 + 60)
         await r.device.tickConfirm()
-        #expect(relay.refused >= 1)
-        #expect(try savedState(r.store).vault?.confirmAtMs == nil)
+        #expect(relay.refused == 1)
         #expect(try savedState(r.store).outbox.isEmpty)
+        // Not again at once (every message would retry it), but a minute later.
+        await r.device.tickConfirm()
+        clock.value = clock.value.addingTimeInterval(30)
+        await r.device.tickConfirm()
+        #expect(relay.refused == 1)
+        clock.value = clock.value.addingTimeInterval(31)
+        await r.device.tickConfirm()
+        #expect(relay.refused == 2)
+    }
+
+    @Test func aRetryableRefusalOrAFullQuotaKeepsTheTime() async throws {
+        let clock = Box(Date())
+        let r = try await rekeyed(clock)
+        clock.value = clock.value.addingTimeInterval(12 * 86_400 + 60)
+        relay.refuseDeposits = RelayError.quotaExceeded
+        relay.refuseStatus = 429
+        await r.device.tickConfirm()
+        let at = try #require(try savedState(r.store).vault?.confirmAtMs)
+        #expect(at == VaultDevice.ms(clock.value))
+        clock.value = clock.value.addingTimeInterval(120)
+        await r.device.tickConfirm()
+        #expect(try savedState(r.store).vault?.confirmAtMs == at)
     }
 
     @Test func aDroppedPairingForgetsTheConfirmedEpoch() async throws {
@@ -179,6 +205,108 @@ extension VaultDeviceTests {
         let r = try await rekeyed(clock)
         r.device.dropPairing()
         #expect(r.device.mem.withLock { r.device.st.vault?.confirmed == nil && r.device.st.vault?.confirmAtMs == nil })
+    }
+
+    /// (0.88.1) The 12-day re-send when collecting starts (every return to the foreground).
+    @Test func aCollectionStartAfterTwelveDaysConfirmsAgain() async throws {
+        let clock = Box(Date())
+        let r = try await rekeyed(clock)
+        relay.serveMailbox = true
+        clock.value = clock.value.addingTimeInterval(12 * 86_400 + 60)
+        r.device.start()
+        defer { r.device.stop() }
+        #expect(try await take(r.new).type == "hs.confirm")
+    }
+
+    /// (0.88.1) The 12-day re-send after a handled message that neither confirms nor brings a confirmation: one under a
+    /// third, retired epoch.
+    @Test func aMessageAfterTwelveDaysConfirmsAgain() async throws {
+        let clock = Box(Date())
+        let r = try await rekeyed(clock)
+        // A second rekey under the confirmed epoch: the unconfirmed one (r.new) is retired, the old stays confirmed.
+        let ini = try r.vault.rekey(r.device)
+        try await r.device.handle(r.vault.msg(ini.envelope))
+        #expect(try await take(r.new).type == "hs.confirm")
+        let res = try ini.handleResp(try await relay.nextDeposit().payload, collectSender: r.device.relayAddr.pk, now: Date())
+        try await r.device.handle(r.vault.msg(res.fin))
+        #expect(try await take(res.epoch).type == "hs.confirm")
+        #expect(try await take(res.epoch).type == "device.features")
+        clock.value = clock.value.addingTimeInterval(12 * 86_400 + 60)
+        try await r.device.handle(r.vault.msg(try r.new.seal(message(at: clock.value))))
+        #expect(try await take(res.epoch).type == "hs.confirm")
+    }
+
+    /// A redelivered `hs.fin` (a new msg_id, the same inner) opens under the new epoch and confirms nothing: only a message
+    /// other than `hs.fin` does (§6.3.1 "Responder").
+    @Test func aRedeliveredFinConfirmsNothing() async throws {
+        let store = InMemoryDeviceStateStore()
+        let (d, v) = try await pairedDevice(store: store)
+        let old = try #require(v.keyring.current())
+        let ini = try v.rekey(d)
+        try await d.handle(v.msg(ini.envelope))
+        let res = try ini.handleResp(try await relay.nextDeposit().payload, collectSender: d.relayAddr.pk, now: Date())
+        try await d.handle(v.msg(res.fin))
+        #expect(try await take(res.epoch).type == "hs.confirm")
+        #expect(try await take(res.epoch).type == "device.features")
+        try await d.handle(v.msg(res.fin))
+        #expect(try savedState(store).vault?.confirmed == old.ctx)
+    }
+
+    /// A save that fails after the activation: the activation stands in memory, so its hs.confirm and device.features are
+    /// kept and still go out, and the time of the confirmation stays.
+    @Test func aFailedSaveAfterTheActivationKeepsItsConfirmation() async throws {
+        let store = FlakyStore()
+        let (d, v) = try await pairedDevice(store: store)
+        let ini = try v.rekey(d)
+        try await d.handle(v.msg(ini.envelope))
+        let res = try ini.handleResp(try await relay.nextDeposit().payload, collectSender: d.relayAddr.pk, now: Date())
+        store.arm()
+        await #expect(throws: (any Error).self) { try await d.handle(v.msg(res.fin)) }
+        #expect(d.mem.withLock { d.keyring.current()?.id } == res.epoch.id)
+        #expect(d.mem.withLock { d.st.vault?.confirmAtMs } != nil)
+        #expect(try await take(res.epoch).type == "hs.confirm")
+        #expect(try await take(res.epoch).type == "device.features")
+        store.disarm()
+    }
+
+    /// The kept epoch's 48 days (§6.3.1 table): on day 47 a message under it still brings hs.confirm; on day 49 it no
+    /// longer opens.
+    @Test func theConfirmedEpochKeepsItsKeysFortyEightDays() async throws {
+        let clock = Box(Date())
+        let r = try await rekeyed(clock)
+        clock.value = clock.value.addingTimeInterval(47 * 86_400)
+        try await r.device.handle(r.vault.msg(try r.old.seal(message(at: clock.value))))
+        #expect(try await take(r.new).type == "hs.confirm")
+        _ = relay.dropDeposits() // the standing token's renewal, due by now (§7.2)
+        clock.value = clock.value.addingTimeInterval(2 * 86_400)
+        try await r.device.handle(r.vault.msg(try r.old.seal(message(at: clock.value))))
+        #expect(await relay.noDeposit(within: 0.5))
+    }
+
+    /// Every sealed message carries the inner `features`, a request sent once included (§10.8 "On every message").
+    @Test func aRequestSentOnceCarriesTheFeatures() async throws {
+        let (d, v) = try await pairedDevice()
+        let op = Task { try await d.opOnce("vault.status") }
+        let req = try v.open(try await relay.nextDeposit().payload)
+        #expect(req.type == "vault.status" && req.features == ["hs_confirm"])
+        try await d.handle(try v.seal("vault.status", "{}", re: req.id, status: Inner.statusOK))
+        _ = try await op.value
+    }
+
+    /// An hs.confirm not yet deposited is still in the outbox after a restart (an outbox type), and goes at the next flush.
+    @Test func anUndeliveredConfirmationSurvivesARestart() async throws {
+        let clock = Box(Date())
+        let r = try await rekeyed(clock)
+        relay.refuseDeposits = "unavailable"
+        relay.refuseStatus = 503
+        try await r.device.handle(r.vault.msg(try r.old.seal(message())))
+        r.device.stop()
+        let again = try #require(try VaultDevice.load(config(r.store, now: { clock.value }), secrets: r.secrets))
+        #expect(again.mem.withLock { again.st.outbox.map(\.type) } == ["hs.confirm"])
+        relay.refuseDeposits = nil
+        _ = relay.dropDeposits()
+        await again.flushOutbox()
+        #expect(try await take(r.new).type == "hs.confirm")
     }
 
     @Test func anHsConfirmFromTheVaultIsIgnored() async throws {

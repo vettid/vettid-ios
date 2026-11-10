@@ -74,7 +74,10 @@ extension VaultDevice {
             st.seen = before.seen
             st.seenInner = before.seenInner
             st.issuedExpMs = before.issuedExpMs
-            st.vault?.confirmAtMs = before.confirmAtMs
+            // Unless the hs.confirm of an activation that stands is kept (``queueConfirmed(_:)``).
+            if !st.outbox.contains(where: { $0.type == HsTypes.confirm && memory.keptOnError.contains($0.id) }) {
+                st.vault?.confirmAtMs = before.confirmAtMs
+            }
             let gone = Set(st.outbox.map(\.id)).subtracting(before.outbox).subtracting(memory.keptOnError)
             st.outbox.removeAll { gone.contains($0.id) }
             outboxInFlight.subtract(gone)
