@@ -122,7 +122,7 @@ import VettIDDataTesting
         #expect(m.credentialKey == .shown("5555 6666 7777 8888"))
     }
 
-    /// A wipe or a reset clears the change, and its count starts again: a later change is still news.
+    /// A wipe or a deletion clears the change, and its count starts again: a later change is still news.
     @Test func aChangeAfterTheCountStartedAgainIsApplied() async {
         repo.credentialKeyAnswer = CredentialKeyAnswer(exists: true, fingerprint: fp)
         let m = VaultStatusViewModel(vault: repo)

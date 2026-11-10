@@ -19,7 +19,8 @@ public struct VaultStatusContent: View {
     let onBack: @MainActor () -> Void
     let credentialKey: CredentialKeyRow?
     let retryCredentialKey: @MainActor () -> Void
-    let copy: @MainActor (String) -> Void
+    /// nil: ``secureCopy(_:lifetime:pasteboard:)``, the app's secure pasteboard.
+    let copy: (@MainActor (String) -> Void)?
 
     /// [credentialKey]: the Credential key row (nil: not shown); [copy]: its Copy (local to this phone, and expiring).
     public init(
@@ -29,7 +30,7 @@ public struct VaultStatusContent: View {
         onBack: @escaping @MainActor () -> Void = {},
         credentialKey: CredentialKeyRow? = nil,
         retryCredentialKey: @escaping @MainActor () -> Void = {},
-        copy: @escaping @MainActor (String) -> Void = { VaultStatusContent.secureCopy($0) }
+        copy: (@MainActor (String) -> Void)? = nil
     ) {
         self.state = state
         self.installedFrom = installedFrom
@@ -158,13 +159,16 @@ public struct VaultStatusContent: View {
     }
 
     /// The default Copy: the app's secure pasteboard, local to this phone and expiring ([pasteboard]: tests give a named one).
-    public static func secureCopy(_ text: String, pasteboard: UIPasteboard = .general) {
-        SecurePasteboard.copy(text, pasteboard: pasteboard)
+    static func secureCopy(
+        _ text: String, lifetime: TimeInterval = SecurePasteboard.defaultLifetime, pasteboard: UIPasteboard = .general
+    ) {
+        SecurePasteboard.copy(text, lifetime: lifetime, pasteboard: pasteboard)
     }
 
     /// Copy: the fingerprint shown, through [copy]; nothing when none is shown.
     func copyCredentialKey(_ ck: CredentialKeyRow) {
-        if case .shown(let fp) = ck { copy(fp) }
+        guard case .shown(let fp) = ck else { return }
+        if let copy { copy(fp) } else { Self.secureCopy(fp) }
     }
 
     /// The counter unavailable for a day (STAGING-TIME-SCALE 0.1.1 S8, S7): the clock's period as it started and the quiet

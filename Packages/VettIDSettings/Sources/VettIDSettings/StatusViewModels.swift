@@ -59,7 +59,7 @@ public final class VaultStatusViewModel {
     @ObservationIgnored private let followers = TaskBag()
     @ObservationIgnored private var keyAsk: Task<Void, Never>?
     /// The ``VaultRepository/credentialKeyChange`` this screen has taken into account. Compared whole, not by `seq`: a
-    /// wipe or a reset clears the change, and its count starts again.
+    /// wipe or the vault's deletion clears the change, and its count starts again.
     @ObservationIgnored private var keySeen: CredentialKeyChange?
 
     public init(vault: any VaultRepository) {

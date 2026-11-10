@@ -161,6 +161,26 @@ public struct SettingsRoute: View {
     }
 }
 
+/// Whether the app came back from the background: an `.active` after a `.background`, never after an `.inactive` alone
+/// (Control Center, a notification pulled down, the Face ID sheet), so a fingerprint being read out does not flicker.
+struct ForegroundReturn {
+    private var wasBackground = false
+
+    /// Notes [phase]; true once per return to `.active` from the background.
+    mutating func returned(_ phase: ScenePhase) -> Bool {
+        switch phase {
+        case .background:
+            wasBackground = true
+            return false
+        case .active:
+            defer { wasBackground = false }
+            return wasBackground
+        default:
+            return false
+        }
+    }
+}
+
 /// Vault status with its view model. Mirrors vettid-android's `VaultStatusRoute` destination.
 public struct VaultStatusRoute: View {
     private let vault: any VaultRepository
@@ -168,6 +188,7 @@ public struct VaultStatusRoute: View {
     private let onBack: @MainActor () -> Void
     @State private var model: VaultStatusViewModel?
     @Environment(\.scenePhase) private var scenePhase
+    @State private var foreground = ForegroundReturn()
 
     public init(vault: any VaultRepository, installedFrom: InstalledFrom, onBack: @escaping @MainActor () -> Void) {
         self.vault = vault
@@ -181,7 +202,7 @@ public struct VaultStatusRoute: View {
             credentialKey: model?.credentialKey ?? .loading, retryCredentialKey: { model?.loadCredentialKey() }
         )
         .onAppear { if model == nil { model = VaultStatusViewModel(vault: vault) } }
-        .onChange(of: scenePhase) { _, now in if now == .active { model?.sceneBecameActive() } }
+        .onChange(of: scenePhase) { _, now in if foreground.returned(now) { model?.sceneBecameActive() } }
     }
 }
 

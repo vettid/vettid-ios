@@ -109,6 +109,17 @@ import VettIDVault
         #expect(m.credentialKeyChange == nil)
     }
 
+    /// The vault being deleted forgets it too.
+    @Test func aDeletionForgetsTheChange() async throws {
+        defer { phone.close() }
+        try await setUp()
+        try await m.openUnlockWindow(password: password)
+        try await m.rotate(password: password)
+        #expect(await eventually { m.credentialKeyChange != nil })
+        m.enterDeleting(expOnPhone: nil)
+        #expect(m.credentialKeyChange == nil)
+    }
+
     @Test func neitherPrintsTheFingerprint() {
         #expect("\(CredentialKeyAnswer(exists: true, fingerprint: shown))" == "CredentialKeyAnswer")
         #expect(!"\(CredentialKeyChange(seq: 1, fingerprint: shown))".contains("e939"))

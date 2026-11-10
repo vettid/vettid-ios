@@ -1,5 +1,6 @@
 #if os(iOS)
 import Foundation
+import SwiftUI
 import Testing
 import UIKit
 import VettIDData
@@ -39,12 +40,25 @@ import VettIDUI
         #expect(asked == 1)
     }
 
-    /// By default Copy goes to the app's secure pasteboard (local to this phone and expiring).
+    /// By default Copy goes to the app's secure pasteboard, whose copy expires (an expired one is gone at once; its
+    /// local-only option cannot be read back, and is ``SecurePasteboard``'s own).
     @Test func theDefaultCopyIsTheSecurePasteboard() throws {
-        let pb = try #require(UIPasteboard(name: UIPasteboard.Name("credential-key-row-test"), create: true))
+        #expect(VaultStatusContent(state: LoadState(), installedFrom: .apple, credentialKey: .shown(fp)).copy == nil)
+        let pb = try #require(UIPasteboard(name: UIPasteboard.Name("vettid.test.\(UUID().uuidString)"), create: true))
         defer { UIPasteboard.remove(withName: pb.name) }
         VaultStatusContent.secureCopy(fp, pasteboard: pb)
         #expect(pb.string == fp)
+        VaultStatusContent.secureCopy(fp, lifetime: -1, pasteboard: pb)
+        #expect(pb.string == nil, "it expires")
+    }
+
+    /// Asked again only on a return from the background, not after an `.inactive` alone (Control Center, a notification,
+    /// the Face ID sheet).
+    @Test func onlyAReturnFromTheBackgroundAsksAgain() {
+        var f = ForegroundReturn()
+        #expect([ScenePhase.inactive, .active].map { f.returned($0) } == [false, false])
+        #expect([ScenePhase.inactive, .background, .inactive, .active].map { f.returned($0) } == [false, false, false, true])
+        #expect(!f.returned(.inactive) && !f.returned(.active), "once per return")
     }
 }
 #endif
