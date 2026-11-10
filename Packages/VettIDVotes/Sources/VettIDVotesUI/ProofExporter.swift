@@ -77,13 +77,29 @@ final class ProofExportCoordinator: NSObject, UIDocumentPickerDelegate, UIAdapti
     /// The temporary file while the picker is up.
     private(set) var temp: ProofTempFile?
     /// Held while the file is, so that it is not released before it is presented.
-    private var picker: UIDocumentPickerViewController?
+    private(set) var picker: UIDocumentPickerViewController?
     /// The directory the files are made in (tests set it).
     var root = FileManager.default.temporaryDirectory
     /// Whether the file now offered was already taken up: it is presented, answered or failed once, and only an update
     /// without a file starts the next one. Updates that still carry it after an answer or a failure (the failure is told
     /// after a hop) open nothing again.
     private var taken = false
+    /// Whether the app is in the background (tests replace it). A picker is never made or presented there: a read that ends
+    /// inside the background task must not write the plaintext file after the background close, and no second
+    /// background notification comes.
+    var inBackground: @MainActor () -> Bool = { UIApplication.shared.applicationState == .background }
+    /// A picker the system did not take away while it was being presented: dismissed again on return to the foreground.
+    private weak var leaving: UIViewController?
+
+    override init() {
+        super.init()
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(didEnterBackground), name: UIApplication.didEnterBackgroundNotification, object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(willEnterForeground), name: UIApplication.willEnterForegroundNotification, object: nil
+        )
+    }
 
     /// [file] set: the picker opens (once for this file); nil: whatever is up closes. A picker that cannot be presented (no
     /// window, another presentation still under way after a few tries, or refused by UIKit) is told as a failure, and its
@@ -95,6 +111,11 @@ final class ProofExportCoordinator: NSObject, UIDocumentPickerDelegate, UIAdapti
             return
         }
         guard !taken else { return }
+        // In the background nothing is written or presented; `taken` stays false, so the next offer opens normally.
+        if inBackground() {
+            refuseInBackground()
+            return
+        }
         taken = true
         let t: ProofTempFile
         do {
@@ -131,6 +152,10 @@ final class ProofExportCoordinator: NSObject, UIDocumentPickerDelegate, UIAdapti
     /// again; when it cannot present at all, or UIKit does not take the presentation, the file goes and the failure is told.
     private func present(_ picker: UIDocumentPickerViewController, for t: ProofTempFile, from host: UIViewController?, triesLeft: Int) {
         guard self.picker === picker, temp?.url == t.url else { return }
+        if inBackground() {
+            refuseInBackground()
+            return
+        }
         guard let presenter = host.map(Self.topmost), presenter.viewIfLoaded?.window != nil else {
             fail()
             return
@@ -174,9 +199,24 @@ final class ProofExportCoordinator: NSObject, UIDocumentPickerDelegate, UIAdapti
 
     /// The picker is gone without an answer (the screen left, or the file was taken away): the file goes.
     func close() {
-        picker?.dismiss(animated: false)
+        let closing = picker
         picker = nil
         removeTemp()
+        dismiss(closing)
+    }
+
+    /// Dismisses [closing] itself (not only what is over it), after the file is gone and the picker is no longer current,
+    /// so a cancel the dismissal reports on the spot answers nothing.
+    private func dismiss(_ closing: UIDocumentPickerViewController?) {
+        guard let closing else { return }
+        closing.presentingViewController?.dismiss(animated: false)
+        leaving = closing
+    }
+
+    /// Back in the foreground: a picker UIKit did not dismiss mid-presentation is dismissed again.
+    @objc func willEnterForeground() {
+        if let leaving, leaving.presentingViewController != nil { leaving.presentingViewController?.dismiss(animated: false) }
+        leaving = nil
     }
 
     func leave() {
@@ -189,16 +229,37 @@ final class ProofExportCoordinator: NSObject, UIDocumentPickerDelegate, UIAdapti
         temp = nil
     }
 
+    // A picker that is not the current one (an earlier one answering late) changes nothing.
     func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
+        guard controller === picker else { return }
         answer(true)
     }
 
     func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
+        guard controller === picker else { return }
         answer(false)
     }
 
     func presentationControllerDidDismiss(_ presentationController: UIPresentationController) {
+        guard presentationController.presentedViewController === picker else { return }
         answer(false)
+    }
+
+    /// The app went to the background: the picker closes and its file goes, as a cancel (the member opens it again on
+    /// return). The app lock engages around a background transition, so this covers it; the inactive states (Control
+    /// Center, a call banner) keep the file by design.
+    @objc func didEnterBackground() {
+        guard let closing = picker else { return }
+        picker = nil
+        removeTemp()
+        dismiss(closing)
+        onAnswered(false)
+    }
+
+    /// In the background an offered file is refused as a cancel: nothing was written (or the file goes).
+    private func refuseInBackground() {
+        close()
+        DispatchQueue.main.async { [weak self] in self?.onAnswered(false) }
     }
 
     /// The member's answer, told once for the picker that is up: its file goes first.

@@ -1127,7 +1127,7 @@ The weak points are:
 | R5 accept re-sent when rebuilt | same | iOS R5. |
 | R6 deep-link input unbounded | not here | 4096-byte bound (`OpenedLinks.swift:15-24`). |
 | R7 setup link queued while a vault exists | partly | Cleared at a wipe (`AppComposition.swift:104-113`); the silent ignore is in iOS E13. |
-| R8 History export leaves broken files | not here | `fileExporter` from memory. |
+| R8 History export leaves broken files | not here | the document picker over a file made for it: complete protection, removed on every path, swept at launch and when History opens. |
 | R9 transfer out cancels on any Back | same, via the swipe | iOS R2: the swipe skips the cancel and the busy guard. |
 | R10 relaunch re-processes the intent | n/a | `onOpenURL` delivers each open once. |
 | R11 notification actions from any app | n/a | Push is phase P (IOS-PLAN §6.7), not built. |
@@ -1362,8 +1362,9 @@ hidden, takes no touches and loses the keyboard (`App/AppLockGate.swift:25-31,53
   (`App/OpenedLinks.swift`); nothing is sent before a confirm. Message links are `https://` only, after "Open link to
   <host>?" with the host in ASCII form (`Packages/VettIDData/Sources/VettIDData/Social/MessageLinks.swift`). No WebView.
 - **No state restoration, `@SceneStorage`, `@AppStorage`, `NSUserActivity`, Spotlight or widgets** that could carry content.
-- **History export** writes only where the member chooses (`fileExporter`), from memory
-  (`Packages/VettIDHistory/Sources/VettIDHistoryUI/Screens/HistoryExportScreen.swift:257-300`); a saved photo uses the
+- **History export** writes only where the member chooses (the document picker), from memory
+  into a file of its own with complete protection, removed on every path
+  (`Packages/VettIDHistory/Sources/VettIDHistoryUI/Screens/HistoryExportPicker.swift`); a saved photo uses the
   add-only permission after the warning.
 - **"Allow screenshots"** is memory-only, ends at the lock and after an hour on a clock that runs during sleep, and is
   off by default in Staging and Release (`App/AppEnvironment.swift:16`).
