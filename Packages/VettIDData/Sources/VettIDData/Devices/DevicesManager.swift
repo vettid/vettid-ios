@@ -107,16 +107,19 @@ public final class DevicesManager: DevicesRepository {
     public func refresh() async throws { try await read(quietly: false, fromQueue: false) }
 
     private func read(quietly: Bool, fromQueue: Bool) async throws {
+        // Before the gate: a read that waited behind a ``clear()`` is not applied after it either.
+        let gen = generation
         await reads.enter()
         defer { reads.leave() }
         if fromQueue { queued = false }
-        let gen = generation
+        guard gen == generation else { return }
         if devices.isEmpty { load = .loading }
         do {
             let o: any DevicesOps = try await Self.guarded { [self] in quietly ? try quietOps() : try await ops() }
             let body = try await Self.guarded { try await o.list() }
             // This phone's id once the session is open (as Android reads it after the list): read before it, a page opened
             // while the session reopens after the foreground would list this phone as another device.
+            guard DeviceWire.hasList(body) else { throw VaultFailure(.other, code: "unreadable") }
             let parsed = DeviceWire.devices(body, selfID: selfID())
             // The paused agents: only asked when there is an agent. A failure never fails the list and never clears a
             // pause: nil keeps the paused flags already held (fail closed).

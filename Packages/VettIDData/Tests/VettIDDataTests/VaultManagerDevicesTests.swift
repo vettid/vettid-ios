@@ -63,6 +63,18 @@ import VettIDDataTesting
         #expect(m.devices.removed?.id == "dev-2")
     }
 
+    /// The session book of the renewal requests drops the removed device's session at once (the vault tells the other
+    /// devices only, §10.1).
+    @Test func removingADeviceEndsItsSessionInTheRenewalBook() async throws {
+        defer { phone.close() }
+        try await open()
+        m.approvals.deviceSessionEvent("dev-2", expiresAt: Date().addingTimeInterval(3_600))
+        #expect(m.approvals.deviceSessions["dev-2"] != nil)
+        try await m.devices.refresh()
+        try await m.devices.remove("dev-2")
+        #expect(m.approvals.deviceSessions["dev-2"] == nil)
+    }
+
     /// A hold forgets the list, as a lock does (IOS-PLAN §6.9).
     @Test func theHoldForgetsTheList() async throws {
         defer { phone.close() }

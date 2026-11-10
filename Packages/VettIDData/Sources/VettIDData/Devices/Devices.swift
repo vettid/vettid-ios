@@ -75,10 +75,14 @@ public enum DeviceWire {
     private static func instant(_ s: String?) -> Date? { OwnerCheckManager.instant(s) }
 
     /// The entries of a `device.list` answer, in the vault's order; [selfID] is this phone's device id.
+    /// An entry whose `id` was seen before is dropped (the first stays).
     public static func devices(_ body: JsonObject, selfID: String?, paused: Set<String> = []) -> [DeviceInfo] {
         guard case .array(_, let items)? = body["devices"] else { return [] }
+        var seen = Set<String>()
         return items.compactMap { item -> DeviceInfo? in
-            guard let d = try? item.asObject(), let id = VaultJSON.string(d, "id"), !id.isEmpty else { return nil }
+            guard let d = try? item.asObject(), let id = VaultJSON.string(d, "id"), !id.isEmpty, seen.insert(id).inserted else {
+                return nil
+            }
             let kind = VaultJSON.string(d, "kind") ?? ""
             let profileName = VaultJSON.obj(d, "profile").flatMap { VaultJSON.string($0, "name") }
             let ik = VaultJSON.string(d, "ik")
@@ -90,6 +94,12 @@ public enum DeviceWire {
                 thisPhone: selfID != nil && id == selfID, paused: kind == DeviceInfo.kindAgent && paused.contains(id)
             )
         }
+    }
+
+    /// Whether a `device.list` answer carries a `devices` array: one without is a failed read, not an empty list.
+    public static func hasList(_ body: JsonObject) -> Bool {
+        if case .array? = body["devices"] { return true }
+        return false
     }
 
     /// The order of the list (ANDROID-PLAN 0.1.53 AA1): this phone first, then agents, then desktops, each newest

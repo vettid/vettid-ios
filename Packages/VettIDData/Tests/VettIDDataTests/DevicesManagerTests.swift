@@ -17,6 +17,12 @@ final class OpenFlag: @unchecked Sendable {
     var value = false
 }
 
+/// This phone's device id, once the session knows it.
+@MainActor
+final class SelfIDBox {
+    var value: String?
+}
+
 final class FakeDevicesOps: DevicesOps, @unchecked Sendable {
     var devices = (try? obj(#"{"devices":[]}"#))!
     var grantsAll = (try? obj(#"{"grants":[],"suspended":[]}"#))!
@@ -433,6 +439,71 @@ final class FakeDevicesOps: DevicesOps, @unchecked Sendable {
         try await m.refresh()
         #expect(m.devices.map(\.id) == ["a1", "d1"])
         #expect(m.devices[1].name.isEmpty && m.devices[1].createdAt == nil)
+    }
+
+    /// An answer without a `devices` array is a failed read, not an empty list: what was read stays.
+    @Test func anAnswerWithoutAListOfDevicesIsAFailedReadThatKeepsTheOldList() async throws {
+        let ops = FakeDevicesOps()
+        ops.devices = try fleet()
+        let m = manager(ops)
+        try await m.refresh()
+        for body in [#"{}"#, #"{"devices":"none"}"#, #"{"devices":{"id":"a"}}"#, #"{"devices":null}"#] {
+            ops.devices = try obj(body)
+            await #expect(throws: VaultFailure.self) { try await m.refresh() }
+            #expect(m.load == .failed && m.devices.count == 7, "\(body)")
+        }
+        // An empty array is an empty list.
+        ops.devices = try obj(#"{"devices":[]}"#)
+        try await m.refresh()
+        #expect(m.load == .loaded && m.devices.isEmpty)
+    }
+
+    @Test func aRepeatedIdIsListedOnceTheFirstStays() throws {
+        let body = try list(dev("a1", "agent", "First"), dev("d1", "desktop", "D"), dev("a1", "desktop", "Second"))
+        let d = DeviceWire.devices(body, selfID: nil)
+        #expect(d.map(\.id) == ["a1", "d1"] && d.first?.name == "First" && d.first?.isAgent == true)
+    }
+
+    /// A read that waited behind another across a clear is not applied after it, even when it fails.
+    @Test func aReadQueuedAcrossAClearIsNotAppliedEvenWhenItFails() async throws {
+        let ops = FakeDevicesOps()
+        ops.devices = try fleet()
+        let gate = TestDeferred<Void>()
+        ops.gate = gate
+        ops.refuse["list"] = "network"
+        let m = manager(ops)
+        let first = Task { try? await m.refresh() }
+        #expect(await eventually { ops.calls.contains("list") })
+        let second = Task { try? await m.refresh() }
+        await Task.yield()
+        m.clear() // the vault is held: both reads began before it
+        gate.complete()
+        _ = await (first.value, second.value)
+        #expect(m.load == .notLoaded && m.devices.isEmpty)
+    }
+
+    /// The id check of ``DevicesManager`` alone: the list was read before the session knew this phone's id, so its entry
+    /// is an ordinary agent that is actionable; once the id is known nothing is sent for it.
+    @Test func thisPhonesIdAloneStopsAnActionWhenItsEntryLooksActionable() async throws {
+        let ops = FakeDevicesOps()
+        ops.devices = try list(dev("me", "agent", "Me"))
+        let id = SelfIDBox()
+        let m = DevicesManager(ops: { ops }, quietOps: { ops }, selfID: { id.value }, onDeviceGone: { _ in })
+        try await m.refresh()
+        #expect(m.devices.first?.actionable == true)
+        id.value = "me"
+        await #expect(throws: VaultFailure.self) { try await m.endAccess("me") }
+        await #expect(throws: VaultFailure.self) { try await m.remove("me") }
+        #expect(!ops.calls.contains { $0.hasPrefix("end:") || $0.hasPrefix("unlink:") })
+    }
+
+    @Test func aRemovalReadsTheListAgainInTheBackground() async throws {
+        let ops = FakeDevicesOps()
+        ops.devices = try fleet()
+        let m = manager(ops)
+        try await m.refresh()
+        try await m.remove("a-old")
+        #expect(await eventually { ops.calls.filter { $0 == "list" }.count == 2 })
     }
 
     @Test func theDescriptionNeverPrintsAName() throws {
