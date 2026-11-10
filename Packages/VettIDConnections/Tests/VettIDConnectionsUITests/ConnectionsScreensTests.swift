@@ -49,6 +49,34 @@ import VettIDUI
         }
     }
 
+    /// vettid-android's `connections_auth_key_changed`, word for word, with the name bidi-isolated (§10.8).
+    @Test func theKeyChangeWarningIsAndroids() {
+        let name = AccountNames.isolate("Ada")
+        #expect(
+            ConnectStrings.authKeyChanged(name)
+                == "The credential key of \(name) changed since their last authentication. Check with them before you trust it."
+        )
+    }
+
+    /// The warning card is on the page when the vault reported a key change, and only then (VAULT-MESSAGING §10.4): the
+    /// same page scrolls further by the card. (The screen fills the window, so its scroll content is what grows.)
+    @Test func theKeyChangeWarningShowsOnlyWhenReported() throws {
+        let plainState = try #require(detailStates().first { $0.connection != nil && !$0.keyChanged && $0.error == nil && !$0.loading })
+        var warned = plainState
+        warned.keyChanged = true
+        let plain = try contentHeight(ConnectionDetailScreen(state: plainState, actions: DetailActions()))
+        let withCard = try contentHeight(ConnectionDetailScreen(state: warned, actions: DetailActions()))
+        #expect(withCard > plain + 20, "warned \(withCard), plain \(plain)")
+    }
+
+    /// The content height of the first scroll view of [view], hosted in a phone-sized window.
+    private func contentHeight(_ view: some View) throws -> CGFloat {
+        let window = host(view)
+        defer { window.isHidden = true }
+        let scroll = try #require(views(in: window).compactMap { $0 as? UIScrollView }.first)
+        return scroll.contentSize.height
+    }
+
     @Test func everyDetailStateRenders() {
         for s in detailStates() {
             var actions = DetailActions()
@@ -146,7 +174,10 @@ import VettIDUI
         var failed = ConnectionDetailState(connectionID: "c1")
         failed.loading = false
         failed.error = .network
-        return [loading, bare, full, cooled, failed]
+        // A key change the vault reported (VAULT-MESSAGING §10.4): the warning card is part of the page.
+        var warned = full
+        warned.keyChanged = true
+        return [loading, bare, full, cooled, failed, warned]
     }
 
     /// The add sheet (the view the add button presents) scrolls its options at the largest text size, so the last one

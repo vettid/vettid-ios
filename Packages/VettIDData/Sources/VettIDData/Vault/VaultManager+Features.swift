@@ -107,6 +107,7 @@ extension VaultManager {
     func forgetOpenLists() {
         forgetOwnProfile()
         forgetHeld()
+        connections.forgetAuthentication()
         forgetRelay()
         approvals.vaultClosed()
     }

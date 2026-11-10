@@ -20,6 +20,10 @@ public final class ConnectionsManager: ConnectionsRepository, ConnectionRequests
     var open: [PendingConnection] = []
     public internal(set) var requestEnds: [String: RequestEnd] = [:]
     public internal(set) var peerDeclines: [PeerDecline] = []
+    /// What the vault says of each connection's member authentication (§10.4), by connection id: from
+    /// `connection.authenticate.list` and the verdicts (`connection.authenticate.result`). In memory only, dropped with the
+    /// connections (``forgetOpenVault()``), with a connection that goes, and at a wipe.
+    public internal(set) var authentication: [String: AuthenticationState] = [:]
 
     @ObservationIgnored let ops: @MainActor () async throws -> any ConnectionOps
     /// The calls of a read nobody asked for (at the opening, after an owner check, on an event): only over the session
@@ -37,6 +41,13 @@ public final class ConnectionsManager: ConnectionsRepository, ConnectionRequests
     /// with everything else (``forgetOpenVault()`` advances both), so the two move together; apart, a later drop of the
     /// requests alone would keep a read of the connections on its way.
     @ObservationIgnored var requestGeneration = 0
+    /// A `connection.authenticate.key` re-read is running (``rereadAuthentication(first:)``); an event that comes while it
+    /// runs only sets ``keyRereadQueued``.
+    @ObservationIgnored var keyRereadRunning = false
+    /// The ``generation`` of the latest `connection.authenticate.key` event that came while a re-read ran: one more read is due.
+    @ObservationIgnored var keyRereadQueued: Int?
+    /// Test hook: runs after a `connection.authenticate.key` re-read has its answers and before they are written.
+    @ObservationIgnored var keyRereadHook: (@MainActor () async -> Void)?
     /// Told of every connection that is gone (removed, blocked, or removed by the peer): its messages go with it.
     @ObservationIgnored public var onForget: @MainActor (String) -> Void = { _ in }
     /// Told whenever the connections read from the vault are dropped (the lock, a hold, a wipe), for what the app derived from
@@ -87,11 +98,24 @@ public final class ConnectionsManager: ConnectionsRepository, ConnectionRequests
     /// from it, and the names and declines learnt of them, are dropped from memory; an unlock reads the lists again.
     /// Also at a hold (IOS-PLAN §6.9: vault content is cleared at the vault lock, at a hold and at a wipe). A read on its
     /// way is not published.
-    public func forgetOpenVault() {
+    ///
+    /// The authentication states go with it unless [keepingAuthentication]: at a hold or a due owner check they stay, with
+    /// the key-change warning (vettid-android's `forgetPending` keeps them; the vault is the same one and a warning the
+    /// member MUST be shown is not forgotten by a hold); the lock, a wipe and ``clear()`` drop them
+    /// (``forgetAuthentication()``). A read begun before the hold is not published either way (the ``generation`` moved),
+    /// and the lists read after the hold take the states in again.
+    public func forgetOpenVault(keepingAuthentication: Bool = false) {
         generation += 1
         connections = []
+        if !keepingAuthentication { authentication = [:] }
         forgetRequests()
         onForgetAll()
+    }
+
+    /// Drops the authentication states (the lock, a wipe), after a hold kept them.
+    public func forgetAuthentication() {
+        generation += 1
+        authentication = [:]
     }
 
     /// The open requests, with their names and safety codes, and the other member's declines are dropped from memory; an
@@ -108,6 +132,7 @@ public final class ConnectionsManager: ConnectionsRepository, ConnectionRequests
     public func clear() {
         forgetOpenVault()
         requestEnds = [:]
+        keyRereadQueued = nil
         notedDeclines = []
         ttls = nil
     }
@@ -137,16 +162,66 @@ public final class ConnectionsManager: ConnectionsRepository, ConnectionRequests
         let g = generation
         let asked = Set(connections.map(\.id))
         let o = quietly ? quietOps : ops
-        let list = try await guarded { try await o().connectionList() }
+        let read = try await guarded { try await readConnections(o) }
         guard g == generation else { return }
-        let next = list.filter { $0.kind == "connection" }.map(ConnectionParser.connection)
+        take(read, asked: asked)
+        if let failure = read.authFailure { throw VaultFailures.map(failure) }
+    }
+
+    /// `connection.list` and `connection.authenticate.list` as the vault answered them. A refused `authenticate.list`
+    /// (the vault answered with an error: a vault without the type) is no states and no failure; any other failure of it
+    /// is kept in [authFailure] for the caller to throw once the connections are taken in.
+    struct ConnectionRead {
+        var connections: [Connection]
+        var states: [AuthenticationState]?
+        var authFailure: Error?
+    }
+
+    func readConnections(_ o: @MainActor () async throws -> any ConnectionOps) async throws -> ConnectionRead {
+        let api = try await o()
+        let connections = try await api.connectionList()
+        do {
+            let states = VaultJSON.objects(try await api.authenticateList(), "states").compactMap(ConnectionParser.authState)
+            return ConnectionRead(connections: connections, states: states)
+        } catch is VaultOpError {
+            return ConnectionRead(connections: connections, states: nil)
+        } catch {
+            return ConnectionRead(connections: connections, states: nil, authFailure: error)
+        }
+    }
+
+    /// Takes a whole read in; the caller has checked the ``generation`` it was asked at. The connections are merged as
+    /// before. The authentication list is authoritative for what it carries (times, last result, the pinned `key`); one
+    /// thing it does not carry is kept from the state held: the `keyChanged` warning (`key_changed` exists only on a
+    /// `connection.authenticate.result`, §10.4, so a list read cannot say whether the last verdict was a key change;
+    /// without the carry-over every re-read would silently drop a warning the member MUST be shown). States the list does
+    /// not name are kept, except those of connections that went.
+    func take(_ read: ConnectionRead, asked: Set<String>) {
+        let next = read.connections.filter { $0.kind == "connection" }.map(ConnectionParser.connection)
         let kept = Set(next.map(\.id))
         // A connection read while the list was on its way (``connection(_:)``) stays; one the vault no longer lists that
         // was known when the list was asked for (removed on another device) goes, and takes its conversation with it.
         let added = connections.filter { !asked.contains($0.id) && !kept.contains($0.id) }
         let gone = connections.map(\.id).filter { asked.contains($0) && !kept.contains($0) }
         connections = next + added
-        for id in gone { onForget(id) }
+        if let states = read.states {
+            var merged = authentication
+            for st in states {
+                var s = st
+                s.keyChanged = merged[st.connectionID]?.keyChanged ?? false
+                merged[st.connectionID] = s
+            }
+            authentication = merged
+        }
+        // States kept across a hold for a connection the vault no longer lists (removed meanwhile) go with it.
+        if read.states != nil {
+            let listed = Set(connections.map(\.id))
+            authentication = authentication.filter { listed.contains($0.key) }
+        }
+        for id in gone {
+            authentication[id] = nil
+            onForget(id)
+        }
     }
 
     public func connection(_ id: String) async throws -> ConnectionInfo {
@@ -266,6 +341,7 @@ public final class ConnectionsManager: ConnectionsRepository, ConnectionRequests
 
     func forget(_ id: String) {
         connections.removeAll { $0.id == id }
+        authentication[id] = nil
         onForget(id)
     }
 

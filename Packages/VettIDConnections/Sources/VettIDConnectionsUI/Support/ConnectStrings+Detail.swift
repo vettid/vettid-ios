@@ -69,6 +69,16 @@ extension ConnectStrings {
         )
     }
 
+    /// The key-change warning (VAULT-MESSAGING §10.4 `key_changed`: apps MUST show it); the words of vettid-android's
+    /// `connections_auth_key_changed`. [name] is bidi-isolated.
+    static func authKeyChanged(_ name: String) -> String {
+        String(
+            localized: "connections_auth_key_changed",
+            defaultValue: "The credential key of \(name) changed since their last authentication. Check with them before you trust it.",
+            bundle: .module
+        )
+    }
+
     // MARK: - Asks (VAULT-MESSAGING 0.23.0 §10.4.1)
 
     static var theirsUnnamed: String { String(localized: "connections_share_theirs_unnamed", defaultValue: "Theirs", bundle: .module) }

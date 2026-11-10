@@ -31,7 +31,7 @@ extension VaultApi {
         _ = try await approvalOp("connection.authenticate.deny", JsonBuilder().string("request_id", requestID))
     }
 
-    /// `connection.authenticate.list`: `{states: [{connection_id, verified_at?, last_result?, last_at?}]}`.
+    /// `connection.authenticate.list`: `{states: [{connection_id, verified_at?, last_result?, last_at?, key?}]}`.
     public func authenticateList() async throws -> JsonObject {
         try await approvalOp("connection.authenticate.list", JsonBuilder())
     }

@@ -21,6 +21,7 @@ public final class FakeConnections: ConnectionsRepository, ConnectionRequestsRep
     public var outstanding: [OutstandingInvite] = []
 
     public var connections: [ConnectionInfo] = []
+    public var authentication: [String: AuthenticationState] = [:]
     public var requests: [PendingConnection] = []
     public var requestEnds: [String: RequestEnd] = [:]
     public var peerDeclines: [PeerDecline] = []

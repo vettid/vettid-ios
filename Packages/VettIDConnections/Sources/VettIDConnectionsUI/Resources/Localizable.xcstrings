@@ -1464,6 +1464,17 @@
         }
       }
     },
+    "connections_auth_key_changed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The credential key of %@ changed since their last authentication. Check with them before you trust it."
+          }
+        }
+      }
+    },
     "connections_share_theirs_unnamed": {
       "extractionState": "manual",
       "localizations": {

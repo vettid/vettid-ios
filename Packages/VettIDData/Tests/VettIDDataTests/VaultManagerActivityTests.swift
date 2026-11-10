@@ -331,9 +331,12 @@ import VettIDVault
         #expect(m.history.cached(seq) != nil)
         let feedItems = feed.items.count
 
+        // The authentication states, and a key-change warning, stay across a hold (VAULT-MESSAGING §10.4).
+        m.connections.authentication[id] = AuthenticationState(connectionID: id, keyChanged: true)
         m.onEvent(Self.held())
         #expect(m.ownerChecks.ownerCheck?.state != .ok)
         #expect(m.connections.connections.isEmpty && m.connections.requests.isEmpty && m.connections.local.requestNames.isEmpty)
+        #expect(m.connections.authentication[id]?.keyChanged == true)
         #expect(m.messages.messages(id).isEmpty && approvals.approvals.isEmpty && feed.items.isEmpty && m.history.cached(seq) == nil)
 
         try service.otherDevicePassesCheck()

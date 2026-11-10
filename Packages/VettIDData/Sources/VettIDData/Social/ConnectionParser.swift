@@ -87,6 +87,59 @@ public enum ConnectionParser {
         return i
     }
 
+    /// The `key` member of a `connection.authenticate.list` state, `.result` or `connection.authenticate.key` body
+    /// (VAULT-MESSAGING 0.88.1 §10.4): returned as sent when it is canonical standard base64 of exactly 32 bytes (an
+    /// Ed25519 public key, §5.3), else nil. Only the encoding and the length are checked: the app does no cryptography
+    /// with it (the vault verified the signatures and follows the rotation chains).
+    public static func credentialKey(_ o: JsonObject) -> String? {
+        guard let k = VaultJSON.string(o, "key"), (try? Base64s.decodeStd(k, 32)) != nil else { return nil }
+        return k
+    }
+
+    /// One state of `connection.authenticate.list`; nil without its `connection_id`. A malformed `key` is dropped and the
+    /// rest kept.
+    static func authState(_ o: JsonObject) -> AuthenticationState? {
+        guard let id = VaultJSON.string(o, "connection_id") else { return nil }
+        return AuthenticationState(
+            connectionID: id, verifiedAt: instant(VaultJSON.string(o, "verified_at")), lastResult: VaultJSON.string(o, "last_result"),
+            lastAt: instant(VaultJSON.string(o, "last_at")), key: credentialKey(o)
+        )
+    }
+
+    /// A `connection.authenticate.result` body over the state [previous] (nil without its `connection_id`).
+    ///
+    /// Only a successful verdict (`authenticated: true`) speaks about the key. Its `key_changed` decides the warning: true
+    /// when the key was not the pinned one and the pin did not lead to it (§10.4); false or absent otherwise, including a
+    /// response whose `rotations` the vault followed. Its `key`, when sent and well formed, is the key the vault now has
+    /// pinned; an absent or malformed one leaves the previous key.
+    ///
+    /// A `key_changed` that is present but not a boolean decides nothing: the held value stays (it fails closed).
+    ///
+    /// A failed verdict (`denied`, `bad_signature`) carries no evidence about the key: it keeps the previous `keyChanged`
+    /// and `key`. Otherwise the party a key-change warning is about could erase it by declining the member's next
+    /// request, and a `key` sent with a failure (which the spec does not define) could pass for a pinned one. A missing
+    /// `authenticated` counts as a failure, never as a success.
+    static func authResult(_ o: JsonObject, now: Date, previous: AuthenticationState?) -> AuthenticationState? {
+        guard let id = VaultJSON.string(o, "connection_id") else { return nil }
+        let ok = VaultJSON.bool(o, "authenticated") ?? false
+        var s = previous ?? AuthenticationState(connectionID: id)
+        if ok {
+            s.verifiedAt = now
+            s.lastResult = "authenticated"
+            // Absent is false, as §10.4 gives it. Present but not a boolean fails closed: the held value stays.
+            if let changed = VaultJSON.bool(o, "key_changed") {
+                s.keyChanged = changed
+            } else if !o.has("key_changed") {
+                s.keyChanged = false
+            }
+            s.key = credentialKey(o) ?? s.key
+        } else {
+            s.lastResult = VaultJSON.string(o, "reason") ?? "denied"
+        }
+        s.lastAt = now
+        return s
+    }
+
     /// An entry of `connection.invite.list`; nil without its `invite_id`.
     static func invite(_ o: JsonObject) -> OutstandingInvite? {
         guard let id = VaultJSON.string(o, "invite_id") else { return nil }
