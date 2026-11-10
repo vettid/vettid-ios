@@ -309,6 +309,42 @@ extension VaultDeviceTests {
         #expect(try await take(r.new).type == "hs.confirm")
     }
 
+    /// A new pairing's hs.resp starts with its own epoch confirmed: a confirmed epoch and time left from before are cleared
+    /// (as dropPairing does).
+    @Test func aNewPairingClearsTheConfirmedEpoch() async throws {
+        let d = try await VaultDevice.create(config(InMemoryDeviceStateStore()), secrets: try DeviceSecrets.generate())
+        let v = try FakeVault(relayURL: relay.baseURL)
+        try await d.handle(try v.enrolled(d))
+        try await d.awaitEnrolled(timeout: 1)
+        d.mem.withLock {
+            d.st.vault?.confirmed = Base64s.encodeStd([UInt8](repeating: 7, count: Suite.epochIDSize))
+            d.st.vault?.confirmAtMs = 5
+        }
+        let paired = Task { try await d.completeEnrollment(timeout: 10) }
+        let (_, initMsg) = try await relay.nextDeposit()
+        try await d.handle(try v.respond(initMsg, d))
+        #expect(d.mem.withLock { d.st.vault?.confirmed == nil && d.st.vault?.confirmAtMs == nil })
+        try v.fin(try await relay.nextDeposit().payload, d)
+        try await d.handle(try v.seal("device.paired", #"{"device_id":"dev-1","role":"app","vault_id":"\#(v.vaultID)"}"#))
+        try await paired.value
+    }
+
+    /// A refusal for good met by the outbox flush (``flushOutbox()``) sets the same floor: due again a minute later.
+    @Test func aRefusalForGoodDuringAFlushSetsTheFloor() async throws {
+        let clock = Box(Date())
+        let r = try await rekeyed(clock)
+        relay.refuseDeposits = "unavailable" // the confirmation a message brings stays in the outbox
+        relay.refuseStatus = 503
+        try await r.device.handle(r.vault.msg(try r.old.seal(message())))
+        #expect(r.device.mem.withLock { r.device.st.outbox.map(\.type) } == ["hs.confirm"])
+        relay.refuseDeposits = RelayError.tokenRevoked
+        relay.refuseStatus = 403
+        await r.device.flushOutbox()
+        #expect(try savedState(r.store).outbox.isEmpty)
+        let floor = VaultDevice.ms(clock.value) - Int64((VaultDevice.confirmResend - VaultDevice.reconfirmEvery) * 1000)
+        #expect(try savedState(r.store).vault?.confirmAtMs == floor)
+    }
+
     @Test func anHsConfirmFromTheVaultIsIgnored() async throws {
         let (d, v) = try await pairedDevice()
         try await d.handle(try v.seal("hs.confirm", "{}"))

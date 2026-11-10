@@ -217,6 +217,9 @@ public protocol HistoryRepository: AnyObject, Sendable {
     /// [refresh] reads it again. Nil when it was never read (the call failed): no device is then named, rather than every
     /// device called removed.
     func devices(refresh: Bool) async -> HistoryDevices?
+    /// The devices read afresh and kept; nil when the read failed (unlike ``devices(refresh:)``, which then answers what was
+    /// kept).
+    func readDevices() async -> HistoryDevices?
 }
 
 /// The vault's devices as History names them (§10.3, §10.9 History export): every listed device by id, with its name, or
@@ -304,8 +307,12 @@ public final class HistoryManager: HistoryRepository {
 
     public func devices(refresh: Bool = false) async -> HistoryDevices? {
         if let devicesRead, !refresh { return devicesRead }
+        return await readDevices() ?? devicesRead
+    }
+
+    public func readDevices() async -> HistoryDevices? {
         let g = generation
-        guard let list = try? await ops().deviceList(), g == generation else { return devicesRead }
+        guard let list = try? await ops().deviceList(), g == generation else { return nil }
         let d = HistoryDevices(list, selfID: selfID())
         devicesRead = d
         return d

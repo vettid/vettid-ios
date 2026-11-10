@@ -50,7 +50,7 @@ public struct NotificationsRoute: View {
             .onAppear {
                 if model == nil {
                     var devices: (@MainActor (Bool) async -> HistoryDevices?)?
-                    if let history { devices = { await history.devices(refresh: $0) } }
+                    if let history { devices = { $0 ? await history.readDevices() : await history.devices(refresh: false) } }
                     model = NotificationsViewModel(
                         feed: feed, connections: connections, approvals: approvals, items: items, votes: votes, archived: archived,
                         devices: devices

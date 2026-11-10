@@ -132,8 +132,9 @@ public final class NotificationsViewModel {
     }
 
     /// The device list when an item names a device by its id only (`device.update_needed`) and no name is known for it: the
-    /// list as History keeps it the first time, read afresh for an id it lacked (a device paired or renamed since). Once
-    /// per id; an id asked for in a failed read is asked again with the next change of the list.
+    /// list as History keeps it the first time, then read afresh at once if it lacks an id (a device paired or renamed
+    /// since), and afresh for any later unnamed id. Once per id; an id still unnamed after a failed read is asked again
+    /// with the next change of the list. [devices] with `refresh` true answers nil when the read fails.
     private func readDevicesIfNeeded() {
         guard let devices else { return }
         let ids = Set(feed.items.filter { $0.kind == "device.update_needed" }.compactMap(\.deviceID))
@@ -142,12 +143,19 @@ public final class NotificationsViewModel {
         devicesAsked.formUnion(missing)
         let refresh = devicesRead
         Task { @MainActor [weak self] in
-            guard let d = await devices(refresh) else {
+            guard let first = await devices(refresh) else {
                 self?.devicesAsked.subtract(missing)
                 return
             }
-            self?.devicesRead = true
-            self?.deviceNames = d.names
+            var names = first.names
+            var failed = false
+            if !refresh, !missing.isSubset(of: names.keys) {
+                if let fresh = await devices(true) { names = fresh.names } else { failed = true }
+            }
+            guard let self else { return }
+            devicesRead = true
+            deviceNames = names
+            if failed { devicesAsked.subtract(missing.subtracting(names.keys)) }
         }
     }
 

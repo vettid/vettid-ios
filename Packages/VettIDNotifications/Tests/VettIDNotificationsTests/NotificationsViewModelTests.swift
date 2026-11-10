@@ -99,6 +99,28 @@ import VettIDVault
         #expect(calls.n == 3)
     }
 
+    /// History's kept list lacks the id (a desktop paired since it was read): read afresh at once; a failed fresh read is
+    /// tried again with the next change of the list.
+    @Test func aKeptListWithoutTheDeviceIsReadAfresh() async {
+        let refreshes = Counter()
+        let freshWorks = Counter()
+        let devices: @MainActor (Bool) async -> HistoryDevices? = { refresh in
+            guard refresh else { return HistoryDevices(names: ["d0": "Phone"]) }
+            refreshes.n += 1
+            return freshWorks.n == 0 ? nil : HistoryDevices(names: ["d0": "Phone", "d1": "Mac"])
+        }
+        var u = Self.item("u1", "device.update_needed", priority: "high")
+        u.deviceID = "d1"
+        feed.items = [u]
+        let m = NotificationsViewModel(feed: feed, connections: connections, approvals: approvals, devices: devices)
+        #expect(await eventually { refreshes.n == 1 })
+        #expect(m.state.names.devices == ["d0": "Phone"]) // the fresh read failed
+        freshWorks.n = 1
+        feed.items = [u, Self.item("m1")]
+        #expect(await eventually { m.state.names.devices["d1"] == "Mac" })
+        #expect(refreshes.n == 2)
+    }
+
     @Test func sectionsPutUrgentUnreadFirstThenDays() {
         let items = [
             Self.item("a", at: "2026-10-19T09:00:00.000Z"), Self.item("b", "credential.alarm", at: "2026-10-18T09:00:00.000Z", priority: "urgent"),
