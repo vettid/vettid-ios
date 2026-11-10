@@ -185,23 +185,38 @@ public final class HistoryExportViewModel {
         self.lockWatch = lockWatch
     }
 
-    /// A lock was seen: remembered from the PIN on, and an export on the save step ends (the member then needs the PIN and
-    /// a fresh read).
-    func locked() {
+    /// Which watch the observers belong to: bumped when a new one starts (at each PIN), so a notification
+    /// that was posted for an earlier export (a hop from another thread that runs late) ends nothing of a later one.
+    @ObservationIgnored private var lockSession = 0
+
+    /// A lock was seen (by the watch of [session]): remembered from the PIN on, and an export holding data in memory ends
+    /// at once (the member then needs the PIN and a fresh read): the PIN being checked, the read (cancelled, its records
+    /// dropped) and the save step. A finished export (done) or one that holds nothing yet is left alone. The remaining
+    /// risk: if UIKit delivers neither protected-data notification on resume, a read that finishes after the unlock still
+    /// reaches the save step (``protectedDataAvailable`` is checked then); the picker's coordinator relies on the same
+    /// delivery.
+    func locked(session: Int) {
+        guard session == lockSession else { return }
         lockSeen = true
-        if case .save = step { close() }
+        switch step {
+        case .save, .reading: close()
+        case .pin(let s) where s.busy: close()
+        default: break
+        }
     }
 
     private func watchLocks() {
         lockSeen = false
+        lockSession += 1
+        let session = lockSession
         let box = ModelBox()
         box.model = self
         lockObservers.start(lockWatch) { [box] in
-            // The notifications come on the main thread.
+            // The notifications come on the main thread; one from elsewhere is handled there, if it is still current.
             if Thread.isMainThread {
-                MainActor.assumeIsolated { box.model?.locked() }
+                MainActor.assumeIsolated { box.model?.locked(session: session) }
             } else {
-                Task { @MainActor in box.model?.locked() }
+                Task { @MainActor in box.model?.locked(session: session) }
             }
         }
     }
@@ -402,6 +417,9 @@ public final class HistoryExportViewModel {
 
     /// TEST ONLY: returns once the work started has run.
     func settle() async { await work.settle() }
+
+    /// TEST ONLY: the current lock watch's session.
+    var lockSessionForTesting: Int { lockSession }
 }
 
 private extension Character {
