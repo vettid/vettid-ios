@@ -341,6 +341,40 @@ final class FakePairingOps: PairingOps {
         #expect(n.calls == ["create", "approve:p1:86400"])
     }
 
+    /// A second tap while the approval is in flight is not a second approval.
+    @Test func anApprovalInFlightIsNotSentTwice() async throws {
+        let ops = try ops()
+        let m = manager(ops)
+        await m.start()
+        m.onEvent(pending())
+        let gate = TestDeferred<Void>()
+        ops.holdApprove = gate
+        let first = Task { await m.approve(sessionSeconds: 3600) }
+        #expect(await eventually { ops.approveEntered.isCompleted })
+        #expect(m.state.busy)
+        await m.approve(sessionSeconds: 3600)
+        await m.reject()
+        #expect(ops.calls == ["create", "approve:p1:3600"])
+        gate.complete(())
+        await time.advance(seconds: 11)
+        await first.value
+        #expect(paired(m) != nil)
+    }
+
+    /// Two new devices announced while the approval ran: neither is taken for the new one, and the list opens instead.
+    @Test func moreThanOneNewDeviceInTheFeedGivesNoId() async throws {
+        let ops = try ops()
+        let m = manager(ops, listed: [agent("new", "Claude on laptop")])
+        ops.onApprove = {
+            m.onEvent(self.paidFeed("agent-8"))
+            m.onEvent(self.paidFeed("agent-9"))
+        }
+        await m.start()
+        m.onEvent(pending())
+        await approve(m)
+        #expect(paired(m) != nil && paired(m)?.deviceID == nil)
+    }
+
     @Test func theNewAgentsIdComesFromTheFeedItem() async throws {
         let ops = try ops()
         let m = manager(ops)
@@ -520,10 +554,13 @@ final class FakePairingOps: PairingOps {
         let m = manager(ops)
         await m.start()
         m.onEvent(pending())
+        // The comparison's own timer starts waiting for its end first.
+        await time.runCurrent()
         skew.value = 601
         // Even before the timer ran, an approval is refused locally.
         await approve(m)
         #expect(ops.calls == ["create"])
+        #expect(compared(m) != nil, "the comparison is still there: only the timer ends it")
         skew.value = 0
         await time.advance(seconds: 601)
         #expect(m.state.stage == .ended)
