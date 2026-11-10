@@ -16,6 +16,9 @@ public struct DevicesState: Equatable, Sendable, CustomStringConvertible, Custom
 
     /// Only this phone is listed: "No agents yet". Only of a list that was read: one that was not never says it.
     public var onlyThisPhone: Bool { load == .loaded && devices.allSatisfy(\.thisPhone) }
+    /// The failure the screen shows: this screen's own, else a generic one when the list failed and nothing is held (a read
+    /// of another screen failed, or the failure was not this screen's), so the screen is never blank.
+    public var shownError: FailureKind? { error ?? (load == .failed && devices.isEmpty ? .other : nil) }
 
     public var loading: Bool { devices.isEmpty && (load == .notLoaded || load == .loading) && error == nil }
 

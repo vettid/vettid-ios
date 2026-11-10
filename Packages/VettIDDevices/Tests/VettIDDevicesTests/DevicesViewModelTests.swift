@@ -76,6 +76,22 @@ import VettIDDataTesting
         #expect(!m.state.loading && m.state.error == .network)
     }
 
+    /// A failed list with nothing held and no failure of this screen's own (another screen's read failed) shows the failure
+    /// card with a generic failure, never a blank screen.
+    @Test func aFailedListWithNothingHeldIsNeverBlank() {
+        var s = DevicesState()
+        s.load = .failed
+        #expect(s.shownError == .other && !s.loading && !s.onlyThisPhone)
+        s.error = .network
+        #expect(s.shownError == .network)
+        s.error = nil
+        s.devices = [DeviceInfo(id: "me", kind: "app", name: "", thisPhone: true)]
+        #expect(s.shownError == nil)
+        s.load = .loaded
+        s.devices = []
+        #expect(s.shownError == nil)
+    }
+
     @Test func aFailedReadIsShownAndReadsAgainWhenTheDailyCheckPasses() async {
         let owner = FakeVaultRepository()
         owner.ownerCheck = OwnerCheckView(state: .held, deadline: nil, hold: true)

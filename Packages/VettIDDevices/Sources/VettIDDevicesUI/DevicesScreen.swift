@@ -47,7 +47,7 @@ public struct DevicesScreen: View {
     @ViewBuilder private var content: some View {
         if state.loading {
             ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity).accessibilityIdentifier("devices_loading")
-        } else if state.devices.isEmpty, let error = state.error {
+        } else if state.devices.isEmpty, let error = state.shownError {
             ErrorCard(error: error, timeScale: timeScale, onRetry: actions.onRetry)
                 .padding(Spacing.xl)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -67,7 +67,7 @@ public struct DevicesScreen: View {
     private var list: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 0) {
-                if let error = state.error {
+                if let error = state.shownError {
                     // The list on screen is what was read before; a refresh that failed says so above it.
                     ErrorCard(error: error, timeScale: timeScale, onRetry: actions.onRetry)
                         .padding(.horizontal, Spacing.gutter).padding(.vertical, Spacing.s)
