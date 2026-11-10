@@ -258,8 +258,8 @@ private struct ExportPinStep: View {
 }
 
 /// The file is ready: "Save to Files" opens by itself once, and again from the button; the suggested name below. The
-/// system's document picker (IOS-PLAN §4) copies a file made for it (``HistoryExportTempFile``, removed on every path) only where the member chooses; cancelling
-/// or dismissing it drops the export.
+/// system's document picker (IOS-PLAN §4) copies a file made for it (``HistoryExportTempFile``, removed on every path)
+/// only where the member chooses; cancelling or dismissing it drops the export.
 private struct ExportSaveStep: View {
     let save: ExportSave
     let file: ExportFile?
@@ -301,7 +301,8 @@ private struct ExportSaveStep: View {
     }
 }
 
-/// The export's content types. The picker takes the type from the file's extension, which the file name carries.
+/// The export's content types, which pin §10.9's (tests check them against the file extensions). The picker takes the
+/// type from the file's extension, which the file name carries.
 enum ExportContentType {
     /// §10.9's content types: `text/csv` or `application/json`.
     static func of(_ f: ExportFormat) -> UTType { f == .csv ? .commaSeparatedText : .json }
