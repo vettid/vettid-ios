@@ -181,7 +181,7 @@ import VettIDData
         defer { try? FileManager.default.removeItem(at: root) }
         let window = windowed(UIViewController())
         let controller = try #require(window.rootViewController)
-                let c = HistoryExportCoordinator()
+        let c = HistoryExportCoordinator()
         c.root = root
         var presented = 0, failed = 0
         var answers: [Bool] = []

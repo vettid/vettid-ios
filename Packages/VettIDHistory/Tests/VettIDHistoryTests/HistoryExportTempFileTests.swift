@@ -42,3 +42,16 @@ import Testing
         #expect(HistoryExportLeftovers.remove(in: root.appendingPathComponent("missing")) == 0)
     }
 }
+
+/// The export's file prints nothing of the history, however it is printed.
+@Suite struct ExportFileRedactionTests {
+    @Test func noPrintingShowsTheBytesOrTheName() {
+        let file = ExportFile(bytes: Data("secret-entry-text".utf8), name: "vettid-history-secret-name.csv", format: .csv)
+        var dumped = ""
+        dump(file, to: &dumped)
+        for text in [String(describing: file), String(reflecting: file), dumped, "\(file)"] {
+            #expect(!text.contains("secret") && !text.contains("c2VjcmV0") && !text.contains("vettid-history"), "\(text)")
+        }
+        #expect(String(describing: file) == "ExportFile(17 bytes)")
+    }
+}
