@@ -167,6 +167,7 @@ public struct VaultStatusRoute: View {
     private let installedFrom: InstalledFrom
     private let onBack: @MainActor () -> Void
     @State private var model: VaultStatusViewModel?
+    @Environment(\.scenePhase) private var scenePhase
 
     public init(vault: any VaultRepository, installedFrom: InstalledFrom, onBack: @escaping @MainActor () -> Void) {
         self.vault = vault
@@ -180,6 +181,7 @@ public struct VaultStatusRoute: View {
             credentialKey: model?.credentialKey ?? .loading, retryCredentialKey: { model?.loadCredentialKey() }
         )
         .onAppear { if model == nil { model = VaultStatusViewModel(vault: vault) } }
+        .onChange(of: scenePhase) { _, now in if now == .active { model?.sceneBecameActive() } }
     }
 }
 

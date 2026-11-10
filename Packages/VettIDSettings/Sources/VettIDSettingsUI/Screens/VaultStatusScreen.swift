@@ -1,5 +1,6 @@
 #if os(iOS)
 import SwiftUI
+import UIKit
 import VettIDData
 import VettIDSettings
 import VettIDUI
@@ -28,7 +29,7 @@ public struct VaultStatusContent: View {
         onBack: @escaping @MainActor () -> Void = {},
         credentialKey: CredentialKeyRow? = nil,
         retryCredentialKey: @escaping @MainActor () -> Void = {},
-        copy: @escaping @MainActor (String) -> Void = { SecurePasteboard.copy($0) }
+        copy: @escaping @MainActor (String) -> Void = { VaultStatusContent.secureCopy($0) }
     ) {
         self.state = state
         self.installedFrom = installedFrom
@@ -108,22 +109,18 @@ public struct VaultStatusContent: View {
         SettingsGroup {
             switch ck {
             case .loading:
-                SettingsInfoRow(SettingsStrings.statusCredentialKey, value: SettingsStrings.loading, icon: .key)
-                    .accessibilityIdentifier("credential_key_loading")
+                credentialKeyInfo(ck).accessibilityIdentifier("credential_key_loading")
             case .none:
-                SettingsInfoRow(SettingsStrings.statusCredentialKeyNone, value: "", icon: .key)
-                    .accessibilityIdentifier("credential_key_none")
+                credentialKeyInfo(ck).accessibilityIdentifier("credential_key_none")
             case .unknown:
-                SettingsInfoRow(SettingsStrings.statusCredentialKeyUnknown, value: "", icon: .key)
-                    .accessibilityIdentifier("credential_key_unknown")
+                credentialKeyInfo(ck).accessibilityIdentifier("credential_key_unknown")
                 SettingsDivider()
                 Button(SettingsStrings.retry) { retryCredentialKey() }
                     .padding(Spacing.gutter)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .accessibilityIdentifier("credential_key_retry")
-            case .shown(let fp):
-                SettingsInfoRow(SettingsStrings.statusCredentialKey, value: fp, icon: .key, code: true)
-                    .accessibilityIdentifier("credential_key")
+            case .shown:
+                credentialKeyInfo(ck).accessibilityIdentifier("credential_key")
                 Text(SettingsStrings.statusCredentialKeyAdmins)
                     .vettIDFont(.bodySmall)
                     .foregroundStyle(colors.onSurfaceVariant)
@@ -131,12 +128,43 @@ public struct VaultStatusContent: View {
                     .padding(.horizontal, Spacing.gutter)
                     .padding(.bottom, Spacing.s)
                 SettingsDivider()
-                Button(TransferStrings.transferCopy) { copy(fp) }
+                Button(TransferStrings.transferCopy) { copyCredentialKey(ck) }
                     .padding(Spacing.gutter)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .accessibilityIdentifier("credential_key_copy")
             }
         }
+    }
+
+    private func credentialKeyInfo(_ ck: CredentialKeyRow) -> SettingsInfoRow {
+        let line = Self.credentialKeyLine(ck)
+        return SettingsInfoRow(line.label, value: line.value, icon: .key, code: line.code)
+    }
+
+    /// What the Credential key row says: its label, its value, and whether the value is a code (monospaced).
+    struct CredentialKeyLine: Equatable {
+        let label: String
+        let value: String
+        let code: Bool
+    }
+
+    static func credentialKeyLine(_ ck: CredentialKeyRow) -> CredentialKeyLine {
+        switch ck {
+        case .loading: CredentialKeyLine(label: SettingsStrings.statusCredentialKey, value: SettingsStrings.loading, code: false)
+        case .none: CredentialKeyLine(label: SettingsStrings.statusCredentialKeyNone, value: "", code: false)
+        case .unknown: CredentialKeyLine(label: SettingsStrings.statusCredentialKeyUnknown, value: "", code: false)
+        case .shown(let fp): CredentialKeyLine(label: SettingsStrings.statusCredentialKey, value: fp, code: true)
+        }
+    }
+
+    /// The default Copy: the app's secure pasteboard, local to this phone and expiring ([pasteboard]: tests give a named one).
+    public static func secureCopy(_ text: String, pasteboard: UIPasteboard = .general) {
+        SecurePasteboard.copy(text, pasteboard: pasteboard)
+    }
+
+    /// Copy: the fingerprint shown, through [copy]; nothing when none is shown.
+    func copyCredentialKey(_ ck: CredentialKeyRow) {
+        if case .shown(let fp) = ck { copy(fp) }
     }
 
     /// The counter unavailable for a day (STAGING-TIME-SCALE 0.1.1 S8, S7): the clock's period as it started and the quiet

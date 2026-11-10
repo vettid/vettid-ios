@@ -22,6 +22,7 @@ extension VaultDevice {
     /// is stored. A transfer or a recovery emits nothing: the new phone learns the key from `credential.version` (§10.8).
     public func credentialKeyChanges() -> AsyncStream<CredentialKeySeen> { keyBroadcast.stream() }
 
-    /// A credential was kept from an answer naming [key] (nil: it replaced the credential without naming one).
-    func noteCredentialKey(_ key: String?) { keyBroadcast.emit(CredentialKeySeen(key: key)) }
+    /// A credential was kept from an answer naming [key] (nil: it replaced the credential without naming one, or a lost
+    /// answer that replaced it was decided as applied).
+    public func noteCredentialKey(_ key: String?) { keyBroadcast.emit(CredentialKeySeen(key: key)) }
 }

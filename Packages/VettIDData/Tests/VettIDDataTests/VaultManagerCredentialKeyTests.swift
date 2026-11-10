@@ -90,6 +90,25 @@ import VettIDVault
         #expect(m.credentialKeyChange?.fingerprint == nil)
     }
 
+    /// Before the credential is created: no key yet.
+    @Test func noCredentialYetIsNoKey() async throws {
+        defer { phone.close() }
+        _ = try await m.redeemSetupCode(.secret(service.secret))
+        try await m.enroll(pin: pin) { _ in }
+        #expect(try await m.credentialKey() == CredentialKeyAnswer(exists: false, fingerprint: nil))
+    }
+
+    /// A wipe forgets the last change.
+    @Test func aWipeForgetsTheChange() async throws {
+        defer { phone.close() }
+        try await setUp()
+        try await m.openUnlockWindow(password: password)
+        try await m.rotate(password: password)
+        #expect(await eventually { m.credentialKeyChange != nil })
+        await m.wipeThisPhone()
+        #expect(m.credentialKeyChange == nil)
+    }
+
     @Test func neitherPrintsTheFingerprint() {
         #expect("\(CredentialKeyAnswer(exists: true, fingerprint: shown))" == "CredentialKeyAnswer")
         #expect(!"\(CredentialKeyChange(seq: 1, fingerprint: shown))".contains("e939"))

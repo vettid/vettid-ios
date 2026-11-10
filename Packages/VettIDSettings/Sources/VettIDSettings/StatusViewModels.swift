@@ -58,12 +58,13 @@ public final class VaultStatusViewModel {
     @ObservationIgnored private let work = Work()
     @ObservationIgnored private let followers = TaskBag()
     @ObservationIgnored private var keyAsk: Task<Void, Never>?
-    /// The ``VaultRepository/credentialKeyChange`` this screen has taken into account.
-    @ObservationIgnored private var keySeq: Int
+    /// The ``VaultRepository/credentialKeyChange`` this screen has taken into account. Compared whole, not by `seq`: a
+    /// wipe or a reset clears the change, and its count starts again.
+    @ObservationIgnored private var keySeen: CredentialKeyChange?
 
     public init(vault: any VaultRepository) {
         self.vault = vault
-        keySeq = vault.credentialKeyChange?.seq ?? 0
+        keySeen = vault.credentialKeyChange
         load()
         // A create, rotate or reset answered while this screen is up: the new fingerprint, or, when the
         // answer named no key, a new ask (the old fingerprint is not shown unflagged).
@@ -95,8 +96,8 @@ public final class VaultStatusViewModel {
     }
 
     private func keyChanged(_ change: CredentialKeyChange?) {
-        guard let change, change.seq > keySeq else { return }
-        keySeq = change.seq
+        guard let change, change != keySeen else { return }
+        keySeen = change
         guard let fp = change.fingerprint else {
             loadCredentialKey()
             return
@@ -104,6 +105,10 @@ public final class VaultStatusViewModel {
         keyAsk?.cancel() // an ask still out may be older than this answer
         credentialKey = .shown(fp)
     }
+
+    /// Back in the foreground: the key is asked again, since it may have changed meanwhile (a recovery or a move
+    /// elsewhere) with no answer to this phone (chosen; not in the spec).
+    public func sceneBecameActive() { loadCredentialKey() }
 
     /// TEST ONLY: returns once the key's ask under way has ended.
     func settleKey() async { await keyAsk?.value }

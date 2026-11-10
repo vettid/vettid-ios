@@ -110,6 +110,31 @@ import VettIDDataTesting
         #expect(repo.calls.filter { $0 == "credentialKey" }.count == 2)
     }
 
+    /// Back in the foreground: asked again, since the key may have changed meanwhile with no answer to this phone.
+    @Test func theForegroundAsksAgain() async {
+        repo.credentialKeyAnswer = CredentialKeyAnswer(exists: true, fingerprint: fp)
+        let m = VaultStatusViewModel(vault: repo)
+        await m.settleKey()
+        repo.credentialKeyAnswer = CredentialKeyAnswer(exists: true, fingerprint: "5555 6666 7777 8888")
+        m.sceneBecameActive()
+        await m.settleKey()
+        #expect(repo.calls.filter { $0 == "credentialKey" }.count == 2)
+        #expect(m.credentialKey == .shown("5555 6666 7777 8888"))
+    }
+
+    /// A wipe or a reset clears the change, and its count starts again: a later change is still news.
+    @Test func aChangeAfterTheCountStartedAgainIsApplied() async {
+        repo.credentialKeyAnswer = CredentialKeyAnswer(exists: true, fingerprint: fp)
+        let m = VaultStatusViewModel(vault: repo)
+        await m.settleKey()
+        repo.answerWithKey("1111 2222 3333 4444")
+        repo.answerWithKey("1111 2222 3333 4444")
+        #expect(await eventually { m.credentialKey == .shown("1111 2222 3333 4444") })
+        repo.credentialKeyChange = nil
+        repo.answerWithKey("9999 aaaa bbbb cccc")
+        #expect(await eventually { m.credentialKey == .shown("9999 aaaa bbbb cccc") })
+    }
+
     @Test func theRowPrintsItsStateOnly() {
         #expect("\(CredentialKeyRow.shown(fp))" == "shown")
     }

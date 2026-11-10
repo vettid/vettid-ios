@@ -74,6 +74,36 @@ import VettIDCrypto
         #expect(await seen(d, stream).isEmpty && d.credentialVersion == 2)
     }
 
+    /// A rotation (a credential operation's answer) that names no key: the key is not known.
+    @Test func aRotationWithoutAKeySaysTheKeyIsUnknown() async throws {
+        let (d, v) = try await ops.base.pairedDevice()
+        let api = VaultApi(device: d) { true }
+        let stream = d.credentialKeyChanges()
+        let create = Task { try await api.credentialCreate(password: "a long password here", pin: "123456") }
+        try await ops.answer(v, d, "credential.utk.get", try ops.pool(3).body)
+        try await ops.answer(v, d, "credential.create", #"{"credential":"AQID","version":1,"key":"a2V5LW9uZQ=="}"#)
+        try await ops.answer(v, d, "credential.ack")
+        try await create.value
+        let rotate = Task { try await api.credentialRotate(password: "a long password here") }
+        try await ops.answer(v, d, VaultApi.typeRotate, #"{"credential":"AQID","version":2}"#)
+        try await ops.answer(v, d, "credential.ack")
+        try await rotate.value
+        #expect(await seen(d, stream) == ["a2V5LW9uZQ==", nil])
+    }
+
+    /// A reset sent again (a change's answer) that names no key: the key is not known.
+    @Test func aResentResetWithoutAKeySaysTheKeyIsUnknown() async throws {
+        let (d, v) = try await ops.base.pairedDevice()
+        let api = VaultApi(device: d) { true }
+        let stream = d.credentialKeyChanges()
+        let held = HeldRequest(type: VaultApi.typeReset, id: Ulid.new(), exp: Date().addingTimeInterval(60), body: Array("{}".utf8))
+        let resend = Task { try await api.resendChange(held) }
+        try await ops.answer(v, d, VaultApi.typeReset, #"{"credential":"AQID","version":1}"#)
+        try await ops.answer(v, d, "credential.ack")
+        _ = try await resend.value
+        #expect(await seen(d, stream) == [nil])
+    }
+
     /// The operations whose answer replaces the key.
     @Test func theKeyReplacingOperations() {
         #expect(CredentialOps.keyReplacing == ["credential.create", "credential.rotate", "credential.reset"])
