@@ -16,12 +16,15 @@ public final class FakeDevices: DevicesRepository {
     @ObservationIgnored public var calls: [String] = []
     @ObservationIgnored public var fail: [String: VaultFailure] = [:]
     @ObservationIgnored public var bound: Int64 = 0
+    /// Any other error the next call of that name throws (once): a ``CancellationError`` (a lock or the app leaving).
+    @ObservationIgnored public var failError: [String: any Error] = [:]
 
     public init() {}
 
     private func call(_ name: String) throws {
         calls.append(name)
         if let f = fail.removeValue(forKey: name) { throw f }
+        if let e = failError.removeValue(forKey: name) { throw e }
     }
 
     public func refresh() async throws { try call("refresh") }
