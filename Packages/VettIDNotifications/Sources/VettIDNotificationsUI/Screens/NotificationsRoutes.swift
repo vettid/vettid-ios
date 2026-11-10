@@ -49,8 +49,8 @@ public struct NotificationsRoute: View {
         NotificationsScreen(state: model?.state ?? NotificationsState(archived: archived), actions: actions)
             .onAppear {
                 if model == nil {
-                    var devices: (@MainActor () async -> HistoryDevices?)?
-                    if let history { devices = { await history.devices(refresh: false) } }
+                    var devices: (@MainActor (Bool) async -> HistoryDevices?)?
+                    if let history { devices = { await history.devices(refresh: $0) } }
                     model = NotificationsViewModel(
                         feed: feed, connections: connections, approvals: approvals, items: items, votes: votes, archived: archived,
                         devices: devices

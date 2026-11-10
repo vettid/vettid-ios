@@ -259,7 +259,7 @@ extension DataStrings {
         )
     }
 
-    /// The same notice when the device has no name this app knows. (Placeholder wording, awaiting the owner's approval.)
+    /// The same notice when the device has no name this app knows (wording approved by the owner 2026-11-10, both apps).
     static var feedDeviceUpdateNeededAny: String {
         String(
             localized: "data_feed_device_update_needed_any",

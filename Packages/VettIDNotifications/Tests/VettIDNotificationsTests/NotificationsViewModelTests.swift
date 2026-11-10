@@ -53,14 +53,21 @@ import VettIDVault
         #expect(FeedKinds.target(item) == .vote(connectionID: "c1", proposalID: "p1"))
     }
 
-    /// `device.update_needed` names a device by its id only: the device list is read once such an item is listed, and asked
-    /// again after a failed read (VAULT-MESSAGING 0.87.0 §10.9).
-    @Test func anUpdateNeededItemReadsTheDeviceNamesOnce() async {
+    /// `device.update_needed` names a device by its id only: the device list is read when such an item is listed (History's
+    /// kept list first), asked again after a failed read, and read afresh for an id the list lacked (VAULT-MESSAGING
+    /// 0.87.0 §10.9).
+    @Test func anUpdateNeededItemReadsTheDeviceNames() async {
         let calls = Counter()
+        let refreshes = Counter()
         let answer = Counter()
-        let devices: @MainActor () async -> HistoryDevices? = {
+        let devices: @MainActor (Bool) async -> HistoryDevices? = { refresh in
             calls.n += 1
-            return answer.n == 0 ? nil : HistoryDevices(names: ["d1": "iPad"])
+            if refresh { refreshes.n += 1 }
+            switch answer.n {
+            case 0: return nil
+            case 1: return HistoryDevices(names: ["d1": "iPad"])
+            default: return HistoryDevices(names: ["d1": "iPad", "d2": "Mac"])
+            }
         }
         feed.items = [Self.item("m1")]
         let m = NotificationsViewModel(feed: feed, connections: connections, approvals: approvals, devices: devices)
@@ -75,9 +82,21 @@ import VettIDVault
         feed.items = [u]
         #expect(await eventually { m.state.names.devices == ["d1": "iPad"] })
         #expect(FeedKinds.title(u, m.state.names).hasPrefix("\u{2068}iPad\u{2069} needs an update"))
+        #expect(refreshes.n == 0)
+        // A named id is not asked for again.
         feed.items = [u, Self.item("m2")]
         try? await Task.sleep(for: .milliseconds(50))
         #expect(calls.n == 2)
+        // A device the kept list lacks: read afresh, once.
+        var u2 = Self.item("u2", "device.update_needed", priority: "high")
+        u2.deviceID = "d2"
+        answer.n = 2
+        feed.items = [u2, u]
+        #expect(await eventually { m.state.names.devices["d2"] == "Mac" })
+        #expect(refreshes.n == 1)
+        feed.items = [u2, u, Self.item("m3")]
+        try? await Task.sleep(for: .milliseconds(50))
+        #expect(calls.n == 3)
     }
 
     @Test func sectionsPutUrgentUnreadFirstThenDays() {

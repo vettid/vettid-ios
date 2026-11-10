@@ -48,7 +48,9 @@ extension VaultDevice {
     /// After an activation: `hs.confirm` and `device.features` into the outbox, stored by the save that ends the handling,
     /// deposited after it. A failure to queue (no token, halted) is left to the 12-day re-send (``tickConfirm()``). Both are
     /// kept, and still deposited, if the handling then fails, as the fin is (``EventMemory/keptOnError``): the activation
-    /// stands in memory, and a redelivered `hs.fin` would not queue them again. Callers hold ``lock``.
+    /// stands in memory, and a redelivered `hs.fin` would not queue them again. Unlike `hs.resp` (``handle(_:)``), they may
+    /// then go out before the activation is on disk: if the app ends before a later save, the `hs.fin` (not acked) is
+    /// delivered again and activates the same epoch, which the vault has confirmed. Callers hold ``lock``.
     func queueConfirmed(_ t: Date) {
         let kept = [try? queueConfirm(t, save: false, keep: true), try? queueFeatures(keep: true)].compactMap { $0?.id }
         mem.withLock { memory.keptOnError.formUnion(kept) }
@@ -104,8 +106,11 @@ extension VaultDevice {
         do {
             try await deliver(e)
         } catch let x as RelayError where Self.isTerminal(x) {
-            let due = Self.ms(now()) - Self.ms(Date(timeIntervalSince1970: Self.confirmResend - Self.reconfirmEvery))
-            try? await withLockSaving { st.vault?.confirmAtMs = due }
+            let due = Self.ms(now()) - Int64((Self.confirmResend - Self.reconfirmEvery) * 1000)
+            // Not over the time of a newer hs.confirm queued meanwhile (a rekey's activation): that one stands.
+            try? await withLockSaving {
+                if !st.outbox.contains(where: { $0.type == HsTypes.confirm }) { st.vault?.confirmAtMs = due }
+            }
         } catch {}
     }
 

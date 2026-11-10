@@ -73,8 +73,10 @@ public final class NotificationsViewModel {
     @ObservationIgnored private let approvals: (any ApprovalsRepository)?
     @ObservationIgnored private let items: (any ItemsRepository)?
     @ObservationIgnored private let votes: (any VotesRepository)?
-    @ObservationIgnored private let devices: (@MainActor () async -> HistoryDevices?)?
-    @ObservationIgnored private var devicesAsked = false
+    @ObservationIgnored private let devices: (@MainActor (_ refresh: Bool) async -> HistoryDevices?)?
+    /// The device ids a read was made for (or is under way): asked again only for an id still unnamed after it.
+    @ObservationIgnored private var devicesAsked: Set<String> = []
+    @ObservationIgnored private var devicesRead = false
     /// The devices' names for `device.update_needed` (VAULT-MESSAGING 0.87.0 §10.9), read once such an item is listed.
     private var deviceNames: [String: String] = [:]
     @ObservationIgnored private let work = Work()
@@ -93,7 +95,7 @@ public final class NotificationsViewModel {
     public init(
         feed: any FeedRepository, connections: (any ConnectionsRepository)? = nil, approvals: (any ApprovalsRepository)? = nil,
         items: (any ItemsRepository)? = nil, votes: (any VotesRepository)? = nil, archived: Bool = false,
-        devices: (@MainActor () async -> HistoryDevices?)? = nil
+        devices: (@MainActor (_ refresh: Bool) async -> HistoryDevices?)? = nil
     ) {
         self.feed = feed
         self.connections = connections
@@ -129,15 +131,22 @@ public final class NotificationsViewModel {
         readDevicesIfNeeded()
     }
 
-    /// The device list once, when an item names a device by its id only (`device.update_needed`).
+    /// The device list when an item names a device by its id only (`device.update_needed`) and no name is known for it: the
+    /// list as History keeps it the first time, read afresh for an id it lacked (a device paired or renamed since). Once
+    /// per id; an id asked for in a failed read is asked again with the next change of the list.
     private func readDevicesIfNeeded() {
-        guard !devicesAsked, let devices, feed.items.contains(where: { $0.kind == "device.update_needed" }) else { return }
-        devicesAsked = true
+        guard let devices else { return }
+        let ids = Set(feed.items.filter { $0.kind == "device.update_needed" }.compactMap(\.deviceID))
+        let missing = ids.subtracting(deviceNames.keys).subtracting(devicesAsked)
+        guard !missing.isEmpty else { return }
+        devicesAsked.formUnion(missing)
+        let refresh = devicesRead
         Task { @MainActor [weak self] in
-            guard let d = await devices() else {
-                self?.devicesAsked = false // not read (the call failed): asked again with the next change of the list
+            guard let d = await devices(refresh) else {
+                self?.devicesAsked.subtract(missing)
                 return
             }
+            self?.devicesRead = true
             self?.deviceNames = d.names
         }
     }
