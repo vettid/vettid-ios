@@ -68,6 +68,89 @@ import VettIDVault
         return try #require(try JSONSerialization.jsonObject(with: file.bytes) as? [String: Any])
     }
 
+    // MARK: A lock ends an export that is not saved yet
+
+    /// A model with its own notification center and availability, up to the PIN step.
+    func lockModel(
+        center: NotificationCenter, available: @escaping @MainActor @Sendable () -> Bool = { true }
+    ) async -> HistoryExportViewModel {
+        let m = HistoryExportViewModel(
+            repo: HistoryExportManager(ops: { [log] in log }), now: { Self.t0 },
+            lockWatch: HistoryLockWatch(names: [Self.willLock, Self.didUnlock], center: center, protectedDataAvailable: available)
+        )
+        m.start(ctx)
+        await m.settle()
+        m.chooseFormat(.json)
+        m.confirm()
+        return m
+    }
+
+    nonisolated static let willLock = Notification.Name("test.willLock")
+    nonisolated static let didUnlock = Notification.Name("test.didUnlock")
+
+    /// (a) A lock and an unlock while the read is in flight: when it finishes the export ends and never shows the save step.
+    @Test func aLockAndUnlockDuringTheReadEndTheExport() async {
+        log.answerExports([{ Self.success() }])
+        log.script([{ AuditPage(entries: Self.entries(3), seq: 31) }])
+        let center = NotificationCenter()
+        let m = await lockModel(center: center)
+        m.submitPin("123456")
+        center.post(name: Self.willLock, object: nil)
+        center.post(name: Self.didUnlock, object: nil)
+        await m.settle()
+        #expect(m.step == .closed && m.exportFile == nil)
+    }
+
+    /// The "did become available" one alone (the "will become unavailable" one was missed) ends it too.
+    @Test func aMissedWillLockStillEndsTheExport() async {
+        log.answerExports([{ Self.success() }])
+        log.script([{ AuditPage(entries: Self.entries(3), seq: 31) }])
+        let center = NotificationCenter()
+        let m = await lockModel(center: center)
+        m.submitPin("123456")
+        center.post(name: Self.didUnlock, object: nil)
+        await m.settle()
+        #expect(m.step == .closed)
+    }
+
+    /// (b) The read finishes while protected data is unavailable: it ends.
+    @Test func aReadThatFinishesWhileProtectedDataIsUnavailableEnds() async {
+        log.answerExports([{ Self.success() }])
+        log.script([{ AuditPage(entries: Self.entries(3), seq: 31) }])
+        let m = await lockModel(center: NotificationCenter(), available: { false })
+        m.submitPin("123456")
+        await m.settle()
+        #expect(m.step == .closed && m.exportFile == nil)
+    }
+
+    /// A lock on the save step ends it, once; no lock leaves it.
+    @Test func aLockOnTheSaveStepEndsItOnceAndNoLockLeavesIt() async {
+        log.answerExports([{ Self.success() }, { Self.success() }])
+        log.script([{ AuditPage(entries: Self.entries(3), seq: 31) }, { AuditPage(entries: Self.entries(3), seq: 31) }])
+        let center = NotificationCenter()
+        let m = await lockModel(center: center)
+        m.submitPin("123456")
+        await m.settle()
+        guard case .save = m.step else { Issue.record("not the save step: \(m.step)"); return }
+        #expect(m.exportFile != nil, "no lock: it stays")
+        center.post(name: Self.willLock, object: nil)
+        #expect(m.step == .closed && m.exportFile == nil)
+        center.post(name: Self.didUnlock, object: nil)
+        #expect(m.step == .closed, "ended once")
+    }
+
+    /// A lock before the PIN was sent is not "since the PIN": the next export is not ended by it.
+    @Test func aLockBeforeThePinDoesNotEndTheNextExport() async {
+        log.answerExports([{ Self.success() }])
+        log.script([{ AuditPage(entries: Self.entries(3), seq: 31) }])
+        let center = NotificationCenter()
+        let m = await lockModel(center: center)
+        center.post(name: Self.willLock, object: nil)
+        m.submitPin("123456")
+        await m.settle()
+        guard case .save = m.step else { Issue.record("not the save step: \(m.step)"); return }
+    }
+
     @Test func theWholeFlowWritesTheFileForTheChosenPlace() async throws {
         log.answerExports([{ Self.success() }])
         log.script([{ AuditPage(entries: Self.entries(3), seq: 31) }])
