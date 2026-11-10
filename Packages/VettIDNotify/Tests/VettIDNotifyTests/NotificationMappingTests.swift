@@ -33,6 +33,8 @@ import VettIDVault
             "identity.rotation_failed", "identity.rotate_conflict", "leash.item.run", "leash.item.proxy",
             // ANDROID-PLAN 0.1.102 "Votes": "The channel is Vault activity; no new channel."
             "vote.open", "vote.closing", "vote.result", "vote.problem",
+            // VAULT-MESSAGING 0.87.0 §6.3.1 "An app from before release 29": its "Vault activity" category, at `high`.
+            "device.update_needed",
         ],
     ]
 
@@ -42,6 +44,10 @@ import VettIDVault
         for (category, kinds) in expected {
             for k in kinds { #expect(NotificationMapping.category(item(k)) == category, "\(k)") }
         }
+    }
+
+    @Test func anotherDeviceNeedingAnUpdateNotifiesAsVaultActivity() {
+        #expect(NotificationMapping.category(item("device.update_needed", priority: "high")) == .activity)
     }
 
     @Test func theHistoryOnlyKindsNeverNotify() {
