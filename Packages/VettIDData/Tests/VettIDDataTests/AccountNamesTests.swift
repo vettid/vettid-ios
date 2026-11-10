@@ -139,4 +139,22 @@ import VettIDData
         #expect(AuthContext.isolated(note) == "\(fsi)Sign in\(pdi)\n\(fsi)to Bank\(pdi)\n\(fsi)now !\(pdi)")
         #expect(AuthContext.isolated("\u{200B}\u{202E}\n ") == nil)
     }
+
+    /// "Could this pass for that name" (VAULT-MESSAGING 0.76.0 §10.8; ANDROID-PLAN 0.1.53 AA1): case, inner spaces, ignorable
+    /// code points, a ZWJ, a filler and U+2800 do not tell two names apart; a different letter or a plain space inside a word does.
+    @Test func aNameThatCouldPassForAReservedOneIsFound() {
+        let phones = [
+            "this PHONE", "This  phone", "This\u{00A0}phone", "Th\u{200B}is phone", "This\u{2800}phone", "\u{2800}This phone\u{2800}",
+            "This \u{3164}phone", "THIS\u{2003}PHONE",
+        ]
+        for shown in phones {
+            #expect(AccountNames.couldPassFor(shown, "This phone"), "\(shown.unicodeScalars.map(\.value))")
+        }
+        for shown in ["\u{2800}VettID\u{2800}", "Vett\u{2800}ID", "vettid", "V\u{200D}ettID", "VETTID"] {
+            #expect(AccountNames.couldPassFor(shown, "VettID"), "\(shown.unicodeScalars.map(\.value))")
+        }
+        for shown in ["Vett ID", "ThisPhone", "This phones", "VettIDs", "Vett1D", ""] {
+            #expect(!AccountNames.couldPassFor(shown, shown.hasPrefix("This") ? "This phone" : "VettID"), "\(shown)")
+        }
+    }
 }
