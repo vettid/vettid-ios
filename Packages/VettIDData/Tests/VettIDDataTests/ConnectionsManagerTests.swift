@@ -396,6 +396,18 @@ final class FakeConnectionOps: ConnectionOps, @unchecked Sendable {
         #expect(m.connections.first { $0.id == "c1" }?.state == .stale)
     }
 
+    @Test(arguments: ["reconnected", "rekeyed"])
+    func aPendingOrOtherConnectionIsLeftAloneAtARekeyOrReconnect(_ kind: String) async throws {
+        let pending = Self.connection("c1").replacingOccurrences(of: #""state":"active""#, with: #""state":"pending""#)
+        let other = Self.connection("c2").replacingOccurrences(of: #""state":"active""#, with: #""state":"something_new""#)
+        ops.connections = [pending, other]
+        let m = manager()
+        try await m.refresh()
+        ops.failing = ["list"]
+        for id in ["c1", "c2"] { m.onEvent(event("connection.event", #"{"connection_id":"\#(id)","event":"\#(kind)"}"#)) }
+        #expect(m.connections.map(\.state) == [.pending, .other])
+    }
+
     @Test func aListReReadClearsAStaleFlagHeldOnlyLocally() async throws {
         ops.connections = [Self.connection("c1")]
         let m = manager()

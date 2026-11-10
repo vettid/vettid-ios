@@ -367,6 +367,11 @@ public enum AuditKinds {
     static let named: [String: Title] = [
         "identity.rotate_conflict": .named("history_kind_rotate_conflict", any: "history_kind_rotate_conflict_any", who: .connection),
         "identity.rotate_resolved": .named("history_kind_rotate_resolved", any: "history_kind_rotate_resolved_any", who: .connection),
+        // VAULT-MESSAGING 0.88.7 §10.9: a stale connection the peer's rekey or reconnect made active again (`connection_id`).
+        // The title is owner-approved (2026-11-10, GC #7655); the text without the name is chosen (not in the spec).
+        "connection.active_again": .named(
+            "history_kind_connection_active_again", any: "history_kind_connection_active_again_any", who: .connection
+        ),
         "call.permission_off": .named("history_kind_call_permission_off", any: "history_kind_call_permission_off_any", who: .connection),
         "call.permission_on": .named("history_kind_call_permission_on", any: "history_kind_call_permission_on_any", who: .connection),
         // VAULT-MESSAGING 0.77.0 §6.8, §10.9: a denied session request (`device_id`, `ref` = `request_id`). Android has no

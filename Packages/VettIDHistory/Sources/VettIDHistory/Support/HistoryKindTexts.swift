@@ -237,6 +237,8 @@ public enum HistoryKindTexts {
         "history_kind_identity_rotation_failed": "Key update failed",
         "history_kind_rotate_conflict": "Connection with %@ paused",
         "history_kind_rotate_resolved": "Connection with %@ checked and resumed",
+        "history_kind_connection_active_again": "Connection with %@ works again",
+        "history_kind_connection_active_again_any": "Connection works again",
         "history_kind_rotate_conflict_any": "Connection paused",
         "history_kind_rotate_resolved_any": "Connection checked and resumed",
         "history_kind_connection_request_approved": "You accepted a connection request",
