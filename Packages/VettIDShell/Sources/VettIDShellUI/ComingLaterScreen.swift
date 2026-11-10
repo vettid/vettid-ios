@@ -31,6 +31,7 @@ public extension TopLevelDestination {
         case .approvals: ShellStrings.navApprovals
         case .votes: ShellStrings.navVotes
         case .items: ShellStrings.navItems
+        case .devices: ShellStrings.navDevices
         case .history: ShellStrings.navHistory
         case .settings: ShellStrings.navSettings
         case .help: ShellStrings.navHelp
@@ -44,6 +45,7 @@ public extension TopLevelDestination {
         case .approvals: .approvals
         case .votes: .howToVote
         case .items: .vault
+        case .devices: .devices
         case .history: .history
         case .settings: .settings
         case .help: .help

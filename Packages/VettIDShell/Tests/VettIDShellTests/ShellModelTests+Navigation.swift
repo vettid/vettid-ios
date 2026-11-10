@@ -198,12 +198,15 @@ import VettIDVault
         m.openFeedTarget(.shareRule(connectionID: "c4", ruleID: "r"))
         m.openFeedTarget(.alarm)
         m.openFeedTarget(.credential)
+        // The transfer, replacement and signer notices stay in Settings → Vault; a paired device opens its page.
         m.openFeedTarget(.devices)
+        m.openFeedTarget(.device("d1"))
+        m.openFeedTarget(.device("d1"))
         m.openFeedTarget(.item("i"))
         m.openFeedTarget(.sheet)
         #expect(m.path == [
             .notifications(archived: false), .conversation("c1"), .connection("c2"), .sharedWithYou(connectionID: "c3", ask: false),
-            .ruleEdit(connectionID: "c4", ruleID: "r"), .alarm, .credential, .vaultStatus, .item("i"),
+            .ruleEdit(connectionID: "c4", ruleID: "r"), .alarm, .credential, .vaultStatus, .device("d1"), .item("i"),
         ])
         // An item once (a History entry's "Open the item" over the item it opened).
         m.openItem("i")
@@ -212,6 +215,10 @@ import VettIDVault
         #expect(m.destination == .connections && m.path.isEmpty)
         m.openFeedTarget(.history)
         #expect(m.destination == .history)
+        // The list of Devices & agents is a drawer destination, its pushed screens dropped.
+        m.push(.notifications(archived: false))
+        m.openFeedTarget(.deviceList)
+        #expect(m.destination == .devices && m.path.isEmpty)
         m.push(.notifications(archived: false))
         m.openFeedTarget(.security)
         #expect(m.destination == .settings && m.path.isEmpty)
@@ -229,6 +236,24 @@ import VettIDVault
         m.path = []
         m.openNotified(nil)
         #expect(m.path == [.notifications(archived: false)])
+    }
+
+    /// Devices & agents (ANDROID-PLAN 0.1.53 AA1): a feed item of a paired device opens its page over the screen in front, one
+    /// without a device the list; a device's page opens its History once, searched for its name.
+    @Test func devicesOpenTheirPageAndTheirHistoryOnce() {
+        let m = model
+        let at = "2026-10-09T12:00:00Z"
+        m.openNotified(FeedItem(itemID: "f1", seq: 1, kind: "device.paired", at: at, status: "active", deviceID: "d1"))
+        #expect(m.path == [.device("d1")])
+        m.openDeviceHistory("Claude")
+        m.openDeviceHistory("Claude")
+        #expect(m.path == [.device("d1"), .deviceHistory(query: "Claude")])
+        m.openDevice("d1")
+        #expect(m.path.count == 3)
+        m.openNotified(FeedItem(itemID: "f2", seq: 2, kind: "device.unlinked", at: at, status: "active", deviceID: "d1"))
+        #expect(m.destination == .devices && m.path.isEmpty)
+        m.openNotified(FeedItem(itemID: "f3", seq: 3, kind: "device.paired", at: at, status: "active"))
+        #expect(m.destination == .devices && m.path.isEmpty)
     }
 
     /// A notification's tap, the screen in front and the permission wait while the shell is not really in front: under the

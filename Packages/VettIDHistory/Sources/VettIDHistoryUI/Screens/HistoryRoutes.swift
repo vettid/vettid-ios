@@ -23,7 +23,8 @@ public struct HistoryHost {
 }
 
 /// History with its export, and their view models, made when the screen first appears and released when it goes: from
-/// the drawer ([chrome]) or a connection's page ([connectionID], with a back arrow). Each time the list is shown again
+/// the drawer ([chrome]), a connection's page ([connectionID], with a back arrow) or a device's page ([query]: the search
+/// field set to the device's name, with a back arrow). Each time the list is shown again
 /// (back from an entry, the export closed, which the vault recorded as `audit.exported`), its newest entries are read
 /// again. While an export is under way its steps take the list's place. Mirrors vettid-android `historyDestination`.
 public struct HistoryRoute: View {
@@ -32,6 +33,7 @@ public struct HistoryRoute: View {
     private let connections: (any ConnectionsRepository)?
     private let ownerChecks: (any OwnerCheckRepository)?
     private let connectionID: String?
+    private let query: String?
     private let chrome: ShellChrome?
     private let host: HistoryHost
     private let items: (any ItemsRepository)?
@@ -43,7 +45,7 @@ public struct HistoryRoute: View {
     public init(
         history: any HistoryRepository, export: any HistoryExportRepository, connections: (any ConnectionsRepository)? = nil,
         ownerChecks: (any OwnerCheckRepository)? = nil, items: (any ItemsRepository)? = nil, votes: (any VotesRepository)? = nil,
-        connectionID: String? = nil, chrome: ShellChrome?, host: HistoryHost
+        connectionID: String? = nil, query: String? = nil, chrome: ShellChrome?, host: HistoryHost
     ) {
         self.history = history
         self.export = export
@@ -52,16 +54,23 @@ public struct HistoryRoute: View {
         self.votes = votes
         self.ownerChecks = ownerChecks
         self.connectionID = connectionID
+        self.query = query
         self.chrome = chrome
         self.host = host
     }
 
+    /// The device's name as the vault's search takes it.
+    private var shownQuery: String { query.flatMap { AuditFilter.searchText($0) } ?? "" }
+
+    /// From a connection's or a device's page: a back arrow.
+    private var hasBack: Bool { connectionID != nil || query != nil }
+
     public var body: some View {
-        let state = model?.state ?? HistoryState(filter: AuditFilter(connectionID: connectionID))
+        let state = model?.state ?? HistoryState(filter: AuditFilter(connectionID: connectionID, query: shownQuery))
         let step = exportModel?.step ?? .closed
         ZStack {
             if step == .closed {
-                HistoryScreen(state: state, chrome: chrome, onBack: connectionID == nil ? nil : host.onBack, actions: actions)
+                HistoryScreen(state: state, chrome: chrome, onBack: hasBack ? host.onBack : nil, actions: actions)
                     .onAppear { model?.refresh() }
             } else {
                 HistoryExportScreen(
@@ -73,7 +82,7 @@ public struct HistoryRoute: View {
             if model == nil {
                 model = HistoryViewModel(
                     history: history, connections: connections, ownerChecks: ownerChecks, connectionID: connectionID,
-                    items: items, votes: votes
+                    query: query, items: items, votes: votes
                 )
             }
             if exportModel == nil {

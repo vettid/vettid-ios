@@ -89,12 +89,15 @@ public final class HistoryViewModel {
     @ObservationIgnored private var refreshGeneration = 0
     private var local: HistoryState
 
-    /// [connectionID]: a connection's History (its page's "History"). [items]: the Vault list, read quietly when it has not
+    /// [connectionID]: a connection's History (its page's "History"). [query]: a device's History (ANDROID-PLAN 0.1.53 AA1), the
+    /// search field set to the device's name as the vault's search takes it (``AuditFilter/searchText(_:)``: `audit.list` has no
+    /// device filter, and the search matches device names, §10.9). [items]: the Vault list, read quietly when it has not
     /// been read and followed for its names ([itemNames] in its place: the names by item id, nil before the list is read).
     /// [debounce], [now] and [calendar]: tests set them.
     public init(
         history: any HistoryRepository, connections: (any ConnectionsRepository)? = nil, ownerChecks: (any OwnerCheckRepository)? = nil,
-        connectionID: String? = nil, items: (any ItemsRepository)? = nil, itemNames: (@MainActor () -> [String: String]?)? = nil,
+        connectionID: String? = nil, query: String? = nil, items: (any ItemsRepository)? = nil,
+        itemNames: (@MainActor () -> [String: String]?)? = nil,
         debounce: Duration = HistoryViewModel.searchDebounce, now: @escaping @MainActor () -> Date = { Date() },
         calendar: Calendar = .current, votes: (any VotesRepository)? = nil
     ) {
@@ -106,7 +109,8 @@ public final class HistoryViewModel {
         self.debounce = debounce
         self.now = now
         self.calendar = calendar
-        local = HistoryState(filter: AuditFilter(connectionID: connectionID))
+        let searched = query.flatMap { AuditFilter.searchText($0) } ?? ""
+        local = HistoryState(filter: AuditFilter(connectionID: connectionID, query: searched))
         local.itemNames = self.itemNames?()
         local.voteTitles = self.voteTitles?() ?? [:]
         pager = newPager()

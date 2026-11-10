@@ -55,6 +55,21 @@ import VettIDVault
         #expect(m.state.entries.isEmpty && m.state.end && !m.state.loading && !m.state.emptyHistory)
     }
 
+    /// From a device's page (ANDROID-PLAN 0.1.53 AA1): the search field is set to the device's name as `q` takes it, and the
+    /// first read already carries it; a name that shows nothing leaves the field empty (the whole log, not a device's).
+    @Test func aDevicesHistoryStartsWithItsNameInTheSearch() async {
+        let log = FakeAuditLog()
+        log.script([Self.page([900], kind: "device.session.granted")])
+        let m = HistoryViewModel(history: HistoryManager { log }, connections: connections, connectionID: nil, query: "  Claude\u{7}  ", debounce: .zero)
+        await m.settle()
+        #expect(m.state.filter.query == "Claude" && log.calls.first?.q == "Claude" && log.calls.first?.connectionID == nil)
+        // Cut as the search cuts: 128 bytes at a character.
+        let long = HistoryViewModel(history: HistoryManager { FakeAuditLog() }, query: String(repeating: "é", count: 100), debounce: .zero)
+        #expect(long.state.filter.query == String(repeating: "é", count: 64))
+        let blank = HistoryViewModel(history: HistoryManager { FakeAuditLog() }, query: " \u{7} ", debounce: .zero)
+        #expect(blank.state.filter.query.isEmpty)
+    }
+
     @Test func theFullHistoryLoadsToo() async {
         let log = FakeAuditLog()
         log.script([{ AuditPage(entries: [Self.entry(5, "vault.unlocked", conn: nil)], seq: 5) }])

@@ -28,7 +28,7 @@ import VettIDVault
             .appendingPathComponent("Sources/VettIDShellUI/Resources/Localizable.xcstrings")
         let doc = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
         let keys = try #require((doc["strings"] as? [String: Any])?.keys)
-        #expect(keys.count == 88)
+        #expect(keys.count == 89)
         let missing = "\u{0}missing"
         for key in keys {
             let text = Bundle.module.localizedString(forKey: key, value: missing, table: nil)
@@ -73,7 +73,7 @@ import VettIDVault
     }
 
     @Test func theTextsAreAndroids() {
-        let labels = ["Messages", "Connections", "Approvals", "Votes", "Vault", "History", "Settings", "Help"]
+        let labels = ["Messages", "Connections", "Approvals", "Votes", "Vault", "Devices & agents", "History", "Settings", "Help"]
         #expect(TopLevelDestination.allCases.map(\.label) == labels)
         #expect(ShellStrings.drawerVersion("2.0.0", 1) == "VettID 2.0.0 (1)")
         #expect(ShellStrings.ownerCheckWarning("3:00 PM") == "Your daily check is due at 3:00 PM.")

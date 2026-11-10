@@ -61,6 +61,8 @@ packages:
     path: Packages/VettIDItems
   VettIDVotes:
     path: Packages/VettIDVotes
+  VettIDDevices:
+    path: Packages/VettIDDevices
   # TEST ONLY: linked by test targets, never by the app (release check).
   VettIDTesting:
     path: Packages/VettIDTesting
@@ -167,6 +169,7 @@ targets:
       - package: VettIDHistory
       - package: VettIDItems
       - package: VettIDVotes
+      - package: VettIDDevices
 
   # TEST ONLY: the app's sources and screens against the local dev stack on the simulator (IOS-PLAN §8 exit I1 (a)),
   # with VettIDAltChanTesting's TEST App Attest attester and VettIDKeysTesting's software keys composed by
@@ -243,6 +246,7 @@ targets:
       - package: VettIDHistory
       - package: VettIDItems
       - package: VettIDVotes
+      - package: VettIDDevices
       # TEST ONLY: the TEST iOS attester and the software keys.
       - package: VettIDAltChan
         product: VettIDAltChanTesting
@@ -333,6 +337,8 @@ schemes:
         - package: VettIDItems/VettIDItemsUITests
         - package: VettIDVotes/VettIDVotesTests
         - package: VettIDVotes/VettIDVotesUITests
+        - package: VettIDDevices/VettIDDevicesTests
+        - package: VettIDDevices/VettIDDevicesUITests
         - package: VettIDTesting/VettIDTestingTests
     profile:
       config: Release

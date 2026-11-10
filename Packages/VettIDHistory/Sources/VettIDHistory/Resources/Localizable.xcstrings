@@ -1649,7 +1649,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Desktop session granted"
+            "value": "Access allowed"
           }
         }
       }
@@ -1660,7 +1660,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Desktop session ended"
+            "value": "Access ended"
           }
         }
       }

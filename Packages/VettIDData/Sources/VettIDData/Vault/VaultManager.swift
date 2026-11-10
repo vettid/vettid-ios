@@ -132,8 +132,8 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
     @ObservationIgnored public let historyExport: HistoryExportManager
     /// The member's votes (VAULT-MESSAGING 0.81.3 §10.19, IOS-PLAN §4.16; ``VaultManager+Votes``), in memory only.
     @ObservationIgnored public private(set) lazy var votes: VotesManager = Self.votesManager(self)
-    /// The canary manifest installed out of band (VAULT-RELEASES §10.1 step 9, VAULT-MESSAGING §11.10.1): used by the
-    /// alternate channel instead of the published manifest only while it is newer.
+    @ObservationIgnored public private(set) lazy var devices: DevicesManager = Self.devicesManager(self) // §10.3, memory only
+    /// The canary manifest installed out of band (VAULT-RELEASES §10.1 step 9, VAULT-MESSAGING §11.10.1): used by the alternate channel instead of the published manifest only while it is newer.
     @ObservationIgnored public let canary: CanaryManifestManager
     /// The proactive release update (RELEASE-UPDATES §2): the offer and the one-step update.
     @ObservationIgnored public let releaseUpdate: ReleaseUpdateManager

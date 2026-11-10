@@ -166,7 +166,10 @@ import VettIDVault
         i.deviceID = nil
         #expect(FeedKinds.title(i, named) == any)
         #expect(FeedKinds.isKnown("device.update_needed") && FeedKinds.classify("device.update_needed") == .shown)
-        #expect(FeedKinds.target(i) == .devices)
+        // Without a device id the list; with one, its page (ANDROID-PLAN §4 Devices & agents).
+        #expect(FeedKinds.target(i) == .deviceList)
+        i.deviceID = "d1"
+        #expect(FeedKinds.target(i) == .device("d1"))
     }
 
     @Test func devicesCredentialAndTheDailyCheck() {

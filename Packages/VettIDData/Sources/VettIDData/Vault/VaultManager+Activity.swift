@@ -61,6 +61,7 @@ extension VaultManager {
         feed.onEvent(m)
         approvals.onEvent(m)
         votes.onEvent(m)
+        devices.onEvent(m)
     }
 
     /// Held or due (§3.6.3): IOS-PLAN §6.9 clears vault content at a hold as at the vault lock. The feed, the photos, the
@@ -129,6 +130,7 @@ extension VaultManager {
         approvals.forgetOpenVault()
         history.clear()
         votes.clear()
+        devices.clear()
     }
 
     /// A wipe, or a deleted vault: every list, and what the phone keeps of them.
@@ -143,6 +145,7 @@ extension VaultManager {
         approvals.clear()
         history.clear()
         votes.clear()
+        devices.clear()
         // The kept attempts at the results too (a lock keeps them; a wipe does not).
         votes.forgetStored()
     }
