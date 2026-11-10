@@ -16,7 +16,7 @@ struct HistoryExportPicker: UIViewControllerRepresentable {
     let onAnswered: @MainActor (Bool) -> Void
     let onFailed: @MainActor () -> Void
     /// The picker was closed and its file removed without an answer (the app went to the background): the export stays, and
-    /// "Save to Files" again opens a new picker.
+    /// "Choose where to save" again opens a new picker.
     let onClosed: @MainActor () -> Void
 
     func makeCoordinator() -> HistoryExportCoordinator { HistoryExportCoordinator() }
@@ -187,8 +187,9 @@ final class HistoryExportCoordinator: NSObject, UIDocumentPickerDelegate, UIAdap
     }
 
     /// The app went to the background: the picker closes and its file goes, but the export stays (``onClosed``), so the
-    /// member opens "Save to Files" again on return without a second export. The app lock does not close it (`vettIDLocked` closes nothing): the file stays through the lock window,
-    /// unreadable while the phone is locked (complete protection), and the background close covers the rest.
+    /// member taps "Choose where to save" again on return without a second export. The app lock does not close it
+    /// (`vettIDLocked` closes nothing): the file stays through the lock window, unreadable while the phone is locked
+    /// (complete protection), and the background close covers the rest.
     @objc func didEnterBackground() {
         guard picker != nil else { return }
         close()

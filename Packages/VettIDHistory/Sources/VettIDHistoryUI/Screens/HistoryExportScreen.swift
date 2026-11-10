@@ -259,7 +259,8 @@ private struct ExportPinStep: View {
 
 /// The file is ready: "Save to Files" opens by itself once, and again from the button; the suggested name below. The
 /// system's document picker (IOS-PLAN §4) copies a file made for it (``HistoryExportTempFile``, removed on every path)
-/// only where the member chooses; cancelling or dismissing it drops the export.
+/// only where the member chooses; cancelling or dismissing it drops the export. The app going to the background closes the
+/// picker and removes its file but keeps the export, so the button opens a new picker on return.
 private struct ExportSaveStep: View {
     let save: ExportSave
     let file: ExportFile?
