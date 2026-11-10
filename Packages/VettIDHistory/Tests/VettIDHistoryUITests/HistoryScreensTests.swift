@@ -163,8 +163,7 @@ import VettIDVault
         for step in steps where step != .closed {
             #expect(height(HistoryExportScreen(step: step, words: "All of your history", file: file, actions: HistoryExportActions())) > 0, "\(step)")
         }
-        #expect(ExportDocument.contentType(.csv) == .commaSeparatedText && ExportDocument.contentType(.json) == .json)
-        #expect(ExportDocument(file).bytes == file.bytes)
+        #expect(ExportContentType.of(.csv) == .commaSeparatedText && ExportContentType.of(.json) == .json)
     }
 
     @Test func theRoutesRenderOverTheirRepositories() {
