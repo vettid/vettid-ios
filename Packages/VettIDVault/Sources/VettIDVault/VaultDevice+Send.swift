@@ -276,8 +276,11 @@ extension VaultDevice {
     /// have no `hs.fin`). Anything else an earlier version left there is dropped at load.
     /// (0.87.0) `hs.confirm` and `device.features` too: durable, never answered, and the same whenever they arrive
     /// (VAULT-MESSAGING §6.3.1 "Responder": "queues `hs.confirm` … durable"; §10.2).
+    /// Calls C1: `call.end` too (as vettid-android's outbox types have it): a hang-up that could not be delivered at once
+    /// still reaches the vault and frees it (§10.10). A second `call.end` for the same call is harmless.
     static let outboxTypes: Set<String> = [
         "relay.token.issued", "relay.token.refresh", VaultDevice.typeHsFin, HsTypes.confirm, VaultDevice.typeDeviceFeatures,
+        VaultDevice.typeCallEnd,
     ]
 
     /// Re-deposits what the outbox still holds (after a restart or a transport failure). The deposits are made outside the
