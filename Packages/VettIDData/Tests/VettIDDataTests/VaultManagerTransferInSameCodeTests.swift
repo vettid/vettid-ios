@@ -99,6 +99,22 @@ extension VaultManagerTransferInTests {
         #expect(!deviceHoldsVault && m.record.value.transferCode == nil)
     }
 
+    /// Without a session (a background ended it): the stored code and start say it is the open transfer's, and the scan
+    /// gives the stored comparison code back with nothing changed, even after the code's expiry.
+    @Test func withoutASessionTheSameCodeIsStillOpen() async throws {
+        defer { phone.close() }
+        let qr = try code()
+        service.holdsTransferApproval = true
+        let sas = try await m.transferIn(code: qr)
+        let before = try openTransfer()
+        await m.onBackground(budget: .seconds(1))
+        #expect(m.session == nil)
+        phone.clockAhead = 620
+        #expect(m.isOpenTransferCode(qr))
+        #expect(try await m.transferIn(code: qr) == sas)
+        #expect(try openTransfer() == before && deviceHoldsVault)
+    }
+
     /// After a restart the comparison code is the stored one: the same code goes back to it without reaching the vault.
     @Test func theSameCodeAfterARestartGivesTheStoredSas() async throws {
         defer { phone.close() }
@@ -157,7 +173,7 @@ extension VaultManagerTransferInTests {
         let inits = service.transferInits.count
         let failure = await vaultFailure { _ = try await m.transferIn(code: qr) }
         #expect(failure != nil && failure?.code != MoveCodes.hsUnanswered && failure?.code != VaultManager.codeTransferWaiting)
-        #expect(service.transferInits.count == inits && m.record.value.transferCode == nil, "a failed fetch keeps no code")
+        #expect(service.transferInits.count == inits && m.record.value.transferCode == nil, "nothing sent, no code kept")
         // A new code is not refused for it (the fake's answers, 620 s behind this phone's clock, are not taken, so the scan
         // ends otherwise once its wait is over: its pauses last five seconds, whenever it reaches them).
         let next = try service.armTransferTarget(pin: pin, password: password, validFor: 1_300)
@@ -177,10 +193,14 @@ extension VaultManagerTransferInTests {
         let started = try #require(m.record.value.transferStartedMs)
         try await phone.restart()
         first.cancel()
+        // The device file as the transfer left it, pinned vault and all.
+        let deviceFile = phone.directory.appendingPathComponent(VaultFiles.device(of: .first))
+        let saved = try Data(contentsOf: deviceFile)
         phone.deviceSaveFails.on = true
         try await m.refresh()
         phone.deviceSaveFails.on = false
         #expect(m.record.value.transferStartedMs == started && m.record.value.transferCode != nil && pendingRecord)
+        #expect(try Data(contentsOf: deviceFile) == saved, "the device file still holds the pinned vault")
         #expect(m.moveFlags.book.transferWaiter != nil, "waited for in the background")
         try await expectFreshSecondScan()
     }

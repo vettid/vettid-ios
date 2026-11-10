@@ -111,7 +111,7 @@ public final class TransferInViewModel: TransferInActions {
         // The task holds the model weakly and never across an await, so a dropped model can deinit (and cancel it); and
         // after every await it stops if it was cancelled: Swift cannot interrupt an await, and a repository that returns
         // normally after `cancel()` must not move the state.
-        let scan = Scan(text: text, sameCode: sameCode, startedBefore: startedBefore)
+        let scan = Scan(text: text, startedBefore: startedBefore)
         waiter = Task { @MainActor [weak self, move, vault, now, sleep] in
             let scanned = now()
             guard let sas = await Self.connect(Weak(self), move, sleep, scan, from: from) else { return }
@@ -121,11 +121,10 @@ public final class TransferInViewModel: TransferInActions {
         }
     }
 
-    /// What was scanned or pasted, and whether it is the open transfer's own code (VAULT-MESSAGING 0.88.4 §11.14.10 rule 5):
-    /// a transfer that this scan did not start, and never abandons.
+    /// What was scanned or pasted, and the open transfer's start before it: a scan the repository answered with the
+    /// open transfer (its own code, VAULT-MESSAGING 0.88.4 §11.14.10 rule 5) did not start it, and never abandons it.
     private struct Scan: Sendable {
         let text: String
-        let sameCode: Bool
         /// The stored start of the open transfer when the scan began: a scan the repository handled as a new one writes
         /// a new start.
         let startedBefore: Date?

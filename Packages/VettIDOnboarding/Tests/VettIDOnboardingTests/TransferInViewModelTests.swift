@@ -233,6 +233,21 @@ import VettIDDataTesting
         #expect(vm.state.step == .notAnswered && vault.calls.contains("abandonTransferIn"))
     }
 
+    /// Decided by the stored start alone: a scan the repository gave the open transfer back to (the start unchanged) is
+    /// never abandoned, whatever the screen thought of the code before.
+    @Test func aScanGivenTheOpenTransferBackIsNeverAbandoned() async throws {
+        let hs = TestDeferred<String>()
+        vault.transferHsResp = hs
+        let vm = model()
+        vm.scan()
+        vault.openTransferCodes = []
+        vault.transferStartedAt = clock.now().addingTimeInterval(-30)
+        vault.transferInStartsAt = nil
+        vm.scanned(try qr())
+        await clock.advance(seconds: 61)
+        #expect(vm.state.step == .notAnswered && !vault.calls.contains("abandonTransferIn"))
+    }
+
     @Test func aPastedCodeIsCheckedTheSameWay() async throws {
         let vm = model()
         vm.paste()
