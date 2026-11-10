@@ -11,8 +11,12 @@ public enum FeedTarget: Equatable, Sendable {
     case sharedWithYou(String)
     case shareRule(connectionID: String, ruleID: String)
     case item(String)
-    /// Settings → Vault (the devices).
+    /// Settings → Vault (the transfer and the signer's notices).
     case devices
+    /// Devices & agents (ANDROID-PLAN 0.1.53 AA1): the list.
+    case deviceList
+    /// A device's page in Devices & agents (`device.paired` with its `device_id`).
+    case device(String)
     /// The clone alarm's screen.
     case alarm
     /// History (its Security entries).
@@ -126,9 +130,11 @@ public enum FeedKinds {
             guard let c, let ref else { return .sheet }
             return .shareRule(connectionID: c, ruleID: ref)
         case "item.revealed": return ref.map { .item($0) } ?? .sheet
-        case "device.pair.pending", "device.paired", "device.unlinked", "device.transferred", "device.replaced",
-             "device.signer_changed":
-            return .devices
+        // 0.1.53: the device and the list are in Devices & agents; the transfer, the replacement and the signer's notices stay in
+        // Settings → Vault.
+        case "device.paired": return item.deviceID.flatMap { $0.isEmpty ? nil : .device($0) } ?? .deviceList
+        case "device.pair.pending", "device.unlinked": return .deviceList
+        case "device.transferred", "device.replaced", "device.signer_changed": return .devices
         case "credential.alarm": return .alarm
         case "credential.password_failed": return .history
         case "credential.rotated", "credential.reset": return .credential

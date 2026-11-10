@@ -263,6 +263,20 @@ final class FakeFeedOps: FeedOps, @unchecked Sendable {
         #expect(FeedKinds.classify("recovery.attempt") == .shown && FeedKinds.classify("recovery.generation_closed") == .shown)
         #expect(FeedKinds.target(item("recovery.attempt", nil, "2/3/not_success/counter")) == .sheet)
     }
+
+    /// Devices & agents (ANDROID-PLAN 0.1.53 AA1): a paired device opens its page, or the list when the item names none; an
+    /// unlinked device and a pairing in wait open the list; the transfer, replacement and signer notices stay in Settings.
+    @Test func deviceKindsOpenDevicesAndAgents() {
+        let item = { (kind: String, device: String?) in FeedItem(itemID: "i", seq: 1, kind: kind, at: "", status: "active", deviceID: device, ref: "r") }
+        #expect(FeedKinds.target(item("device.paired", "d1")) == .device("d1"))
+        #expect(FeedKinds.target(item("device.paired", nil)) == .deviceList)
+        #expect(FeedKinds.target(item("device.paired", "")) == .deviceList)
+        #expect(FeedKinds.target(item("device.unlinked", "d1")) == .deviceList)
+        #expect(FeedKinds.target(item("device.pair.pending", nil)) == .deviceList)
+        for kind in ["device.transferred", "device.replaced", "device.signer_changed"] {
+            #expect(FeedKinds.target(item(kind, "d1")) == .devices, "\(kind)")
+        }
+    }
 }
 
 // swiftlint:enable line_length
