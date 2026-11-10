@@ -247,6 +247,41 @@ import VettIDDataTesting
         #expect(pairing.calls.last == "reject")
     }
 
+    // MARK: Review fixes
+
+    /// Done on a live code or a comparison asks the repository to leave, not left to the model going.
+    @Test func doneOnACodeOrAComparisonLeavesTheRepository() async {
+        for stage in [PairingStage.code(PairingCode(pairingID: "p1", link: "L", exp: exp)), .compare(pending)] {
+            let m = vm()
+            pairing.state = PairingState(stage: stage)
+            await sync(m)
+            pairing.calls = []
+            m.done()
+            #expect(pairing.calls == ["leave"], "\(stage)")
+        }
+    }
+
+    /// A sheet opened for an older comparison never approves the new one: Pair is ignored unless it is the comparison now held.
+    @Test func aSheetOfAnOlderComparisonCannotApproveTheNewOne() async {
+        let m = vm()
+        pairing.state = PairingState(stage: .compare(pending))
+        await sync(m)
+        m.codesMatch()
+        await sync(m)
+        pairing.state = PairingState(stage: .compare(PendingPairing(pairingID: "p2", name: "Other", sas: "654321", ends: exp)))
+        await sync(m)
+        pairing.calls = []
+        m.pair()
+        await sync(m)
+        #expect(!pairing.calls.contains { $0.hasPrefix("approve") })
+        // Nothing held at all: nothing is approved either.
+        pairing.state = PairingState()
+        await sync(m)
+        m.pair()
+        await sync(m)
+        #expect(!pairing.calls.contains { $0.hasPrefix("approve") })
+    }
+
     // MARK: Leaving (iOS)
 
     /// Leaving an expired code by Back tells the vault (the code may still be answered for a minute): it is rejected first, never

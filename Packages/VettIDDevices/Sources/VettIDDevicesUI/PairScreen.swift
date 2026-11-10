@@ -173,6 +173,8 @@ private struct CodeStep: View {
             Countdown(exp: code.exp).padding(.top, Spacing.m)
             CaptureProtected {
                 Text(verbatim: code.link)
+                    // Deliberately not selectable (vettid-android's is): every copy of the code goes through ``PairingClipboard``
+                    // and so ``SecurePasteboard`` (local to this iPhone, expiring), never the system's own Copy.
                     .font(.system(.footnote, design: .monospaced))
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(Spacing.m)
@@ -196,7 +198,9 @@ private struct CodeStep: View {
             }
             .buttonStyle(.plain)
             .accessibilityIdentifier("pair_copy")
-            // The code only, nothing around it; the sheet's title is the line "Send it only to yourself.".
+            // The code only, nothing around it; the sheet's title is the line "Send it only to yourself.". Sharing the code is allowed
+            // (ANDROID-PLAN 0.1.53 AA2 decision 1(b)); the share sheet's own Copy action bypasses ``SecurePasteboard``, which is the
+            // member's choice of where to send it.
             ShareLink(item: code.link, preview: SharePreview(DeviceStrings.pairShareTitle)) {
                 OutlinedLabel(symbol: .share, text: DeviceStrings.pairShare)
             }

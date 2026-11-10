@@ -931,6 +931,120 @@ extension PairingManagerTests {
 }
 
 extension PairingManagerTests {
+    // MARK: Review fixes
+
+    /// Leaving while "Making a pairing code": nothing is shown, and the answer that comes is rejected, never installed as a live
+    /// code that no screen holds.
+    @Test func leavingWhileTheCodeIsBeingMadeRejectsItsAnswer() async throws {
+        let ops = try ops()
+        let gate = TestDeferred<Void>()
+        ops.holdNext = gate
+        let m = manager(ops)
+        let starting = Task { await m.start(.agent) }
+        #expect(await eventually { ops.held.isCompleted })
+        #expect(m.state.stage == .creating)
+        await m.cancel()
+        #expect(m.state == PairingState())
+        gate.complete(())
+        #expect(await eventually { ops.calls.contains("reject:p1") })
+        await starting.value
+        #expect(m.state == PairingState())
+        #expect(ops.calls == ["create", "reject:p1"])
+    }
+
+    /// A late answer of a code whose end has passed but whose timer has not run yet is taken, as for an expired one.
+    @Test func aLateAnswerBeforeTheExpiryTimerRanIsTaken() async throws {
+        let m = manager(try ops())
+        await m.start()
+        // The comparison's timer waits for the end; the clock is past it, within the late minute.
+        await time.runCurrent()
+        skew.value = 630
+        m.onEvent(pending())
+        #expect(compared(m)?.sas == "123456")
+        // Past the late minute it is not.
+        let late = manager(try ops())
+        await late.start()
+        await time.runCurrent()
+        skew.value = 661
+        late.onEvent(pending())
+        #expect(compared(late) == nil)
+    }
+
+    /// "New code" after an expiry tells the vault that the expired pairing is not wanted.
+    @Test func aNewCodeAfterExpiryRejectsTheExpiredPairing() async throws {
+        let ops = try ops()
+        let m = manager(ops)
+        await m.start()
+        await time.advance(seconds: 601)
+        ops.created = try created("p2")
+        m.acknowledge()
+        await m.start()
+        #expect(code(m)?.pairingID == "p2")
+        // Without the screen's acknowledge in between (the stage is still the expired one):
+        let n = try self.ops()
+        let other = manager(n)
+        await other.start()
+        await time.advance(seconds: 601)
+        n.created = try created("p3")
+        await other.start()
+        #expect(code(other)?.pairingID == "p3")
+        #expect(await eventually { n.calls.contains("reject:p1") })
+    }
+
+    /// Every start is a new pairing: the id search of the one before, still waiting, reads nothing for it.
+    @Test func aStartAfterAPairedPairingCutsTheEarlierSearch() async throws {
+        let ops = try ops()
+        let reads = ReadCounter()
+        let base = time.now
+        let m = PairingManager(
+            ops: { ops }, now: { base() }, sleep: time.sleep, knownDeviceIDs: { ["me"] },
+            readDevices: {
+                reads.n += 1
+                return []
+            }
+        )
+        await m.start()
+        m.onEvent(pending())
+        let task = Task { await m.approve(sessionSeconds: 3600) }
+        await time.advance(seconds: 2)
+        #expect(paired(m) != nil)
+        // The member reads the end and starts again while the search still waits.
+        m.acknowledge()
+        ops.created = try created("p2")
+        await m.start()
+        await time.advance(seconds: 15)
+        await task.value
+        #expect(reads.n == 0)
+        #expect(code(m)?.pairingID == "p2")
+    }
+
+    /// An earlier approval's end does not stop the watch of a newer one (a lock, then a new pairing approved).
+    @Test func anEarlierApprovalsEndLeavesTheNewerWatchAlone() async throws {
+        let ops = try ops()
+        let m = manager(ops)
+        await m.start()
+        m.onEvent(pending())
+        let first = Task { await m.approve(sessionSeconds: 3600) }
+        await time.advance(seconds: 2)
+        #expect(paired(m) != nil)
+        m.clear()
+        // A new pairing, approved while the earlier search is still ending.
+        await m.start()
+        m.onEvent(pending())
+        let gate = TestDeferred<Void>()
+        ops.holdApprove = gate
+        ops.onApprove = { m.onEvent(self.paidFeed("agent-B")) }
+        let second = Task { await m.approve(sessionSeconds: 3600) }
+        #expect(await eventually { ops.approveEntered.isCompleted })
+        // The earlier search ends now.
+        await time.advance(seconds: 1)
+        await first.value
+        gate.complete(())
+        await time.advance(seconds: 11)
+        await second.value
+        #expect(paired(m)?.deviceID == "agent-B")
+    }
+
     // MARK: What the screens rely on (iOS)
 
     /// A lock during the search for the new device's id stops it: the list is never read afterwards (that could open a session and fill

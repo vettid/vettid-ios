@@ -171,6 +171,8 @@ public final class PairViewModel {
     }
 
     public func pair() {
+        // Only the comparison the sheet was opened for: a sheet of an older one never approves the new one.
+        guard case .compare(let c) = repo.state.stage, sheetFor == c.pairingID else { return }
         let (repo, seconds) = (repo, local.session.seconds)
         work.launch { await repo.approve(sessionSeconds: seconds) }
     }
@@ -195,9 +197,13 @@ public final class PairViewModel {
     /// held to reject. A pairing that was approved, rejected or ended is never rejected (nothing is held then: ``PairingRepository/leave()`` does nothing
     /// for it); a comparison or a live code is rejected when [leaving] (the model going), by the repository.
     private static func finish(_ repo: any PairingRepository, leaving: Bool) {
-        if case .codeExpired = repo.state.stage {
+        switch repo.state.stage {
+        // Not left to the model going: a screen that is popped is released late.
+        case .codeExpired, .code, .compare:
             repo.leave()
             return
+        default:
+            break
         }
         if leaving { repo.leave() }
         repo.acknowledge()
