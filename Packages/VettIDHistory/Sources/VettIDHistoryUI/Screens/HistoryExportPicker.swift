@@ -13,6 +13,8 @@ import VettIDHistory
 /// a file that could not be made is [onFailed]. The temporary file goes on every path.
 struct HistoryExportPicker: UIViewControllerRepresentable {
     let file: ExportFile?
+    /// Whether there is an export to end on a lock: the screen holds its bytes (its save step), picker up or not.
+    let kept: Bool
     let onAnswered: @MainActor (Bool) -> Void
     let onFailed: @MainActor () -> Void
     /// The picker was closed and its file removed without an answer (the app went to the background): the export stays, and
@@ -36,6 +38,7 @@ struct HistoryExportPicker: UIViewControllerRepresentable {
         c.onFailed = onFailed
         c.onClosed = onClosed
         c.onLocked = onLocked
+        c.setKept(kept)
         c.update(file, host: host)
     }
 
@@ -50,6 +53,10 @@ final class HistoryExportCoordinator: NSObject, UIDocumentPickerDelegate, UIAdap
     var onFailed: @MainActor () -> Void = {}
     var onClosed: @MainActor () -> Void = {}
     var onLocked: @MainActor () -> Void = {}
+    /// Whether there is an export to end on a lock (set by the screen's updates), and whether it was ended already: the
+    /// end is told once, and a later update that still carries the export does not arm it again.
+    private(set) var kept = false
+    private var ended = false
     /// The temporary file while the picker is up.
     private(set) var temp: HistoryExportTempFile?
     /// Held while the file is, so that it is not released before it is presented.
@@ -77,6 +84,11 @@ final class HistoryExportCoordinator: NSObject, UIDocumentPickerDelegate, UIAdap
         )
         NotificationCenter.default.addObserver(
             self, selector: #selector(didLock), name: UIApplication.protectedDataWillBecomeUnavailableNotification, object: nil
+        )
+        // A suspended app may not get the "will become unavailable" one on the spot; the "did become available" one comes
+        // at the next unlock. Either means a lock happened; whichever arrives first ends the export, once.
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(didLock), name: UIApplication.protectedDataDidBecomeAvailableNotification, object: nil
         )
     }
 
@@ -236,11 +248,23 @@ final class HistoryExportCoordinator: NSObject, UIDocumentPickerDelegate, UIAdap
         onClosed()
     }
 
-    /// The phone locked: the picker and its file go, and the export ends whether or not a picker was up (a kept export
-    /// too): after a lock the member needs the PIN and a fresh read.
-    @objc func didLock() {
+    /// A lock happened (either protected-data notification): the export ends.
+    @objc func didLock() { endExport() }
+
+    /// The one place an export is ended from outside (a lock; the app lock too, if that is decided): the picker and its
+    /// file go, and the screen is told (``onLocked``), once, and only while there is an export (a kept export too): after a
+    /// lock the member needs the PIN and a fresh read.
+    func endExport() {
+        guard kept, !ended else { return }
+        ended = true
         close()
         onLocked()
+    }
+
+    /// The screen's export is there ([kept]) or gone; a gone one re-arms the next.
+    func setKept(_ kept: Bool) {
+        self.kept = kept
+        if !kept { ended = false }
     }
 
     /// In the background an offered file is refused: nothing was written (or the file goes), the export stays, and nothing

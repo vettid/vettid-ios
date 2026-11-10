@@ -408,8 +408,11 @@ import VettIDData
         var locked = 0, answers: [Bool] = []
         c.onLocked = { locked += 1 }
         c.onAnswered = { answers.append($0) }
+        c.setKept(true)
         c.didLock()
         #expect(locked == 1, "a kept export (no picker) ends too")
+        c.setKept(false)
+        c.setKept(true)
         c.update(file, host: UIViewController())
         #expect(entries(root).count == 1)
         c.didLock()
@@ -425,11 +428,47 @@ import VettIDData
         c.root = root
         var locked = 0
         c.onLocked = { locked += 1 }
+        c.setKept(true)
         c.update(file, host: UIViewController())
         c.didEnterBackground()
         #expect(locked == 0, "no lock, the export stays")
         NotificationCenter.default.post(name: UIApplication.protectedDataWillBecomeUnavailableNotification, object: nil)
         #expect(locked == 1)
+    }
+
+    /// Either protected-data notification means a lock happened: "did become available" alone ends a kept export (a suspended
+    /// app may miss the "will become unavailable" one), both together end it once, neither leaves it, and no export means
+    /// nothing to end.
+    @Test func eitherProtectedDataNotificationEndsAKeptExportOnce() throws {
+        let will = UIApplication.protectedDataWillBecomeUnavailableNotification
+        let did = UIApplication.protectedDataDidBecomeAvailableNotification
+        func run(_ names: [Notification.Name], kept: Bool = true) -> Int {
+            let c = HistoryExportCoordinator()
+            var locked = 0
+            c.onLocked = { locked += 1 }
+            c.setKept(kept)
+            for n in names { NotificationCenter.default.post(name: n, object: nil) }
+            // A later update that still carries the export does not arm it again.
+            c.setKept(kept)
+            for n in names { NotificationCenter.default.post(name: n, object: nil) }
+            return locked
+        }
+        #expect(run([did]) == 1, "did become available alone")
+        #expect(run([will]) == 1)
+        #expect(run([will, did]) == 1, "both: once")
+        #expect(run([did, will]) == 1, "both: once")
+        #expect(run([]) == 0, "neither")
+        #expect(run([will, did], kept: false) == 0, "no export")
+        // The export gone and offered again is armed again.
+        let c = HistoryExportCoordinator()
+        var locked = 0
+        c.onLocked = { locked += 1 }
+        c.setKept(true)
+        c.didLock()
+        c.setKept(false)
+        c.setKept(true)
+        c.didLock()
+        #expect(locked == 2)
     }
 
     /// The notification itself reaches the coordinator.

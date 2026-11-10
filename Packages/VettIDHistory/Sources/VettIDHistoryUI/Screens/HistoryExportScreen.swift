@@ -283,6 +283,7 @@ private struct ExportSaveStep: View {
         .background(
             HistoryExportPicker(
                 file: exporting && !covered ? file : nil,
+                kept: file != nil,
                 onAnswered: { saved in
                     exporting = false
                     actions.onSaved(saved)
