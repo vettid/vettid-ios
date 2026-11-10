@@ -455,9 +455,12 @@ extension VaultManagerTransferInTests {
         clock.follow(m, d)
         #expect(clock.finalNotBefore == sent + 20 + 75, "the first hold past the cap")
         #expect(clock.dropsAfterFinalCollect(m, d), "the end cannot move: the drop is next")
+        // The 90 s timer the window armed at its start was cancelled by the freeze, but its task may reach the pause only
+        // now, under load, and a cancelled pause is recorded too: it is not the hold.
         phone.windowPauses.holding = true
         let waiting = Task { @MainActor in await clock.holdAfterExtra(m) }
-        #expect(await eventually { phone.windowPauses.lengths == [75] }, "the hold of the freeze: \(phone.windowPauses.lengths)")
+        #expect(await eventually { [[75], [90, 75]].contains(phone.windowPauses.lengths) },
+                "the hold of the freeze: \(phone.windowPauses.lengths)")
         phone.windowPauses.release()
         #expect(await waiting.value, "the hold is waited for, then a look")
         #expect(await !clock.holdAfterExtra(m), "once")
