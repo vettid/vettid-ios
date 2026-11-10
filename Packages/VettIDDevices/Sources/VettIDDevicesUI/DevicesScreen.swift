@@ -16,7 +16,7 @@ public struct DevicesActions {
 
 /// Devices & agents (ANDROID-PLAN 0.1.53 AA1): this phone first, then the member's agents, then desktops, each newest first. A
 /// row is the name, the role, the access ("Access until 15:40" / "No access") and the last activity; an agent the vault paused
-/// carries a "Paused" chip. With this phone alone: "No agents yet". A list that could not be read says so, above what was
+/// carries a "Paused" chip. With this phone alone: "Nothing paired yet". A list that could not be read says so, above what was
 /// read before. Mirrors vettid-android `DevicesScreen`.
 public struct DevicesScreen: View {
     @Environment(\.vettIDTimeScale) private var timeScale
@@ -52,10 +52,10 @@ public struct DevicesScreen: View {
                 .padding(Spacing.xl)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if state.onlyThisPhone {
-            // This phone only: "No agents yet".
+            // This phone only: "Nothing paired yet".
             VStack(spacing: 0) {
                 ForEach(state.devices.filter(\.thisPhone)) { ThisPhoneRow(device: $0) }
-                EmptyState(icon: .devices, title: DeviceStrings.devicesEmptyTitle, message: DeviceStrings.devicesEmptyBody)
+                EmptyState(icon: .devices, title: DeviceStrings.devicesEmptyTitleAny, message: DeviceStrings.devicesEmptyBodyAny)
                     .accessibilityIdentifier("devices_empty")
             }
             .accessibilityIdentifier("devices")

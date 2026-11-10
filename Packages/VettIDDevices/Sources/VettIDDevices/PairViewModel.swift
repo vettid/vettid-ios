@@ -1,0 +1,198 @@
+import Foundation
+import Observation
+import VettIDData
+
+/// The first access offered when a pairing is approved (ANDROID-PLAN 0.1.53 AA2 step 3, decision 5): every choice is a whole number
+/// of seconds the vault takes (60 to 86,400), or none. Mirrors vettid-android `SessionChoice`.
+public enum SessionChoice: CaseIterable, Sendable {
+    case none, minutes15, hour1, hours4, hours8, hours24
+
+    public var seconds: Int? {
+        switch self {
+        case .none: nil
+        case .minutes15: 15 * 60
+        case .hour1: 60 * 60
+        case .hours4: 4 * 60 * 60
+        case .hours8: 8 * 60 * 60
+        case .hours24: 24 * 60 * 60
+        }
+    }
+}
+
+/// The pairing screens' state: the pairing's own, and what the screen adds. Holds the code, the digits and the name of a device:
+/// nothing but the type is printed. Mirrors vettid-android `PairUiState`.
+public struct PairState: Equatable, Sendable, CustomStringConvertible, CustomDebugStringConvertible, CustomReflectable {
+    public var pairing = PairingState()
+    /// Opened from the feed item "A device asks to pair": with no pairing held, the phone can't check it any more.
+    public var held = false
+    /// The sheet "Allow access now?" is open (only over the very comparison it was opened for).
+    public var sheet = false
+    /// A pairing was shown and the state returned to nothing by itself (a lock, a hold): it was interrupted, nothing paired.
+    public var interrupted = false
+    public var session = SessionChoice.hour1
+    /// The code was copied: the button says so.
+    public var copied = false
+
+    public init() {}
+
+    public var stage: PairingStage { pairing.stage }
+
+    public var description: String { "PairState" }
+    public var debugDescription: String { "PairState" }
+    public var customMirror: Mirror { Mirror(self, children: [:]) }
+}
+
+/// Pairing an agent (ANDROID-PLAN 0.1.53 AA2) or a desktop (owner decision 2026-11-05). The pairing itself lives in
+/// ``PairingRepository`` (memory only); this holds what the screen adds. Leaving the screen (the model going) with a pairing not
+/// approved rejects it: an abandoned pairing grants nothing. Mirrors vettid-android `PairViewModel`.
+@MainActor
+@Observable
+public final class PairViewModel {
+    @ObservationIgnored private let repo: any PairingRepository
+    @ObservationIgnored private let ownerChecks: (any OwnerCheckRepository)?
+    @ObservationIgnored private let work = Work()
+    @ObservationIgnored private let follows = TaskBag()
+    @ObservationIgnored private let held: Bool
+    @ObservationIgnored private let role: PairRole
+
+    public private(set) var state = PairState()
+
+    private var local = PairState()
+    /// The pairing the repository last said.
+    @ObservationIgnored private var snapshot = PairingState()
+    /// The pairing the sheet was opened for.
+    @ObservationIgnored private var sheetFor: String?
+    /// The role of the last pairing seen that was not nothing: a held screen (opened from a feed item) has no route role, and a
+    /// cleared state (a lock, a hold) says agent whatever was held, so "New code" never takes its role from the repository.
+    @ObservationIgnored private var seenRole: PairRole
+    /// A stage other than nothing was seen, and the screen is not being closed.
+    @ObservationIgnored private var sawStage = false
+    @ObservationIgnored private var closing = false
+
+    /// [held]: opened from the feed item (what is held, never a new code; the held pairing says its own role). [desktop]: "Pair a
+    /// desktop" rather than "Pair an agent". [ownerChecks]: the daily check passing clears a refused approval.
+    public init(held: Bool = false, desktop: Bool = false, repo: any PairingRepository, ownerChecks: (any OwnerCheckRepository)? = nil) {
+        self.held = held
+        self.role = desktop ? .desktop : .agent
+        self.seenRole = desktop ? .desktop : .agent
+        self.repo = repo
+        self.ownerChecks = ownerChecks
+        local.held = held
+        state.held = held
+        // From the feed item the pairing is whatever is held; from the button, a new code (an unfinished one is kept).
+        if !held {
+            repo.acknowledge()
+            // A pairing held for the other role is rejected and replaced by the repository in this one call.
+            let role = role
+            work.launch { await repo.start(role) }
+        }
+        follows.add(follow(self, read: { $0.repo.state }, apply: { $0.onPairing($1) }))
+        // The daily check passed: a refused approval may be sent again.
+        if ownerChecks != nil {
+            follows.add(follow(self, read: { $0.ownerChecks?.ownerCheck?.state }, apply: { $0.onOwnerCheck($1) }))
+        }
+    }
+
+    deinit {
+        work.cancelAll()
+        follows.cancelAll()
+        // The screen is gone: a code not used or a comparison not answered is rejected (best effort), never kept.
+        let repo = repo
+        Task { @MainActor in
+            repo.leave()
+            repo.acknowledge()
+        }
+    }
+
+    /// What a new code is made for: the button's role, or for a held screen the role of what it last showed.
+    private var codeRole: PairRole { held ? seenRole : role }
+
+    private func onPairing(_ p: PairingState) {
+        snapshot = p
+        if p.stage != .idle {
+            sawStage = true
+            seenRole = p.role
+        }
+        recompute()
+    }
+
+    /// The state from the pairing, what the screen adds, the sheet and whether the screen is closing.
+    private func recompute() {
+        let p = snapshot
+        var s = local
+        // The screens say the role of what was shown, also once it was taken away (the lock's "This pairing has ended").
+        s.pairing = p
+        if p.stage == .idle { s.pairing.role = codeRole }
+        if case .compare(let c) = p.stage, sheetFor == c.pairingID { s.sheet = true } else { s.sheet = false }
+        s.interrupted = sawStage && !closing && p.stage == .idle && p.error == nil && !p.busy
+        if s != state { state = s }
+    }
+
+    private func onOwnerCheck(_ check: OwnerCheckState?) {
+        guard check == .ok, repo.state.error == .ownerCheckRequired else { return }
+        repo.acknowledge()
+    }
+
+    /// "New code", or "Try again" after a code could not be made.
+    public func newCode() {
+        local.copied = false
+        sheetFor = nil
+        sawStage = false
+        recompute()
+        let (repo, role) = (repo, codeRole)
+        work.launch {
+            repo.acknowledge()
+            await repo.start(role)
+        }
+    }
+
+    public func copied() {
+        local.copied = true
+        recompute()
+    }
+
+    /// Cancel on the code screen: the vault is told, nothing is held.
+    public func cancel() {
+        closing = true
+        recompute()
+        repo.leave()
+    }
+
+    public func codesMatch() {
+        if case .compare(let c) = repo.state.stage { sheetFor = c.pairingID } else { sheetFor = nil }
+        recompute()
+    }
+
+    public func closeSheet() {
+        sheetFor = nil
+        recompute()
+    }
+
+    public func choose(_ c: SessionChoice) {
+        local.session = c
+        recompute()
+    }
+
+    public func pair() {
+        let (repo, seconds) = (repo, local.session.seconds)
+        work.launch { await repo.approve(sessionSeconds: seconds) }
+    }
+
+    /// "They don't match", and Reject for a pairing that cannot be compared.
+    public func reject() {
+        sheetFor = nil
+        recompute()
+        let repo = repo
+        work.launch { await repo.reject() }
+    }
+
+    /// A final stage was read.
+    public func done() {
+        closing = true
+        recompute()
+        repo.acknowledge()
+    }
+
+    /// TEST ONLY: returns once the work started so far has run.
+    func settle() async { await work.settle() }
+}

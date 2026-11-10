@@ -22,17 +22,50 @@ public enum DeviceTexts {
     /// self-asserted name that could pass for the phone itself or for VettID is shown with its role (compared by a key, so
     /// inner spaces, NBSP, ZWJ, fillers or U+2800 cannot slip past).
     public static func name(_ d: DeviceInfo) -> String {
-        let role = role(d)
-        guard !d.name.isEmpty else {
-            if d.isAgent { return DeviceStrings.devicesAnAgentCap }
-            if d.kind == DeviceInfo.kindDesktop { return DeviceStrings.devicesADesktopCap }
-            return DeviceStrings.devicesUnnamed(role.lowercased())
+        var unnamed: String?
+        if d.isAgent {
+            unnamed = DeviceStrings.devicesAnAgentCap
+        } else if d.kind == DeviceInfo.kindDesktop {
+            unnamed = DeviceStrings.devicesADesktopCap
         }
-        if AccountNames.couldPassFor(d.name, DeviceStrings.devicesThisPhone) || AccountNames.couldPassFor(d.name, "VettID") {
-            return DeviceStrings.devicesNameWithRole(d.name, role)
-        }
-        return d.name
+        return label(d.name, role: role(d), unnamed: unnamed)
     }
+
+    /// [name] as a heading or a row has it: with no name, [unnamed] (else "Unnamed <role>"); a name that could pass for the phone or
+    /// for VettID comes with its [role].
+    private static func label(_ name: String, role: String, unnamed: String?) -> String {
+        guard !name.isEmpty else { return unnamed ?? DeviceStrings.devicesUnnamed(role.lowercased()) }
+        if AccountNames.couldPassFor(name, DeviceStrings.devicesThisPhone) || AccountNames.couldPassFor(name, "VettID") {
+            return DeviceStrings.devicesNameWithRole(name, role)
+        }
+        return name
+    }
+
+    /// The agent a pairing shows, by the name it gave (already cleaned): as ``name(_:)``, for an agent not yet listed.
+    public static func agentName(_ name: String) -> String {
+        label(name, role: DeviceStrings.devicesRoleAgent, unnamed: DeviceStrings.devicesAnAgentCap)
+    }
+
+    /// The desktop a pairing shows, by the name it gave (already cleaned): as ``name(_:)``, for a desktop not yet listed.
+    public static func desktopName(_ name: String) -> String {
+        label(name, role: DeviceStrings.devicesRoleDesktop, unnamed: DeviceStrings.devicesADesktopCap)
+    }
+
+    /// The agent a pairing shows, inside a sentence: its name isolated, "an agent" when it gave none (§10.8).
+    public static func sentenceAgent(_ name: String) -> String {
+        name.isEmpty ? DeviceStrings.devicesAnAgent : AccountNames.isolate(agentName(name))
+    }
+
+    /// The desktop a pairing shows, inside a sentence: its name isolated, "a desktop" when it gave none (§10.8).
+    public static func sentenceDesktop(_ name: String) -> String {
+        name.isEmpty ? DeviceStrings.devicesADesktop : AccountNames.isolate(desktopName(name))
+    }
+
+    /// The agent a pairing shows at the start of a title: its name isolated, "An agent" (capital) when it gave none.
+    public static func titleAgent(_ name: String) -> String { AccountNames.isolate(agentName(name)) }
+
+    /// The desktop a pairing shows at the start of a title: its name isolated, "A desktop" (capital) when it gave none.
+    public static func titleDesktop(_ name: String) -> String { AccountNames.isolate(desktopName(name)) }
 
     /// The name inside a sentence: bidirectionally isolated (a self-asserted name may run either way, §10.8); "an agent" or
     /// "a desktop" (lower case, no isolate) when it gave none.
