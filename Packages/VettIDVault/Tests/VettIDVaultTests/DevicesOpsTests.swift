@@ -52,3 +52,4 @@ import VettIDCrypto
         #expect(devices.count == 2)
     }
 }
+// swiftlint:enable line_length
