@@ -62,7 +62,7 @@ public struct DevicesScreen: View {
     /// Not while the list is loading, nor when it could not be read at all.
     private var offersPairing: Bool { Self.offersPairing(state) }
 
-    static func offersPairing(_ state: DevicesState) -> Bool { !state.loading && !(state.devices.isEmpty && state.error != nil) }
+    static func offersPairing(_ state: DevicesState) -> Bool { !state.loading && !(state.devices.isEmpty && state.shownError != nil) }
 
     @ViewBuilder private var content: some View {
         if state.loading {

@@ -352,12 +352,17 @@ final class FakePairingOps: PairingOps {
         let first = Task { await m.approve(sessionSeconds: 3600) }
         #expect(await eventually { ops.approveEntered.isCompleted })
         #expect(m.state.busy)
-        await m.approve(sessionSeconds: 3600)
-        await m.reject()
+        // The taps run as tasks, so that a guard that fails shows as a count of calls, never as a wait.
+        let second = Task { await m.approve(sessionSeconds: 3600) }
+        let rejecting = Task { await m.reject() }
+        await time.runCurrent()
         #expect(ops.calls == ["create", "approve:p1:3600"])
         gate.complete(())
         await time.advance(seconds: 11)
         await first.value
+        await second.value
+        await rejecting.value
+        #expect(ops.calls == ["create", "approve:p1:3600"])
         #expect(paired(m) != nil)
     }
 

@@ -326,6 +326,8 @@ public final class PairingManager: PairingRepository {
         if wait > 0 {
             do { try await sleep(.milliseconds(Int((wait * 1000).rounded(.up)) + 1)) } catch { return }
         }
+        // The generation too: a timer woken as its pairing was replaced (cancellation is only cooperative) must not end the new
+        // pairing's code, which `still` alone would take for its own.
         guard gen == generation, still(state.stage) else { return }
         // An approval in flight settles it by its answer.
         if state.busy { return }
