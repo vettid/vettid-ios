@@ -101,8 +101,8 @@ import VettIDDataTesting
         fake.requests = [Samples.outgoing(sas: nil, state: .waiting)]
         #expect(await until { m.state.step == .waiting && m.state.sas == nil })
         fake.requests = [Samples.outgoing(remote: true)]
-        await m.settle()
-        #expect(m.state.step == .compare && m.state.sas == "042817" && m.state.remote)
+        #expect(await until { m.state.step == .compare })
+        #expect(m.state.sas == "042817" && m.state.remote)
         m.approve()
         await m.settle()
         #expect(fake.calls.contains("approveOutgoing") && m.state.step == .approved && !m.state.busy)
@@ -129,7 +129,7 @@ import VettIDDataTesting
     @Test func aFailedApprovalSaysWhy() async {
         let m = await waiting()
         fake.requests = [Samples.outgoing()]
-        await m.settle()
+        #expect(await until { m.state.step == .compare })
         fake.fail["approveOutgoing"] = VaultFailure(.notFound)
         m.approve()
         await m.settle()
@@ -138,8 +138,9 @@ import VettIDDataTesting
 
     @Test func declineEndsTheRequest() async {
         let m = await waiting()
+        // The model follows the requests list asynchronously: wait for the step it leads to, not only for the model's work.
         fake.requests = [Samples.outgoing()]
-        await m.settle()
+        #expect(await until { m.state.step == .compare })
         fake.fail["declineOutgoing"] = VaultFailure(.network)
         m.decline()
         await m.settle()
