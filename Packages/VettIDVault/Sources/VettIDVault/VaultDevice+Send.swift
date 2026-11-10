@@ -134,7 +134,11 @@ extension VaultDevice {
             finSendHook?()
             #endif
             _ = try await relayFor(e.relayURL).deposit(mailboxID: e.mailbox, token: e.token, payload: try Base64s.decodeStd(e.envelope))
-            // The deposit is made: a failure to save what follows it is not a failure of the deposit.
+            // The deposit is made: a failure to save what follows it is not a failure of the deposit. The entry is out of memory
+            // at once and the next successful save drops it from the file; if the app ends before that, the file's copy is
+            // deposited once more. That is harmless: every outbox type is durable and means the same when it arrives again
+            // (``outboxTypes``: standing tokens, an `hs.fin`, `hs.confirm`, `device.features`), and the vault takes a repeated
+            // inner id once (VAULT-MESSAGING §8.2). The same holds for the clean-ups below.
             try? await withLockSaving { st.outbox.removeAll { $0.id == e.id && $0.envelope == e.envelope } }
         } catch let x as RelayError {
             // §8.6: a quota the recipient's mailbox ran out of is not cured by a fresh token; the deposit waits in the

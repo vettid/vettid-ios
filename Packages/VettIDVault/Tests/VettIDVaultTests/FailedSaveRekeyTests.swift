@@ -118,6 +118,118 @@ extension VaultDeviceTests {
         let again = try #require(try VaultDevice.load(config(f.store), secrets: f.secrets))
         #expect(again.mem.withLock { again.keyring.current()?.id } == f.new.id)
     }
+
+    // MARK: - Nothing is deposited before a save holds it (other than the kept entries of an activation)
+
+    /// An answer the device queues while saves fail (a `relay.token.refresh` of the vault, after a rekey whose save failed)
+    /// is not deposited, nor left in the outbox for a flush; the redelivery, once saves work, gives exactly one answer.
+    @Test func anAnswerQueuedWhileSavesFailWaitsForASave() async throws {
+        let f = try await readyToFail()
+        f.store.arm()
+        await #expect(throws: (any Error).self) { try await f.device.handle(f.fin) }
+        #expect(try await take(f.new).type == "hs.confirm") // the kept entries of the activation
+        #expect(try await take(f.new).type == "device.features")
+        let refresh = try f.vault.seal("relay.token.refresh", "{}")
+        await #expect(throws: (any Error).self) { try await f.device.handle(refresh) }
+        #expect(outbox(f.device, "relay.token.refresh") == 0)
+        await f.device.flushOutbox()
+        #expect(await relay.noDeposit(within: 0.5), "nothing deposited before a save holds it")
+        f.store.disarm()
+        try await f.device.handle(refresh) // the relay's redelivery: the same msg_id
+        let answer = try await take(f.new)
+        #expect(answer.type == "relay.token.refresh" && answer.re != nil)
+        #expect(await relay.noDeposit(within: 0.5), "exactly one answer")
+    }
+
+    /// `send` stores its entry before it deposits (`enqueueLocked(save: true)`): while saves fail it throws, deposits nothing,
+    /// and leaves nothing in the outbox for a flush.
+    @Test func aSendWhileSavesFailDepositsNothingAndLeavesNothing() async throws {
+        let store = FlakyStore()
+        let (d, _) = try await pairedDevice(store: store)
+        store.arm()
+        await #expect(throws: (any Error).self) { try await d.send("relay.token.refresh") }
+        #expect(outbox(d, "relay.token.refresh") == 0)
+        await d.flushOutbox()
+        #expect(await relay.noDeposit(within: 0.3))
+        store.disarm()
+        try await d.send("relay.token.refresh")
+        _ = try await relay.nextDeposit()
+        #expect(await relay.noDeposit(within: 0.3))
+    }
+
+    /// A flush after a restart deposits what the disk holds, and only that: an entry the failed handling queued (and took
+    /// out again) is not on disk and not in the restarted device's outbox.
+    @Test func aFlushAfterARestartDepositsOnlyWhatTheDiskHolds() async throws {
+        let store = FlakyStore()
+        let secrets = try DeviceSecrets.generate()
+        let (d, v) = try await pairedDevice(store: store, secrets: secrets)
+        relay.refuseDeposits = "unavailable" // retryable: the answer stays in the outbox, stored
+        relay.refuseStatus = 503
+        try await d.handle(try v.seal("relay.token.refresh", "{}"))
+        #expect(outbox(d, "relay.token.refresh") == 1)
+        store.arm()
+        await #expect(throws: (any Error).self) { try await d.handle(try v.seal("relay.token.refresh", "{}")) }
+        #expect(outbox(d, "relay.token.refresh") == 1, "the failed handling's answer is taken out")
+        d.stop()
+        store.disarm()
+        relay.refuseDeposits = nil
+        relay.dropDeposits()
+        let again = try #require(try VaultDevice.load(config(store), secrets: secrets))
+        #expect(outbox(again, "relay.token.refresh") == 1)
+        await again.flushOutbox()
+        _ = try await relay.nextDeposit()
+        #expect(await relay.noDeposit(within: 0.3), "one entry, the stored one")
+    }
+
+    // MARK: - Every store error is a failed save
+
+    /// A store error that is not an I/O error (a Keychain or crypto error): the same as any failed save.
+    private struct KeychainLikeError: Error {}
+
+    private final class ErrorStore: DeviceStateStore, @unchecked Sendable {
+        private let lock = NSLock()
+        private var b: [UInt8]?
+        private var failure: (any Error)?
+        func failWith(_ e: (any Error)?) { lock.withLock { failure = e } }
+        func load() -> [UInt8]? { lock.withLock { b } }
+        func clear() { lock.withLock { b = nil } }
+        func save(_ state: [UInt8]) throws {
+            try lock.withLock {
+                if let failure { throw failure }
+                b = state
+            }
+        }
+    }
+
+    /// The collector path: a store error of another kind leaves the message unacked and unseen, deposits nothing, leaves no
+    /// entry; the redelivery is handled once saves work and is answered once.
+    @Test func aStoreErrorOfAnotherKindIsAFailedSave() async throws {
+        let store = ErrorStore()
+        let (d, v) = try await pairedDevice(store: store)
+        let refresh = try v.seal("relay.token.refresh", "{}")
+        relay.serveMailbox = true
+        relay.queue(refresh)
+        store.failWith(KeychainLikeError())
+        await #expect(throws: KeychainLikeError.self) { _ = try await d.pollOnce() }
+        #expect(await relay.waitAcked(refresh.msgID, timeout: 0.5) == false)
+        #expect(d.mem.withLock { d.st.seen[refresh.msgID] } == nil)
+        #expect(outbox(d, "relay.token.refresh") == 0)
+        await d.flushOutbox()
+        #expect(await relay.noDeposit(within: 0.5))
+        // A rekey's answer is not deposited before its responder is stored, either.
+        await #expect(throws: KeychainLikeError.self) { try await d.handle(v.msg(try v.rekey(d).envelope)) }
+        #expect(await relay.noDeposit(within: 0.3))
+        #expect(d.mem.withLock { d.awaiting.isEmpty })
+        // And `send` takes its entry out again.
+        await #expect(throws: KeychainLikeError.self) { try await d.send("relay.token.refresh") }
+        #expect(outbox(d, "relay.token.refresh") == 0)
+        store.failWith(nil)
+        relay.queue(refresh)
+        #expect(try await d.pollOnce() == 1)
+        #expect(await relay.waitAcked(refresh.msgID))
+        _ = try await relay.nextDeposit()
+        #expect(await relay.noDeposit(within: 0.3), "answered once")
+    }
 }
 
 // swiftlint:enable line_length
