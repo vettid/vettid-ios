@@ -287,7 +287,7 @@ final class FakePairingOps: PairingOps {
             await m.start()
             m.onEvent(pending(sas: sas, role: role))
             #expect(compared(m)?.comparable == false, "\(sas) \(role)")
-            await m.approve(sessionSeconds: 3600)
+            await approve(m)
             #expect(ops.calls == ["create"])
             await m.reject()
             #expect(ops.calls == ["create", "reject:p1"])
@@ -308,6 +308,37 @@ final class FakePairingOps: PairingOps {
         #expect(paired(m)?.name == "Claude on laptop")
         // The list is read again once it is paired.
         #expect(count.n == 1)
+    }
+
+    @Test func noAccessYetSendsNoSession() async throws {
+        let ops = try ops()
+        let m = manager(ops)
+        await m.start()
+        m.onEvent(pending())
+        await approve(m, nil)
+        #expect(ops.calls.contains("approve:p1:nil"))
+    }
+
+    /// The vault takes 60 to 86,400 seconds (§10.3): anything else is not sent, and the comparison stays.
+    @Test func aSessionOutsideTheVaultsBoundsIsNotSent() async throws {
+        let ops = try ops()
+        let m = manager(ops)
+        await m.start()
+        m.onEvent(pending())
+        await approve(m, 59)
+        await approve(m, 86_401)
+        await approve(m, -1)
+        #expect(ops.calls == ["create"])
+        #expect(compared(m) != nil)
+        // The bounds themselves are taken.
+        await approve(m, 60)
+        #expect(ops.calls == ["create", "approve:p1:60"])
+        let n = try self.ops()
+        let other = manager(n)
+        await other.start()
+        other.onEvent(pending())
+        await approve(other, 86_400)
+        #expect(n.calls == ["create", "approve:p1:86400"])
     }
 
     @Test func theNewAgentsIdComesFromTheFeedItem() async throws {
@@ -491,7 +522,7 @@ final class FakePairingOps: PairingOps {
         m.onEvent(pending())
         skew.value = 601
         // Even before the timer ran, an approval is refused locally.
-        await m.approve(sessionSeconds: 3600)
+        await approve(m)
         #expect(ops.calls == ["create"])
         skew.value = 0
         await time.advance(seconds: 601)
@@ -619,7 +650,7 @@ extension PairingManagerTests {
             await m.start(.desktop)
             m.onEvent(pending(sas: sas, role: role))
             #expect(compared(m)?.comparable == false, "\(sas) \(role)")
-            await m.approve(sessionSeconds: 3600)
+            await approve(m)
             #expect(ops.calls == ["create"])
             await m.reject()
             #expect(ops.calls == ["create", "reject:p1"])
