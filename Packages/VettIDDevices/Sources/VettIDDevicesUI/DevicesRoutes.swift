@@ -60,12 +60,14 @@ public struct DevicesRoute: View {
 public struct DeviceRoute: View {
     private let id: String
     private let devices: any DevicesRepository
+    private let ownerChecks: (any OwnerCheckRepository)?
     private let host: DevicesHost
     @State private var model: DeviceViewModel?
 
-    public init(_ id: String, devices: any DevicesRepository, host: DevicesHost) {
+    public init(_ id: String, devices: any DevicesRepository, ownerChecks: (any OwnerCheckRepository)? = nil, host: DevicesHost) {
         self.id = id
         self.devices = devices
+        self.ownerChecks = ownerChecks
         self.host = host
     }
 
@@ -74,6 +76,9 @@ public struct DeviceRoute: View {
             DevicePageScreen(state: model?.state ?? DeviceState(), actions: actions, now: timeline.date)
         }
         .onAppear { if model == nil { model = DeviceViewModel(id: id, repo: devices) } }
+        // The daily check passed or the hold ended: a page the hold left without its device reads again (opened from the feed
+        // it has no list screen to do it). The route tells the model, which holds only the id and the repository.
+        .onChange(of: ownerChecks?.ownerCheck?.state == .ok) { _, passed in if passed { model?.ownerCheckPassed() } }
     }
 
     private var actions: DevicePageActions {
@@ -88,7 +93,16 @@ public struct DeviceRoute: View {
         a.onDismissFailure = { m.dismissFailure() }
         a.onAccessEndedShown = { m.accessEndedShown() }
         a.onRetry = { m.refresh() }
+        a.onRemovedShown = {
+            Task { @MainActor in
+                try? await Task.sleep(for: .seconds(removedNoticeSeconds))
+                m.removedShown()
+            }
+        }
         return a
     }
 }
+
+/// How long the page shows "<name> was removed" before it leaves.
+private let removedNoticeSeconds = 3.0
 #endif

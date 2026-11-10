@@ -22,7 +22,7 @@ extension AppShell {
     @ViewBuilder func devicesDetail(_ route: ShellRoute) -> some View {
         switch route {
         case .device(let id):
-            if let devices { DeviceRoute(id, devices: devices, host: devicesHost) }
+            if let devices { DeviceRoute(id, devices: devices, ownerChecks: ownerChecks, host: devicesHost) }
         case .deviceHistory(let query):
             if let history, let historyExport {
                 HistoryRoute(

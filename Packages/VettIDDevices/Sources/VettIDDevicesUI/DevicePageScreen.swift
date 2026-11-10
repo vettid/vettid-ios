@@ -16,6 +16,8 @@ public struct DevicePageActions {
     public var onDismissFailure: @MainActor () -> Void = {}
     public var onAccessEndedShown: @MainActor () -> Void = {}
     public var onRetry: @MainActor () -> Void = {}
+    /// The "<name> was removed" notice was shown here; the page leaves a moment later.
+    public var onRemovedShown: @MainActor () -> Void = {}
 
     public init() {}
 }
@@ -51,6 +53,11 @@ public struct DevicePageScreen: View {
             if let d { pill(d) }
         }
         .onChange(of: leave, initial: true) { _, leaving in if leaving { actions.onBack() } }
+        // A page opened from the feed has no list under it: the removal is told here, once, before the page leaves.
+        .deviceToast(
+            state.removedDevice.map { DeviceStrings.devicesRemoved(DeviceTexts.sentenceName($0)) }, bottom: 88,
+            onShown: actions.onRemovedShown
+        )
         .deviceToast(state.accessEnded ? DeviceStrings.devicesAccessEnded : nil, bottom: 88, onShown: actions.onAccessEndedShown)
         // One dialog per confirmation, each worded from the device only: its text stays while it closes.
         .confirmDialog(

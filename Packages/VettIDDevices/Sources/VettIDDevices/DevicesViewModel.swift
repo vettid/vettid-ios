@@ -14,8 +14,8 @@ public struct DevicesState: Equatable, Sendable, CustomStringConvertible, Custom
 
     public init() {}
 
-    /// Only this phone is listed: "No agents yet".
-    public var onlyThisPhone: Bool { devices.allSatisfy(\.thisPhone) }
+    /// Only this phone is listed: "No agents yet". Only of a list that was read: one that was not never says it.
+    public var onlyThisPhone: Bool { load == .loaded && devices.allSatisfy(\.thisPhone) }
 
     public var loading: Bool { devices.isEmpty && (load == .notLoaded || load == .loading) && error == nil }
 
@@ -62,7 +62,7 @@ public final class DevicesViewModel {
     /// the hold cleared while the screen was open (chosen; not in the spec: Android's screen stays on its spinner then).
     private func onOwnerCheck(_ v: OwnerCheckView?) {
         guard v?.state == .ok else { return }
-        guard local.error == .ownerCheckRequired || (local.error == nil && repo.load == .notLoaded) else { return }
+        guard local.error == .ownerCheckRequired || (local.error == nil && repo.load != .loaded) else { return }
         refresh()
     }
 

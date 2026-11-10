@@ -85,6 +85,8 @@ import VettIDUI
         #expect(backs(Samples.page(nil)) == 1)
         #expect(backs(Samples.page(Samples.phone)) == 1)
         #expect(backs(Samples.page(Samples.agent) { $0.removed = true }) == 1)
+        // Removed here, its notice not yet shown: the page stays for it.
+        #expect(backs(Samples.page(Samples.agent) { $0.removedDevice = Samples.agent }) == 0)
         #expect(backs(Samples.page(Samples.agent)) == 0)
         var unread = Samples.page(nil)
         unread.loaded = false
@@ -106,6 +108,12 @@ import VettIDUI
         #expect(endedShown == 1)
         _ = host(self.page(Samples.page(Samples.agent), page))
         #expect(endedShown == 1)
+        var removedOnPage = 0
+        page.onRemovedShown = { removedOnPage += 1 }
+        _ = host(self.page(Samples.page(Samples.agent) { $0.removedDevice = Samples.agent }, page))
+        #expect(removedOnPage == 1)
+        _ = host(self.page(Samples.page(Samples.agent), page))
+        #expect(removedOnPage == 1)
     }
 
     /// The remove confirmation of an agent says how long a service may still accept its permissions only while it has one; a

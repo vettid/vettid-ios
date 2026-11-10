@@ -121,18 +121,7 @@ public final class DevicesManager: DevicesRepository {
             // while the session reopens after the foreground would list this phone as another device.
             guard DeviceWire.hasList(body) else { throw VaultFailure(.other, code: "unreadable") }
             let parsed = DeviceWire.devices(body, selfID: selfID())
-            // The paused agents: only asked when there is an agent. A failure never fails the list and never clears a
-            // pause: nil keeps the paused flags already held (fail closed).
-            var paused: Set<String>? = []
-            if parsed.contains(where: \.isAgent) {
-                do {
-                    paused = DeviceWire.suspended(try await Self.guarded { try await o.grants(nil) })
-                } catch is CancellationError {
-                    throw CancellationError()
-                } catch {
-                    paused = nil
-                }
-            }
+            let paused = try await pausedAgents(o, parsed)
             guard gen == generation else { return }
             let held = Dictionary(devices.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
             devices = DeviceWire.ordered(parsed.map { d in
@@ -147,6 +136,19 @@ public final class DevicesManager: DevicesRepository {
         } catch {
             if gen == generation { load = .failed }
             throw error
+        }
+    }
+
+    /// The paused agents: only asked when there is an agent. A failure never fails the list and never clears a pause: nil
+    /// keeps the paused flags already held (fail closed).
+    private func pausedAgents(_ o: any DevicesOps, _ parsed: [DeviceInfo]) async throws -> Set<String>? {
+        guard parsed.contains(where: \.isAgent) else { return [] }
+        do {
+            return DeviceWire.suspended(try await Self.guarded { try await o.grants(nil) })
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            return nil
         }
     }
 

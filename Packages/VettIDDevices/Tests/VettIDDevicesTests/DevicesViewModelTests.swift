@@ -32,6 +32,31 @@ import VettIDDataTesting
         #expect(m.state.devices.count == 3 && !m.state.onlyThisPhone && !m.state.loading)
     }
 
+    /// "No agents yet" is said of a list that was read, never of one that was not.
+    @Test func noAgentsYetNeedsAListThatWasRead() async {
+        fake.devices = [Samples.phone]
+        let m = DevicesViewModel(repo: fake)
+        for load in [ListLoad.notLoaded, .loading, .failed] {
+            fake.load = load
+            #expect(!m.state.onlyThisPhone, "\(load)")
+        }
+        fake.load = .loaded
+        #expect(m.state.onlyThisPhone)
+    }
+
+    @Test func aListThatFailedWithoutAnErrorOfItsOwnReadsAgainWhenTheCheckPasses() async {
+        let owner = FakeVaultRepository()
+        owner.ownerCheck = OwnerCheckView(state: .ok, deadline: Date(), hold: false)
+        let m = await list(owner)
+        let before = fake.calls.filter { $0 == "refresh" }.count
+        owner.ownerCheck = OwnerCheckView(state: .held, deadline: nil, hold: true)
+        fake.load = .failed
+        await m.settle()
+        owner.ownerCheck = OwnerCheckView(state: .ok, deadline: Date(), hold: true)
+        await m.settle()
+        #expect(await eventually { fake.calls.filter { $0 == "refresh" }.count == before + 1 })
+    }
+
     @Test func thisPhoneAloneIsTheEmptyState() async {
         fake.devices = [Samples.phone]
         let m = DevicesViewModel(repo: fake)
@@ -168,6 +193,48 @@ import VettIDDataTesting
         #expect(m.state.failure == .remove && m.state.error == .ownerCheckRequired)
     }
 
+    /// A hold clears the list while the request fails with the refused check: the page still shows the vault's refusal, naming
+    /// the device, and never sits on a spinner.
+    @Test func aRefusalDuringAHoldStaysOnThePage() async {
+        let m = await page("a1")
+        fake.fail["endAccess:a1"] = VaultFailure(.ownerCheckRequired, code: "owner_check_required")
+        fake.fail["refresh"] = VaultFailure(.ownerCheckRequired, code: "owner_check_required")
+        fake.clearsOnFailure = ["endAccess:a1"]
+        m.askEndAccess()
+        m.confirm()
+        await m.settle()
+        let s = m.state
+        #expect(fake.devices.isEmpty && !s.loaded)
+        #expect(s.failure == .endAccess && s.error == .ownerCheckRequired)
+        #expect(s.device?.id == "a1" && !s.gone && !s.busy)
+        #expect(s.loadError == .ownerCheckRequired)
+        // Dismissed: no device and no list, and the page says why instead of spinning.
+        m.dismissFailure()
+        #expect(m.state.device == nil && m.state.loadError == .ownerCheckRequired && !m.state.gone)
+    }
+
+    /// The end of the hold: a page the hold left without its device reads the list again, whoever opened it; a page that has
+    /// its list does not.
+    @Test func thePageReadsAgainWhenTheCheckPassesOnlyWithoutAList() async {
+        let m = await page("a1")
+        let before = fake.calls.filter { $0 == "refresh" }.count
+        m.ownerCheckPassed()
+        await m.settle()
+        #expect(fake.calls.filter { $0 == "refresh" }.count == before)
+        fake.load = .notLoaded
+        m.ownerCheckPassed()
+        await m.settle()
+        #expect(fake.calls.filter { $0 == "refresh" }.count == before + 1)
+        fake.load = .loaded
+        fake.fail["refresh"] = VaultFailure(.network)
+        m.refresh()
+        await m.settle()
+        #expect(m.state.loadError == .network)
+        m.ownerCheckPassed()
+        await m.settle()
+        #expect(m.state.loadError == nil)
+    }
+
     @Test func removingAnAgentNamesTheBoundFirstAndLeavesAfterwards() async {
         fake.bound = 960
         let m = await page("a1")
@@ -178,7 +245,11 @@ import VettIDDataTesting
         m.confirm()
         await m.settle()
         #expect(fake.calls.filter { $0.hasPrefix("remove:") } == ["remove:a1"])
-        #expect(m.state.removed && fake.removed?.name == "Claude")
+        // The page tells it itself (opened from the feed it has no list under it), once, and leaves afterwards.
+        #expect(m.state.removedDevice?.name == "Claude" && m.state.device?.id == "a1" && !m.state.gone && !m.state.removed)
+        #expect(fake.removed == nil && fake.calls.contains("dismissRemoved"))
+        m.removedShown()
+        #expect(m.state.removed)
     }
 
     @Test func removingADesktopAsksNoBound() async {
@@ -268,7 +339,7 @@ import VettIDDataTesting
         await m.settle()
         m.confirm()
         await m.settle()
-        #expect(fake.calls.allSatisfy { ["refresh", "endAccess:a1", "removalBound:a1", "remove:a1"].contains($0) })
+        #expect(fake.calls.allSatisfy { ["refresh", "endAccess:a1", "removalBound:a1", "remove:a1", "dismissRemoved"].contains($0) })
     }
 
     @Test func theStatesNeverPrintANameOrADevice() async {

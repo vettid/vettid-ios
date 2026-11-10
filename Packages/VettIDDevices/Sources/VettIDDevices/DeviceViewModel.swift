@@ -22,8 +22,11 @@ public struct DeviceState: Equatable, Sendable, CustomStringConvertible, CustomD
     public var error: FailureKind?
     /// "Access ended", once.
     public var accessEnded = false
-    /// The device was removed here: the screen leaves.
+    /// The device was removed here and its notice, "<name> was removed", was shown: the screen leaves.
     public var removed = false
+    /// The device just removed here, until the screen leaves: the page shows its notice itself (opened from the feed it has no
+    /// list under it to show it), and keeps the device on screen meanwhile.
+    public var removedDevice: DeviceInfo?
     /// The list could not be read and no device is known: the page says so and offers Retry.
     public var loadError: FailureKind?
 
@@ -48,6 +51,9 @@ public final class DeviceViewModel {
     @ObservationIgnored private let repo: any DevicesRepository
     @ObservationIgnored private let work = Work()
     private var local = DeviceState()
+    /// The device as it was when a request failed or it was removed here: a hold clears the list (and with it the device)
+    /// while the failure, the vault's refusal, is still to be read, and the page keeps naming it until the list is read again.
+    private var kept: DeviceInfo?
 
     public init(id: String, repo: any DevicesRepository) {
         self.id = id
@@ -60,9 +66,18 @@ public final class DeviceViewModel {
 
     public var state: DeviceState {
         var s = local
-        s.device = repo.devices.first { $0.id == id }
         s.loaded = repo.load == .loaded
+        s.device = repo.devices.first { $0.id == id }
+        if s.device == nil, let kept, s.removedDevice != nil || (!s.loaded && s.failure != nil) { s.device = kept }
         return s
+    }
+
+    /// The daily check passed (or the hold ended): a page that could not read its device, or the hold cleared the list under,
+    /// reads again (the page opened from the feed has no list screen to do it). The route calls it, so that the model holds
+    /// nothing but the id and the repository.
+    public func ownerCheckPassed() {
+        guard repo.load != .loaded || local.loadError != nil else { return }
+        refresh()
     }
 
     /// On opening, on Retry.
@@ -120,8 +135,12 @@ public final class DeviceViewModel {
                     self?.local.accessEnded = true
                 case .remove:
                     try await repo.remove(d.id)
-                    self?.local.busy = false
-                    self?.local.removed = true
+                    guard let self else { return }
+                    local.busy = false
+                    // Told here, once: the list under the page (when there is one) has nothing left to say.
+                    kept = d
+                    local.removedDevice = d
+                    repo.dismissRemoved()
                 }
             } catch where isSilent(error) {
                 self?.local.busy = false
@@ -129,13 +148,25 @@ public final class DeviceViewModel {
                 self?.local.busy = false
                 self?.local.failure = what == .endAccess ? .endAccess : .remove
                 self?.local.error = failureKind(error)
-                // What the vault says now settles whether the device is still there, with or without access.
-                try? await repo.refresh()
+                self?.kept = d
+                // What the vault says now settles whether the device is still there, with or without access. A failed read
+                // is shown as the page's own (the hold clears the list: the refusal stays on the page, with the device).
+                do {
+                    try await repo.refresh()
+                    self?.local.loadError = nil
+                } catch where isSilent(error) {
+                    // Cut off by a lock or the app leaving.
+                } catch {
+                    self?.local.loadError = failureKind(error)
+                }
             }
         }
     }
 
     public func accessEndedShown() { local.accessEnded = false }
+
+    /// "<name> was removed" was shown: the page leaves.
+    public func removedShown() { local.removed = true }
 
     public func dismissFailure() {
         local.failure = nil

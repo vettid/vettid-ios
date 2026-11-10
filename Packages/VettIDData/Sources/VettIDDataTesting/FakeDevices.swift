@@ -19,10 +19,18 @@ public final class FakeDevices: DevicesRepository {
     /// Any other error the next call of that name throws (once): a ``CancellationError`` (a lock or the app leaving).
     @ObservationIgnored public var failError: [String: any Error] = [:]
 
+    /// Calls whose failure also forgets the list, as the hold does (the failure is the refused owner check): `devices` empty
+    /// and not loaded.
+    @ObservationIgnored public var clearsOnFailure: Set<String> = []
+
     public init() {}
 
     private func call(_ name: String) throws {
         calls.append(name)
+        if clearsOnFailure.contains(name), fail[name] != nil || failError[name] != nil {
+            devices = []
+            load = .notLoaded
+        }
         if let f = fail.removeValue(forKey: name) { throw f }
         if let e = failError.removeValue(forKey: name) { throw e }
     }
