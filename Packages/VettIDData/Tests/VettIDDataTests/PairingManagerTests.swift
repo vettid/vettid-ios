@@ -29,7 +29,7 @@ final class PairingBox {
 
 /// TEST ONLY. A count the test's closures bump on the main actor.
 @MainActor
-final class DepositCounterLike {
+final class ReadCounter {
     var n = 0
 }
 
@@ -938,7 +938,7 @@ extension PairingManagerTests {
     @Test func aLockDuringTheSearchForTheNewDeviceReadsNothingAndEndsAtOnce() async throws {
         let ops = try ops()
         ops.onApprove = { throw URLError(.timedOut) }
-        let reads = DepositCounterLike()
+        let reads = ReadCounter()
         let base = time.now
         let m = PairingManager(
             ops: { ops }, now: { base() }, sleep: time.sleep, knownDeviceIDs: { ["me"] },
@@ -949,7 +949,7 @@ extension PairingManagerTests {
         )
         await m.start()
         m.onEvent(pending())
-        let finished = DepositCounterLike()
+        let finished = ReadCounter()
         let task = Task {
             await m.approve(sessionSeconds: 3600)
             finished.n = 1
@@ -970,9 +970,9 @@ extension PairingManagerTests {
     @Test func aLockJustBeforeTheListIsReadReadsNothing() async throws {
         let ops = try ops()
         ops.onApprove = { throw URLError(.timedOut) }
-        let reads = DepositCounterLike()
+        let reads = ReadCounter()
         let box = PairingBox()
-        let polls = DepositCounterLike()
+        let polls = ReadCounter()
         let base = time.now
         let wait = time.sleep
         let m = PairingManager(
@@ -1001,6 +1001,22 @@ extension PairingManagerTests {
         await task.value
         #expect(polls.n == 40)
         #expect(reads.n == 0)
+    }
+
+    /// A pairing's code, digits and name are never in a text form of the state, the stage or the pending (nothing is logged).
+    @Test func noStateOfAPairingPrintsACodeADigitOrAName() async throws {
+        let m = manager(try ops())
+        await m.start()
+        let linkText = try #require(code(m)).link
+        let texts = [
+            "\(m.state)", String(reflecting: m.state), "\(m.state.stage)", String(reflecting: m.state.stage),
+        ]
+        m.onEvent(pending(name: "Red Team"))
+        let after = ["\(m.state)", String(reflecting: m.state.stage), "\(m.state.stage)"]
+        for t in texts + after { #expect(!t.contains(linkText) && !t.contains("123456") && !t.contains("Red Team")) }
+        await approve(m)
+        #expect(paired(m)?.name == "Red Team")
+        #expect(!"\(m.state)".contains("Red Team") && !String(reflecting: m.state.stage).contains("Red Team"))
     }
 }
 // swiftlint:enable line_length file_length

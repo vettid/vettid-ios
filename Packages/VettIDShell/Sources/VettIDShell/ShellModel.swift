@@ -152,7 +152,9 @@ public final class ShellModel {
 
     /// One pairing screen at a time: with one already on the path (the member is pairing and taps the feed item "A device asks to
     /// pair"), the path goes back to it. A second screen over the first would be a second view model on the one pairing, and the
-    /// top one's leaving would reject the comparison the lower one is about to show.
+    /// top one's leaving would reject the comparison the lower one is about to show. The screen kept is the one already there,
+    /// whatever role was asked: the one repository holds the single pairing (no path in the app asks for the other role with a
+    /// pairing screen open, as the Devices list sits under it).
     private func pushPairing(_ r: ShellRoute) {
         if let i = path.lastIndex(where: { if case .pair = $0 { true } else { false } }) {
             path = Array(path[...i])
