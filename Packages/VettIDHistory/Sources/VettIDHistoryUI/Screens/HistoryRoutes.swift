@@ -75,7 +75,11 @@ public struct HistoryRoute: View {
                     items: items, votes: votes
                 )
             }
-            if exportModel == nil { exportModel = HistoryExportViewModel(repo: export) }
+            if exportModel == nil {
+                // An export left in tmp/ by an app that was killed with the picker up.
+                HistoryExportLeftovers.remove()
+                exportModel = HistoryExportViewModel(repo: export)
+            }
         }
         .onDisappear { if exportModel?.step != .closed { exportModel?.close() } }
     }

@@ -258,8 +258,8 @@ private struct ExportPinStep: View {
 }
 
 /// The file is ready: "Save to Files" opens by itself once, and again from the button; the suggested name below. The
-/// system's exporter (`fileExporter`, IOS-PLAN §4) writes the in-memory bytes only where the member chooses; cancelling
-/// or dismissing it drops the export.
+/// system's document picker (IOS-PLAN §4) copies a file made for it (``HistoryExportTempFile``, removed on every path)
+/// only where the member chooses; cancelling or dismissing it drops the export.
 private struct ExportSaveStep: View {
     let save: ExportSave
     let file: ExportFile?
@@ -279,18 +279,18 @@ private struct ExportSaveStep: View {
         .onAppear { if !save.requested { open() } }
         // A cover closes the exporter; "Save to Files" again opens it.
         .closesWhenCovered { exporting = false }
-        .fileExporter(
-            isPresented: uncovered($exporting, covered: covered), document: file.map(ExportDocument.init),
-            contentTypes: [ExportDocument.contentType(save.format)],
-            defaultFilename: save.fileName,
-            onCompletion: { result in
-                switch result {
-                case .success: actions.onSaved(true)
-                case .failure(let error as CocoaError) where error.code == .userCancelled: actions.onSaved(false)
-                case .failure: actions.onSaveFailed()
+        .background(
+            HistoryExportPicker(
+                file: exporting && !covered ? file : nil,
+                onAnswered: { saved in
+                    exporting = false
+                    actions.onSaved(saved)
+                },
+                onFailed: {
+                    exporting = false
+                    actions.onSaveFailed()
                 }
-            },
-            onCancellation: { actions.onSaved(false) }
+            )
         )
     }
 
@@ -301,20 +301,11 @@ private struct ExportSaveStep: View {
     }
 }
 
-/// The export's file for `fileExporter`: its bytes from memory, never read back.
-struct ExportDocument: FileDocument {
-    static var readableContentTypes: [UTType] { [.commaSeparatedText, .json] }
-
-    let bytes: Data
-
-    init(_ file: ExportFile) { bytes = file.bytes }
-
-    init(configuration: ReadConfiguration) throws { throw CocoaError(.fileReadUnsupportedScheme) }
-
-    func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper { FileWrapper(regularFileWithContents: bytes) }
-
+/// The export's content types, which pin §10.9's (tests check them against the file extensions). The picker takes the
+/// type from the file's extension, which the file name carries.
+enum ExportContentType {
     /// §10.9's content types: `text/csv` or `application/json`.
-    static func contentType(_ f: ExportFormat) -> UTType { f == .csv ? .commaSeparatedText : .json }
+    static func of(_ f: ExportFormat) -> UTType { f == .csv ? .commaSeparatedText : .json }
 }
 
 /// "History exported" with the count, or how many the retention removed meanwhile; the file is not encrypted.

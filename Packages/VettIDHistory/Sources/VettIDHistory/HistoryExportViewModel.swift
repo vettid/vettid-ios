@@ -51,10 +51,15 @@ public struct ExportSave: Equatable, Sendable {
 /// The export's file, in memory only (IOS-PLAN §4 "Save to Files"; ANDROID-PLAN §4 History "Export" step 4: no copy in
 /// the cache): its bytes, its suggested name and its format, handed to the system's exporter, which writes it where the
 /// member chooses.
-public struct ExportFile: Equatable, Sendable {
+public struct ExportFile: Equatable, Sendable, CustomStringConvertible, CustomDebugStringConvertible, CustomReflectable {
     public var bytes: Data
     public var name: String
     public var format: ExportFormat
+
+    /// Nothing of the history is printed: a failing `#expect`, a dump or `_printChanges` shows the size only.
+    public var description: String { "ExportFile(\(bytes.count) bytes)" }
+    public var debugDescription: String { description }
+    public var customMirror: Mirror { Mirror(self, children: [], displayStyle: .struct) }
 }
 
 /// The steps of a History export (ANDROID-PLAN §4 History "Export"): preview → confirm → PIN → reading → "Save to Files"

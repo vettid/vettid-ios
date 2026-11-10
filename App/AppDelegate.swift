@@ -1,14 +1,16 @@
 import UIKit
+import VettIDHistory
 import VettIDVotes
 
 /// The app delegate's jobs (IOS-PLAN §6.1, §6.5): refusing third-party keyboards app-wide, keeping the app's data out
-/// of backups, the first-run cleanup before anything else touches a key, and a vote proof left by a killed app (§4.16).
+/// of backups, the first-run cleanup before anything else touches a key, a vote proof and a History export left by a killed app (§4.16, §4).
 final class AppDelegate: NSObject, UIApplicationDelegate {
     func application(
         _ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
         Self.excludeFromBackup()
         ProofLeftovers.remove()
+        HistoryExportLeftovers.remove()
         AppComposition.shared.launch()
         return true
     }
