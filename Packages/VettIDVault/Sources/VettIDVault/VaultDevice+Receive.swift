@@ -31,7 +31,7 @@ extension VaultDevice {
             let before = mem.withLock {
                 HandlingStart(
                     seen: st.seen, seenInner: st.seenInner, issuedExpMs: st.issuedExpMs,
-                    outbox: Set(st.outbox.map(\.id)), awaiting: awaiting.map(\.resp)
+                    outbox: Set(st.outbox.map(\.id)), awaiting: awaiting.map(\.resp), confirmAtMs: st.vault?.confirmAtMs
                 )
             }
             mem.withLock { memory.keptOnError = [] }
@@ -62,6 +62,8 @@ extension VaultDevice {
         let issuedExpMs: Int64
         let outbox: Set<String>
         let awaiting: [Responder]
+        /// When `hs.confirm` was last queued: one the failed handling queued is taken out, so its time goes too.
+        let confirmAtMs: Int64?
     }
 
     /// A failed handling is undone: its message ids are forgotten, the entries it queued are taken out (and are no longer in
@@ -72,6 +74,7 @@ extension VaultDevice {
             st.seen = before.seen
             st.seenInner = before.seenInner
             st.issuedExpMs = before.issuedExpMs
+            st.vault?.confirmAtMs = before.confirmAtMs
             let gone = Set(st.outbox.map(\.id)).subtracting(before.outbox).subtracting(memory.keptOnError)
             st.outbox.removeAll { gone.contains($0.id) }
             outboxInFlight.subtract(gone)
@@ -187,7 +190,7 @@ extension VaultDevice {
         case "device.paired":
             storeVaultToken(body)
             // §10.2 (0.87.0): device.features after each epoch it activates; the pairing's is this one.
-            try? queueFeatures(save: false)
+            try? queueFeatures()
             // The first handshake's `device.paired` (pairing, enrollment, transfer): a fin still owed for it is of no use, and
             // its age must not later tell a paired device that the pairing failed.
             // Only the fins of the epoch it opened under: a retired epoch's message must not clear a newer handshake's fin.

@@ -133,6 +133,54 @@ extension VaultDeviceTests {
         #expect(try await take(r.new).type == "hs.confirm")
     }
 
+    @Test func noSecondConfirmWhileOneIsStillInTheOutbox() async throws {
+        let clock = Box(Date())
+        let r = try await rekeyed(clock)
+        relay.refuseDeposits = "unavailable" // retryable: the entry stays
+        relay.refuseStatus = 503
+        let confirms = { r.device.mem.withLock { r.device.st.outbox.filter { $0.type == "hs.confirm" }.count } }
+        try await r.device.handle(r.vault.msg(try r.old.seal(message())))
+        #expect(confirms() == 1)
+        clock.value = clock.value.addingTimeInterval(61)
+        try await r.device.handle(r.vault.msg(try r.old.seal(message())))
+        #expect(confirms() == 1)
+    }
+
+    /// §6.3.1 "Responder": the activation and its `hs.confirm` are in the same write.
+    @Test func theActivationAndItsConfirmationAreSavedTogether() async throws {
+        let store = InMemoryDeviceStateStore()
+        let (d, v) = try await pairedDevice(store: store)
+        let old = try #require(v.keyring.current())
+        let ini = try v.rekey(d)
+        try await d.handle(v.msg(ini.envelope))
+        let res = try ini.handleResp(try await relay.nextDeposit().payload, collectSender: d.relayAddr.pk, now: Date())
+        relay.refuseDeposits = "unavailable"
+        relay.refuseStatus = 503
+        try await d.handle(v.msg(res.fin))
+        let saved = try savedState(store)
+        #expect(saved.vault?.confirmed == old.ctx && saved.vault?.awaiting.isEmpty == true)
+        #expect(saved.outbox.map(\.type) == ["hs.confirm", "device.features"])
+        #expect(saved.vault?.confirmAtMs != nil)
+    }
+
+    @Test func aConfirmationRefusedForGoodIsQueuedAgainWithoutWaiting() async throws {
+        let clock = Box(Date())
+        let r = try await rekeyed(clock)
+        relay.refuseDeposits = RelayError.tokenRevoked
+        clock.value = clock.value.addingTimeInterval(12 * 86_400 + 60)
+        await r.device.tickConfirm()
+        #expect(relay.refused >= 1)
+        #expect(try savedState(r.store).vault?.confirmAtMs == nil)
+        #expect(try savedState(r.store).outbox.isEmpty)
+    }
+
+    @Test func aDroppedPairingForgetsTheConfirmedEpoch() async throws {
+        let clock = Box(Date())
+        let r = try await rekeyed(clock)
+        r.device.dropPairing()
+        #expect(r.device.mem.withLock { r.device.st.vault?.confirmed == nil && r.device.st.vault?.confirmAtMs == nil })
+    }
+
     @Test func anHsConfirmFromTheVaultIsIgnored() async throws {
         let (d, v) = try await pairedDevice()
         try await d.handle(try v.seal("hs.confirm", "{}"))

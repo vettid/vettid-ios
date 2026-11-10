@@ -1,5 +1,6 @@
 import Foundation
 import VettIDCrypto
+import VettIDRelay
 
 // Activation on confirmation, the responder half (VAULT-MESSAGING 0.87.0–0.88.1, §6.3.1 "Responder", "Devices and
 // agents"), for the vault's rekeys of this device. The device activates at a verified `hs.fin` and queues `hs.confirm`
@@ -49,7 +50,7 @@ extension VaultDevice {
     /// activation stands. Callers hold ``lock``.
     func queueConfirmed(_ t: Date) {
         try? queueConfirm(t, save: false)
-        try? queueFeatures(save: false)
+        try? queueFeatures()
     }
 
     /// A message other than `hs.fin` opened under [ep]. Under the current epoch it confirms it: the previous confirmed
@@ -69,10 +70,10 @@ extension VaultDevice {
             }
             guard ep.id == confirmedIDLocked(), !st.outbox.contains(where: { $0.type == HsTypes.confirm }) else { return false }
             if let last = memory.reconfirmedAt, t.timeIntervalSince(last) < Self.reconfirmEvery { return false }
-            memory.reconfirmedAt = t
             return true
         }
-        if again { try? queueConfirm(t, save: false) }
+        // The minute counts from a confirmation actually queued: a failed one (no token) does not hold the next back.
+        if again, (try? queueConfirm(t, save: false)) != nil { mem.withLock { memory.reconfirmedAt = t } }
     }
 
     /// (0.88.1) `hs.confirm` again 12 days after the last one queued while the current epoch is unconfirmed, unless one is
@@ -92,7 +93,18 @@ extension VaultDevice {
     /// failure leaves it in the outbox for the next flush).
     func tickConfirm() async {
         let e = await lock.withLock { tickConfirmLocked(now(), save: true) }
-        if let e { try? await deliver(e) }
+        if let e { await deliverConfirm(e) }
+    }
+
+    /// Deposits an `hs.confirm`. One the relay refuses for good is gone from the outbox (``deliver(_:keepOnFailure:)``):
+    /// its time is forgotten, so the next start or message queues one again instead of 12 days later (chosen; not in the
+    /// spec).
+    private func deliverConfirm(_ e: OutboxEntry) async {
+        do {
+            try await deliver(e)
+        } catch let x as RelayError where !x.retryable {
+            try? await withLockSaving { st.vault?.confirmAtMs = nil }
+        } catch {}
     }
 
     /// Queues `hs.confirm` (body `{}`, durable, not a request) and records when, in the same write. [save]: true outside
@@ -107,7 +119,7 @@ extension VaultDevice {
             let e = try enqueueLocked(
                 id: nil, type: HsTypes.confirm, body: VaultJSON.empty, re: nil, status: nil, exp: nil, save: saves
             )
-            if !saves { afterLock { [self] in try? await deliver(e) } }
+            if !saves { afterLock { [self] in await deliverConfirm(e) } }
             return e
         } catch {
             mem.withLock { st.vault?.confirmAtMs = before }
@@ -115,10 +127,11 @@ extension VaultDevice {
         }
     }
 
-    /// Queues `device.features` with this app's list (§10.2).
-    func queueFeatures(save saves: Bool) throws {
+    /// Queues `device.features` with this app's list (§10.2), while a message is being handled: stored by the save that
+    /// ends it, deposited after the lock.
+    func queueFeatures() throws {
         let body = JsonBuilder().raw("features", JsonBuilder.array(DeviceFeatures.all.map(JsonBuilder.quote))).bytes()
-        let e = try enqueueLocked(id: nil, type: Self.typeDeviceFeatures, body: body, re: nil, status: nil, exp: nil, save: saves)
+        let e = try enqueueLocked(id: nil, type: Self.typeDeviceFeatures, body: body, re: nil, status: nil, exp: nil, save: false)
         afterLock { [self] in try? await deliver(e) }
     }
 }
