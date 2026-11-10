@@ -3,6 +3,9 @@ import Observation
 import os
 import VettIDData
 
+/// Owners of pairing screens: each screen has its own, for the whole process.
+private let ownerCounter = OSAllocatedUnfairLock(initialState: 0)
+
 /// The first access offered when a pairing is approved (ANDROID-PLAN 0.1.53 AA2 step 3, decision 5): every choice is a whole number
 /// of seconds the vault takes (60 to 86,400), or none. Mirrors vettid-android `SessionChoice`.
 public enum SessionChoice: CaseIterable, Sendable {
@@ -55,6 +58,11 @@ public final class PairViewModel {
     @ObservationIgnored private let follows = TaskBag()
     @ObservationIgnored private let held: Bool
     @ObservationIgnored private let role: PairRole
+    /// This screen, as the pairing's owner (``PairingRepository/start(_:owner:)``).
+    @ObservationIgnored private let owner = ownerCounter.withLock { n -> Int in
+        n += 1
+        return n
+    }
 
     public private(set) var state = PairState()
 
@@ -90,8 +98,11 @@ public final class PairViewModel {
         if !held {
             repo.acknowledge()
             // A pairing held for the other role is rejected and replaced by the repository in this one call.
-            let role = role
-            work.launch { await repo.start(role) }
+            let (role, owner) = (role, owner)
+            work.launch { await repo.start(role, owner: owner) }
+        } else {
+            // The feed item's screen takes over what is held: the screen it came from can no longer end it.
+            repo.claim(owner: owner)
         }
         follows.add(follow(self, read: { $0.repo.state }, apply: { $0.onPairing($1) }))
         // The daily check passed: a refused approval may be sent again.
@@ -107,9 +118,9 @@ public final class PairViewModel {
         // Always leave the pairing this screen saw, whatever done() or cancel() did (some stages are not ended by them: a comparison
         // with an approval in flight, a code still being made), but only that one: a screen released late must not reach the pairing
         // of a newer one (the member leaves and opens Pair again).
-        let (repo, mine) = (repo, own.withLock { $0.token })
+        let (repo, mine, owner) = (repo, own.withLock { $0.token }, owner)
         guard let mine else { return }
-        Task { @MainActor in Self.finish(repo, token: mine, leaving: true) }
+        Task { @MainActor in Self.finish(repo, token: mine, owner: owner, leaving: true) }
     }
 
     /// What a new code is made for: the button's role, or for a held screen the role of what it last showed.
@@ -139,8 +150,8 @@ public final class PairViewModel {
     }
 
     private func onOwnerCheck(_ check: OwnerCheckState?) {
-        guard check == .ok, repo.state.error == .ownerCheckRequired else { return }
-        repo.acknowledge()
+        guard check == .ok, repo.state.error == .ownerCheckRequired, let token = own.withLock({ $0.token }) else { return }
+        repo.acknowledge(token: token, owner: owner)
     }
 
     /// "New code", or "Try again" after a code could not be made.
@@ -149,10 +160,10 @@ public final class PairViewModel {
         sheetFor = nil
         sawStage = false
         recompute()
-        let (repo, role) = (repo, codeRole)
+        let (repo, role, owner) = (repo, codeRole, owner)
         work.launch {
             repo.acknowledge()
-            await repo.start(role)
+            await repo.start(role, owner: owner)
         }
     }
 
@@ -165,11 +176,13 @@ public final class PairViewModel {
     public func cancel() {
         closing = true
         recompute()
-        if let token = own.withLock({ $0.token }) { repo.leave(token: token) }
+        if let token = own.withLock({ $0.token }) { repo.leave(token: token, owner: owner) }
     }
 
-    public func codesMatch() {
-        if case .compare(let c) = repo.state.stage { sheetFor = c.pairingID } else { sheetFor = nil }
+    /// **The codes match** for the comparison [pairingID] the screen shows: the sheet opens for that one, and only while it is the one
+    /// held.
+    public func codesMatch(pairingID: String) {
+        if case .compare(let c) = repo.state.stage, c.pairingID == pairingID { sheetFor = pairingID } else { sheetFor = nil }
         recompute()
     }
 
@@ -192,35 +205,35 @@ public final class PairViewModel {
     }
 
     /// "They don't match", and Reject for a pairing that cannot be compared.
-    public func reject() {
+    public func reject(pairingID: String) {
         sheetFor = nil
         recompute()
         let repo = repo
-        work.launch { await repo.reject() }
+        work.launch { await repo.reject(pairingID: pairingID) }
     }
 
     /// A final stage was read.
     public func done() {
         closing = true
         recompute()
-        if let token = own.withLock({ $0.token }) { Self.finish(repo, token: token, leaving: false) }
+        if let token = own.withLock({ $0.token }) { Self.finish(repo, token: token, owner: owner, leaving: false) }
     }
 
     /// The screen's end. A code that expired is still taken for a late answer for a minute, and the vault is told it is not wanted:
     /// that rejection (``PairingRepository/leave(token:)``) is asked for before anything else, since acknowledging first would leave nothing
     /// held to reject. A pairing that was approved, rejected or ended is never rejected (nothing is held then: ``PairingRepository/leave(token:)`` does nothing
     /// for it); a comparison or a live code is rejected when [leaving] (the model going), by the repository.
-    private static func finish(_ repo: any PairingRepository, token: Int, leaving: Bool) {
+    private static func finish(_ repo: any PairingRepository, token: Int, owner: Int, leaving: Bool) {
         switch repo.state.stage {
         // Not left to the model going: a screen that is popped is released late.
         case .codeExpired, .code, .compare, .creating:
-            repo.leave(token: token)
+            repo.leave(token: token, owner: owner)
             return
         default:
             break
         }
-        if leaving { repo.leave(token: token) }
-        repo.acknowledge(token: token)
+        if leaving { repo.leave(token: token, owner: owner) }
+        repo.acknowledge(token: token, owner: owner)
     }
 
     /// TEST ONLY: returns once the work started so far has run.

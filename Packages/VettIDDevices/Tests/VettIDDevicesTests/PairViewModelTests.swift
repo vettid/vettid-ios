@@ -39,11 +39,11 @@ import VettIDDataTesting
     @Test func theSheetOpensOnlyOverAComparisonAndPairsWithTheChosenAccess() async {
         let m = vm()
         await sync(m)
-        m.codesMatch()
+        m.codesMatch(pairingID: "p1")
         #expect(!m.state.sheet)
         pairing.state = PairingState(stage: .compare(pending))
         await sync(m)
-        m.codesMatch()
+        m.codesMatch(pairingID: "p1")
         await sync(m)
         #expect(m.state.sheet)
         // One hour is preselected (decision 5).
@@ -66,7 +66,7 @@ import VettIDDataTesting
         let m = vm()
         pairing.state = PairingState(stage: .compare(pending))
         await sync(m)
-        m.codesMatch()
+        m.codesMatch(pairingID: "p1")
         pairing.state = PairingState(stage: .compare(pending), error: .ownerCheckRequired)
         await sync(m)
         #expect(m.state.sheet)
@@ -79,7 +79,7 @@ import VettIDDataTesting
         let m = vm()
         pairing.state = PairingState(stage: .compare(pending))
         await sync(m)
-        m.reject()
+        m.reject(pairingID: "p1")
         await sync(m)
         #expect(pairing.calls.contains("reject"))
         pairing.calls = []
@@ -148,7 +148,7 @@ import VettIDDataTesting
         let m = vm()
         pairing.state = PairingState(stage: .compare(pending))
         await sync(m)
-        m.codesMatch()
+        m.codesMatch(pairingID: "p1")
         await sync(m)
         #expect(m.state.sheet)
         // Another pairing's comparison does not open with it.
@@ -235,14 +235,14 @@ import VettIDDataTesting
         let m = vm(desktop: true)
         pairing.state = PairingState(stage: .compare(pending), role: .desktop)
         await sync(m)
-        m.codesMatch()
+        m.codesMatch(pairingID: "p1")
         await sync(m)
         #expect(m.state.sheet)
         m.pair()
         await sync(m)
         // The repository's approve takes the session and nothing else: no grants exist to send.
         #expect(pairing.calls.last == "approve:3600")
-        m.reject()
+        m.reject(pairingID: "p1")
         await sync(m)
         #expect(pairing.calls.last == "reject")
     }
@@ -266,7 +266,7 @@ import VettIDDataTesting
         let m = vm()
         pairing.state = PairingState(stage: .compare(pending))
         await sync(m)
-        m.codesMatch()
+        m.codesMatch(pairingID: "p1")
         await sync(m)
         pairing.state = PairingState(stage: .compare(PendingPairing(pairingID: "p2", name: "Other", sas: "654321", ends: exp)))
         await sync(m)
@@ -316,7 +316,7 @@ import VettIDDataTesting
         s.token = 9
         pairing.state = s
         await sync(m)
-        m.codesMatch()
+        m.codesMatch(pairingID: "p1")
         await sync(m)
         m.pair()
         await sync(m)
@@ -331,6 +331,35 @@ import VettIDDataTesting
         pairing.calls = []
         n.done()
         #expect(pairing.acknowledgedTokens == [11])
+    }
+
+    /// Every screen owns what it shows: its own owner starts a pairing or, from a feed item, takes over the one held, and it leaves and
+    /// reads with that owner; the screens' owners differ. The comparison to match or reject is the one shown.
+    @Test func everyScreenIsItsOwnOwnerAndNamesWhatItShows() async {
+        let a = vm()
+        await sync(a)
+        let b = vm(held: true)
+        await sync(b)
+        guard let starter = pairing.owners.first, let claimer = pairing.claimedOwners.first else {
+            Issue.record("a screen that starts, and one that takes over, each name their owner")
+            return
+        }
+        #expect(starter != claimer, "each screen has its own owner")
+        var s = PairingState(stage: .compare(pending))
+        s.token = 3
+        pairing.state = s
+        await sync(a)
+        await sync(b)
+        a.cancel()
+        b.cancel()
+        #expect(pairing.leftOwners == [starter, claimer])
+        // The sheet and the rejection are for the comparison shown, never another.
+        b.codesMatch(pairingID: "other")
+        await sync(b)
+        #expect(!b.state.sheet)
+        b.reject(pairingID: "p1")
+        await sync(b)
+        #expect(pairing.rejectedIDs == ["p1"])
     }
 
     // MARK: Leaving (iOS)

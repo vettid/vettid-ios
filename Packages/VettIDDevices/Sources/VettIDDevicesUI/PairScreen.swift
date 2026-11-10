@@ -10,11 +10,13 @@ public struct PairActions {
     public var onNewCode: @MainActor () -> Void = {}
     public var onCopied: @MainActor () -> Void = {}
     public var onCancel: @MainActor () -> Void = {}
-    public var onCodesMatch: @MainActor () -> Void = {}
+    /// **The codes match**, for the comparison shown (its pairing id).
+    public var onCodesMatch: @MainActor (String) -> Void = { _ in }
     public var onCloseSheet: @MainActor () -> Void = {}
     public var onChoose: @MainActor (SessionChoice) -> Void = { _ in }
     public var onPair: @MainActor () -> Void = {}
-    public var onReject: @MainActor () -> Void = {}
+    /// **They don't match**, and Reject, for the comparison shown (its pairing id).
+    public var onReject: @MainActor (String) -> Void = { _ in }
     public var onDone: @MainActor () -> Void = {}
     /// **Open its page**: the new agent's page, when its id is known.
     public var onOpenPage: @MainActor (String) -> Void = { _ in }
@@ -300,8 +302,9 @@ private struct CompareStep: View {
     var body: some View {
         FormScaffold(
             title: step.title, primaryLabel: step.primary, busy: state.pairing.busy, destructive: step.destructive,
-            secondaryLabel: step.secondary, onPrimary: pending.comparable ? actions.onCodesMatch : actions.onReject,
-            onSecondary: actions.onReject,
+            secondaryLabel: step.secondary,
+            onPrimary: { pending.comparable ? actions.onCodesMatch(pending.pairingID) : actions.onReject(pending.pairingID) },
+            onSecondary: { actions.onReject(pending.pairingID) },
             // Leaving without an answer rejects (the view model): nothing is approved by leaving.
             onBack: actions.onBack
         ) {

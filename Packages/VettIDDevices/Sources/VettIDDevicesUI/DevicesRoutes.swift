@@ -161,11 +161,11 @@ public struct PairRoute: View {
             m.cancel()
             host.onBack()
         }
-        a.onCodesMatch = { m.codesMatch() }
+        a.onCodesMatch = { m.codesMatch(pairingID: $0) }
         a.onCloseSheet = { m.closeSheet() }
         a.onChoose = { m.choose($0) }
         a.onPair = { m.pair() }
-        a.onReject = { m.reject() }
+        a.onReject = { m.reject(pairingID: $0) }
         a.onDone = {
             m.done()
             host.onBack()

@@ -34,6 +34,20 @@ final class ReadCounter {
 }
 
 extension PairingManager {
+    /// The screens' calls as one test screen (owner 0) makes them.
+    func start(_ role: PairRole = .agent) async { await start(role, owner: 0) }
+
+    func leave(token: Int) { leave(token: token, owner: 0) }
+
+    func acknowledge(token: Int) { acknowledge(token: token, owner: 0) }
+
+    /// The rejection of the comparison held now.
+    func reject() async {
+        var id = "none"
+        if case .compare(let p) = state.stage { id = p.pairingID }
+        await reject(pairingID: id)
+    }
+
     /// The approval of the comparison held now (what a screen's sheet does for the comparison it was opened for).
     func approve(sessionSeconds: Int?) async {
         var id = "none"
@@ -1209,6 +1223,71 @@ extension PairingManagerTests {
         await approving.value
         #expect(paired(m) != nil)
         #expect(!ops.calls.contains { $0.hasPrefix("reject") })
+    }
+
+    // MARK: Owners
+
+    /// A screen that takes over what is held (a feed item's screen shows the comparison of the one before it): the old screen's late
+    /// cleanup rejects nothing of the new owner's; the new owner's own cleanup rejects it, if it is left unapproved.
+    @Test func aScreenTakingOverAComparisonIsTheOnlyOneThatCanEndIt() async throws {
+        let ops = try ops()
+        let m = manager(ops)
+        await m.start(.agent, owner: 1)
+        m.onEvent(pending())
+        let token = m.state.token
+        m.claim(owner: 2)
+        m.leave(token: token, owner: 1)
+        m.acknowledge(token: token, owner: 1)
+        await time.runCurrent()
+        #expect(compared(m) != nil, "the old owner's cleanup touches nothing")
+        #expect(!ops.calls.contains { $0.hasPrefix("reject") })
+        m.leave(token: token, owner: 2)
+        #expect(await eventually { ops.calls.contains("reject:p1") })
+        #expect(m.state == PairingState())
+    }
+
+    /// A final stage is read by its owner only.
+    @Test func aFinalStageIsAcknowledgedByItsOwnerOnly() async throws {
+        let m = manager(try ops())
+        await m.start(.agent, owner: 1)
+        m.onEvent(pending())
+        m.claim(owner: 2)
+        await m.reject()
+        #expect(m.state.stage == .rejected(told: true))
+        let token = m.state.token
+        m.acknowledge(token: token, owner: 1)
+        #expect(m.state.stage == .rejected(told: true))
+        m.acknowledge(token: token, owner: 2)
+        #expect(m.state.stage == .idle)
+    }
+
+    /// The same when the new screen starts: it keeps the code already shown (the same role) and owns it from then on.
+    @Test func aStartThatKeepsTheShownCodeHandsItToTheNewScreen() async throws {
+        let ops = try ops()
+        let m = manager(ops)
+        await m.start(.agent, owner: 1)
+        let token = m.state.token
+        await m.start(.agent, owner: 2)
+        #expect(ops.calls == ["create"], "the code is kept")
+        #expect(m.state.token == token)
+        m.leave(token: token, owner: 1)
+        await time.runCurrent()
+        #expect(code(m) != nil)
+        m.leave(token: token, owner: 2)
+        #expect(await eventually { ops.calls.contains("reject:p1") })
+        #expect(m.state == PairingState())
+    }
+
+    /// Rejecting names the comparison shown: another is not rejected.
+    @Test func aRejectionNamesTheComparisonShown() async throws {
+        let ops = try ops()
+        let m = manager(ops)
+        await m.start()
+        m.onEvent(pending())
+        await m.reject(pairingID: "other")
+        #expect(compared(m) != nil && !ops.calls.contains { $0.hasPrefix("reject") })
+        await m.reject(pairingID: "p1")
+        #expect(m.state.stage == .rejected(told: true))
     }
 
     // MARK: What the screens rely on (iOS)
