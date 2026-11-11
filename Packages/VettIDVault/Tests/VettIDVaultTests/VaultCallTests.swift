@@ -349,7 +349,7 @@ extension VaultDeviceTests {
         let req = try v.open(try await relay.nextDeposit().payload)
         #expect(String(bytes: req.body, encoding: .utf8) == #"{"limit":10}"#)
         try await d.handle(try v.seal("call.list", #"{"calls":[{"call_id":"\#(callId)","connection_id":"conn-1","direction":"in","media":"audio","state":"ended","reason":"timeout","started_at":"2026-10-12T10:00:00.000Z","ended_at":"2026-10-12T10:00:45.000Z"},{"call_id":"no-direction"}]}"#, re: req.id, status: Inner.statusOK))
-        #expect(try await list.value == [CallRecord(callId: callId, connectionId: "conn-1", direction: "in", media: "audio", state: "ended", reason: "timeout", startedAt: "2026-10-12T10:00:00.000Z", endedAt: "2026-10-12T10:00:45.000Z")])
+        #expect(try await list.value == CallList(calls: [CallRecord(callId: callId, connectionId: "conn-1", direction: "in", media: "audio", state: "ended", reason: "timeout", startedAt: "2026-10-12T10:00:00.000Z", endedAt: "2026-10-12T10:00:45.000Z")], skipped: 1))
         let unsupported = Task { try await api.callList() }
         let req2 = try v.open(try await relay.nextDeposit().payload)
         #expect(String(bytes: req2.body, encoding: .utf8) == #"{"limit":50}"#)

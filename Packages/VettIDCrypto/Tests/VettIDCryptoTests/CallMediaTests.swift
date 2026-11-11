@@ -228,6 +228,8 @@ import Testing
 
     @Test func ivIsSsrcTimestampAndTimestampMinusCounter() throws {
         #expect(CallFrames.iv(ssrc: 0x0A0B_0C0D, timestamp: 0x10000, sendCount: 3) == (try Bytes.unhex("0a0b0c0d" + "00010000" + "0000fffd")))
+        // The subtraction wraps at 32 bits (a plain `-` would trap).
+        #expect(CallFrames.iv(ssrc: 1, timestamp: 0, sendCount: 1) == (try Bytes.unhex("00000001" + "00000000" + "ffffffff")))
         // The counter wraps at 65535, not 65536.
         #expect(CallFrames.iv(ssrc: 1, timestamp: 500, sendCount: 0) == CallFrames.iv(ssrc: 1, timestamp: 500, sendCount: 0xFFFF))
     }

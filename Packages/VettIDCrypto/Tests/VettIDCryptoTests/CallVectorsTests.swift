@@ -63,6 +63,42 @@ import Testing
         same("k_call", kCall, try CallWire.accept(offerKey: offerKey, enc: enc, callId: callId))
     }
 
+    /// The HPKE exporter K before `k_call` is derived from it, from both sides.
+    @Test func theExporterOfTheVector() throws {
+        let info = Array(try d.str("info").utf8)
+        let r = try HpkeRecipient.setup(enc: enc, key: offerKey, info: info)
+        same("exporter (caller)", try d.hex("exporter_hex"), try r.export(CallWire.labelCallKey, CallWire.keySize))
+        let s = try deterministic(try d.hex("answer_randomness_hex")) { try HpkeSender.setup(KemPublicKey.parse(ek), info: info) }
+        same("exporter (answerer)", try d.hex("exporter_hex"), try s.export(CallWire.labelCallKey, CallWire.keySize))
+    }
+
+    /// The HPKE export is wiped in the buffer its owner holds, not in a copy of it (arrays copy on write), and `Answered`
+    /// shows no key to a description, a debug description or `dump`.
+    @Test func theExportIsWipedInTheOwnersBufferAndAnsweredShowsNoKey() throws {
+        var k = (0..<32).map { UInt8($0 + 1) }
+        let base = k.withUnsafeBufferPointer { $0.baseAddress }
+        let out = try CallWire.mediaKey(&k, callId)
+        #expect(out.count == CallWire.keySize && out.contains { $0 != 0 })
+        #expect(k.allSatisfy { $0 == 0 }, "the owner's array is zero")
+        #expect(k.withUnsafeBufferPointer { $0.baseAddress } == base, "wiped in place")
+        var a = CallWire.Answered(enc: [0x5B], kCall: out)
+        var shown = ""
+        dump(a, to: &shown)
+        for text in ["\(a)", String(describing: a), String(reflecting: a), shown] {
+            #expect(!text.contains("kCall") && !text.contains(Bytes.hex(out)) && !text.contains("\(out)"))
+        }
+        Bytes.wipe(&a.kCall)
+        #expect(a.kCall.allSatisfy { $0 == 0 })
+        // The ICE types show no credential either.
+        let server = CallWire.IceServer(urls: ["turn:x:1"], username: "USERSECRET", credential: "CREDSECRET")
+        let config = CallWire.IceConfig(callId: callId, exp: Date(timeIntervalSince1970: 1), servers: [server])
+        for x in [server, config] as [Any] {
+            var d = ""
+            dump(x, to: &d)
+            for text in ["\(x)", String(reflecting: x), d] { #expect(!text.contains("CREDSECRET") && !text.contains("USERSECRET")) }
+        }
+    }
+
     @Test func theAnswererProducesTheVectorsEncAndKey() throws {
         let a = try deterministic(try d.hex("answer_randomness_hex")) { try CallWire.answer(ek: ek, callId: callId) }
         same("enc", enc, a.enc)

@@ -56,7 +56,7 @@ public struct CallMessageError: Error, Equatable, Sendable, CustomStringConverti
 /// Only ``VaultApi/callAnswer(_:sdp:)`` and ``VaultApi/callAccept(_:event:pinnedFingerprint:)`` make these in the app
 /// (vettid-android marks the constructor `MadeByCallApi`: an `AcceptedCall` or `CallKeys` says "every signature was
 /// checked"). Here the initializer is internal to the package; a test of code built on these types uses `@testable`.
-public final class CallKeys: @unchecked Sendable, CustomStringConvertible {
+public final class CallKeys: @unchecked Sendable, CustomStringConvertible, CustomDebugStringConvertible, CustomReflectable {
     public let suite: MediaSuite
     private let lock = NSLock()
     private var live = true
@@ -96,10 +96,11 @@ public final class CallKeys: @unchecked Sendable, CustomStringConvertible {
     }
 
     public var description: String { "CallKeys(suite=\(suite.id), [redacted])" }
+    public var debugDescription: String { description }
+    public var customMirror: Mirror { Mirror(self, children: [:]) }
 
-    /// Derives both direction keys from [kCall] and wipes it.
-    static func derive(_ kCall: [UInt8], _ n: CallMedia.Negotiated, callId: String, caller: Bool) throws -> CallKeys {
-        var kCall = kCall
+    /// Derives both direction keys from [kCall] and wipes it in place: the caller's own buffer, not a copy of it.
+    static func derive(_ kCall: inout [UInt8], _ n: CallMedia.Negotiated, callId: String, caller: Bool) throws -> CallKeys {
         defer { Bytes.wipe(&kCall) }
         let fromCaller = try CallMedia.directionKey(kCall: kCall, negotiated: n, direction: CallMedia.directionCaller, callId: callId)
         let fromCallee = try CallMedia.directionKey(kCall: kCall, negotiated: n, direction: CallMedia.directionCallee, callId: callId)
@@ -111,7 +112,7 @@ public final class CallKeys: @unchecked Sendable, CustomStringConvertible {
 
 /// A call this device placed, while it waits for the answer. Holds the ephemeral KEM key: ``destroy()`` when the call is
 /// over.
-public final class OutgoingCall: @unchecked Sendable, CustomStringConvertible {
+public final class OutgoingCall: @unchecked Sendable, CustomStringConvertible, CustomDebugStringConvertible, CustomReflectable {
     public let callId: String
     public let connectionId: String
     public let media: String
@@ -137,10 +138,12 @@ public final class OutgoingCall: @unchecked Sendable, CustomStringConvertible {
     public func destroy() { offerKey.destroy() }
 
     public var description: String { "OutgoingCall(\(callId))" }
+    public var debugDescription: String { description }
+    public var customMirror: Mirror { Mirror(self, children: [:]) }
 }
 
 /// A verified `call.offer`: a connection is calling. Nothing of it is used before every signature has checked out.
-public struct IncomingCall: Sendable, CustomStringConvertible {
+public struct IncomingCall: Sendable, CustomStringConvertible, CustomDebugStringConvertible, CustomReflectable {
     public let callId: String
     public let connectionId: String
     public let media: String
@@ -160,17 +163,23 @@ public struct IncomingCall: Sendable, CustomStringConvertible {
     public var offered: [Int] { negotiated.offered }
 
     public var description: String { "IncomingCall(\(callId))" }
+    public var debugDescription: String { description }
+    public var customMirror: Mirror { Mirror(self, children: [:]) }
 }
 
 /// The callee's verified answer on the calling device: its SDP (without the media-suite attribute) and the call's keys.
-public struct AcceptedCall: Sendable {
+public struct AcceptedCall: Sendable, CustomStringConvertible, CustomDebugStringConvertible, CustomReflectable {
     public let callId: String
     public let sdp: String
     public let keys: CallKeys
+
+    public var description: String { "AcceptedCall(\(callId))" }
+    public var debugDescription: String { description }
+    public var customMirror: Mirror { Mirror(self, children: [:]) }
 }
 
 /// One ICE candidate of `call.ice`. It holds a network address: ``description`` does not print it.
-public struct CallCandidate: Equatable, Sendable, CustomStringConvertible {
+public struct CallCandidate: Equatable, Sendable, CustomStringConvertible, CustomDebugStringConvertible, CustomReflectable {
     public let candidate: String
     public let sdpMid: String?
     public let sdpMLineIndex: Int?
@@ -182,18 +191,31 @@ public struct CallCandidate: Equatable, Sendable, CustomStringConvertible {
     }
 
     public var description: String { "CallCandidate([redacted])" }
+    public var debugDescription: String { description }
+    public var customMirror: Mirror { Mirror(self, children: [:]) }
 }
 
 /// `call.ice` as received.
-public struct CallIce: Equatable, Sendable {
+public struct CallIce: Equatable, Sendable, CustomStringConvertible, CustomDebugStringConvertible, CustomReflectable {
     public let callId: String
     public let candidates: [CallCandidate]
+
+    public var description: String { "CallIce(\(callId), \(candidates.count) candidates)" }
+    public var debugDescription: String { description }
+    public var customMirror: Mirror { Mirror(self, children: [:]) }
 }
 
 /// `call.end` as received.
 public struct CallEnded: Equatable, Sendable {
     public let callId: String
     public let reason: String
+}
+
+/// The answer of `call.list`: the entries that could be read, and how many the vault sent that could not.
+public struct CallList: Equatable, Sendable {
+    public let calls: [CallRecord]
+    /// Entries left out because a required member was missing or of the wrong type; 0 for a clean list.
+    public let skipped: Int
 }
 
 /// One entry of `call.list` (the vault keeps the latest 200 calls; no SDP, no keys).
@@ -402,8 +424,9 @@ extension VaultApi {
         let chosen = call.negotiated
         let answer = CallMedia.sdpWithChoice(sdp, chosen: chosen.chosen)
         try checkSdp(answer)
-        let a = try checked("key agreement") { try CallWire.answer(ek: call.ek, callId: call.callId) }
-        let keys = try CallKeys.derive(a.kCall, chosen, callId: call.callId, caller: false)
+        var a = try checked("key agreement") { try CallWire.answer(ek: call.ek, callId: call.callId) }
+        defer { Bytes.wipe(&a.kCall) }
+        let keys = try CallKeys.derive(&a.kCall, chosen, callId: call.callId, caller: false)
         do {
             let shared = CallWire.shareMessage(role: CallWire.roleAnswer, callId: call.callId, media: "", share: a.enc)
             let encSig = try device.signCallShare(shared)
@@ -428,10 +451,12 @@ extension VaultApi {
         let shared = CallWire.shareMessage(role: CallWire.roleAnswer, callId: call.callId, media: "", share: enc)
         try verifyPeerShare(o, shared, pinnedFingerprint)
         let chosen = try checked("media suites") { try CallMedia.chosenIn(sdp, offered: call.offered) }
-        let kCall = try checked("key agreement") { try CallWire.accept(offerKey: call.key(), enc: enc, callId: call.callId) }
+        var kCall = try checked("key agreement") { try CallWire.accept(offerKey: call.key(), enc: enc, callId: call.callId) }
         call.destroy()
+        defer { Bytes.wipe(&kCall) }
         return AcceptedCall(
-            callId: call.callId, sdp: CallMedia.sdpWithout(sdp), keys: try CallKeys.derive(kCall, chosen, callId: call.callId, caller: true)
+            callId: call.callId, sdp: CallMedia.sdpWithout(sdp),
+            keys: try CallKeys.derive(&kCall, chosen, callId: call.callId, caller: true)
         )
     }
 
@@ -471,89 +496,16 @@ extension VaultApi {
 
     /// `call.list`: the vault's call history, newest first ([limit] 1 to 200). A vault release without calls answers
     /// `unsupported_type`: that answer is how the app learns that the vault has no calls (§11.10.8: no message lists a
-    /// release's features). An entry without a required member is left out (§10.1).
-    public func callList(limit: Int = 50) async throws -> [CallRecord] {
-        let o = VaultJSON.object(try await device.op("call.list", body: JsonBuilder().uint("limit", UInt64(max(limit, 0))).bytes()))
-        return ((try? o.array("calls")) ?? []).compactMap { (try? $0.asObject()).flatMap(CallRecord.init) }
-    }
-}
-
-/// One call event from the vault, in the order the vault's events arrived.
-public enum CallEvent: Sendable {
-    /// `call.offer`, **unchecked**: pass the message to ``VaultApi/callIncoming(_:pinnedFingerprint:suites:)``.
-    case offer(VaultMessage)
-    /// `call.answer`, **unchecked**: pass the message to ``VaultApi/callAccept(_:event:pinnedFingerprint:)`` with the
-    /// call it is for.
-    case answer(VaultMessage)
-    case ringing(callId: String)
-    case ended(CallEnded)
-    case ice(CallIce)
-
-    /// For an offer, the connection the event names, to look its identity up before the check; not yet verified.
-    public var connectionId: String? {
-        guard case .offer(let m) = self else { return nil }
-        return VaultJSON.string(m.object, "connection_id")
-    }
-
-    /// For an answer, the call it names; not yet verified.
-    public var answerCallId: String? {
-        guard case .answer(let m) = self else { return nil }
-        return VaultJSON.string(m.object, "call_id")
-    }
-}
-
-private let callEventTypes: Set<String> = ["call.offer", "call.answer", "call.ringing", "call.end", "call.ice"]
-
-private func parseCandidate(_ v: JsonValue) -> CallCandidate? {
-    guard let o = try? v.asObject(), let candidate = VaultJSON.string(o, "candidate") else { return nil }
-    var mid: String?
-    switch o["sdp_mid"] {
-    case nil, .null?: mid = nil
-    case .string(_, let s)?: mid = s
-    default: return nil
-    }
-    var index: Int?
-    switch o["sdp_mline_index"] {
-    case nil, .null?: index = nil
-    case .number?: guard let i = try? o["sdp_mline_index"]?.asUint(min: 0, max: UInt64(Int32.max)) else { return nil }
-        index = Int(i)
-    default: return nil
-    }
-    return CallCandidate(candidate, sdpMid: mid, sdpMLineIndex: index)
-}
-
-private func parseIce(_ m: VaultMessage) -> CallIce? {
-    let o = m.object
-    guard let id = VaultJSON.string(o, "call_id") else { return nil }
-    let list = ((try? o.array("candidates")) ?? []).compactMap(parseCandidate)
-        .filter { $0.candidate.utf16.count <= CallLimits.maxCandidate }.prefix(CallLimits.maxCandidates)
-    return list.isEmpty ? nil : CallIce(callId: id, candidates: Array(list))
-}
-
-private func parseEnd(_ m: VaultMessage) -> CallEnded? {
-    guard let id = VaultJSON.string(m.object, "call_id"), let reason = VaultJSON.string(m.object, "reason") else { return nil }
-    return CallEnded(callId: id, reason: reason)
-}
-
-/// [events] as call events: the `call.*` ones, in the order they arrived; anything else is left out.
-public func callEventsIn<S: AsyncSequence & Sendable>(
-    _ events: S
-) -> AsyncCompactMapSequence<S, CallEvent> where S.Element == VaultMessage {
-    events.compactMap { m -> CallEvent? in
-        guard callEventTypes.contains(m.type) else { return nil }
-        switch m.type {
-        case "call.offer": return .offer(m)
-        case "call.answer": return .answer(m)
-        case "call.ringing": return VaultJSON.string(m.object, "call_id").map { .ringing(callId: $0) }
-        case "call.end": return parseEnd(m).map { .ended($0) }
-        default: return parseIce(m).map { .ice($0) }
-        }
-    }
-}
-
-extension VaultApi {
-    /// Every `call.*` event, one stream, so that their order is the vault's (an answer before the candidates after it).
-    public func callEvents() -> AsyncCompactMapSequence<AsyncStream<VaultMessage>, CallEvent> {
-        callEventsIn(device.events())
+    /// release's features). An entry without a required member is left out, never silently: ``CallList/skipped`` counts
+    /// them, so that the screen can say some calls could not be shown.
+    public func callList(limit: Int = 50) async throws -> CallList {
+        // A limit below 1 is refused before anything is sent (the vault's range is 1 to 200).
+        guard limit >= 1 else { throw CallMessageError("limit") }
+        let o = VaultJSON.object(try await device.op("call.list", body: JsonBuilder().uint("limit", UInt64(limit)).bytes()))
+        // `calls` that is not an array is a failed decode, as in vettid-android; an entry that is malformed is left out.
+        let calls: [JsonValue]
+        do { calls = o.has("calls") ? try o.array("calls") : [] } catch { throw CallMessageError("calls") }
+        let records = calls.compactMap { (try? $0.asObject()).flatMap(CallRecord.init) }
+        return CallList(calls: records, skipped: calls.count - records.count)
     }
 }

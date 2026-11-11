@@ -39,17 +39,22 @@ public enum CallWire {
     /// The calling device's ephemeral KEM key: its public half (`ek`, 1,216 bytes) goes into `call.start`.
     public static func newOfferKey() throws -> KemPrivateKey { try KemPrivateKey.generate() }
 
-    /// `k_call = HKDF-SHA-256(ikm = K, salt = "vettid-call-v1", info = call_id, L = 32)`; [k] is wiped.
-    private static func mediaKey(_ k: [UInt8], _ callId: String) throws -> [UInt8] {
-        var k = k
+    /// `k_call = HKDF-SHA-256(ikm = K, salt = "vettid-call-v1", info = call_id, L = 32)`; [k] is wiped in place
+    /// (the caller's own buffer: a wipe of a copy would leave the key where it was).
+    static func mediaKey(_ k: inout [UInt8], _ callId: String) throws -> [UInt8] {
         defer { Bytes.wipe(&k) }
         return try Hkdf.derive(ikm: k, salt: Array(mediaSalt.utf8), info: Array(callId.utf8), length: keySize)
     }
 
     /// What the answering device gets: [enc] for `call.answer` and [kCall], which stays on the device.
-    public struct Answered: Sendable {
+    public struct Answered: Sendable, CustomStringConvertible, CustomDebugStringConvertible, CustomReflectable {
         public let enc: [UInt8]
-        public let kCall: [UInt8]
+        /// `var` so that its owner can wipe it in place (``Bytes/wipe(_:)``).
+        public var kCall: [UInt8]
+
+        public var description: String { "Answered([redacted])" }
+        public var debugDescription: String { description }
+        public var customMirror: Mirror { Mirror(self, children: [:]) }
     }
 
     /// Run by the answering device: `(enc, ctx) = SetupBaseS(ek, "vettid/vms/2/call" || call_id)`,
@@ -57,14 +62,16 @@ public enum CallWire {
     public static func answer(ek: [UInt8], callId: String) throws -> Answered {
         guard ek.count == Suite.ekSize else { throw CryptoError.key("call ek size") }
         let sender = try HpkeSender.setup(KemPublicKey.parse(ek), info: callInfo(callId))
-        return Answered(enc: sender.enc, kCall: try mediaKey(try sender.export(labelCallKey, keySize), callId))
+        var k = try sender.export(labelCallKey, keySize)
+        return Answered(enc: sender.enc, kCall: try mediaKey(&k, callId))
     }
 
     /// Run by the calling device on the answer's `enc` (1,120 bytes): the same `k_call`.
     public static func accept(offerKey: KemPrivateKey, enc: [UInt8], callId: String) throws -> [UInt8] {
         guard enc.count == Suite.encSize else { throw CryptoError.key("call enc size") }
         let r = try HpkeRecipient.setup(enc: enc, key: offerKey, info: callInfo(callId))
-        return try mediaKey(try r.export(labelCallKey, keySize), callId)
+        var k = try r.export(labelCallKey, keySize)
+        return try mediaKey(&k, callId)
     }
 
     /// The signed bytes of a share: `role || 0x00 || call_id || 0x00 || media || 0x00 || share`. For ``roleOffer`` the
@@ -93,7 +100,7 @@ public enum CallWire {
     }
 
     /// One entry of an ICE configuration; [username] and [credential] are both set or both nil.
-    public struct IceServer: Equatable, Sendable, CustomStringConvertible {
+    public struct IceServer: Equatable, Sendable, CustomStringConvertible, CustomDebugStringConvertible, CustomReflectable {
         public let urls: [String]
         public let username: String?
         public let credential: String?
@@ -105,10 +112,12 @@ public enum CallWire {
         }
 
         public var description: String { "IceServer(urls=\(urls), \(credential == nil ? "no credential" : "[redacted]"))" }
+        public var debugDescription: String { description }
+        public var customMirror: Mirror { Mirror(self, children: [:]) }
     }
 
     /// The vault-signed ICE configuration of one call.
-    public struct IceConfig: Equatable, Sendable {
+    public struct IceConfig: Equatable, Sendable, CustomStringConvertible, CustomDebugStringConvertible, CustomReflectable {
         public let callId: String
         public let exp: Date
         public let servers: [IceServer]
@@ -118,6 +127,10 @@ public enum CallWire {
             self.exp = exp
             self.servers = servers
         }
+
+        public var description: String { "IceConfig(\(callId), \(servers.count) servers)" }
+        public var debugDescription: String { description }
+        public var customMirror: Mirror { Mirror(self, children: [:]) }
 
         var expSeconds: Int64 { Int64(exp.timeIntervalSince1970.rounded(.down)) }
     }
