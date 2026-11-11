@@ -94,6 +94,17 @@ import VettIDDataTesting
         vm.setPassword("pw")
         vm.confirmReturn()
         #expect(vault.returnPins == ["402817"] && vm.state.password.isEmpty, "the PIN only; the password does not stay")
+
+        // The check comes due while the return's keypad is asking: the keypad closes, and its PIN is never sent.
+        vm.askReturn()
+        vm.confirmReturn()
+        #expect(vm.state.returnAsksPin)
+        vm.ownerCheck(due: true, lockedByChecks: false)
+        #expect(!vm.state.returnAsksPin && !vm.state.returnConfirm)
+        vm.setPin("402817")
+        vm.submit()
+        await vm.settle()
+        #expect(vault.returnPins.count == 1 && !vm.state.returnAsksPin, "gated: the PIN goes to the unlock, never the way back")
     }
 
     /// Check again: "not finished yet" while listed, the unreachable text, nothing once gone; the bound's state followed.

@@ -103,6 +103,12 @@ public final class UnlockViewModel: UnlockActions {
         state.lockedByOwnerCheck = lockedByChecks
         state.returnGated = due || lockedByChecks
         state.idleLocked = idleLocked
+        // Gated while the way back was being asked for: its keypad and question close, the PIN typed for it goes.
+        if state.returnGated, state.returnAsksPin || state.returnConfirm {
+            state.returnAsksPin = false
+            state.returnConfirm = false
+            state.pin = ""
+        }
     }
 
     // MARK: - Tasks
@@ -283,6 +289,11 @@ public final class UnlockViewModel: UnlockActions {
         state.pin = ""
         state.password = ""
         // Not now (a backoff's countdown runs, or a step is busy): the keypad keeps asking, and says why with its countdown.
+        // Gated meanwhile (the check came due): nothing is sent, and the notice says the check comes first.
+        if state.returnGated {
+            state.returnAsksPin = false
+            return
+        }
         guard pin.count >= UnlockState.minPinLength, state.pinAllowed else {
             state.returnAsksPin = true
             return
