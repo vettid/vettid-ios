@@ -165,10 +165,7 @@ final class StagingTests: VaultUITestCase {
         expect(app, "owner_check", timeout: 30)
         expect(app, "owner_check_pin", timeout: 30)
         enterPin(app, pin)
-        let field = app.secureTextFields["owner_check_password"]
-        field.tap()
-        field.typeText(password)
-        tapPrimary(app)
+        submitCheck(app, password: password)
 
         guard checkPassed(app, row: row) else { return }
         failOnSavePassword(app)
@@ -413,16 +410,11 @@ final class StagingTests: VaultUITestCase {
         return true
     }
 
-    /// The password when the owner check is due (VAULT-MESSAGING §3.6.5), the PIN, and "Unlock".
+    /// The PIN and "Unlock"; with the owner check due, "Next", the password, then "Unlock" (VAULT-MESSAGING §3.6.5).
     @MainActor
     private func enterUnlock(_ app: XCUIApplication, pin: String, password: String) {
-        let passwordField = app.secureTextFields["unlock_password"]
-        if passwordField.exists {
-            passwordField.tap()
-            passwordField.typeText(password)
-        }
         enterPin(app, pin)
-        tapPrimary(app)
+        submitUnlock(app, password: password)
     }
 
     /// Settings, from the drawer. (An app left open on Settings has no menu button there: Settings has a back arrow.)

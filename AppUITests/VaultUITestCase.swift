@@ -222,14 +222,8 @@ class VaultUITestCase: XCTestCase {
         if !waitUntil(timeout: Self.network, { key.exists && key.isEnabled }) {
             return fail(app, "The unlock screen never accepted a PIN.")
         }
-        // The owner check is due: the password goes with the PIN (VAULT-MESSAGING §3.6.5).
-        let passwordField = app.secureTextFields["unlock_password"]
-        if passwordField.exists {
-            passwordField.tap()
-            passwordField.typeText(password)
-        }
         enterPin(app, pin)
-        tapPrimary(app)
+        submitUnlock(app, password: password)
         switch waitForAny(app, ["app_shell", "owner_check"], timeout: Self.network) {
         case "owner_check":
             ownerCheck(app, pin: pin, password: password)
@@ -246,16 +240,34 @@ class VaultUITestCase: XCTestCase {
     func ownerCheck(_ app: XCUIApplication, pin: String, password: String) -> Bool {
         expect(app, "owner_check_pin", timeout: 30)
         guard enterPin(app, pin) else { return false }
-        let field = app.secureTextFields["owner_check_password"]
-        field.tap()
-        field.typeText(password)
-        tapPrimary(app)
+        submitCheck(app, password: password)
         if waitForAny(app, ["app_shell", "owner_check_passed_unrecorded"], timeout: Self.network) == "owner_check_passed_unrecorded" {
             tapPrimary(app)
         }
         expect(app, "app_shell", timeout: Self.network)
         failOnSavePassword(app)
         return shown(app)["app_shell"] != nil
+    }
+
+    /// "Unlock" after the PIN; with the owner check due, "Next" first, then the password in the keypad's place and "Unlock"
+    /// (VAULT-MESSAGING §3.6.5: both on one screen, the keypad first).
+    @MainActor
+    func submitUnlock(_ app: XCUIApplication, password: String) {
+        tapPrimary(app)
+        if waitForAny(app, ["app_shell", "owner_check", "unlock_password"], timeout: Self.network) == "unlock_password" {
+            typeInto(app.secureTextFields["unlock_password"], password)
+            tapPrimary(app)
+        }
+    }
+
+    /// The owner check's "Next" after the PIN, then its password in the keypad's place and the check's button.
+    @MainActor
+    func submitCheck(_ app: XCUIApplication, password: String) {
+        tapPrimary(app)
+        let field = app.secureTextFields["owner_check_password"]
+        guard field.waitForExistence(timeout: 30) else { return fail(app, "The password did not follow the PIN.") }
+        typeInto(field, password)
+        tapPrimary(app)
     }
 
     /// "Lock vault" from the account sheet, then the unlock screen once the vault has confirmed the lock.

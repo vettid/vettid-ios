@@ -87,7 +87,8 @@ import VettIDUI
     }
 
     /// IOS-PLAN §6.5: the PIN is never typed on a keyboard: the unlock screen has no text field for it. With the owner
-    /// check due, the one field is the credential password's, with no AutoFill, no save prompt and no keyboard learning.
+    /// check due, the keypad comes first (no field yet), then, after "Next", the one field is the credential password's,
+    /// with no AutoFill, no save prompt and no keyboard learning.
     @Test func thePinIsOnTheKeypadAndThePasswordFieldIsASecretOne() throws {
         let plain = host(UnlockScreen(state: ok, actions: NoUnlockActions()))
         #expect(textFields(in: plain).isEmpty, "no keyboard for the PIN")
@@ -95,7 +96,10 @@ import VettIDUI
 
         var due = ok
         due.checkDue = true
-        let window = host(UnlockScreen(state: due, actions: NoUnlockActions()))
+        let first = host(UnlockScreen(state: due, actions: NoUnlockActions()))
+        #expect(textFields(in: first).isEmpty, "the keypad first")
+        first.isHidden = true
+        let window = host(UnlockScreen(state: due, actions: NoUnlockActions(), pin: typed(6), steps: PinThenPassword(pinDone: true)))
         let fields = textFields(in: window)
         #expect(fields.count == 1)
         let field = try #require(fields.first)
@@ -104,6 +108,22 @@ import VettIDUI
         #expect(field.autocorrectionType == .no && field.spellCheckingType == .no && field.inlinePredictionType == .no)
         #expect(field.smartQuotesType == .no && field.smartDashesType == .no && field.smartInsertDeleteType == .no)
         window.isHidden = true
+    }
+
+    /// The PIN and then the password (VAULT-MESSAGING §3.6.5 on one screen): "Next" once the PIN is long enough, the
+    /// password after it, the keypad again once its digits are gone; only the password when no PIN is asked.
+    @Test func thePasswordFollowsThePin() {
+        var steps = PinThenPassword()
+        #expect(steps.asksNext(asksPin: true, digits: 6, minPin: 6))
+        #expect(!steps.passwordShown(asksPin: true, digits: 6, minPin: 6))
+        steps.pinDone = true
+        #expect(steps.passwordShown(asksPin: true, digits: 6, minPin: 6))
+        #expect(!steps.passwordShown(asksPin: true, digits: 5, minPin: 6), "a PIN made too short shows the keypad")
+        steps.digitsChanged(to: 4)
+        #expect(steps.pinDone)
+        steps.digitsChanged(to: 0)
+        #expect(!steps.pinDone, "taken or dropped: the keypad again, and \"Next\" again")
+        #expect(PinThenPassword().passwordShown(asksPin: false, digits: 0, minPin: 6), "the PIN kept: the password only")
     }
 
     /// The release R cancel of a recovery asks for the password in the same kind of field.
@@ -223,5 +243,11 @@ import VettIDUI
     private func views(in view: UIView) -> [UIView] { [view] + view.subviews.flatMap { views(in: $0) } }
 
     private func textFields(in view: UIView) -> [UITextField] { views(in: view).compactMap { $0 as? UITextField } }
+
+    private func typed(_ digits: Int) -> PinBuffer {
+        let b = PinBuffer()
+        for d in 0..<digits { b.append(d % 10) }
+        return b
+    }
 }
 #endif

@@ -57,6 +57,8 @@ public struct UnlockScreen: View {
     let onOpenAccountSite: @MainActor () -> Void
     let onContactSupport: (@MainActor (_ done: @escaping @MainActor (Bool) -> Void) -> Void)?
     @State private var pin = PinBuffer()
+    /// With a check due, the PIN on the keypad first, then the password (``PinThenPassword``).
+    @State private var steps = PinThenPassword()
     @Environment(\.openURL) private var openURL
     @Environment(\.scenePhase) private var scenePhase
 
@@ -72,9 +74,31 @@ public struct UnlockScreen: View {
         self.onContactSupport = onContactSupport
     }
 
+    /// Opened with [pin] typed and at [steps] (tests: the password step).
+    init(state: UnlockState, actions: any UnlockActions, pin: PinBuffer, steps: PinThenPassword) {
+        self.init(state: state, actions: actions)
+        _pin = State(initialValue: pin)
+        _steps = State(initialValue: steps)
+    }
+
     private var blocked: Bool { state.recoverOnly }
 
-    private var primaryLabel: String? {
+    /// The check is due and the keypad shows: "Next" takes the PIN on to the password, in place of "Unlock".
+    private var asksNext: Bool {
+        state.checkDue && plainUnlock && steps.asksNext(asksPin: true, digits: pin.count, minPin: UnlockState.minPinLength)
+    }
+
+    /// The password step of a due check (the keypad has given way to it).
+    private var passwordStep: Bool {
+        state.checkDue && steps.passwordShown(asksPin: true, digits: pin.count, minPin: UnlockState.minPinLength)
+    }
+
+    /// The primary button is the plain "Unlock" (not a retry, a return or nothing).
+    private var plainUnlock: Bool { basePrimaryLabel == OnboardingStrings.unlockSubmit }
+
+    private var primaryLabel: String? { asksNext ? OnboardingStrings.pinStepNext : basePrimaryLabel }
+
+    private var basePrimaryLabel: String? {
         if state.returnAsksPin, let m = state.moveUnconfirmed { return OnboardingStrings.releaseUpdateReturn(Int(m.from.number)) }
         if state.preflightError != nil && !blocked { return OnboardingStrings.unlockRetry }
         if blocked || state.recoveryPending { return nil }
@@ -96,9 +120,18 @@ public struct UnlockScreen: View {
             title: OnboardingStrings.unlockTitle,
             message: state.email.map(OnboardingStrings.unlockBodyAccount) ?? OnboardingStrings.unlockBody,
             primaryLabel: primaryLabel,
-            primaryEnabled: state.preflightError != nil && !state.returnAsksPin ? state.retryAllowed : canSubmit,
+            primaryEnabled: asksNext ? state.pinAllowed && pin.count >= UnlockState.minPinLength
+                : state.preflightError != nil && !state.returnAsksPin ? state.retryAllowed : canSubmit,
             busy: state.busy || state.loading || state.erasing,
-            onPrimary: { state.preflightError != nil && !state.returnAsksPin ? actions.retryPreflight() : submit() },
+            onPrimary: {
+                if asksNext {
+                    steps.pinDone = true
+                } else if state.preflightError != nil && !state.returnAsksPin {
+                    actions.retryPreflight()
+                } else {
+                    submit()
+                }
+            },
             header: {
                 VettIDSymbol.lock.image.font(.system(size: 36)).padding(.top, Spacing.l).accessibilityHidden(true)
             }
@@ -146,6 +179,8 @@ public struct UnlockScreen: View {
             actions.confirmReturn()
         }
         .onDisappear { pin.clear() }
+        // Digits taken by "Unlock" or dropped: the keypad again.
+        .onChange(of: pin.count) { _, digits in steps.digitsChanged(to: digits) }
         .onChange(of: scenePhase) { _, now in
             // IOS-PLAN §6.3: typed secrets are dropped when the app leaves the foreground, and when the iPhone locks.
             if now == .background { forgetSecrets() }
@@ -159,7 +194,8 @@ public struct UnlockScreen: View {
     private var returnFrom: Int { Int(state.moveUnconfirmed?.from.number ?? 0) }
     private var returnTo: Int { Int(state.moveUnconfirmed?.to.number ?? 0) }
 
-    /// The keypad, the countdown and, with a check due, the password (§3.6.5: one screen for both).
+    /// The keypad, the countdown and, with a check due, the password (§3.6.5: one screen for both): the keypad first, then
+    /// in its place the PIN as dots and the password (``PinThenPassword``).
     @ViewBuilder private var pinEntry: some View {
         // VAULT-MESSAGING §11.14.9 "A lost answer" step 5: the previous PIN first, the new one after `device_secret`.
         switch state.pinStep {
@@ -171,15 +207,21 @@ public struct UnlockScreen: View {
             NoticeCard(.success, title: OnboardingStrings.unlockNewPinTitle, message: OnboardingStrings.unlockNewPinBody, announce: .polite)
                 .accessibilityIdentifier("unlock_new_pin")
         }
-        PinEntry(
-            label: OnboardingStrings.unlockPinLabel,
-            buffer: pin,
-            error: state.message == .badPin && pin.count == 0 ? OnboardingStrings.unlockBadPin : nil,
-            failure: state.message == .badPin ? OnboardingStrings.unlockBadPin : nil,
-            identifier: "unlock_pin"
-        )
-        .disabled(!state.pinAllowed)
-        .padding(.top, Spacing.s)
+        if passwordStep {
+            EnteredPin(label: OnboardingStrings.unlockPinLabel, digits: pin.count, identifier: "unlock_pin") { steps.pinDone = false }
+                .disabled(!state.pinAllowed)
+                .padding(.top, Spacing.s)
+        } else {
+            PinEntry(
+                label: OnboardingStrings.unlockPinLabel,
+                buffer: pin,
+                error: state.message == .badPin && pin.count == 0 ? OnboardingStrings.unlockBadPin : nil,
+                failure: state.message == .badPin ? OnboardingStrings.unlockBadPin : nil,
+                identifier: "unlock_pin"
+            )
+            .disabled(!state.pinAllowed)
+            .padding(.top, Spacing.s)
+        }
         if state.waitSeconds > 0 {
             Text(OnboardingStrings.unlockWait(formatWait(state.waitSeconds)))
                 .vettIDFont(.bodySmall)
@@ -189,10 +231,11 @@ public struct UnlockScreen: View {
                 .announcedOnce(OnboardingStrings.unlockWait(spokenDuration(state.waitSeconds)))
                 .accessibilityIdentifier("unlock_wait")
         }
-        if state.checkDue {
+        if passwordStep {
             SecretField(
                 OnboardingStrings.unlockPasswordLabel,
                 text: Binding(get: { state.password }, set: { actions.setPassword($0) }),
+                focus: true,
                 onSubmit: submit
             )
             .disabled(!state.pinAllowed)

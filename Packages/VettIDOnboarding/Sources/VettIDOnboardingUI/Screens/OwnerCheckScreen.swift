@@ -67,6 +67,9 @@ public struct OwnerCheckScreen: View {
     let onCancel: @MainActor () -> Void
     let now: Date
     @State private var pin = PinBuffer()
+    /// The PIN on the keypad first, then the password (``PinThenPassword``); only the password after an unlock that kept
+    /// the PIN.
+    @State private var steps = PinThenPassword()
     @Environment(\.scenePhase) private var scenePhase
 
     /// Fewer checks than this left are shown in the error colour.
@@ -79,6 +82,13 @@ public struct OwnerCheckScreen: View {
         self.actions = actions
         self.onCancel = onCancel
         self.now = now
+    }
+
+    /// Opened with [pin] typed and at [steps] (tests: the password step).
+    init(state: OwnerCheckScreenState, actions: any OwnerCheckActions, now: Date, pin: PinBuffer, steps: PinThenPassword) {
+        self.init(state: state, actions: actions, now: now)
+        _pin = State(initialValue: pin)
+        _steps = State(initialValue: steps)
     }
 
     /// The interval at the vault's time scale (STAGING-TIME-SCALE §5.2): "24 hours", on staging "1 hour".
@@ -114,6 +124,16 @@ public struct OwnerCheckScreen: View {
         return state.entriesAllowed && pin.count >= OwnerCheckScreenState.minPin && !state.password.isEmpty
     }
 
+    /// The keypad shows and the check can be answered: "Next" takes the PIN on to the password.
+    private var asksNext: Bool {
+        state.watch == .none && !state.locked
+            && steps.asksNext(asksPin: !state.pinKept, digits: pin.count, minPin: OwnerCheckScreenState.minPin)
+    }
+
+    private var passwordStep: Bool {
+        steps.passwordShown(asksPin: !state.pinKept, digits: pin.count, minPin: OwnerCheckScreenState.minPin)
+    }
+
     private func submit() {
         guard canSubmit else { return }
         if !state.pinKept { actions.setPin(pin.take()) }
@@ -144,11 +164,20 @@ public struct OwnerCheckScreen: View {
         FormScaffold(
             title: title,
             message: body0,
-            primaryLabel: primaryLabel,
-            primaryEnabled: canSubmit || (state.watch == .silent && !state.locking),
+            primaryLabel: asksNext ? OnboardingStrings.pinStepNext : primaryLabel,
+            primaryEnabled: asksNext ? state.entriesAllowed && pin.count >= OwnerCheckScreenState.minPin
+                : canSubmit || (state.watch == .silent && !state.locking),
             busy: state.busy || state.locking,
             secondaryLabel: state.lockOffered ? OnboardingStrings.ownerCheckLock : OnboardingStrings.ownerCheckCancel,
-            onPrimary: { if state.watch == .silent { actions.checkAgain() } else { submit() } },
+            onPrimary: {
+                if asksNext {
+                    steps.pinDone = true
+                } else if state.watch == .silent {
+                    actions.checkAgain()
+                } else {
+                    submit()
+                }
+            },
             onSecondary: {
                 pin.clear()
                 if state.lockOffered { actions.lockVault() } else { onCancel() }
@@ -191,6 +220,8 @@ public struct OwnerCheckScreen: View {
             }
         }
         .onDisappear { forgetSecrets() }
+        // Digits taken by the submit or dropped: the keypad again.
+        .onChange(of: pin.count) { _, digits in steps.digitsChanged(to: digits) }
         // Locked, or probably locked: digits typed on the hidden keypad do not wait in its buffer.
         .onChange(of: state.locked) { _, locked in
             if locked { pin.clear() }
@@ -250,8 +281,8 @@ public struct OwnerCheckScreen: View {
         }
     }
 
-    /// The keypad (not after an unlock whose PIN was kept) and the password (§3.6.5: one screen for both); neither once the
-    /// vault locked.
+    /// The keypad (not after an unlock whose PIN was kept) and the password (§3.6.5: one screen for both): the keypad first,
+    /// then in its place the PIN as dots and the password (``PinThenPassword``); neither once the vault locked.
     @ViewBuilder private var entries: some View {
         if !state.locked, state.watch == .none {
             entryFields
@@ -259,7 +290,13 @@ public struct OwnerCheckScreen: View {
     }
 
     @ViewBuilder private var entryFields: some View {
-        if !state.pinKept {
+        if !state.pinKept, passwordStep {
+            EnteredPin(label: OnboardingStrings.ownerCheckPinLabel, digits: pin.count, identifier: "owner_check_pin") {
+                steps.pinDone = false
+            }
+            .disabled(!state.entriesAllowed)
+            .padding(.top, Spacing.s)
+        } else if !state.pinKept {
             PinEntry(
                 label: OnboardingStrings.ownerCheckPinLabel,
                 buffer: pin,
@@ -270,15 +307,19 @@ public struct OwnerCheckScreen: View {
             .disabled(!state.entriesAllowed)
             .padding(.top, Spacing.s)
         }
-        SecretField(
-            OnboardingStrings.ownerCheckPasswordLabel,
-            text: Binding(get: { state.password }, set: { actions.setPassword($0) }),
-            error: badPassword ? OnboardingStrings.ownerCheckBadPassword : nil,
-            errorPriority: .assertive,
-            onSubmit: submit
-        )
-        .disabled(!state.entriesAllowed)
-        .accessibilityIdentifier("owner_check_password")
+        if passwordStep {
+            SecretField(
+                OnboardingStrings.ownerCheckPasswordLabel,
+                text: Binding(get: { state.password }, set: { actions.setPassword($0) }),
+                error: badPassword ? OnboardingStrings.ownerCheckBadPassword : nil,
+                errorPriority: .assertive,
+                // Given the keyboard when "Next" brings it, not when the PIN was kept (the screen opens on it then).
+                focus: !state.pinKept,
+                onSubmit: submit
+            )
+            .disabled(!state.entriesAllowed)
+            .accessibilityIdentifier("owner_check_password")
+        }
     }
 
     private func forgetSecrets() {

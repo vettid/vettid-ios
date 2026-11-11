@@ -26,7 +26,15 @@ import VettIDUI
     /// IOS-PLAN §6.5: the PIN on the keypad, never a keyboard; the one text field is the password's, with no AutoFill, no
     /// save prompt and no keyboard learning.
     @Test func thePinIsOnTheKeypadAndThePasswordFieldIsASecretOne() throws {
-        let window = host(OwnerCheckScreen(state: held, actions: NoOwnerCheckActions(), now: now))
+        // The keypad first, with no field; the password once "Next" took the PIN.
+        let first = host(OwnerCheckScreen(state: held, actions: NoOwnerCheckActions(), now: now))
+        #expect(textFields(in: first).isEmpty)
+        first.isHidden = true
+        let pin = PinBuffer()
+        for d in [9, 7, 5, 3, 1, 0] { pin.append(d) }
+        let window = host(
+            OwnerCheckScreen(state: held, actions: NoOwnerCheckActions(), now: now, pin: pin, steps: PinThenPassword(pinDone: true))
+        )
         let fields = textFields(in: window)
         #expect(fields.count == 1)
         let field = try #require(fields.first)

@@ -71,18 +71,7 @@ public struct PinKeypad: View {
 
     public var body: some View {
         VStack(spacing: Spacing.xl) {
-            HStack(spacing: Spacing.m) {
-                ForEach(0..<max(length, buffer.count), id: \.self) { i in
-                    Circle()
-                        .fill(i < buffer.count ? colors.onSurface.color : Color.clear)
-                        .overlay(Circle().stroke(colors.outline))
-                        .frame(width: 14, height: 14)
-                }
-            }
-            .accessibilityElement()
-            .accessibilityLabel(UIStrings.keypadEntered)
-            .accessibilityValue("\(buffer.count)")
-            .accessibilityIdentifier("pin_dots")
+            PinDots(count: buffer.count, length: length)
             Grid(horizontalSpacing: Spacing.l, verticalSpacing: Spacing.m) {
                 ForEach(0..<3) { row in
                     GridRow { ForEach(1...3, id: \.self) { col in key(row * 3 + col) } }
@@ -110,5 +99,33 @@ public struct PinKeypad: View {
         }
         .foregroundStyle(colors.onSurface)
         .accessibilityIdentifier("pin_\(d)")
+    }
+}
+
+/// How many digits of a PIN are typed, as dots ([length] at least, filled up to [count]); read as one element. Shown by
+/// ``PinKeypad`` and on its own once the keypad has given way to a password typed after the PIN.
+public struct PinDots: View {
+    private let count: Int
+    private let length: Int
+    @Environment(\.vettIDColors) private var colors
+
+    public init(count: Int, length: Int = 6) {
+        self.count = count
+        self.length = length
+    }
+
+    public var body: some View {
+        HStack(spacing: Spacing.m) {
+            ForEach(0..<max(length, count), id: \.self) { i in
+                Circle()
+                    .fill(i < count ? colors.onSurface.color : Color.clear)
+                    .overlay(Circle().stroke(colors.outline))
+                    .frame(width: 14, height: 14)
+            }
+        }
+        .accessibilityElement()
+        .accessibilityLabel(UIStrings.keypadEntered)
+        .accessibilityValue("\(count)")
+        .accessibilityIdentifier("pin_dots")
     }
 }

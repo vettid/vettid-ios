@@ -172,6 +172,52 @@ public struct PinEntry: View {
     }
 }
 
+/// A PIN on the in-app keypad and then a password, on one screen (VAULT-MESSAGING §3.6.5 asks for both together; the
+/// owner's choice for the iPhone, where the keypad is too tall to leave room for the password under it): the keypad until
+/// the PIN is long enough and "Next" is pressed, then the typed PIN as dots, a way back to the keypad, and the password.
+/// The keypad comes back by itself once its digits are gone (taken by a submit, or dropped).
+struct PinThenPassword: Equatable {
+    /// "Next" was pressed and the PIN not changed since.
+    var pinDone = false
+
+    /// Whether the password step shows: always when no PIN is asked ([asksPin] false), else once "Next" took a PIN of at
+    /// least [minPin] digits that is still typed.
+    func passwordShown(asksPin: Bool, digits: Int, minPin: Int) -> Bool {
+        !asksPin || (pinDone && digits >= minPin)
+    }
+
+    /// Whether the primary button is "Next" (a PIN to type first) rather than the screen's own.
+    func asksNext(asksPin: Bool, digits: Int, minPin: Int) -> Bool {
+        !passwordShown(asksPin: asksPin, digits: digits, minPin: minPin)
+    }
+
+    /// The keypad's digits changed: once they are gone, the keypad is shown again.
+    mutating func digitsChanged(to digits: Int) {
+        if digits == 0 { pinDone = false }
+    }
+}
+
+/// The PIN once typed, in the password step: its label, its dots and "Change PIN", which brings the keypad back with the
+/// digits as they are.
+struct EnteredPin: View {
+    @Environment(\.vettIDColors) private var colors
+    let label: String
+    let digits: Int
+    let identifier: String
+    let onChange: () -> Void
+
+    var body: some View {
+        VStack(spacing: Spacing.m) {
+            Text(label).vettIDFont(.labelLarge).foregroundStyle(colors.onSurfaceVariant)
+            PinDots(count: digits, length: PinPolicy.minLength)
+            TextLink(OnboardingStrings.pinStepChange, identifier: "\(identifier)_change", action: onChange)
+        }
+        .frame(maxWidth: .infinity)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("\(identifier)_entered")
+    }
+}
+
 extension ProgressState {
     var stepState: StepState {
         switch self {
