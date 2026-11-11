@@ -162,6 +162,7 @@ final class StagingTests: VaultUITestCase {
         if !reveal(app, row) { return fail(app, "Settings has no \"Check now\": the vault has not reported its owner check.") }
         row.tap()
 
+        expect(app, "owner_check", timeout: 30)
         expect(app, "owner_check_pin", timeout: 30)
         enterPin(app, pin)
         let field = app.secureTextFields["owner_check_password"]
@@ -201,14 +202,10 @@ final class StagingTests: VaultUITestCase {
             throw XCTSkip("The password change asks for no PIN: the vault has no phone secret.")
         }
         enterPin(app, wrongPin)
-        currentField.tap()
-        currentField.typeText(password)
-        let newField = app.secureTextFields["change_password_new"]
-        newField.tap()
-        newField.typeText(newPassword)
+        typeInto(currentField, password)
+        typeInto(app.secureTextFields["change_password_new"], newPassword)
         let confirmField = app.secureTextFields["change_password_confirm"]
-        confirmField.tap()
-        confirmField.typeText(newPassword)
+        typeInto(confirmField, newPassword)
         let primary = app.buttons["form_primary"]
         if !waitUntil(timeout: 10, { primary.isEnabled }) {
             let rule = shown(app)["password_rule"] ?? ""
