@@ -194,7 +194,8 @@ public struct OwnerCheckScreen: View {
                     }
                     .accessibilityIdentifier("owner_check_cancel")
                 }
-            }
+            },
+            bottom: { keypad }
         ) {
             VStack(alignment: .leading, spacing: Spacing.m) {
                 SmallNote(state.stagingNote)
@@ -290,31 +291,39 @@ public struct OwnerCheckScreen: View {
         }
     }
 
+    /// The keypad, fixed above the buttons (no notice above it pushes its keys past the screen's edge), with a wrong
+    /// password said over it: the PIN was taken, so the member is back here (§3.6.5 keeps neither entry). Not in the
+    /// password step, after an unlock that kept the PIN, or once the vault locked or is probably locked.
+    @ViewBuilder private var keypad: some View {
+        if !state.locked, state.watch == .none, !state.pinKept, !passwordStep {
+            VStack(spacing: Spacing.s) {
+                if badPassword {
+                    Text(OnboardingStrings.ownerCheckBadPassword)
+                        .vettIDFont(.bodySmall)
+                        .foregroundStyle(colors.error)
+                        .frame(maxWidth: .infinity)
+                        .multilineTextAlignment(.center)
+                        .announced(OnboardingStrings.ownerCheckBadPassword, .assertive)
+                        .accessibilityIdentifier("owner_check_password_error")
+                }
+                PinEntry(
+                    label: OnboardingStrings.ownerCheckPinLabel,
+                    buffer: pin,
+                    error: badPin && pin.count == 0 ? OnboardingStrings.ownerCheckBadPin : nil,
+                    failure: badPin ? OnboardingStrings.ownerCheckBadPin : nil,
+                    identifier: "owner_check_pin"
+                )
+                .disabled(!state.entriesAllowed)
+            }
+            .padding(.top, Spacing.s)
+        }
+    }
+
     @ViewBuilder private var entryFields: some View {
         if !state.pinKept, passwordStep {
             EnteredPin(label: OnboardingStrings.ownerCheckPinLabel, digits: pin.count, identifier: "owner_check_pin") {
                 steps.pinDone = false
             }
-            .disabled(!state.entriesAllowed)
-            .padding(.top, Spacing.s)
-        } else if !state.pinKept {
-            // A wrong password sent the member back to the keypad (the PIN was taken): said here, where they are.
-            if badPassword {
-                Text(OnboardingStrings.ownerCheckBadPassword)
-                    .vettIDFont(.bodySmall)
-                    .foregroundStyle(colors.error)
-                    .frame(maxWidth: .infinity)
-                    .multilineTextAlignment(.center)
-                    .announced(OnboardingStrings.ownerCheckBadPassword, .assertive)
-                    .accessibilityIdentifier("owner_check_password_error")
-            }
-            PinEntry(
-                label: OnboardingStrings.ownerCheckPinLabel,
-                buffer: pin,
-                error: badPin && pin.count == 0 ? OnboardingStrings.ownerCheckBadPin : nil,
-                failure: badPin ? OnboardingStrings.ownerCheckBadPin : nil,
-                identifier: "owner_check_pin"
-            )
             .disabled(!state.entriesAllowed)
             .padding(.top, Spacing.s)
         }

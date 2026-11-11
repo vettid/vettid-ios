@@ -139,7 +139,8 @@ public struct UnlockScreen: View {
             },
             header: {
                 VettIDSymbol.lock.image.font(.system(size: 36)).padding(.top, Spacing.l).accessibilityHidden(true)
-            }
+            },
+            bottom: { keypad }
         ) {
             VStack(alignment: .leading, spacing: Spacing.m) {
                 ForEach(UnlockBlock.blocks(for: state), id: \.self) { block in
@@ -199,8 +200,24 @@ public struct UnlockScreen: View {
     private var returnFrom: Int { Int(state.moveUnconfirmed?.from.number ?? 0) }
     private var returnTo: Int { Int(state.moveUnconfirmed?.to.number ?? 0) }
 
-    /// The keypad, the countdown and, with a check due, the password (§3.6.5: one screen for both): the keypad first, then
-    /// in its place the PIN as dots and the password (``PinThenPassword``).
+    /// The PIN's notices, the countdown and, with a check due, the password step (§3.6.5: one screen for both): the keypad
+    /// first (``keypad``, below the scroll), then in its place the PIN as dots and the password (``PinThenPassword``).
+    /// The keypad, fixed above the button, so that no notice above it ever pushes its keys past the screen's edge; gone in
+    /// the password step and wherever the screen asks for no PIN.
+    @ViewBuilder private var keypad: some View {
+        if UnlockBlock.blocks(for: state).contains(.pin), !passwordStep {
+            PinEntry(
+                label: OnboardingStrings.unlockPinLabel,
+                buffer: pin,
+                error: state.message == .badPin && pin.count == 0 ? OnboardingStrings.unlockBadPin : nil,
+                failure: state.message == .badPin ? OnboardingStrings.unlockBadPin : nil,
+                identifier: "unlock_pin"
+            )
+            .disabled(!state.pinAllowed)
+            .padding(.top, Spacing.s)
+        }
+    }
+
     @ViewBuilder private var pinEntry: some View {
         // VAULT-MESSAGING §11.14.9 "A lost answer" step 5: the previous PIN first, the new one after `device_secret`.
         switch state.pinStep {
@@ -216,16 +233,6 @@ public struct UnlockScreen: View {
             EnteredPin(label: OnboardingStrings.unlockPinLabel, digits: pin.count, identifier: "unlock_pin") { steps.pinDone = false }
                 .disabled(!state.pinAllowed)
                 .padding(.top, Spacing.s)
-        } else {
-            PinEntry(
-                label: OnboardingStrings.unlockPinLabel,
-                buffer: pin,
-                error: state.message == .badPin && pin.count == 0 ? OnboardingStrings.unlockBadPin : nil,
-                failure: state.message == .badPin ? OnboardingStrings.unlockBadPin : nil,
-                identifier: "unlock_pin"
-            )
-            .disabled(!state.pinAllowed)
-            .padding(.top, Spacing.s)
         }
         if state.waitSeconds > 0 {
             Text(OnboardingStrings.unlockWait(formatWait(state.waitSeconds)))
