@@ -77,14 +77,6 @@ public enum DeviceStrings {
         String(localized: "devices_paused", defaultValue: "Paused", bundle: .module)
     }
 
-    public static var devicesEmptyTitle: String {
-        String(localized: "devices_empty_title", defaultValue: "No agents yet", bundle: .module)
-    }
-
-    public static var devicesEmptyBody: String {
-        String(localized: "devices_empty_body", defaultValue: "Pair an agent to let an AI assistant on your computer use items you choose. It acts only while you allow it.", bundle: .module)
-    }
-
     public static var devicesErrorTitle: String {
         String(localized: "devices_error_title", defaultValue: "Could not load your devices", bundle: .module)
     }

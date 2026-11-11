@@ -133,6 +133,7 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
     /// The member's votes (VAULT-MESSAGING 0.81.3 §10.19, IOS-PLAN §4.16; ``VaultManager+Votes``), in memory only.
     @ObservationIgnored public private(set) lazy var votes: VotesManager = Self.votesManager(self)
     @ObservationIgnored public private(set) lazy var devices: DevicesManager = Self.devicesManager(self) // §10.3, memory only
+    @ObservationIgnored public private(set) lazy var pairing: PairingManager = Self.pairingManager(self) // §6.7, §10.3, with devices
     /// The canary manifest installed out of band (VAULT-RELEASES §10.1 step 9, VAULT-MESSAGING §11.10.1): used by the alternate channel instead of the published manifest only while it is newer.
     @ObservationIgnored public let canary: CanaryManifestManager
     /// The proactive release update (RELEASE-UPDATES §2): the offer and the one-step update.
@@ -597,4 +598,4 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
         if !local.enrollConfirmed, local.enrolledHere { try await confirmEnrollment(s, backup: local.backupChoice) { _ in } }
         return local.setupComplete ? .unlocked : .setup(.finishing)
     }
-}
+} // swiftlint:disable:this file_length

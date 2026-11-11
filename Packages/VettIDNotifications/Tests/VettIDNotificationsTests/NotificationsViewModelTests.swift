@@ -214,6 +214,8 @@ import VettIDVault
         #expect(m.state.sheet?.itemID == "i" && m.state.sheetGone)
         m.open(Self.item("d", "device.paired"))
         #expect(m.state.open == .deviceList)
+        m.open(Self.item("p", "device.pair.pending"))
+        #expect(m.state.open == .pairing)
         m.open(Self.item("t", "device.transferred"))
         #expect(m.state.open == .devices)
     }

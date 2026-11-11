@@ -65,6 +65,8 @@ public final class DevicesManager: DevicesRepository {
     @ObservationIgnored private let quietOps: @MainActor () throws -> any DevicesOps
     @ObservationIgnored private let selfID: @MainActor () -> String?
     @ObservationIgnored private let onDeviceGone: @MainActor (String) async throws -> Void
+    /// Also forgotten with the list (the pairing held for it, AA2): every lock, hold, wipe and deletion clears both.
+    @ObservationIgnored private let onClear: @MainActor () -> Void
     @ObservationIgnored private let reads = ReadGate()
     /// Bumped by ``clear()``: a read that started before it is not applied after it.
     @ObservationIgnored private var generation = 0
@@ -72,12 +74,14 @@ public final class DevicesManager: DevicesRepository {
 
     public init(
         ops: @escaping @MainActor () async throws -> any DevicesOps, quietOps: @escaping @MainActor () throws -> any DevicesOps,
-        selfID: @escaping @MainActor () -> String? = { nil }, onDeviceGone: @escaping @MainActor (String) async throws -> Void = { _ in }
+        selfID: @escaping @MainActor () -> String? = { nil }, onDeviceGone: @escaping @MainActor (String) async throws -> Void = { _ in },
+        onClear: @escaping @MainActor () -> Void = {}
     ) {
         self.ops = ops
         self.quietOps = quietOps
         self.selfID = selfID
         self.onDeviceGone = onDeviceGone
+        self.onClear = onClear
     }
 
     /// Forgets everything: the vault locked, was held or wiped. Not loaded first, then empty, in one step: LOADED always
@@ -88,6 +92,7 @@ public final class DevicesManager: DevicesRepository {
         load = .notLoaded
         devices = []
         removed = nil
+        onClear()
     }
 
     /// `sync.event` of kinds that change the list (§10.1).

@@ -331,7 +331,7 @@ struct AppRoot: View {
                     connections: vault.connections, connectionRequests: vault.connections, inviteInbox: inviteInbox,
                     messages: vault.messages, attachments: vault.attachments, feed: vault.feed, approvals: vault.approvals,
                     history: vault.history, historyExport: vault.historyExport, items: vault.items, sharing: vault.sharing,
-                    votes: vault.votes, devices: vault.devices, move: move
+                    votes: vault.votes, devices: vault.devices, pairing: vault.pairing, move: move
                 ) { openPortal() }
                 .environment(\.accountDeletionURL, AccountDeletion.url(origin: environment.apiOrigin))
                 .modifier(OptionalNotificationsHook(

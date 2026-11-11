@@ -100,8 +100,10 @@ private final class SingleUse: @unchecked Sendable {
 /// A sending context (SetupBaseS). It seals exactly one message (§4.3: a context MUST NOT be reused) and may export
 /// any number of secrets. Mirrors vettid-android `HpkeSender`.
 public final class HpkeSender: HpkeExporter, @unchecked Sendable {
-    private let schedule: Hpke.Schedule
+    private var schedule: Hpke.Schedule
     private let once = SingleUse()
+    private let lock = NSLock()
+    private var destroyed = false
 
     /// The encapsulated key (1,120 bytes).
     public let enc: [UInt8]
@@ -111,12 +113,38 @@ public final class HpkeSender: HpkeExporter, @unchecked Sendable {
         self.enc = enc
     }
 
+    deinit { destroy() }
+
     public func seal(aad: [UInt8], plaintext: [UInt8]) throws -> [UInt8] {
         try once.claim()
-        return try schedule.seal(aad: aad, plaintext: plaintext)
+        return try lock.withLock {
+            guard !destroyed else { throw CryptoError.used("hpke context destroyed") }
+            return try schedule.seal(aad: aad, plaintext: plaintext)
+        }
     }
 
-    public func export(_ label: String, _ length: Int) throws -> [UInt8] { try schedule.export(label, length) }
+    public func export(_ label: String, _ length: Int) throws -> [UInt8] {
+        try lock.withLock {
+            guard !destroyed else { throw CryptoError.used("hpke context destroyed") }
+            return try schedule.export(label, length)
+        }
+    }
+
+    /// Wipes the key schedule (the exporter secret included) in place; the context exports and seals nothing after it.
+    /// Also done when the context goes away. Safe to call twice.
+    public func destroy() {
+        lock.withLock {
+            destroyed = true
+            schedule.wipe()
+        }
+    }
+
+    #if DEBUG
+    /// TEST ONLY (debug builds): the exporter secret's own buffer, to check that it is zeroed in place.
+    func withExporterSecret<R>(_ body: (UnsafeBufferPointer<UInt8>) -> R) -> R {
+        lock.withLock { schedule.exporterSecret.withUnsafeBufferPointer(body) }
+    }
+    #endif
 
     /// SetupBaseS(pk_R = [recipient], [info]) with randomness from ``Randomness``.
     public static func setup(_ recipient: KemPublicKey, info: [UInt8]) throws -> HpkeSender {
@@ -151,17 +179,45 @@ public final class HpkeSender: HpkeExporter, @unchecked Sendable {
 
 /// A receiving context (SetupBaseR). It opens exactly one message. Mirrors vettid-android `HpkeRecipient`.
 public final class HpkeRecipient: HpkeExporter, @unchecked Sendable {
-    private let schedule: Hpke.Schedule
+    private var schedule: Hpke.Schedule
     private let once = SingleUse()
+    private let lock = NSLock()
+    private var destroyed = false
 
     private init(schedule: Hpke.Schedule) { self.schedule = schedule }
 
+    deinit { destroy() }
+
     public func open(aad: [UInt8], ciphertext: [UInt8]) throws -> [UInt8] {
         try once.claim()
-        return try schedule.open(aad: aad, ciphertext: ciphertext)
+        return try lock.withLock {
+            guard !destroyed else { throw CryptoError.used("hpke context destroyed") }
+            return try schedule.open(aad: aad, ciphertext: ciphertext)
+        }
     }
 
-    public func export(_ label: String, _ length: Int) throws -> [UInt8] { try schedule.export(label, length) }
+    public func export(_ label: String, _ length: Int) throws -> [UInt8] {
+        try lock.withLock {
+            guard !destroyed else { throw CryptoError.used("hpke context destroyed") }
+            return try schedule.export(label, length)
+        }
+    }
+
+    /// Wipes the key schedule (the exporter secret included) in place; the context opens and exports nothing after it.
+    /// Also done when the context goes away. Safe to call twice.
+    public func destroy() {
+        lock.withLock {
+            destroyed = true
+            schedule.wipe()
+        }
+    }
+
+    #if DEBUG
+    /// TEST ONLY (debug builds): the exporter secret's own buffer, to check that it is zeroed in place.
+    func withExporterSecret<R>(_ body: (UnsafeBufferPointer<UInt8>) -> R) -> R {
+        lock.withLock { schedule.exporterSecret.withUnsafeBufferPointer(body) }
+    }
+    #endif
 
     /// SetupBaseR(enc, sk_R, info).
     public static func setup(enc: [UInt8], key: KemPrivateKey, info: [UInt8]) throws -> HpkeRecipient {

@@ -61,6 +61,7 @@ public struct AppShell: View {
     let sharing: (any SharingRepository)?
     let votes: (any VotesRepository)?
     let devices: (any DevicesRepository)?
+    let pairing: (any PairingRepository)?
     private let move: (any MoveRepository)?
     private let onOpenPortal: @MainActor () -> Void
     /// The member's own profile photo (VAULT-MESSAGING §10.8), decoded once per photo, for the top bar's avatar, the avatar
@@ -112,6 +113,7 @@ public struct AppShell: View {
         sharing: (any SharingRepository)? = nil,
         votes: (any VotesRepository)? = nil,
         devices: (any DevicesRepository)? = nil,
+        pairing: (any PairingRepository)? = nil,
         move: (any MoveRepository)? = nil,
         onOpenPortal: @escaping @MainActor () -> Void
     ) {
@@ -145,6 +147,7 @@ public struct AppShell: View {
         self.sharing = sharing
         self.votes = votes
         self.devices = devices
+        self.pairing = pairing
         self.move = move
         self.onOpenPortal = onOpenPortal
     }
@@ -394,7 +397,7 @@ public struct AppShell: View {
             itemsDetail(route)
         case .vote, .connectionVotes:
             votesDetail(route)
-        case .device, .deviceHistory: devicesDetail(route)
+        case .device, .deviceHistory, .pair: devicesDetail(route)
         }
     }
 
