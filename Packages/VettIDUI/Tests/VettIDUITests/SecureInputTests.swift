@@ -13,7 +13,7 @@ import UIKit
         for visible in [false, true] {
             let f = UITextField()
             SecretInput.configure(f, visible: visible)
-            #expect(f.textContentType == UITextContentType(rawValue: ""))
+            #expect(f.textContentType == .oneTimeCode)
             #expect(f.textContentType != .password && f.textContentType != .newPassword && f.textContentType != .username)
             #expect(f.autocorrectionType == .no && f.spellCheckingType == .no)
             #expect(f.smartQuotesType == .no && f.smartDashesType == .no && f.smartInsertDeleteType == .no)
