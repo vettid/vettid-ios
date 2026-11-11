@@ -247,6 +247,13 @@ public struct SecretTextInput: UIViewRepresentable {
         if f.text != text { f.text = text }
     }
 
+    /// One line high, as wide as offered: a text field's own size gives way vertically, so without this it would fill a
+    /// height left open (inside ``SecureContainer``, which measures its content with no height limit) and widen the form.
+    public func sizeThatFits(_ proposal: ProposedViewSize, uiView: UITextField, context: Context) -> CGSize? {
+        let natural = uiView.intrinsicContentSize
+        return CGSize(width: proposal.width ?? natural.width, height: natural.height)
+    }
+
     /// Leaves no text behind in a secure field that goes (the save prompt's trigger).
     public static func dismantleUIView(_ f: UITextField, coordinator: Coordinator) { f.text = "" }
 }
