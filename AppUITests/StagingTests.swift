@@ -162,6 +162,7 @@ final class StagingTests: VaultUITestCase {
         if !reveal(app, row) { return fail(app, "Settings has no \"Check now\": the vault has not reported its owner check.") }
         row.tap()
 
+        expect(app, "owner_check", timeout: 30)
         expect(app, "owner_check_pin", timeout: 30)
         enterPin(app, pin)
         let field = app.secureTextFields["owner_check_password"]
