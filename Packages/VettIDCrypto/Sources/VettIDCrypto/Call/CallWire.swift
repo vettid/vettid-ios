@@ -62,6 +62,8 @@ public enum CallWire {
     public static func answer(ek: [UInt8], callId: String) throws -> Answered {
         guard ek.count == Suite.ekSize else { throw CryptoError.key("call ek size") }
         let sender = try HpkeSender.setup(KemPublicKey.parse(ek), info: callInfo(callId))
+        // The exporter secret `k_call` comes from does not outlive this call.
+        defer { sender.destroy() }
         var k = try sender.export(labelCallKey, keySize)
         return Answered(enc: sender.enc, kCall: try mediaKey(&k, callId))
     }
@@ -70,6 +72,7 @@ public enum CallWire {
     public static func accept(offerKey: KemPrivateKey, enc: [UInt8], callId: String) throws -> [UInt8] {
         guard enc.count == Suite.encSize else { throw CryptoError.key("call enc size") }
         let r = try HpkeRecipient.setup(enc: enc, key: offerKey, info: callInfo(callId))
+        defer { r.destroy() }
         var k = try r.export(labelCallKey, keySize)
         return try mediaKey(&k, callId)
     }

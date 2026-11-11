@@ -43,7 +43,7 @@ import VettIDCrypto
             negotiated: negotiated, ek: [UInt8](repeating: 0x5B, count: 8)
         )
         let outgoing = OutgoingCall(
-            callId: callId, connectionId: "conn-1", media: "audio", exp: Date(), ice: ice, offered: [1],
+            callId: callId, connectionId: "conn-1", media: "audio", exp: Date(), ice: ice, offered: [1], pinnedFingerprint: "0000",
             offerKey: try CallWire.newOfferKey()
         )
         let accepted = AcceptedCall(callId: callId, sdp: sdp, keys: keys)
@@ -85,7 +85,8 @@ extension VaultDeviceTests {
             }
         }
         // A clean list reports nothing skipped; one bad entry among good ones is counted, never silent.
-        let good = #"{"call_id":"c1","connection_id":"k","direction":"in","media":"audio","state":"ended","started_at":"t"}"#
+        let good = #"{"call_id":"c1","connection_id":"k","direction":"in","media":"audio","#
+            + #""state":"ended","started_at":"2026-10-12T10:00:00.000Z"}"#
         for (entries, skipped) in [([good], 0), ([good, #"{"call_id":"c2"}"#], 1), ([#"{"x":1}"#, "5", good], 2)] {
             let list = Task { try await api.callList(limit: 5) }
             let req = try v.open(try await relay.nextDeposit().payload)

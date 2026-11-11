@@ -27,6 +27,8 @@ public enum CallLimits {
     public static let ephemeralTTL: TimeInterval = 30
     /// How long the app waits for the answer to `call.start` before it gives the call up.
     public static let startTimeout: TimeInterval = 15
+    /// The most entries one `call.list` may ask for (the vault keeps the latest 200 calls).
+    public static let maxListLimit = 200
 }
 
 /// `call.end` reasons (§10.10).
@@ -53,7 +55,7 @@ public struct CallMessageError: Error, Equatable, Sendable, CustomStringConverti
 /// The two frame keys of a call on this device (``CallMedia``): ``send()`` encrypts the frames this device sends,
 /// ``receive()`` decrypts the other device's. They exist only on the two devices of the call. ``destroy()`` wipes them.
 ///
-/// Only ``VaultApi/callAnswer(_:sdp:)`` and ``VaultApi/callAccept(_:event:pinnedFingerprint:)`` make these in the app
+/// Only ``VaultApi/callAnswer(_:sdp:)`` and ``VaultApi/callAccept(_:event:)`` make these in the app
 /// (vettid-android marks the constructor `MadeByCallApi`: an `AcceptedCall` or `CallKeys` says "every signature was
 /// checked"). Here the initializer is internal to the package; a test of code built on these types uses `@testable`.
 public final class CallKeys: @unchecked Sendable, CustomStringConvertible, CustomDebugStringConvertible, CustomReflectable {
@@ -121,9 +123,16 @@ public final class OutgoingCall: @unchecked Sendable, CustomStringConvertible, C
     /// The servers this device may use, and no others.
     public let ice: CallWire.IceConfig
     let offered: [Int]
+    /// The fingerprint of the connection that was called (§10.8), as the app showed it when the call was placed: the
+    /// answer's `peer_ik` must be that connection's identity, not any other the vault could name.
+    let pinnedFingerprint: String
     private let offerKey: KemPrivateKey
 
-    init(callId: String, connectionId: String, media: String, exp: Date, ice: CallWire.IceConfig, offered: [Int], offerKey: KemPrivateKey) {
+    init(
+        callId: String, connectionId: String, media: String, exp: Date, ice: CallWire.IceConfig, offered: [Int],
+        pinnedFingerprint: String, offerKey: KemPrivateKey
+    ) {
+        self.pinnedFingerprint = pinnedFingerprint
         self.callId = callId
         self.connectionId = connectionId
         self.media = media
@@ -142,12 +151,25 @@ public final class OutgoingCall: @unchecked Sendable, CustomStringConvertible, C
     public var customMirror: Mirror { Mirror(self, children: [:]) }
 }
 
+/// The single use of an ``IncomingCall``: the first ``claim()`` is true, every later one false.
+final class AnswerOnce: @unchecked Sendable {
+    private let lock = NSLock()
+    private var claimed = false
+
+    func claim() -> Bool {
+        lock.withLock {
+            defer { claimed = true }
+            return !claimed
+        }
+    }
+}
+
 /// A verified `call.offer`: a connection is calling. Nothing of it is used before every signature has checked out.
 public struct IncomingCall: Sendable, CustomStringConvertible, CustomDebugStringConvertible, CustomReflectable {
     public let callId: String
     public let connectionId: String
     public let media: String
-    /// The caller's SDP offer, without the media-suite attribute: ready for the media stack.
+    /// The caller's SDP offer, without the media-suite attribute and the `a=ssrc` lines: ready for the media stack.
     public let sdp: String
     /// When the offer expires, by the vault's clock.
     public let exp: Date
@@ -161,6 +183,9 @@ public struct IncomingCall: Sendable, CustomStringConvertible, CustomDebugString
 
     /// The caller's media suites, as sent (numbers this build does not know included).
     public var offered: [Int] { negotiated.offered }
+
+    /// Set by the one ``VaultApi/callAnswer(_:sdp:)`` this call gets: a second would encapsulate to the caller's key again.
+    let answerOnce = AnswerOnce()
 
     public var description: String { "IncomingCall(\(callId))" }
     public var debugDescription: String { description }
@@ -232,11 +257,21 @@ public struct CallRecord: Equatable, Sendable {
     public let answeredAt: String?
     public let endedAt: String?
 
+    private static func isTimestamp(_ s: String) -> Bool {
+        (try? Timestamps.parseMillis(s)) != nil || (try? Timestamps.parseSeconds(s)) != nil
+    }
+
     init?(_ o: JsonObject) {
         guard let callId = VaultJSON.string(o, "call_id"), let connectionId = VaultJSON.string(o, "connection_id"),
-              let direction = VaultJSON.string(o, "direction"), let media = VaultJSON.string(o, "media"),
-              let state = VaultJSON.string(o, "state"), let startedAt = VaultJSON.string(o, "started_at")
+              let direction = VaultJSON.string(o, "direction"), ["in", "out"].contains(direction),
+              let media = VaultJSON.string(o, "media"),
+              let state = VaultJSON.string(o, "state"), ["ringing", "active", "ended"].contains(state),
+              let startedAt = VaultJSON.string(o, "started_at"), Self.isTimestamp(startedAt)
         else { return nil }
+        // A timestamp that is present must be one: an entry the app cannot read is not shown, and is counted as skipped.
+        for name in ["answered_at", "ended_at"] {
+            if o.has(name), !(VaultJSON.string(o, name).map(Self.isTimestamp) ?? false) { return nil }
+        }
         self.callId = callId
         self.connectionId = connectionId
         self.direction = direction
@@ -347,9 +382,13 @@ extension VaultApi {
     /// durable `call.end{hangup}` for the same `call_id` follows, so that a call the vault did place does not ring on for
     /// nobody.
     public func callStart(
-        _ connectionId: String, sdp: String, suites: [MediaSuite] = MediaSuite.default, media: String = CallWire.mediaAudio,
+        _ connectionId: String, pinnedFingerprint: String, sdp: String, suites: [MediaSuite] = MediaSuite.default,
+        media: String = CallWire.mediaAudio,
         timeout: TimeInterval = CallLimits.startTimeout
     ) async throws -> OutgoingCall {
+        // The call is bound to the identity the member sees: no fingerprint, no call. Nothing is sent.
+        guard !pinnedFingerprint.isEmpty else { throw CallMessageError("pinned fingerprint") }
+        guard media == CallWire.mediaAudio || media == CallWire.mediaVideo else { throw CallMessageError("media") }
         let callId = device.newRequestID()
         let offered = try checked("media suites") { try CallMedia.offerOf(MediaSuite.formOne(suites)) }
         let offer = try checked("media suites") { try CallMedia.sdpWithOffer(sdp, offered: offered) }
@@ -367,7 +406,7 @@ extension VaultApi {
             let exp = try checked("exp") { try Timestamps.parseMillis(try o.need("exp")) }
             return OutgoingCall(
                 callId: callId, connectionId: connectionId, media: media, exp: exp, ice: try iceOf(o, callId), offered: offered,
-                offerKey: key
+                pinnedFingerprint: pinnedFingerprint, offerKey: key
             )
         } catch let e as VaultOpError {
             // The vault's own refusal: there is no call.
@@ -411,7 +450,8 @@ extension VaultApi {
             try CallMedia.choose(offered: try CallMedia.offeredIn(sdp), supported: MediaSuite.formOne(suites))
         }
         return IncomingCall(
-            callId: callId, connectionId: try o.need("connection_id"), media: media, sdp: CallMedia.sdpWithout(sdp), exp: exp,
+            callId: callId, connectionId: try o.need("connection_id"), media: media,
+            sdp: CallMedia.sdpWithoutSsrc(CallMedia.sdpWithout(sdp)), exp: exp,
             ringFor: ringFor, ice: ice, negotiated: negotiated, ek: ek
         )
     }
@@ -424,6 +464,8 @@ extension VaultApi {
         let chosen = call.negotiated
         let answer = CallMedia.sdpWithChoice(sdp, chosen: chosen.chosen)
         try checkSdp(answer)
+        // An offer is answered once: a second answer would be a second share for the same call. Nothing is sent.
+        guard call.answerOnce.claim() else { throw CallMessageError("call already answered") }
         var a = try checked("key agreement") { try CallWire.answer(ek: call.ek, callId: call.callId) }
         defer { Bytes.wipe(&a.kCall) }
         let keys = try CallKeys.derive(&a.kCall, chosen, callId: call.callId, caller: false)
@@ -439,23 +481,24 @@ extension VaultApi {
         }
     }
 
-    /// Checks the `call.answer` event for [call] on the calling device: `peer_ik` against [pinnedFingerprint], the
+    /// Checks the `call.answer` event for [call] on the calling device: `peer_ik` against the fingerprint of the
+    /// connection [call] was placed to (``callStart(_:pinnedFingerprint:sdp:suites:media:timeout:)``), the
     /// answerer's share under it, the SDP's one Opus audio section and the choice of media suite; then derives the call's
     /// keys. The ephemeral KEM key is destroyed when the answer is accepted; after a ``CallMessageError`` the caller of
     /// this function destroys [call] (the call is over).
-    public func callAccept(_ call: OutgoingCall, event: VaultMessage, pinnedFingerprint: String) throws -> AcceptedCall {
+    public func callAccept(_ call: OutgoingCall, event: VaultMessage) throws -> AcceptedCall {
         let o = event.object
         guard try o.callId() == call.callId else { throw CallMessageError("answer for another call") }
         let sdp = try sdpOf(o)
         let enc = try o.b64("enc", Suite.encSize)
         let shared = CallWire.shareMessage(role: CallWire.roleAnswer, callId: call.callId, media: "", share: enc)
-        try verifyPeerShare(o, shared, pinnedFingerprint)
+        try verifyPeerShare(o, shared, call.pinnedFingerprint)
         let chosen = try checked("media suites") { try CallMedia.chosenIn(sdp, offered: call.offered) }
         var kCall = try checked("key agreement") { try CallWire.accept(offerKey: call.key(), enc: enc, callId: call.callId) }
         call.destroy()
         defer { Bytes.wipe(&kCall) }
         return AcceptedCall(
-            callId: call.callId, sdp: CallMedia.sdpWithout(sdp),
+            callId: call.callId, sdp: CallMedia.sdpWithoutSsrc(CallMedia.sdpWithout(sdp)),
             keys: try CallKeys.derive(&kCall, chosen, callId: call.callId, caller: true)
         )
     }
@@ -499,8 +542,8 @@ extension VaultApi {
     /// release's features). An entry without a required member is left out, never silently: ``CallList/skipped`` counts
     /// them, so that the screen can say some calls could not be shown.
     public func callList(limit: Int = 50) async throws -> CallList {
-        // A limit below 1 is refused before anything is sent (the vault's range is 1 to 200).
-        guard limit >= 1 else { throw CallMessageError("limit") }
+        // A limit outside 1 to 200 is refused before anything is sent.
+        guard (1...CallLimits.maxListLimit).contains(limit) else { throw CallMessageError("limit") }
         let o = VaultJSON.object(try await device.op("call.list", body: JsonBuilder().uint("limit", UInt64(limit)).bytes()))
         // `calls` that is not an array is a failed decode, as in vettid-android; an entry that is malformed is left out.
         let calls: [JsonValue]

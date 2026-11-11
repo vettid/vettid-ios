@@ -52,19 +52,23 @@ private func parseCandidate(_ v: JsonValue) -> CallCandidate? {
     var index: Int?
     switch o["sdp_mline_index"] {
     case nil, .null?: index = nil
-    case .number?: guard let i = try? o["sdp_mline_index"]?.asUint(min: 0, max: UInt64(Int32.max)) else { return nil }
+    case .number?: guard let i = try? o["sdp_mline_index"]?.asUint(min: 0, max: UInt64(CallLimits.maxMLineIndex)) else { return nil }
         index = Int(i)
     default: return nil
     }
+    // The limits of `call.ice` (§10.10), in bytes: a candidate that is longer, or a `sdp_mid` that is, is left out.
+    guard candidate.utf8.count <= CallLimits.maxCandidate, (mid?.utf8.count ?? 0) <= CallLimits.maxSdpMid else { return nil }
     return CallCandidate(candidate, sdpMid: mid, sdpMLineIndex: index)
 }
 
 private func parseIce(_ m: VaultMessage) -> CallIce? {
     let o = m.object
     guard let id = VaultJSON.string(o, "call_id") else { return nil }
-    let list = ((try? o.array("candidates")) ?? []).compactMap(parseCandidate)
-        .filter { $0.candidate.utf16.count <= CallLimits.maxCandidate }.prefix(CallLimits.maxCandidates)
-    return list.isEmpty ? nil : CallIce(callId: id, candidates: Array(list))
+    let raw = (try? o.array("candidates")) ?? []
+    // More than 16 candidates is not a message a vault forwards: it is refused whole, not cut to 16.
+    guard raw.count <= CallLimits.maxCandidates else { return nil }
+    let list = raw.compactMap(parseCandidate)
+    return list.isEmpty ? nil : CallIce(callId: id, candidates: list)
 }
 
 private func parseEnd(_ m: VaultMessage) -> CallEnded? {

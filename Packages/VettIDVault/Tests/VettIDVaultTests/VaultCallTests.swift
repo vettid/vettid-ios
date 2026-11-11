@@ -29,6 +29,7 @@ extension VaultDeviceTests {
         }
     }
 
+    static let callFp = "0000 1111 2222 3333 4444 5555 6666 7777"
     static let callSdp = "v=0\r\no=- 1 2 IN IP4 127.0.0.1\r\ns=-\r\nt=0 0\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\na=rtpmap:111 opus/48000/2\r\n"
     static let secondAudio = "m=audio 9 UDP/TLS/RTP/SAVPF 111\r\na=rtpmap:111 opus/48000/2\r\n"
 
@@ -53,7 +54,7 @@ extension VaultDeviceTests {
         let sdp = Self.callSdp
 
         // An engine that can do suites 2 and 1: form 1 offers suite 1 only (VAULT-MESSAGING §10.10 "Call forms", rule 3).
-        let starting = Task { try await api.callStart("conn-1", sdp: sdp, suites: MediaSuite.allCases) }
+        let starting = Task { try await api.callStart("conn-1", pinnedFingerprint: peer.pinned, sdp: sdp, suites: MediaSuite.allCases) }
         let req = try v.open(try await relay.nextDeposit().payload)
         #expect(req.type == "call.start")
         #expect(req.exp == nil)
@@ -95,12 +96,9 @@ extension VaultDeviceTests {
         // consistent in itself, with its own `peer_ik`: not the connection the member called.
         for bad in [try answer(voucher: other.vault), try answer(voucher: other.vault, peerIk: other.vault.publicKey)] {
             let ev = try await take(bad)
-            #expect(throws: CallMessageError.self) { try api.callAccept(call, event: ev, pinnedFingerprint: peer.pinned) }
+            #expect(throws: CallMessageError.self) { try api.callAccept(call, event: ev) }
         }
-        // And the right answer checked against another connection's identity, or against none.
         let right = try await take(try answer())
-        #expect(throws: CallMessageError.self) { try api.callAccept(call, event: right, pinnedFingerprint: other.pinned) }
-        #expect(throws: CallMessageError.self) { try api.callAccept(call, event: right, pinnedFingerprint: "") }
 
         // A share that was swapped on the way, an answer without the suite, a suite that was not offered, an answer for
         // another call: unusable. And an answer with a second media section: its audio would play outside the frame
@@ -110,12 +108,12 @@ extension VaultDeviceTests {
         let others = [swappedShare, try answer(sdpAnswer: sdp), try answer(sdpAnswer: CallMedia.sdpWithChoice(sdp, chosen: .aes256Gcm)), try answer(sdpAnswer: twoSections)]
         for bad in others {
             let ev = try await take(bad)
-            #expect(throws: CallMessageError.self, "\(bad.prefix(60))") { try api.callAccept(call, event: ev, pinnedFingerprint: peer.pinned) }
+            #expect(throws: CallMessageError.self, "\(bad.prefix(60))") { try api.callAccept(call, event: ev) }
         }
         let elsewhere = try await take(try answer().replacingOccurrences(of: callId, with: String(callId.dropLast()) + "1"))
-        #expect(throws: CallMessageError.self) { try api.callAccept(call, event: elsewhere, pinnedFingerprint: peer.pinned) }
+        #expect(throws: CallMessageError.self) { try api.callAccept(call, event: elsewhere) }
         // None of that spent the call's key: the right answer still works.
-        let accepted = try api.callAccept(call, event: try await take(try answer()), pinnedFingerprint: peer.pinned)
+        let accepted = try api.callAccept(call, event: try await take(try answer()))
         #expect(accepted.sdp == sdp, "the media stack gets the SDP without VettID's attribute")
         #expect(accepted.keys.suite == .aes128Gcm)
         #expect(try accepted.keys.send() == fromCaller)
@@ -126,10 +124,10 @@ extension VaultDeviceTests {
         #expect(throws: VaultStateError.self) { try accepted.keys.receive() }
         // The ephemeral key is gone with the answer: the same answer taken again (a replay) finds no key.
         #expect(throws: CryptoError.self) { try call.key().seed() }
-        #expect(throws: CallMessageError.self) { try api.callAccept(call, event: right, pinnedFingerprint: peer.pinned) }
+        #expect(throws: CallMessageError.self) { try api.callAccept(call, event: right) }
 
         // A refusal is the vault's code.
-        let refused = Task { try await api.callStart("conn-1", sdp: sdp) }
+        let refused = Task { try await api.callStart("conn-1", pinnedFingerprint: peer.pinned, sdp: sdp) }
         let r2 = try v.open(try await relay.nextDeposit().payload)
         try await d.handle(v.msg(try #require(v.keyring.current()).seal(Inner(id: Ulid.new(), type: r2.type, ts: Date(), re: r2.id, status: Inner.statusError, error: InnerError("busy")))))
         do {
@@ -141,7 +139,7 @@ extension VaultDeviceTests {
 
         // An ICE configuration signed by anyone but this device's vault, or for another call, is refused.
         #expect(await relay.noDeposit(within: 0.3), "the vault refused: there is no call to end")
-        let forged = Task { try await api.callStart("conn-1", sdp: sdp) }
+        let forged = Task { try await api.callStart("conn-1", pinnedFingerprint: peer.pinned, sdp: sdp) }
         let r3 = try v.open(try await relay.nextDeposit().payload)
         let id3 = try StrictJson.parseObject(r3.body).string("call_id")
         let cfg = try CallWire.marshalIce(CallWire.IceConfig(callId: id3, exp: Date(timeIntervalSince1970: Date().timeIntervalSince1970.rounded(.down) + 600), servers: [CallWire.IceServer(urls: ["turn:evil.example:3478"], username: "u", credential: "p")]))
@@ -158,7 +156,7 @@ extension VaultDeviceTests {
         #expect(String(bytes: rungOff.body, encoding: .utf8) == #"{"call_id":"\#(id3)","reason":"hangup"}"#)
 
         // The answer names another call than the one asked for: refused, and rung off.
-        let wrongCall = Task { try await api.callStart("conn-1", sdp: sdp) }
+        let wrongCall = Task { try await api.callStart("conn-1", pinnedFingerprint: peer.pinned, sdp: sdp) }
         let r4 = try v.open(try await relay.nextDeposit().payload)
         let id4 = try StrictJson.parseObject(r4.body).string("call_id")
         let otherId = String(id4.dropLast()) + (id4.hasSuffix("1") ? "2" : "1")
@@ -167,10 +165,10 @@ extension VaultDeviceTests {
         #expect(try v.open(try await relay.nextDeposit().payload).type == "call.end")
 
         // The device's own SDP is held to the same shape.
-        await #expect(throws: CallMessageError.self) { _ = try await api.callStart("conn-1", sdp: sdp + "m=video 9 UDP/TLS/RTP/SAVPF 96\r\n") }
+        await #expect(throws: CallMessageError.self) { _ = try await api.callStart("conn-1", pinnedFingerprint: peer.pinned, sdp: sdp + "m=video 9 UDP/TLS/RTP/SAVPF 96\r\n") }
         // Guard: a form 1 `call.start` never offers anything but [1]. An engine of suite 2 alone has nothing form 1 may
         // offer: refused before anything leaves.
-        await #expect(throws: CallMessageError.self) { _ = try await api.callStart("conn-1", sdp: sdp, suites: [.aes256Gcm]) }
+        await #expect(throws: CallMessageError.self) { _ = try await api.callStart("conn-1", pinnedFingerprint: peer.pinned, sdp: sdp, suites: [.aes256Gcm]) }
         #expect(await relay.noDeposit(within: 0.3), "nothing left the phone")
     }
 
@@ -311,7 +309,7 @@ extension VaultDeviceTests {
         relay.refuseStatus = 503
         relay.refuseDeposits = "unavailable"
         await #expect(throws: RelayError.self) { try await api.callRinging(callId) }
-        await #expect(throws: RelayError.self) { _ = try await api.callStart("conn-1", sdp: sdp) }
+        await #expect(throws: RelayError.self) { _ = try await api.callStart("conn-1", pinnedFingerprint: Self.callFp, sdp: sdp) }
         await #expect(throws: RelayError.self) { _ = try await api.callIce(callId, [CallCandidate("c")]) }
         // The relay's answers were lost, as far as the app knows: `call.start` is not kept, but a hang-up for its call is.
         #expect(try savedState(store).outbox.map(\.type) == ["call.end"])
@@ -337,7 +335,7 @@ extension VaultDeviceTests {
         #expect(await relay.noDeposit(within: 0.3))
 
         // `callStart` without an answer: the call may exist in the vault, so its hang-up follows.
-        await #expect(throws: VaultStateError.self) { _ = try await api.callStart("conn-1", sdp: sdp, timeout: 0.3) }
+        await #expect(throws: VaultStateError.self) { _ = try await api.callStart("conn-1", pinnedFingerprint: Self.callFp, sdp: sdp, timeout: 0.3) }
         let started = try v.open(try await relay.nextDeposit().payload)
         #expect(started.type == "call.start")
         let after = try v.open(try await relay.nextDeposit().payload)
@@ -375,13 +373,13 @@ extension VaultDeviceTests {
         }
         let call = OutgoingCall(
             callId: "01JB2Z6V9K3M4N5P6Q7R8S9T50", connectionId: "c", media: "audio", exp: Date().addingTimeInterval(45),
-            ice: CallWire.IceConfig(callId: "01JB2Z6V9K3M4N5P6Q7R8S9T50", exp: Date().addingTimeInterval(45), servers: []), offered: [1],
+            ice: CallWire.IceConfig(callId: "01JB2Z6V9K3M4N5P6Q7R8S9T50", exp: Date().addingTimeInterval(45), servers: []), offered: [1], pinnedFingerprint: peer.pinned,
             offerKey: try CallWire.newOfferKey()
         )
         for body in ["{}", #"{"call_id":"01JB2Z6V9K3M4N5P6Q7R8S9T50","sdp":"x","enc":"!!"}"#] {
             try await d.handle(try v.seal("call.answer", body))
             let ev = try await d.awaitEvent("call.answer")
-            #expect(throws: CallMessageError.self, "\(body)") { try api.callAccept(call, event: ev, pinnedFingerprint: peer.pinned) }
+            #expect(throws: CallMessageError.self, "\(body)") { try api.callAccept(call, event: ev) }
         }
         call.destroy()
     }

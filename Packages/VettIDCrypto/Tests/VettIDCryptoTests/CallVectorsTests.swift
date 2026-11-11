@@ -99,6 +99,30 @@ import Testing
         }
     }
 
+    /// The exporter secret `k_call` comes from is zeroed in its own buffer once the context is destroyed, which
+    /// `CallWire.answer` and `accept` do right after the export; the context then exports and seals nothing.
+    @Test func theHpkeExporterSecretIsWipedInPlace() throws {
+        let info = Array(try d.str("info").utf8)
+        let r = try HpkeRecipient.setup(enc: enc, key: offerKey, info: info)
+        let s = try deterministic(try d.hex("answer_randomness_hex")) { try HpkeSender.setup(KemPublicKey.parse(ek), info: info) }
+        let exporter = try d.hex("exporter_hex")
+        let rBase = r.withExporterSecret { $0.baseAddress }
+        let sBase = s.withExporterSecret { $0.baseAddress }
+        #expect(r.withExporterSecret { $0.contains { $0 != 0 } } && s.withExporterSecret { $0.contains { $0 != 0 } })
+        same("export before the wipe", exporter, try r.export(CallWire.labelCallKey, CallWire.keySize))
+        r.destroy()
+        s.destroy()
+        #expect(r.withExporterSecret { $0.baseAddress } == rBase, "wiped in place (recipient)")
+        #expect(s.withExporterSecret { $0.baseAddress } == sBase, "wiped in place (sender)")
+        #expect(r.withExporterSecret { $0.allSatisfy { $0 == 0 } })
+        #expect(s.withExporterSecret { $0.allSatisfy { $0 == 0 } })
+        expectCrypto(.used) { _ = try r.export(CallWire.labelCallKey, CallWire.keySize) }
+        expectCrypto(.used) { _ = try s.export(CallWire.labelCallKey, CallWire.keySize) }
+        r.destroy() // twice is safe
+        // The call functions still give the vector's key: they destroy the context after the export, not before.
+        same("k_call", kCall, try CallWire.accept(offerKey: offerKey, enc: enc, callId: callId))
+    }
+
     @Test func theAnswererProducesTheVectorsEncAndKey() throws {
         let a = try deterministic(try d.hex("answer_randomness_hex")) { try CallWire.answer(ek: ek, callId: callId) }
         same("enc", enc, a.enc)
