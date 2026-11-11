@@ -126,6 +126,34 @@ import VettIDUI
         #expect(PinThenPassword().passwordShown(asksPin: false, digits: 0, minPin: 6), "the PIN kept: the password only")
     }
 
+    /// The steps as the member sees them, with the check due: the keypad (no field); after "Next" the password field and
+    /// no keypad key; the digits taken by "Unlock" or dropped (backgrounding) bring the keypad back; "Change PIN"
+    /// (``PinThenPassword/pinDone`` false) too; a wrong PIN shows the keypad.
+    @Test func theStepsFollowThePin() async throws {
+        var due = ok
+        due.checkDue = true
+        let pin = typed(6)
+        let window = host(UnlockScreen(state: due, actions: NoUnlockActions(), pin: pin, steps: PinThenPassword(pinDone: true)))
+        #expect(textFields(in: window).count == 1, "the password step")
+        pin.clear()
+        for _ in 0..<10 where !textFields(in: window).isEmpty {
+            window.layoutIfNeeded()
+            try await Task.sleep(for: .milliseconds(30))
+        }
+        #expect(textFields(in: window).isEmpty, "the digits gone: the keypad again")
+        window.isHidden = true
+
+        let back = host(UnlockScreen(state: due, actions: NoUnlockActions(), pin: typed(6), steps: PinThenPassword(pinDone: false)))
+        #expect(textFields(in: back).isEmpty, "Change PIN: the keypad, the digits kept")
+        back.isHidden = true
+
+        var wrong = due
+        wrong.message = .badPin
+        let bad = host(UnlockScreen(state: wrong, actions: NoUnlockActions()))
+        #expect(textFields(in: bad).isEmpty, "a wrong PIN: the keypad")
+        bad.isHidden = true
+    }
+
     /// The keypad stays fixed above the buttons on an iPhone 15 or 16e at the usual text sizes; on an SE, or at an
     /// accessibility size, it scrolls with the form so that the notices above it keep room.
     @Test func theKeypadIsFixedOnlyWhereTheNoticesKeepRoom() {

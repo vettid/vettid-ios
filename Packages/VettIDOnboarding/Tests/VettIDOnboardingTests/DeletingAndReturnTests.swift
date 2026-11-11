@@ -69,6 +69,33 @@ import VettIDDataTesting
         #expect(vault.returnPins.count == 2 && !vm.state.returnAsksPin)
     }
 
+    /// The way back waits while the owner check gates it (due, held, or locked after ten checks), as the vault's release
+    /// update refuses it then: no confirmation, nothing sent, the PIN and password dropped. Only the idle lock (release L)
+    /// does not gate it: the return then starts with the PIN alone.
+    @Test func theWayBackWaitsForTheCheck() async {
+        vault.unconfirmedMove = Self.move(failed: true)
+        let vm = await unlockModel()
+        vm.ownerCheck(due: true, lockedByChecks: false)
+        #expect(vm.state.returnGated && vm.state.checkDue)
+        vm.askReturn()
+        #expect(!vm.state.returnConfirm)
+        vm.setPin("402817")
+        vm.setPassword("pw")
+        vm.confirmReturn()
+        #expect(vault.returnPins.isEmpty && vm.state.pin.isEmpty && vm.state.password.isEmpty && !vm.state.returnAsksPin)
+        vm.ownerCheck(due: false, lockedByChecks: true)
+        #expect(vm.state.returnGated)
+
+        vm.ownerCheck(due: false, lockedByChecks: false, idleLocked: IdleLocked(afterSeconds: 3600))
+        #expect(!vm.state.returnGated && vm.state.checkDue)
+        vm.askReturn()
+        #expect(vm.state.returnConfirm)
+        vm.setPin("402817")
+        vm.setPassword("pw")
+        vm.confirmReturn()
+        #expect(vault.returnPins == ["402817"] && vm.state.password.isEmpty, "the PIN only; the password does not stay")
+    }
+
     /// Check again: "not finished yet" while listed, the unreachable text, nothing once gone; the bound's state followed.
     @Test func checkAgainSaysWhatItFound() async {
         vault.deletion = VaultDeletion(since: Date(), until: Date())

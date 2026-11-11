@@ -73,6 +73,8 @@ public struct OwnerCheckScreen: View {
     /// The screen's height, for whether the keypad stays fixed above the buttons (``PinThenPassword/keypadFixed(height:typeSize:)``).
     @State private var height: CGFloat = .infinity
     @Environment(\.dynamicTypeSize) private var typeSize
+    /// VoiceOver's cursor: to the password on "Next", back to the keypad on "Change PIN".
+    @AccessibilityFocusState private var focus: PinThenPassword.Focus?
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.vettIDColors) private var colors
 
@@ -130,7 +132,7 @@ public struct OwnerCheckScreen: View {
 
     /// The keypad shows and the check can be answered: "Next" takes the PIN on to the password.
     private var asksNext: Bool {
-        state.watch == .none && !state.locked
+        state.watch == .none && !state.locked && !state.busy
             && steps.asksNext(asksPin: !state.pinKept, digits: pin.count, minPin: OwnerCheckScreenState.minPin)
     }
 
@@ -176,6 +178,7 @@ public struct OwnerCheckScreen: View {
             onPrimary: {
                 if asksNext {
                     steps.pinDone = true
+                    focus = .password
                 } else if state.watch == .silent {
                     actions.checkAgain()
                 } else {
@@ -228,6 +231,8 @@ public struct OwnerCheckScreen: View {
         .onDisappear { forgetSecrets() }
         // Digits taken by the submit or dropped: the keypad again.
         .onChange(of: pin.count) { _, digits in steps.digitsChanged(to: digits) }
+        // The password typed goes with its step (back to the keypad, the PIN taken or dropped).
+        .onChange(of: passwordStep) { _, shown in if !shown, !state.password.isEmpty { actions.setPassword("") } }
         // Locked, or probably locked: digits typed on the hidden keypad do not wait in its buffer.
         .onChange(of: state.locked) { _, locked in
             if locked { pin.clear() }
@@ -323,6 +328,7 @@ public struct OwnerCheckScreen: View {
                     identifier: "owner_check_pin"
                 )
                 .disabled(!state.entriesAllowed)
+                .accessibilityFocused($focus, equals: .keypad)
             }
             .padding(.top, Spacing.s)
         }
@@ -332,6 +338,7 @@ public struct OwnerCheckScreen: View {
         if !state.pinKept, passwordStep {
             EnteredPin(label: OnboardingStrings.ownerCheckPinLabel, digits: pin.count, identifier: "owner_check_pin") {
                 steps.pinDone = false
+                focus = .keypad
             }
             .disabled(!state.entriesAllowed)
             .padding(.top, Spacing.s)
@@ -348,6 +355,7 @@ public struct OwnerCheckScreen: View {
                 onSubmit: submit
             )
             .disabled(!state.entriesAllowed)
+            .accessibilityFocused($focus, equals: .password)
             .accessibilityIdentifier("owner_check_password")
         }
     }

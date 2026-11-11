@@ -84,6 +84,9 @@ public struct UnlockState: Equatable, Sendable, CustomStringConvertible, CustomD
     public var password = ""
     /// The vault locked after ten failed checks (§3.6.4; from the owner check).
     public var lockedByOwnerCheck = false
+    /// The check is due or held, or locked the vault (not only the idle lock): the way back to release N waits for it, as
+    /// the vault's release update refuses it then (§3.6.5).
+    public var returnGated = false
     /// (Release L, VAULT-MESSAGING §3.6.8) The vault locked itself because no check was passed in time: said here, with the
     /// unlock and the check on the same screen.
     public var idleLocked: IdleLocked?

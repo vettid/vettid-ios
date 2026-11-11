@@ -180,6 +180,9 @@ struct PinThenPassword: Equatable {
     /// "Next" was pressed and the PIN not changed since.
     var pinDone = false
 
+    /// Where VoiceOver's cursor goes when the step changes.
+    enum Focus: Hashable { case keypad, password }
+
     /// The screen height (points, inside the safe area) from which the keypad stays fixed above the buttons: an iPhone 15
     /// or 16e (about 760) and up; an iPhone SE (about 650) keeps it in the scroll.
     static let fixedKeypadHeight: CGFloat = 700

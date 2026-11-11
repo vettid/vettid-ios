@@ -101,6 +101,7 @@ public final class UnlockViewModel: UnlockActions {
     func ownerCheck(due: Bool, lockedByChecks: Bool, idleLocked: IdleLocked? = nil) {
         state.checkDue = due || lockedByChecks || idleLocked != nil
         state.lockedByOwnerCheck = lockedByChecks
+        state.returnGated = due || lockedByChecks
         state.idleLocked = idleLocked
     }
 
@@ -248,7 +249,7 @@ public final class UnlockViewModel: UnlockActions {
     // MARK: - The way back to release N (IOS-PLAN §4.3)
 
     public func askReturn() {
-        if state.returnOffered && !state.busy { state.returnConfirm = true }
+        if state.returnOffered && !state.busy && !state.returnGated { state.returnConfirm = true }
     }
 
     public func dismissReturn() { state.returnConfirm = false }
@@ -260,8 +261,11 @@ public final class UnlockViewModel: UnlockActions {
 
     public func confirmReturn() {
         state.returnConfirm = false
-        guard state.returnOffered, !state.busy else {
+        // The way back sends the PIN only: a password typed for the check does not stay.
+        state.password = ""
+        guard state.returnOffered, !state.busy, !state.returnGated else {
             state.pin = ""
+            state.returnAsksPin = false
             return
         }
         if state.pin.count >= UnlockState.minPinLength {
@@ -277,6 +281,7 @@ public final class UnlockViewModel: UnlockActions {
     private func returnWithPin() {
         let pin = state.pin
         state.pin = ""
+        state.password = ""
         // Not now (a backoff's countdown runs, or a step is busy): the keypad keeps asking, and says why with its countdown.
         guard pin.count >= UnlockState.minPinLength, state.pinAllowed else {
             state.returnAsksPin = true
