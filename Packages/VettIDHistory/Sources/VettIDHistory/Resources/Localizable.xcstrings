@@ -3227,6 +3227,30 @@
         }
       }
     },
+    "history_kind_connection_active_again": {
+      "comment": "VAULT-MESSAGING 0.88.7 §10.9 connection.active_again; title owner-approved 2026-11-10 (GC #7655).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connection with %@ works again"
+          }
+        }
+      }
+    },
+    "history_kind_connection_active_again_any": {
+      "comment": "Without the name (the connection is gone or not known); owner-approved 2026-11-10 (GC #7655).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connection works again"
+          }
+        }
+      }
+    },
     "history_kind_rotate_conflict": {
       "extractionState": "manual",
       "localizations": {

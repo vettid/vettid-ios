@@ -93,7 +93,12 @@ import VettIDVault
         #expect(HistoryText.title("leash.item.run", "01ITEM", names: n) == "An agent used \u{2068}GitHub token\u{2069}")
         #expect(HistoryText.title("leash.item.proxy", "01ITEM", names: n) == "An agent used \u{2068}GitHub token\u{2069}")
         #expect(HistoryText.title("leash.item.changed", "01ITEM", names: n) == "You changed how an agent may use \u{2068}GitHub token\u{2069}")
+        // VAULT-MESSAGING 0.88.7 §10.9 (owner-approved 2026-11-10, GC #7655).
+        #expect(HistoryText.title("connection.active_again", "c1", names: n) == "Connection with \u{2068}Sam Lee\u{2069} works again")
+        #expect(HistoryText.title("connection.active_again", "c1", names: n, isolate: false) == "Connection with Sam Lee works again")
+        #expect(HistoryText.title("connection.active_again", "c1", names: EntryNames(connection: "\u{2069}\u{202E}")) == "Connection works again")
         // Without the name (gone or not known), the title drops it.
+        #expect(HistoryText.title("connection.active_again", "c1") == "Connection works again")
         #expect(HistoryText.title("identity.rotate_conflict") == "Connection paused")
         #expect(HistoryText.title("identity.rotate_resolved") == "Connection checked and resumed")
         #expect(HistoryText.title("call.permission_off") == "Calls turned off")

@@ -198,6 +198,7 @@ public extension FeedKinds {
         case "connection.added": return DataStrings.feedConnectionAdded(who())
         case "connection.removed": return DataStrings.feedConnectionRemoved(who())
         case "connection.stale": return DataStrings.feedConnectionStale(who())
+        case "connection.active_again": return DataStrings.feedConnectionActiveAgain(who())
         case "connection.asks_paused": return DataStrings.feedAsksPaused(firstName(item, names))
         case "connection.authenticate.requested": return authenticationTitle(item, names)
         case "message.received": return DataStrings.feedMessage(who())

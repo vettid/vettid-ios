@@ -62,6 +62,8 @@ public enum FeedKinds {
     public static let known: Set<String> = [
         "connection.request", "connection.request.peer_declined", "connection.added", "connection.removed",
         "connection.stale", "connection.asks_paused", "connection.authenticate.requested",
+        // VAULT-MESSAGING 0.88.7 §10.9, §3.4.1 "Stale is not final": a stale connection the peer's rekey or reconnect made active.
+        "connection.active_again",
         "message.received", "call.missed", "message.attachment_failed", "message.attachment_refused",
         "grant.request", "grant.shared", "grant.revoked", "share.pending", "share.rate_limited",
         "critical-secret.use.request", "item.revealed",
@@ -127,7 +129,8 @@ public enum FeedKinds {
         let ref = item.ref
         switch item.kind {
         case "connection.request.peer_declined": return c.map { .connection($0) } ?? .connections
-        case "connection.added", "connection.stale", "connection.asks_paused": return c.map { .connection($0) } ?? .sheet
+        case "connection.added", "connection.stale", "connection.active_again", "connection.asks_paused":
+            return c.map { .connection($0) } ?? .sheet
         case "message.received", "call.missed", "message.attachment_failed", "message.attachment_refused":
             return c.map { .conversation($0) } ?? .sheet
         case "grant.shared", "grant.revoked": return c.map { .sharedWithYou($0) } ?? .sheet

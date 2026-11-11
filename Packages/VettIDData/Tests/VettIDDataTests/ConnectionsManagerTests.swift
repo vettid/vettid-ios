@@ -363,6 +363,60 @@ final class FakeConnectionOps: ConnectionOps, @unchecked Sendable {
         #expect(await eventually { ops.calls.filter { $0 == "list" }.count == 2 })
     }
 
+    static func staleConnection(_ id: String) -> String {
+        connection(id).replacingOccurrences(of: #""state":"active""#, with: #""state":"stale""#)
+    }
+
+    /// VAULT-MESSAGING 0.88.7 §3.4.1 "Stale is not final": the peer's rekey or reconnect makes a stale connection active
+    /// again, shown at once (the list read that follows is made to fail here, so only the event's own change shows).
+    @Test(arguments: ["reconnected", "rekeyed"])
+    func aStaleConnectionIsActiveAgainAtTheRekeyOrReconnect(_ kind: String) async throws {
+        ops.connections = [Self.staleConnection("c1"), Self.connection("c2")]
+        let m = manager()
+        try await m.refresh()
+        #expect(m.connections.first { $0.id == "c1" }?.state == .stale)
+        ops.failing = ["list"]
+        m.onEvent(event("connection.event", #"{"connection_id":"c1","event":"\#(kind)"}"#))
+        #expect(m.connections.map(\.state) == [.active, .active])
+    }
+
+    @Test func anUnrelatedEventLeavesStaleAsItIs() async throws {
+        ops.connections = [Self.staleConnection("c1"), Self.connection("c2"), Self.connection("c3").replacingOccurrences(of: #""state":"active""#, with: #""state":"blocked""#)]
+        let m = manager()
+        try await m.refresh()
+        ops.failing = ["list"]
+        for e in ["profile", "added", "stale", "failed"] {
+            m.onEvent(event("connection.event", #"{"connection_id":"c1","event":"\#(e)"}"#))
+        }
+        // A connection that is not stale (here blocked) stays as it is at a rekey.
+        m.onEvent(event("connection.event", #"{"connection_id":"c3","event":"rekeyed"}"#))
+        #expect(m.connections.first { $0.id == "c3" }?.state == .blocked)
+        // A rekey of another connection changes nothing of this one.
+        m.onEvent(event("connection.event", #"{"connection_id":"c2","event":"rekeyed"}"#))
+        #expect(m.connections.first { $0.id == "c1" }?.state == .stale)
+    }
+
+    @Test(arguments: ["reconnected", "rekeyed"])
+    func aPendingOrOtherConnectionIsLeftAloneAtARekeyOrReconnect(_ kind: String) async throws {
+        let pending = Self.connection("c1").replacingOccurrences(of: #""state":"active""#, with: #""state":"pending""#)
+        let other = Self.connection("c2").replacingOccurrences(of: #""state":"active""#, with: #""state":"something_new""#)
+        ops.connections = [pending, other]
+        let m = manager()
+        try await m.refresh()
+        ops.failing = ["list"]
+        for id in ["c1", "c2"] { m.onEvent(event("connection.event", #"{"connection_id":"\#(id)","event":"\#(kind)"}"#)) }
+        #expect(m.connections.map(\.state) == [.pending, .other])
+    }
+
+    @Test func aListReReadClearsAStaleFlagHeldOnlyLocally() async throws {
+        ops.connections = [Self.connection("c1")]
+        let m = manager()
+        try await m.refresh()
+        m.connections[0].state = .stale
+        try await m.refresh()
+        #expect(m.connections[0].state == .active)
+    }
+
     /// An accept answered after the vault locked publishes no request (chosen; not in the spec).
     @Test func anAcceptAnsweredAfterALockAddsNothing() async throws {
         let gate = TestDeferred<Void>()
