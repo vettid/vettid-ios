@@ -5,12 +5,15 @@ import UIKit
 /// autocorrection, spell checking, smart quotes, dashes or inserts, no inline predictions, no capitalization.
 ///
 /// AutoFill and the save prompt: iOS offers them for a field whose `textContentType` is a credential type (`.password`,
-/// `.newPassword`, `.username`) and for a secure field next to a username-like field. These fields never stand beside a
-/// username field, and are emptied when they leave the screen (the save prompt comes from a secure field that
-/// disappears with text in it). The technique of §6.5 on record: `.oneTimeCode`. The first one tried, an empty content
-/// type, failed on an iPhone (iOS 27.0.1) that holds a saved password for the app's associated domain: a secure field
-/// with the empty type was offered that password in an AutoFill bubble, over the next field. `isSecureTextEntry` stays
-/// (it keeps the text out of captures and the keyboard from learning); manual masking is the last resort.
+/// `.newPassword`, `.username`) and for a secure field next to a username-like field. The secret screens of §6.5 have
+/// no username field beside these fields, and they are emptied when they leave the screen (the save prompt comes from a
+/// secure field that disappears with text in it). The technique: `.oneTimeCode`. An empty content type, tried first,
+/// failed on an iPhone (iOS 27.0.1) that holds a saved password for the app's associated domain: the enrollment's
+/// password field was offered that password in an AutoFill bubble, over the next field. With `.oneTimeCode`, the
+/// enrollment, the unlock and the owner check pass on that iPhone; the other secret screens are not yet run there. The
+/// trade-off: iOS may suggest a verification code (from Messages, Mail or Passwords) above the keyboard; it is only
+/// typed in if the member taps it, and nothing is offered or saved from the field. `isSecureTextEntry` stays (it keeps
+/// the text out of captures and the keyboard from learning); manual masking is the last resort.
 @MainActor
 public enum SecretInput {
     /// Applies the secret-input settings to [field]. [visible]: a secret the member reads while typing it (a recovery
