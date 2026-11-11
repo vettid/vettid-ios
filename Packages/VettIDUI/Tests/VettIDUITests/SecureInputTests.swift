@@ -215,7 +215,8 @@ import UIKit
             window.layoutIfNeeded()
             let field = try #require(textFields(in: window).first)
             let frame = field.convert(field.bounds, to: window)
-            #expect(frame.height < field.intrinsicContentSize.height * 2, "\(size): \(frame.height)")
+            let line = max(field.intrinsicContentSize.height, Spacing.touchTarget)
+            #expect(abs(frame.height - line) < 1, "\(size): \(frame.height), one line or the touch target: \(line)")
             let hosts = views(in: window).filter { String(describing: type(of: $0)).contains("SecureHost") }
             #expect(!hosts.isEmpty)
             for v in hosts {
