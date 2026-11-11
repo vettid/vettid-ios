@@ -126,6 +126,15 @@ import VettIDUI
         #expect(PinThenPassword().passwordShown(asksPin: false, digits: 0, minPin: 6), "the PIN kept: the password only")
     }
 
+    /// The keypad stays fixed above the buttons on an iPhone 15 or 16e at the usual text sizes; on an SE, or at an
+    /// accessibility size, it scrolls with the form so that the notices above it keep room.
+    @Test func theKeypadIsFixedOnlyWhereTheNoticesKeepRoom() {
+        #expect(PinThenPassword.keypadFixed(height: 763, typeSize: .large))
+        #expect(PinThenPassword.keypadFixed(height: 763, typeSize: .xxxLarge))
+        #expect(!PinThenPassword.keypadFixed(height: 763, typeSize: .accessibility1))
+        #expect(!PinThenPassword.keypadFixed(height: 647, typeSize: .large), "an iPhone SE")
+    }
+
     /// "Unlock" needs the whole PIN, and the password with a check due; a return to the previous release takes the PIN only,
     /// check due or not (its keypad shows no password, so asking for one would leave the button off for good).
     @Test func aReturnToThePreviousReleaseNeedsNoPassword() {

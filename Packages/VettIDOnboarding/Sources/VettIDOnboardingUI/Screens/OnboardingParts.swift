@@ -180,6 +180,16 @@ struct PinThenPassword: Equatable {
     /// "Next" was pressed and the PIN not changed since.
     var pinDone = false
 
+    /// The screen height (points, inside the safe area) from which the keypad stays fixed above the buttons: an iPhone 15
+    /// or 16e (about 760) and up; an iPhone SE (about 650) keeps it in the scroll.
+    static let fixedKeypadHeight: CGFloat = 700
+
+    /// Whether the keypad stays fixed above the buttons: on a screen at least ``fixedKeypadHeight`` high and below the
+    /// accessibility text sizes; otherwise it scrolls with the form, so that the notices above it keep room.
+    static func keypadFixed(height: CGFloat, typeSize: DynamicTypeSize) -> Bool {
+        height >= fixedKeypadHeight && !typeSize.isAccessibilitySize
+    }
+
     /// Whether the password step shows: always when no PIN is asked ([asksPin] false), else once "Next" took a PIN of at
     /// least [minPin] digits that is still typed.
     func passwordShown(asksPin: Bool, digits: Int, minPin: Int) -> Bool {

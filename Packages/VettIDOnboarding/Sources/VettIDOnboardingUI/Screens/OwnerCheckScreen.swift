@@ -70,6 +70,9 @@ public struct OwnerCheckScreen: View {
     /// The PIN on the keypad first, then the password (``PinThenPassword``); only the password after an unlock that kept
     /// the PIN.
     @State private var steps = PinThenPassword()
+    /// The screen's height, for whether the keypad stays fixed above the buttons (``PinThenPassword/keypadFixed(height:typeSize:)``).
+    @State private var height: CGFloat = .infinity
+    @Environment(\.dynamicTypeSize) private var typeSize
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.vettIDColors) private var colors
 
@@ -195,7 +198,7 @@ public struct OwnerCheckScreen: View {
                     .accessibilityIdentifier("owner_check_cancel")
                 }
             },
-            bottom: { keypad }
+            bottom: { if keypadFixed { keypad } }
         ) {
             VStack(alignment: .leading, spacing: Spacing.m) {
                 SmallNote(state.stagingNote)
@@ -221,6 +224,7 @@ public struct OwnerCheckScreen: View {
                 OwnerCheckMessageView(state: state, title: title)
             }
         }
+        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height = $0 }
         .onDisappear { forgetSecrets() }
         // Digits taken by the submit or dropped: the keypad again.
         .onChange(of: pin.count) { _, digits in steps.digitsChanged(to: digits) }
@@ -286,12 +290,17 @@ public struct OwnerCheckScreen: View {
     /// The keypad (not after an unlock whose PIN was kept) and the password (§3.6.5: one screen for both): the keypad first,
     /// then in its place the PIN as dots and the password (``PinThenPassword``); neither once the vault locked.
     @ViewBuilder private var entries: some View {
+        if !keypadFixed { keypad }
         if !state.locked, state.watch == .none {
             entryFields
         }
     }
 
-    /// The keypad, fixed above the buttons (no notice above it pushes its keys past the screen's edge), with a wrong
+    /// The keypad stays above the buttons, out of the scroll, unless the screen is short or the text an accessibility size
+    /// (then it scrolls with the rest, which a fixed keypad would leave no room).
+    private var keypadFixed: Bool { PinThenPassword.keypadFixed(height: height, typeSize: typeSize) }
+
+    /// The keypad (above the buttons, or in the form: ``keypadFixed``; no notice pushes its keys past the edge), with a wrong
     /// password said over it: the PIN was taken, so the member is back here (§3.6.5 keeps neither entry). Not in the
     /// password step, after an unlock that kept the PIN, or once the vault locked or is probably locked.
     @ViewBuilder private var keypad: some View {
@@ -331,7 +340,8 @@ public struct OwnerCheckScreen: View {
             SecretField(
                 OnboardingStrings.ownerCheckPasswordLabel,
                 text: Binding(get: { state.password }, set: { actions.setPassword($0) }),
-                error: badPassword ? OnboardingStrings.ownerCheckBadPassword : nil,
+                // After a wrong password the keypad said it (the PIN not kept); the field says it only when it is the only entry.
+                error: badPassword && state.pinKept ? OnboardingStrings.ownerCheckBadPassword : nil,
                 errorPriority: .assertive,
                 // Given the keyboard when "Next" brings it, not when the PIN was kept (the screen opens on it then).
                 focus: !state.pinKept,

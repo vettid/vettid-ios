@@ -59,6 +59,9 @@ public struct UnlockScreen: View {
     @State private var pin = PinBuffer()
     /// With a check due, the PIN on the keypad first, then the password (``PinThenPassword``).
     @State private var steps = PinThenPassword()
+    /// The screen's height, for whether the keypad stays fixed above "Unlock" (``PinThenPassword/keypadFixed(height:typeSize:)``).
+    @State private var height: CGFloat = .infinity
+    @Environment(\.dynamicTypeSize) private var typeSize
     @Environment(\.openURL) private var openURL
     @Environment(\.scenePhase) private var scenePhase
 
@@ -140,7 +143,7 @@ public struct UnlockScreen: View {
             header: {
                 VettIDSymbol.lock.image.font(.system(size: 36)).padding(.top, Spacing.l).accessibilityHidden(true)
             },
-            bottom: { keypad }
+            bottom: { if keypadFixed { keypad } }
         ) {
             VStack(alignment: .leading, spacing: Spacing.m) {
                 ForEach(UnlockBlock.blocks(for: state), id: \.self) { block in
@@ -184,6 +187,7 @@ public struct UnlockScreen: View {
             if pin.count >= UnlockState.minPinLength { actions.setPin(pin.take()) }
             actions.confirmReturn()
         }
+        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height = $0 }
         .onDisappear { pin.clear() }
         // Digits taken by "Unlock" or dropped: the keypad again.
         .onChange(of: pin.count) { _, digits in steps.digitsChanged(to: digits) }
@@ -202,8 +206,12 @@ public struct UnlockScreen: View {
 
     /// The PIN's notices, the countdown and, with a check due, the password step (§3.6.5: one screen for both): the keypad
     /// first (``keypad``, below the scroll), then in its place the PIN as dots and the password (``PinThenPassword``).
-    /// The keypad, fixed above the button, so that no notice above it ever pushes its keys past the screen's edge; gone in
-    /// the password step and wherever the screen asks for no PIN.
+    /// The keypad stays above "Unlock", out of the scroll, so that no notice above it pushes its keys past the screen's
+    /// edge; on a short screen or at an accessibility text size it scrolls with the rest instead (fixed, it would leave
+    /// the notices no room).
+    private var keypadFixed: Bool { PinThenPassword.keypadFixed(height: height, typeSize: typeSize) }
+
+    /// The keypad; gone in the password step and wherever the screen asks for no PIN.
     @ViewBuilder private var keypad: some View {
         if UnlockBlock.blocks(for: state).contains(.pin), !passwordStep {
             PinEntry(
@@ -234,6 +242,7 @@ public struct UnlockScreen: View {
                 .disabled(!state.pinAllowed)
                 .padding(.top, Spacing.s)
         }
+        if !keypadFixed { keypad }
         if state.waitSeconds > 0 {
             Text(OnboardingStrings.unlockWait(formatWait(state.waitSeconds)))
                 .vettIDFont(.bodySmall)
@@ -284,9 +293,10 @@ public struct UnlockScreen: View {
     }
 }
 
-/// The unlock screen's blocks in the order they are shown, and read by VoiceOver: the PIN keypad first, the results of the
-/// unlock under it, the release offer (RELEASE-UPDATES §2 step 2) last, a compact notice. "Unlock" is the pinned button
-/// under all of them.
+/// The unlock screen's blocks in the order they are shown, and read by VoiceOver: the PIN first, the results of the unlock
+/// under it, the release offer (RELEASE-UPDATES §2 step 2) last, a compact notice. "Unlock" is the pinned button under all
+/// of them. On a tall enough screen the keypad itself stays above "Unlock" (read after the blocks, the PIN's own notices
+/// keeping their place); on a short one or at an accessibility text size it is in the PIN's place.
 enum UnlockBlock: Hashable {
     case notices, pin, offer, signerRefused, returnCancel, wayForward
 
