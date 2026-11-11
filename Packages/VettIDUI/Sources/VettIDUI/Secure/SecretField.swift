@@ -6,10 +6,12 @@ import UIKit
 ///
 /// AutoFill and the save prompt: iOS offers them for a field whose `textContentType` is a credential type (`.password`,
 /// `.newPassword`, `.username`) and for a secure field next to a username-like field. The secret screens of §6.5 have
-/// no username field beside these fields, and they are emptied when they leave the screen (the save prompt comes from a
-/// secure field that disappears with text in it). The technique: `.oneTimeCode`. An empty content type, tried first,
-/// failed on an iPhone (iOS 27.0.1) that holds a saved password for the app's associated domain: the enrollment's
-/// password field was offered that password in an AutoFill bubble, over the next field. With `.oneTimeCode`, the
+/// no username field beside these fields (the setup screen's email sits above a visible code field, not a secure one),
+/// and they are emptied when they leave the screen (the save prompt comes from a secure field that disappears with text
+/// in it). The technique: `.oneTimeCode`. An empty content type, tried first, failed on an iPhone (iOS 27.0.1) that
+/// holds a saved password for vettid.org: the enrollment's password field was offered that password in an AutoFill
+/// bubble, over the next field. The app has no `webcredentials:` association (only `applinks:`), so the offer came from
+/// iOS's own matching of the app to the domain; it is not something an entitlement change would remove. With `.oneTimeCode`, the
 /// enrollment, the unlock and the owner check pass on that iPhone; the other secret screens are not yet run there. The
 /// trade-off: iOS may suggest a verification code (from Messages, Mail or Passwords) above the keyboard; it is only
 /// typed in if the member taps it, and nothing is offered or saved from the field. `isSecureTextEntry` stays (it keeps
