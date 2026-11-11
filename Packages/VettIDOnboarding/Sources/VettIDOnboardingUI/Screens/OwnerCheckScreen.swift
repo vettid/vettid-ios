@@ -71,6 +71,7 @@ public struct OwnerCheckScreen: View {
     /// the PIN.
     @State private var steps = PinThenPassword()
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.vettIDColors) private var colors
 
     /// Fewer checks than this left are shown in the error colour.
     static let warnLeft = 3
@@ -297,6 +298,16 @@ public struct OwnerCheckScreen: View {
             .disabled(!state.entriesAllowed)
             .padding(.top, Spacing.s)
         } else if !state.pinKept {
+            // A wrong password sent the member back to the keypad (the PIN was taken): said here, where they are.
+            if badPassword {
+                Text(OnboardingStrings.ownerCheckBadPassword)
+                    .vettIDFont(.bodySmall)
+                    .foregroundStyle(colors.error)
+                    .frame(maxWidth: .infinity)
+                    .multilineTextAlignment(.center)
+                    .announced(OnboardingStrings.ownerCheckBadPassword, .assertive)
+                    .accessibilityIdentifier("owner_check_password_error")
+            }
             PinEntry(
                 label: OnboardingStrings.ownerCheckPinLabel,
                 buffer: pin,

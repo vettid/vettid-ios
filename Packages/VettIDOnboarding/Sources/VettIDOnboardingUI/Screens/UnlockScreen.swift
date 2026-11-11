@@ -105,8 +105,13 @@ public struct UnlockScreen: View {
         return OnboardingStrings.unlockSubmit
     }
 
-    private var canSubmit: Bool {
-        state.pinAllowed && pin.count >= UnlockState.minPinLength && (!state.checkDue || !state.password.isEmpty)
+    private var canSubmit: Bool { Self.canSubmit(state, digits: pin.count) }
+
+    /// The PIN typed whole, and the password with a check due; a return to the previous release takes the PIN only (its
+    /// keypad shows no password, even with a check due).
+    static func canSubmit(_ state: UnlockState, digits: Int) -> Bool {
+        state.pinAllowed && digits >= UnlockState.minPinLength
+            && (!state.checkDue || state.returnAsksPin || !state.password.isEmpty)
     }
 
     private func submit() {

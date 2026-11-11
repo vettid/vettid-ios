@@ -126,6 +126,24 @@ import VettIDUI
         #expect(PinThenPassword().passwordShown(asksPin: false, digits: 0, minPin: 6), "the PIN kept: the password only")
     }
 
+    /// "Unlock" needs the whole PIN, and the password with a check due; a return to the previous release takes the PIN only,
+    /// check due or not (its keypad shows no password, so asking for one would leave the button off for good).
+    @Test func aReturnToThePreviousReleaseNeedsNoPassword() {
+        let whole = UnlockState.minPinLength
+        var due = ok
+        due.checkDue = true
+        #expect(!UnlockScreen.canSubmit(due, digits: whole), "the password is missing")
+        #expect(!UnlockScreen.canSubmit(due, digits: whole - 1))
+        var typed = due
+        typed.password = "pw"
+        #expect(UnlockScreen.canSubmit(typed, digits: whole))
+        var back = due
+        back.returnAsksPin = true
+        #expect(UnlockScreen.canSubmit(back, digits: whole))
+        #expect(!UnlockScreen.canSubmit(back, digits: whole - 1))
+        #expect(UnlockScreen.canSubmit(ok, digits: whole))
+    }
+
     /// The release R cancel of a recovery asks for the password in the same kind of field.
     @Test func theCancelPasswordIsASecretField() throws {
         var s = ok

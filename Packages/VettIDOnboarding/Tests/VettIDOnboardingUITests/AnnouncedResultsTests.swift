@@ -76,6 +76,15 @@ import VettIDOnboarding
         #expect(await spoken(maybeScreen, OnboardingStrings.unlockCheckMaybeCounted(1), .assertive))
     }
 
+    /// A wrong password takes the PIN, so the keypad is back: the error is said there at once, not only after the PIN is
+    /// typed again and the password step shows.
+    @Test func aWrongPasswordIsSpokenAtTheKeypad() async {
+        var wrong = check
+        wrong.message = .badPassword(checksLeft: 3)
+        let screen = OwnerCheckScreen(state: wrong, actions: NoOwnerCheckActions(), now: now)
+        #expect(await spoken(screen, OnboardingStrings.ownerCheckBadPassword, .assertive))
+    }
+
     // MARK: - Helpers
 
     private static var recorded: [Announcer.Event] = []
