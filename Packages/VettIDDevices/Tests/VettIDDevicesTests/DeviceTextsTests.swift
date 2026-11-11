@@ -102,4 +102,33 @@ import Testing
         let text = DeviceTexts.full(Samples.before(86_400), utc)
         #expect(text.contains("Oct 20") && text.contains("2026") && text.contains("12:00"), "\(text)")
     }
+
+    // MARK: A pairing's device (ANDROID-PLAN 0.1.53 AA2; vettid-android #291)
+
+    /// The device a pairing shows is the name it gave (cleaned): by its role when it gave none, and with its role when it could pass for
+    /// the phone or for VettID.
+    @Test func thePairingsAgentAndDesktopAreNamedByWhatTheyGave() {
+        #expect(DeviceTexts.agentName("Claude") == "Claude" && DeviceTexts.desktopName("Work laptop") == "Work laptop")
+        #expect(DeviceTexts.agentName("") == "An agent" && DeviceTexts.desktopName("") == "A desktop")
+        #expect(DeviceTexts.agentName("This phone") == "This phone (Agent)")
+        #expect(DeviceTexts.desktopName("Vett\u{200D}ID") == "Vett\u{200D}ID (Desktop)")
+        #expect(DeviceTexts.agentName("This\u{2800}phone") == "This\u{2800}phone (Agent)")
+        // The same as the list names a device of that role.
+        #expect(DeviceTexts.agentName("This  phone") == DeviceTexts.name(device("agent", "This  phone")))
+        #expect(DeviceTexts.desktopName("") == DeviceTexts.name(device("desktop", "")))
+    }
+
+    @Test func inASentenceThePairingsDeviceIsIsolatedOrLowerCaseWhenUnnamed() {
+        #expect(DeviceTexts.sentenceAgent("") == "an agent" && DeviceTexts.sentenceDesktop("") == "a desktop")
+        #expect(DeviceTexts.sentenceAgent("Claude") == "\u{2068}Claude\u{2069}")
+        #expect(DeviceTexts.sentenceDesktop("Laptop") == "\u{2068}Laptop\u{2069}")
+        #expect(DeviceTexts.sentenceDesktop("VettID") == "\u{2068}VettID (Desktop)\u{2069}")
+    }
+
+    /// At the start of a title an unnamed device is capitalised ("An agent is paired", "A desktop is paired").
+    @Test func atTheStartOfATitleAnUnnamedDeviceStartsWithACapital() {
+        #expect(DeviceTexts.titleAgent("") == "\u{2068}An agent\u{2069}" && DeviceTexts.titleDesktop("") == "\u{2068}A desktop\u{2069}")
+        #expect(DeviceStrings.pairPairedTitle(DeviceTexts.titleAgent("")) == "\u{2068}An agent\u{2069} is paired")
+        #expect(DeviceStrings.pairPairedTitle(DeviceTexts.titleDesktop("Laptop")) == "\u{2068}Laptop\u{2069} is paired")
+    }
 }

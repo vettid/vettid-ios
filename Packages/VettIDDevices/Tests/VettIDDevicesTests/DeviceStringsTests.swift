@@ -40,8 +40,6 @@ import Testing
         Row("devices_ago_hours", DeviceStrings.devicesAgoHours(5), "5 h ago"),
         Row("devices_ago_days", DeviceStrings.devicesAgoDays(5), "5 d ago"),
         Row("devices_paused", DeviceStrings.devicesPaused, "Paused"),
-        Row("devices_empty_title", DeviceStrings.devicesEmptyTitle, "No agents yet"),
-        Row("devices_empty_body", DeviceStrings.devicesEmptyBody, "Pair an agent to let an AI assistant on your computer use items you choose. It acts only while you allow it."),
         Row("devices_error_title", DeviceStrings.devicesErrorTitle, "Could not load your devices"),
         Row("devices_retry", DeviceStrings.devicesRetry, "Try again"),
         Row("devices_ok", DeviceStrings.devicesOk, "OK"),
@@ -77,10 +75,69 @@ import Testing
         Row("devices_a_desktop", DeviceStrings.devicesADesktop, "a desktop"),
         Row("devices_a_desktop_cap", DeviceStrings.devicesADesktopCap, "A desktop"),
         Row("devices_an_agent_cap", DeviceStrings.devicesAnAgentCap, "An agent"),
+        Row("devices_pair", DeviceStrings.devicesPair, "Pair an agent"),
+        Row("pair_title", DeviceStrings.pairTitle, "Pair an agent"),
+        Row("pair_code_body", DeviceStrings.pairCodeBody, "Copy this code to the computer where the agent runs. It works once and expires in 10 minutes."),
+        Row("pair_qr_cd", DeviceStrings.pairQrCd, "Pairing code as a QR code"),
+        Row("pair_creating", DeviceStrings.pairCreating, "Making a pairing code"),
+        Row("pair_clip_label", DeviceStrings.pairClipLabel, "Pairing code"),
+        Row("pair_copy", DeviceStrings.pairCopy, "Copy"),
+        Row("pair_copied", DeviceStrings.pairCopied, "Copied"),
+        Row("pair_share", DeviceStrings.pairShare, "Share"),
+        Row("pair_share_title", DeviceStrings.pairShareTitle, "Send it only to yourself."),
+        Row("pair_expires_in", DeviceStrings.pairExpiresIn("Example"), "Expires in Example"),
+        Row("pair_expired", DeviceStrings.pairExpired, "This code expired."),
+        Row("pair_new_code", DeviceStrings.pairNewCode, "New code"),
+        Row("pair_cancel", DeviceStrings.pairCancel, "Cancel"),
+        Row("pair_create_failed", DeviceStrings.pairCreateFailed, "A pairing code could not be made. Try again."),
+        Row("pair_try_again", DeviceStrings.pairTryAgain, "Try again"),
+        Row("pair_check_now", DeviceStrings.pairCheckNow, "Check now"),
+        Row("pair_compare_title", DeviceStrings.pairCompareTitle, "Compare the code"),
+        Row("pair_compare_body", DeviceStrings.pairCompareBody("Example"), "Does the agent show Example? Approve only if the codes match."),
+        Row("pair_calls_itself", DeviceStrings.pairCallsItself("Example"), "It calls itself Example."),
+        Row("pair_calls_itself_note", DeviceStrings.pairCallsItselfNote, "The code proves this phone talks to the agent you just gave the code to. The name is only what the agent says about itself."),
+        Row("pair_codes_match", DeviceStrings.pairCodesMatch, "The codes match"),
+        Row("pair_codes_differ", DeviceStrings.pairCodesDiffer, "They don't match"),
+        Row("pair_reject", DeviceStrings.pairReject, "Reject"),
+        Row("pair_cannot_compare", DeviceStrings.pairCannotCompare, "This phone can't show a code to compare for this pairing, so it can't be approved. Reject it."),
+        Row("pair_rejected_title", DeviceStrings.pairRejectedTitle, "Pairing rejected"),
+        Row("pair_rejected_body", DeviceStrings.pairRejectedBody, "The agent is told it was rejected. If you did not expect a code, someone else may have the pairing code; it no longer works."),
+        Row("pair_rejected_unsent", DeviceStrings.pairRejectedUnsent, "Nothing is paired. Your vault could not be told, so the pairing ends by itself within 10 minutes. If you did not expect a code, someone else may have the pairing code."),
+        Row("pair_done", DeviceStrings.pairDone, "Done"),
+        Row("pair_lost_title", DeviceStrings.pairLostTitle, "A device asks to pair"),
+        Row("pair_lost_body", DeviceStrings.pairLostBody, "This pairing can't be checked on this phone any more. Let it expire: it ends by itself within 10 minutes and nothing is paired. If you want to pair, start again."),
+        Row("pair_allow_title", DeviceStrings.pairAllowTitle, "Allow access now?"),
+        Row("pair_allow_body", DeviceStrings.pairAllowBody, "Agents act only while you allow access, and only within the permissions you give them."),
+        Row("pair_session_none", DeviceStrings.pairSessionNone, "No access yet"),
+        Row("pair_session_15m", DeviceStrings.pairSession15m, "15 minutes"),
+        Row("pair_session_1h", DeviceStrings.pairSession1h, "1 hour"),
+        Row("pair_session_4h", DeviceStrings.pairSession4h, "4 hours"),
+        Row("pair_session_8h", DeviceStrings.pairSession8h, "8 hours"),
+        Row("pair_session_24h", DeviceStrings.pairSession24h, "24 hours"),
+        Row("pair_confirm", DeviceStrings.pairConfirm, "Pair"),
+        Row("pair_ended_title", DeviceStrings.pairEndedTitle, "Not paired"),
+        Row("pair_ended", DeviceStrings.pairEnded, "This pairing has ended. Start again from Devices & agents."),
+        Row("pair_unconfirmed_title", DeviceStrings.pairUnconfirmedTitle, "Pairing not confirmed"),
+        Row("pair_unconfirmed_body", DeviceStrings.pairUnconfirmedBody("Example"), "Your vault did not answer. If Example is listed in Devices & agents, it was paired; if not, start again."),
+        Row("pair_paired_title", DeviceStrings.pairPairedTitle("Example"), "Example is paired"),
+        Row("pair_paired_body", DeviceStrings.pairPairedBody, "It can't use any of your items yet."),
+        Row("pair_open_page", DeviceStrings.pairOpenPage, "Open its page"),
+        Row("devices_pair_new", DeviceStrings.devicesPairNew, "Pair an agent or desktop"),
+        Row("devices_empty_title_any", DeviceStrings.devicesEmptyTitleAny, "Nothing paired yet"),
+        Row("devices_empty_body_any", DeviceStrings.devicesEmptyBodyAny, "Pair VettID on your computer, or pair an agent to let an AI assistant use items you choose. They act only while you allow access."),
+        Row("devices_pair_desktop", DeviceStrings.devicesPairDesktop, "Pair a desktop"),
+        Row("pair_title_desktop", DeviceStrings.pairTitleDesktop, "Pair a desktop"),
+        Row("pair_code_body_desktop", DeviceStrings.pairCodeBodyDesktop, "Copy this code into VettID on your computer. It works once and expires in 10 minutes."),
+        Row("pair_compare_body_desktop", DeviceStrings.pairCompareBodyDesktop("Example"), "Does the desktop show Example? Approve only if the codes match."),
+        Row("pair_calls_itself_note_desktop", DeviceStrings.pairCallsItselfNoteDesktop, "The code proves this phone talks to the desktop you just gave the code to. The name is only what the desktop says about itself."),
+        Row("pair_rejected_body_desktop", DeviceStrings.pairRejectedBodyDesktop, "The desktop is told it was rejected. If you did not expect a code, someone else may have the pairing code; it no longer works."),
+        Row("pair_allow_body_desktop", DeviceStrings.pairAllowBodyDesktop, "A desktop acts only while you allow access."),
+        Row("pair_paired_body_desktop", DeviceStrings.pairPairedBodyDesktop, "When it asks for access, the request comes to Approvals."),
+        Row("pair_minutes_left", DeviceStrings.pairMinutesLeft(5), "5 minutes left"),
     ]
 
     @Test func everyTextIsWordForWord() {
-        #expect(Self.table.count == 54)
+        #expect(Self.table.count == 111)
         for row in Self.table { #expect(row.got == row.want, "\(row.key)") }
     }
 
@@ -98,12 +155,27 @@ import Testing
             .appendingPathComponent("Sources/VettIDDevices/Resources/Localizable.xcstrings")
     }
 
-    /// What differs from master's texts: the empty state is AA1's "No agents yet", not "Nothing paired yet", and there is no
-    /// pairing text at all (pairing is AA2).
-    @Test func theAA1EmptyStateAndNoPairingTexts() {
-        #expect(DeviceStrings.devicesEmptyTitle == "No agents yet")
-        #expect(DeviceStrings.devicesEmptyBody == "Pair an agent to let an AI assistant on your computer use items you choose. It acts only while you allow it.")
-        #expect(!Self.table.contains { $0.key.hasPrefix("pair_") || $0.key == "devices_pair" || $0.key.hasPrefix("devices_pair_") })
+    /// AA2 replaces AA1's empty state ("No agents yet") with the one of vettid-android #291: "Nothing paired yet", for agents and
+    /// desktops alike. Its texts, and every desktop text, are new in #291: not in the plan and not yet approved there.
+    @Test func theEmptyStateIsNothingPairedYetAndTheOldOneIsGone() {
+        #expect(DeviceStrings.devicesEmptyTitleAny == "Nothing paired yet")
+        #expect(DeviceStrings.devicesEmptyBodyAny == "Pair VettID on your computer, or pair an agent to let an AI assistant use items you choose. They act only while you allow access.")
+        #expect(!Self.table.contains { $0.key == "devices_empty_title" || $0.key == "devices_empty_body" })
+    }
+
+    /// "N minutes left" has its singular (the screen reader's once-a-minute line).
+    @Test func theMinutesLeftHasASingularAndAPlural() {
+        #expect(DeviceStrings.pairMinutesLeft(1) == "1 minute left")
+        #expect(DeviceStrings.pairMinutesLeft(0) == "0 minutes left")
+        #expect(DeviceStrings.pairMinutesLeft(10) == "10 minutes left")
+    }
+
+    /// AA4's "Choose what it may use" and "Later", and the chooser's "Menu open" and "Menu closed" (a TalkBack workaround; the
+    /// iPhone's menu says it is one), are not here.
+    @Test func whatIsNotBuiltIsNotThere() {
+        for key in ["pair_choose", "pair_later", "devices_pair_menu_open", "devices_pair_menu_closed"] {
+            #expect(!Self.table.contains { $0.key == key }, "\(key)")
+        }
     }
 }
 // swiftlint:enable line_length

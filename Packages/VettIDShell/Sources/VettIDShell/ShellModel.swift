@@ -92,6 +92,7 @@ public final class ShellModel {
         case .conversation(let id): openConversation(id)
         case .voteList: navigate(.votes)
         case .deviceList: navigate(.devices)
+        case .pairing: pushPairing(.pair(held: true, desktop: false))
         case .sheet: break
         default: if let r = Self.screen(t) { pushOnce(r) }
         }
@@ -129,6 +130,7 @@ public final class ShellModel {
         switch t {
         case .devices: .vaultStatus
         case .device(let id): .device(id)
+        case .pairing: .pair(held: true, desktop: false)
         case .approval(let key): .approval(key)
         case .connection(let id): .connection(id)
         case .sharedWithYou(let id): .sharedWithYou(connectionID: id, ask: false)
@@ -143,6 +145,23 @@ public final class ShellModel {
 
     /// A device's page over Devices & agents (or the screen on top), once.
     public func openDevice(_ id: String) { pushOnce(.device(id)) }
+
+    /// Pairing an agent, or [desktop] a desktop, over Devices & agents, once. The drawer drops it (``navigate(_:)``): a pairing not
+    /// approved is then rejected by its screen going.
+    public func openPair(desktop: Bool) { pushPairing(.pair(held: false, desktop: desktop)) }
+
+    /// One pairing screen at a time: with one already on the path (the member is pairing and taps the feed item "A device asks to
+    /// pair"), the path goes back to it. A second screen over the first would be a second view model on the one pairing, and the
+    /// top one's leaving would reject the comparison the lower one is about to show. The screen kept is the one already there,
+    /// whatever role was asked: the one repository holds the single pairing (no path in the app asks for the other role with a
+    /// pairing screen open, as the Devices list sits under it).
+    private func pushPairing(_ r: ShellRoute) {
+        if let i = path.lastIndex(where: { if case .pair = $0 { true } else { false } }) {
+            path = Array(path[...i])
+        } else {
+            pushOnce(r)
+        }
+    }
 
     /// History searched for a device's name, over its page, once (vettid-android's `launchSingleTop` for `DeviceHistoryRoute`).
     public func openDeviceHistory(_ query: String) { pushOnce(.deviceHistory(query: query)) }

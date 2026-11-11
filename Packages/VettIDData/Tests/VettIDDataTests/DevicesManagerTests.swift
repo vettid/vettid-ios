@@ -236,6 +236,16 @@ final class FakeDevicesOps: DevicesOps, @unchecked Sendable {
         #expect(m.devices.isEmpty && m.removed == nil)
     }
 
+    /// AA2: the pairing held for the list goes wherever the list does (lock, hold, wipe, deletion): every clear tells it.
+    @Test func clearingTheListClearsThePairingHeldWithIt() async throws {
+        var cleared = 0
+        let ops = FakeDevicesOps()
+        let m = DevicesManager(ops: { ops }, quietOps: { ops }, onClear: { cleared += 1 })
+        m.clear()
+        m.clear()
+        #expect(cleared == 2)
+    }
+
     /// A read in flight across a clear (a hold) ends not loaded and empty, never LOADED with an empty list.
     @Test func aReadInFlightAcrossAClearLeavesNotLoadedAndEmpty() async throws {
         let ops = FakeDevicesOps()

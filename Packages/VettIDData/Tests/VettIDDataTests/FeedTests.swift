@@ -265,14 +265,15 @@ final class FakeFeedOps: FeedOps, @unchecked Sendable {
     }
 
     /// Devices & agents (ANDROID-PLAN 0.1.53 AA1): a paired device opens its page, or the list when the item names none; an
-    /// unlinked device and a pairing in wait open the list; the transfer, replacement and signer notices stay in Settings.
+    /// unlinked device opens the list, and (AA2) a pairing in wait the pairing screen; the transfer, replacement and signer notices stay in Settings.
     @Test func deviceKindsOpenDevicesAndAgents() {
         let item = { (kind: String, device: String?) in FeedItem(itemID: "i", seq: 1, kind: kind, at: "", status: "active", deviceID: device, ref: "r") }
         #expect(FeedKinds.target(item("device.paired", "d1")) == .device("d1"))
         #expect(FeedKinds.target(item("device.paired", nil)) == .deviceList)
         #expect(FeedKinds.target(item("device.paired", "")) == .deviceList)
         #expect(FeedKinds.target(item("device.unlinked", "d1")) == .deviceList)
-        #expect(FeedKinds.target(item("device.pair.pending", nil)) == .deviceList)
+        // AA2: a pairing in wait opens the pairing screen (the comparison, or "can't be checked").
+        #expect(FeedKinds.target(item("device.pair.pending", nil)) == .pairing)
         for kind in ["device.transferred", "device.replaced", "device.signer_changed"] {
             #expect(FeedKinds.target(item(kind, "d1")) == .devices, "\(kind)")
         }

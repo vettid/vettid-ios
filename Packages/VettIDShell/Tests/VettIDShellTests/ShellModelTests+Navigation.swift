@@ -256,6 +256,45 @@ import VettIDVault
         #expect(m.destination == .devices && m.path.isEmpty)
     }
 
+    /// Pairing (ANDROID-PLAN 0.1.53 AA2; vettid-android #291): the list's button opens the agent's or the desktop's pairing once; a feed
+    /// item "A device asks to pair" opens the held one; the drawer drops it.
+    @Test func pairingOpensOnceAndTheDrawerDropsIt() {
+        let m = model
+        m.navigate(.devices)
+        m.openPair(desktop: false)
+        m.openPair(desktop: false)
+        #expect(m.path == [.pair(held: false, desktop: false)])
+        m.openPair(desktop: true)
+        #expect(m.path == [.pair(held: false, desktop: false)], "one pairing screen at a time")
+        m.navigate(.devices)
+        #expect(m.path.isEmpty && m.destination == .devices)
+        // The feed item of a pairing in wait: what is held, never a new code (once).
+        let at = "2026-10-09T12:00:00Z"
+        m.openNotified(FeedItem(itemID: "f1", seq: 1, kind: "device.pair.pending", at: at, status: "active", ref: "x"))
+        m.openNotified(FeedItem(itemID: "f1", seq: 1, kind: "device.pair.pending", at: at, status: "active", ref: "x"))
+        #expect(m.path == [.pair(held: true, desktop: false)])
+    }
+
+    /// One pairing screen at a time: the feed item "A device asks to pair" while the member is pairing goes back to that screen, and
+    /// never stacks a second view model on the one pairing.
+    @Test func aPairingInWaitNeverStacksOnARunningPairing() {
+        let m = model
+        let at = "2026-10-09T12:00:00Z"
+        let item = FeedItem(itemID: "f1", seq: 1, kind: "device.pair.pending", at: at, status: "active", ref: "x")
+        m.navigate(.devices)
+        m.openPair(desktop: true)
+        m.push(.device("d1"))
+        m.openNotified(item)
+        #expect(m.path == [.pair(held: false, desktop: true)])
+        m.openPair(desktop: false)
+        #expect(m.path == [.pair(held: false, desktop: true)])
+        // With none on the path it is pushed, once.
+        m.navigate(.devices)
+        m.openNotified(item)
+        m.openNotified(item)
+        #expect(m.path == [.pair(held: true, desktop: false)])
+    }
+
     /// A notification's tap, the screen in front and the permission wait while the shell is not really in front: under the
     /// app lock's cover or an asked daily check.
     @Test func theShellIsInFrontOnlyWithoutTheAppLockOrAnAskedCheck() {
