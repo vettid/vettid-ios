@@ -264,6 +264,30 @@ import VettIDUI
         #expect(!outside.secure && outside.focused)
     }
 
+    /// A new item from each template fits the screen at the default and the largest text sizes: no view of the form past
+    /// either edge (its secret fields once filled the form's open height and pushed the screen sideways).
+    @Test func everyTemplateFormFitsTheScreen() async throws {
+        let items = FakeItems()
+        for template in [nil] + ItemTemplates.all.map(\.id) as [String?] {
+            for size in [DynamicTypeSize.large, .accessibility3] {
+                let state = ItemEditViewModel(itemID: nil, template: template, items: items).state
+                let host = UIHostingController(rootView: NavigationStack {
+                    ItemEditScreen(state: state, actions: ItemEditActions()).toolbar(.hidden, for: .navigationBar)
+                }.environment(\.dynamicTypeSize, size).vettIDTheme(.dark))
+                let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
+                window.rootViewController = host
+                window.makeKeyAndVisible()
+                host.view.layoutIfNeeded()
+                await Task.yield()
+                host.view.layoutIfNeeded()
+                func all(_ v: UIView) -> [UIView] { [v] + v.subviews.flatMap(all) }
+                let past = all(host.view).map { $0.convert($0.bounds, to: window) }.filter { $0.minX < -0.5 || $0.maxX > 390.5 }
+                #expect(past.isEmpty, "\(template ?? "blank") at \(size): \(past.first.map { "\($0)" } ?? "")")
+                window.isHidden = true
+            }
+        }
+    }
+
     @Test func everyCategoryHasItsGlyph() {
         #expect(ItemTemplates.categories.allSatisfy { ItemSymbols.category($0.id) != .folder || $0.id == "other" })
         #expect(ItemSymbols.category("loyalty_cards") == .folder)

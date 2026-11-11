@@ -196,6 +196,39 @@ import UIKit
         window.isHidden = true
     }
 
+    /// Inside the secure container, which measures its content with no height limit, a secret field stays one line high and
+    /// the container no wider than the screen: a field that filled the open height pushed the item form past both edges.
+    @Test func aSecretFieldInTheSecureContainerKeepsToItsLineAndTheScreen() throws {
+        try #require(SecureLayer.isAvailable)
+        for size in [DynamicTypeSize.large, .accessibility5] {
+            let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
+            window.rootViewController = UIHostingController(rootView: ScrollView {
+                SecureContainer {
+                    VStack(alignment: .leading) {
+                        SecretField("Password", text: .constant(""))
+                        Text("Wider than the screen").frame(width: 600)
+                    }
+                }
+                .padding(.horizontal, 24)
+            }.environment(\.dynamicTypeSize, size))
+            window.isHidden = false
+            window.layoutIfNeeded()
+            let field = try #require(textFields(in: window).first)
+            let frame = field.convert(field.bounds, to: window)
+            let line = max(field.intrinsicContentSize.height, Spacing.touchTarget)
+            #expect(abs(frame.height - line) < 1, "\(size): \(frame.height), one line or the touch target: \(line)")
+            let hosts = views(in: window).filter { String(describing: type(of: $0)).contains("SecureHost") }
+            #expect(!hosts.isEmpty)
+            for v in hosts {
+                let f = v.convert(v.bounds, to: window)
+                #expect(f.minX >= 0 && f.maxX <= 390, "\(size): \(f)")
+            }
+            window.isHidden = true
+        }
+    }
+
+    private func views(in view: UIView) -> [UIView] { [view] + view.subviews.flatMap { views(in: $0) } }
+
     private func textFields(in view: UIView) -> [UITextField] {
         (view as? UITextField).map { [$0] } ?? view.subviews.flatMap { textFields(in: $0) }
     }
