@@ -216,7 +216,7 @@ extension VaultDevice {
                 let entry = try enqueueLocked(
                     id: nil, type: inner.type, body: Self.standing(tok), re: inner.id, status: Inner.statusOK, exp: nil, save: false
                 )
-                afterLock { [self] in try? await deliver(entry) }
+                afterLock { [self] in _ = try? await deliverQueued(entry) }
             } else {
                 storeVaultToken(body)
             }
@@ -276,6 +276,15 @@ extension VaultDevice {
         guard let (a, env, v) = prepared else { return }
         // The responder is stored by the save that ends ``handleLocked(_:)``, before this deposit (``afterLock(_:)``).
         afterLock { [self] in
+            // Not while a lock is pending (``flushMayGo(_:since:)``): the vault never sees this hs.resp, and the responder goes
+            // as after a refusal; the vault's rekey starts again.
+            guard await flushMayGo(HsTypes.resp, since: stopMark) == .go else {
+                try? await withLockSaving {
+                    awaiting.removeAll { $0.resp === a.resp }
+                    a.resp.abort()
+                }
+                return
+            }
             do {
                 try await depositToVault(v, env)
             } catch let e as RelayError {
@@ -350,14 +359,14 @@ extension VaultDevice {
                 let e = try enqueueLocked(
                     id: nil, type: "relay.token.issued", body: Self.standing(tok), re: nil, status: nil, exp: nil, save: false
                 )
-                afterLock { [self] in try? await deliver(e) }
+                afterLock { [self] in _ = try? await deliverQueued(e) }
             }
             let exp = Double(v.tokenExpMs) / 1000
             if exp - t.timeIntervalSince1970 < Self.refreshBefore, t.timeIntervalSince1970 < exp {
                 let e = try enqueueLocked(
                     id: nil, type: "relay.token.refresh", body: VaultJSON.empty, re: nil, status: nil, exp: nil, save: false
                 )
-                afterLock { [self] in try? await deliver(e) }
+                afterLock { [self] in _ = try? await deliverQueued(e) }
             }
         } catch {
             // retried at the next message

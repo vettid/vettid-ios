@@ -383,6 +383,25 @@ extension InitDepositTests {
         try await d.startTransfer(link: try qr.link(), attester: TestIOSAttester()) { _, _ in nil }
         #expect(d.pairingSas == nil, "no code until this handshake's own hs.resp")
     }
+
+    /// A pairing's `hs.fin` asks the lock gate (nothing but the lock while one is pending): held, it waits in the outbox, not
+    /// marked in flight, as after a passing failure, and the next flush the gate admits sends it.
+    @Test func aFinWaitsForTheLockGate() async throws {
+        let (d, v) = try await newPhone()
+        let open = Box(false)
+        d.setFlushGate { open.value }
+        let (qr, inviteID) = try codeFor(v, d)
+        try await d.startTransfer(link: try qr.link(), attester: TestIOSAttester()) { _, _ in nil }
+        let (_, initMsg) = try await base.relay.nextDeposit()
+        try await d.handle(try v.respondOpening(initMsg, d, ctx: inviteID).message)
+        #expect(await base.relay.noDeposit(within: 0.2))
+        #expect(d.mem.withLock { d.st.outbox.map(\.type) == ["hs.fin"] && d.outboxInFlight.isEmpty })
+        #expect(!d.mem.withLock { d.finFailed })
+        open.value = true
+        await d.flushOutbox()
+        try v.fin(try await base.relay.nextDeposit().payload, d)
+        #expect(d.mem.withLock { d.st.outbox.isEmpty })
+    }
 }
 
 // swiftlint:enable line_length

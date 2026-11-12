@@ -294,16 +294,14 @@ extension VaultDevice {
     /// device lock, one flush at a time: a slow relay holds up the flush and nothing else. Each entry asks the lock gate
     /// first (``flushMayGo(_:since:)``): while a lock is pending only a `call.end` goes, and nothing goes after a ``stop()``
     /// that came since this flush was asked for, also when it waited for another flush to end.
-    public func flushOutbox() async {
-        let mark = stopMark
+    public func flushOutbox() async { await flushOutbox(since: stopMark) }
+
+    /// ``flushOutbox()`` for a flush asked for at [mark] (``stopMark``): a stop since then ends it.
+    func flushOutbox(since mark: Int) async {
         guard let entries = await takeFlushSlot() else { return }
         let nowMs = Self.ms(now())
         var ended = false
         for e in entries {
-            let go = await flushMayGo(e.type, since: mark)
-            if go == .hold { continue }
-            ended = go == .end
-            if ended { break }
             // Not one that is being deposited just now (a renewal reported as failed must not go out later).
             // By id: an entry re-addressed meanwhile (§8.6) is still the same entry.
             let taken = mem.withLock { st.outbox.contains { $0.id == e.id } && outboxInFlight.insert(e.id).inserted }
@@ -319,6 +317,10 @@ extension VaultDevice {
                 try? await withLockSaving { st.outbox.removeAll { $0.id == e.id } }
                 continue
             }
+            let go = await flushMayGo(e.type, since: mark)
+            if go == .hold { continue }
+            ended = go == .end
+            if ended { break }
             if e.type == HsTypes.confirm {
                 await deliverConfirm(e) // its time follows a refusal for good
                 continue
@@ -352,6 +354,9 @@ extension VaultDevice {
             if let entries { return entries }
             // Woken when the running flush ends; a cancelled waiter returns at once. The timeout only bounds one wait: the
             // loop looks again.
+            #if DEBUG
+            flushWaits?()
+            #endif
             _ = await running?.wait(timeout: 60)
             if Task.isCancelled { return nil }
         }

@@ -1,6 +1,10 @@
 // The lock gate of the outbox: nothing but the lock (and a pending `call.end`) goes to a vault while a lock is pending
-// (ANDROID-PLAN "Locking", "While pending"). Every deposit of an outbox entry, whoever starts the flush, asks the gate
-// first, entry by entry.
+// (ANDROID-PLAN "Locking", "While pending"). Every flush, whoever starts it, asks the gate before each entry, and so does
+// every reply queued while a vault message is handled (``deliverQueued(_:since:)``, a rekey's `hs.resp`). Not gated here:
+// the entry a ``send(_:body:id:)`` deposits itself, whose caller is gated by the manager (its one caller today is
+// `call.end`, which passes anyway), and the requests, which the manager gates.
+
+import VettIDCrypto
 
 extension VaultDevice {
     /// What a flush may do with its next entry (``flushMayGo(_:since:)``).
@@ -27,5 +31,24 @@ extension VaultDevice {
         if type == Self.typeCallEnd { return .go }
         if let gate, await !gate() { return .hold }
         return mem.withLock({ stops == mark && !forgotten }) ? .go : .end
+    }
+
+    /// Deposits an outbox entry queued outside a flush (a reply queued while a vault message was handled, the 12-day
+    /// `hs.confirm`), only when the lock gate admits it: a lock pending, the handling's replies wait in the outbox for a
+    /// flush after it. Held, the entry is no longer in flight (``enqueueLocked``), so that the flush sends it. False when
+    /// held; a deposit's failure is thrown, as ``deliver(_:keepOnFailure:)``'s (an `hs.confirm`'s is handled by
+    /// ``deliverConfirm(_:)``).
+    @discardableResult
+    func deliverQueued(_ e: OutboxEntry, since mark: Int? = nil) async throws -> Bool {
+        guard await flushMayGo(e.type, since: mark ?? stopMark) == .go else {
+            mem.withLock { _ = outboxInFlight.remove(e.id) }
+            return false
+        }
+        if e.type == HsTypes.confirm {
+            await deliverConfirm(e)
+        } else {
+            try await deliver(e)
+        }
+        return true
     }
 }

@@ -94,17 +94,10 @@ extension VaultDevice {
 
     /// ``tickConfirmLocked(_:save:)`` under the device lock, and the deposit of what it queued outside it (a transport
     /// failure leaves it in the outbox for the next flush).
-    func tickConfirm() async {
-        let mark = stopMark
+    func tickConfirm(since mark: Int? = nil) async {
         let e = await lock.withLock { tickConfirmLocked(now(), save: true) }
-        guard let e else { return }
-        // Queued in any case; deposited only when the lock gate admits it (``flushMayGo(_:since:)``). Held, it is no longer
-        // in flight (``enqueueLocked``), so that a later flush sends it.
-        guard await flushMayGo(e.type, since: mark) == .go else {
-            mem.withLock { _ = outboxInFlight.remove(e.id) }
-            return
-        }
-        await deliverConfirm(e)
+        // Queued in any case; deposited only when the lock gate admits it, or by a later flush.
+        if let e { _ = try? await deliverQueued(e, since: mark) }
     }
 
     /// Deposits an `hs.confirm` (also from ``flushOutbox()``). One the relay refuses for good (``isTerminal(_:)``) is gone
@@ -134,7 +127,7 @@ extension VaultDevice {
             let e = try enqueueLocked(
                 id: nil, type: HsTypes.confirm, body: VaultJSON.empty, re: nil, status: nil, exp: nil, save: saves
             )
-            if !saves { afterLock(keep: keep) { [self] in await deliverConfirm(e) } }
+            if !saves { afterLock(keep: keep) { [self] in _ = try? await deliverQueued(e) } }
             return e
         } catch {
             mem.withLock { st.vault?.confirmAtMs = before }
@@ -148,7 +141,7 @@ extension VaultDevice {
     func queueFeatures(keep: Bool = false) throws -> OutboxEntry {
         let body = JsonBuilder().raw("features", JsonBuilder.array(DeviceFeatures.all.map(JsonBuilder.quote))).bytes()
         let e = try enqueueLocked(id: nil, type: Self.typeDeviceFeatures, body: body, re: nil, status: nil, exp: nil, save: false)
-        afterLock(keep: keep) { [self] in try? await deliver(e) }
+        afterLock(keep: keep) { [self] in _ = try? await deliverQueued(e) }
         return e
     }
 }

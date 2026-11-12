@@ -373,9 +373,9 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
         memberVault.set(device: s.device)
         // A phone registered for a recovery holds the key the vault bound at the register (IOS-PLAN §6.2).
         config.attestStartOver?.set(recovering: s.device.recovering)
-        // Every outbox deposit, whoever starts the flush (the device's start, a quota backoff's end, a fresh token for held
-        // entries, the manager), asks the lock gate before each entry: nothing but the lock, and a pending `call.end`, while a
-        // lock is pending.
+        // Every flush of the outbox, whoever starts it (the device's start, a quota backoff's end, a fresh token for held
+        // entries, the manager), and every reply the device queues while handling a vault message, asks the lock gate before
+        // each entry: nothing but the lock, and a pending `call.end`, while a lock is pending.
         s.device.setFlushGate { @MainActor [weak self] in self?.lockGuard.admits() ?? false }
         // In the background nothing starts the collection again (a lock's retry opens the session): the return to the
         // foreground does (IOS-PLAN §6.6).

@@ -70,6 +70,7 @@ public final class VaultDevice: @unchecked Sendable {
     #if DEBUG
     var beforeFinalSave: (@Sendable () async -> Void)? // TEST ONLY: before the write that ends a handling
     var flushSeen: (@Sendable (Bool) -> Void)? // TEST ONLY: a flush reached an entry (true: it left it alone)
+    var flushWaits: (@Sendable () -> Void)? // TEST ONLY: a flush waits for a running one to end
     #endif
     var flushing = false // a flush of the outbox runs (``flushOutbox()``); read and written under ``mem``
     /// Completed when the running flush ends: the flushes that wait for it wake up. Under ``mem``.
@@ -377,19 +378,21 @@ public final class VaultDevice: @unchecked Sendable {
     /// Starts collecting from the device's mailbox and flushes the outbox; does nothing while a collection runs. A
     /// terminal relay error ends the collection (``collectionEnded``); start it again to go on.
     public func start() {
-        let begin: Int? = mem.withLock {
+        let begin: (round: Int, mark: Int)? = mem.withLock {
             // A quieted device collects nothing again (``quiet()``): its answers could not be sent.
             if quieted { return nil }
             stopped = false
             if collector != nil, collectEnded == nil { return nil }
             collectEnded = nil
             collectRound += 1
-            return collectRound
+            return (collectRound, stops)
         }
-        guard let round = begin else { return }
+        guard let (round, mark) = begin else { return }
         let task = Task { [weak self] in
             guard let self else { return }
-            let flush = Task { await self.tickConfirm(); await self.flushOutbox() } // (0.88.1) hs.confirm again after 12 days (both gated)
+            // (0.88.1) hs.confirm again after 12 days, then the outbox: both through the lock gate, and neither after a stop
+            // since this start.
+            let flush = Task { await self.tickConfirm(since: mark); await self.flushOutbox(since: mark) }
             defer { flush.cancel() }
             do {
                 try await collector(of: round).run { m in try await self.handle(m) }

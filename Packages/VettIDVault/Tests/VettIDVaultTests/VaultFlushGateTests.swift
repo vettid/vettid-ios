@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 @testable import VettIDVault
+import VettIDCrypto
 import VettIDRelay
 import VettIDTesting
 
@@ -23,7 +24,6 @@ extension VaultDeviceTests {
         let open = Box(false)
         d.setFlushGate { open.value }
         await d.flushOutbox()
-        await d.gatedFlush()
         #expect(await relay.noDeposit(within: 0.2))
         #expect(outboxTypes(d) == ["device.features"])
         open.value = true
@@ -84,16 +84,78 @@ extension VaultDeviceTests {
             asked.complete(true)
             return await answer.wait(timeout: 10) ?? false
         }
+        let waiting = OneShot<Bool>()
+        d.flushWaits = { waiting.complete(true) }
         let first = Task { await d.flushOutbox() }
         #expect(await asked.wait(timeout: 10) == true)
         let second = Task { await d.flushOutbox() }
-        try await Task.sleep(nanoseconds: 100_000_000) // the second waits for the first to end
+        #expect(await waiting.wait(timeout: 10) == true) // the second waits for the first to end
         d.stop()
         answer.complete(true)
         await first.value
         await second.value
         #expect(await relay.noDeposit(within: 0.2))
         #expect(outboxTypes(d) == ["device.features"])
+    }
+
+    /// The vault's `relay.token.refresh` while a lock is pending: its answer waits in the outbox (not in flight), and goes
+    /// at the next flush the gate admits.
+    @Test func theAnswerToARefreshWaitsForTheGate() async throws {
+        let (d, v) = try await pairedDevice()
+        relay.dropDeposits()
+        let open = Box(false)
+        d.setFlushGate { open.value }
+        try await d.handle(try v.seal("relay.token.refresh", "{}"))
+        #expect(await relay.noDeposit(within: 0.2))
+        #expect(outboxTypes(d) == ["relay.token.refresh"] && d.mem.withLock { d.outboxInFlight.isEmpty })
+        open.value = true
+        await d.flushOutbox()
+        let answer = try v.open(try await relay.nextDeposit().payload)
+        #expect(answer.type == "relay.token.refresh" && answer.re != nil)
+    }
+
+    /// The renewals a handling queues (a standing token near its end, §7.2) wait for the gate too.
+    @Test func aRenewalQueuedByAHandlingWaitsForTheGate() async throws {
+        let (d, v) = try await pairedDevice()
+        relay.dropDeposits()
+        d.setFlushGate { false }
+        d.mem.withLock { d.st.issuedExpMs = VaultDevice.ms(Date()) + 1_000 }
+        try await d.handle(try v.seal("vault.notice", "{}"))
+        #expect(await relay.noDeposit(within: 0.2))
+        #expect(outboxTypes(d) == ["relay.token.issued"] && d.mem.withLock { d.outboxInFlight.isEmpty })
+    }
+
+    /// The vault's rekey while a lock is pending: no `hs.resp` goes, and its responder is dropped, as after a refusal (the
+    /// vault starts the rekey again).
+    @Test func aRekeyIsNotAnsweredWhileTheGateIsShut() async throws {
+        let (d, v) = try await pairedDevice()
+        relay.dropDeposits()
+        d.setFlushGate { false }
+        let ini = try v.rekey(d)
+        try await d.handle(v.msg(ini.envelope))
+        #expect(await relay.noDeposit(within: 0.2))
+        #expect(d.mem.withLock { d.awaiting.isEmpty })
+    }
+
+    /// A rekey answered before the lock: its `hs.confirm` and `device.features`, queued when the vault's `hs.fin` arrives
+    /// with a lock pending, wait in the outbox for the gate.
+    @Test func aRekeysConfirmAndFeaturesWaitForTheGate() async throws {
+        let (d, v) = try await pairedDevice()
+        relay.dropDeposits()
+        let open = Box(true)
+        d.setFlushGate { open.value }
+        let ini = try v.rekey(d)
+        try await d.handle(v.msg(ini.envelope))
+        let res = try ini.handleResp(try await relay.nextDeposit().payload, collectSender: d.relayAddr.pk, now: Date())
+        open.value = false
+        try await d.handle(v.msg(res.fin))
+        #expect(await relay.noDeposit(within: 0.2))
+        #expect(outboxTypes(d) == ["hs.confirm", "device.features"] && d.mem.withLock { d.outboxInFlight.isEmpty })
+        open.value = true
+        await d.flushOutbox()
+        let first = try res.epoch.open(try Envelope.parse(try await relay.nextDeposit().payload))
+        let second = try res.epoch.open(try Envelope.parse(try await relay.nextDeposit().payload))
+        #expect([first.type, second.type] == ["hs.confirm", "device.features"])
     }
 
     /// A pending `call.end` still goes while the gate is shut; what is held stays.
