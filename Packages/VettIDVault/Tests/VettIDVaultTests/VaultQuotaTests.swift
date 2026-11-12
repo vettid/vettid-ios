@@ -233,4 +233,60 @@ extension VaultDeviceTests {
         #expect(outboxTypes(d).isEmpty)
         #expect(relay.depositTokens.count == before + 1, "the fin was not sent")
     }
+
+    /// The flush at the backoff's end runs only while the device collects and its lock gate admits it.
+    @Test func theBackoffsFlushPassesTheGate() async throws {
+        for (started, gate) in [(false, true), (true, false), (true, true)] {
+            let (d, v, up) = try await quotaDevice()
+            relay.serveMailbox = true
+            if started { d.start() }
+            d.setFlushGate { gate }
+            // The wait "passes" at once: the clock moves by it.
+            let slept = Box(false)
+            d.mem.withLock { d.quotaSleep = { secs in up.value += secs + 1; slept.value = true } }
+            relay.refuseDeposits = RelayError.quotaExceeded
+            relay.refuseOnly = 1
+            await #expect(throws: RelayError.self) { try await d.send("device.features") }
+            if started && gate {
+                #expect(try v.open(try await relay.nextDeposit().payload).type == "device.features", "\(started) \(gate)")
+            } else {
+                #expect(await relay.noDeposit(within: 0.3), "\(started) \(gate)")
+                #expect(slept.value)
+                #expect(outboxTypes(d) == ["device.features"])
+            }
+            d.stop()
+        }
+    }
+
+    /// A renewal of the standing token during a move is never kept for later: refused for a quota, or held by one, it is
+    /// gone, and the caller is told.
+    @Test func aRenewalUnderAQuotaIsNotKept() async throws {
+        let (d, _, _) = try await quotaDevice()
+        relay.refuseDeposits = RelayError.quotaExceeded
+        relay.refuseOnly = 1
+        await #expect(throws: RelayError.self) { try await d.renewStandingToken() }
+        #expect(outboxTypes(d).isEmpty)
+        // The mailbox's backoff runs: the next renewal waits, and is dropped all the same.
+        await #expect(throws: QuotaWait.self) { try await d.renewStandingToken() }
+        #expect(outboxTypes(d).isEmpty)
+        #expect(await relay.noDeposit(within: 0.2))
+    }
+
+    /// A new standing token from the vault sends the entries held for the spent one at once, under it.
+    @Test func aNewStandingTokenFlushesTheHeldEntries() async throws {
+        let (d, v, _) = try await quotaDevice()
+        relay.serveMailbox = true
+        d.start()
+        let spent = try #require(d.mem.withLock { d.st.vault?.token })
+        relay.refuseDeposits = RelayError.quotaExceeded
+        relay.refuseQuota = RelayError.quotaToken
+        relay.refuseOnly = 1
+        await #expect(throws: RelayError.self) { try await d.send("device.features") }
+        v.requestTokenTTL = DepositTokens.standingTTL + 3_600
+        let fresh = try v.token(for: d)
+        try await d.handle(try v.seal("relay.token.issued", #"{"kind":"standing","token":"\#(fresh)"}"#))
+        #expect(try v.open(try await relay.nextDeposit().payload).type == "device.features")
+        #expect(relay.depositTokens.last == fresh && relay.depositTokens.last != spent)
+        d.stop()
+    }
 }

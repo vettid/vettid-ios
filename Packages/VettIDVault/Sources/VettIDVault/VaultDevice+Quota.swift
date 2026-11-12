@@ -35,10 +35,12 @@ extension VaultDevice {
                 quotaBackoff[e.mailbox] = (cfg.uptime() + next, next)
                 return next
             }
-            // A flush when the wait ends, so that a foreground app tries again on time (not only at its next start or unlock).
+            // A flush when the wait ends, so that a foreground app tries again on time (not only at its next start or unlock),
+            // through the manager's lock gate.
+            let sleep = mem.withLock { quotaSleep }
             Task { [weak self] in
-                try? await Task.sleep(for: .seconds(next))
-                await self?.flushOutbox()
+                await sleep(next)
+                await self?.gatedFlush()
             }
             return
         }
@@ -55,6 +57,18 @@ extension VaultDevice {
     /// How many spent tokens are kept (``DeviceState/quotaSpentTokens``), the newest: a device holds one standing token for
     /// its vault at a time (chosen; not in the spec).
     static let maxSpentTokens = 8
+
+    /// Sets the gate of the flushes the device starts on its own (``gatedFlush()``).
+    public func setFlushGate(_ gate: @escaping @Sendable () async -> Bool) { mem.withLock { flushGate = gate } }
+
+    /// A flush the device starts on its own (the end of a quota backoff, a new standing token for held entries): only while
+    /// it collects, and only when the manager's gate admits it (nothing but the lock while one is pending).
+    func gatedFlush() async {
+        let (gate, running) = mem.withLock { (flushGate, !stopped && !forgotten) }
+        guard running else { return }
+        if let gate, await !gate() { return }
+        await flushOutbox()
+    }
 
     /// The relay took a deposit to [mailbox]: its quota backoff ends.
     func quotaAccepted(_ mailbox: String) { mem.withLock { quotaBackoff[mailbox] = nil } }

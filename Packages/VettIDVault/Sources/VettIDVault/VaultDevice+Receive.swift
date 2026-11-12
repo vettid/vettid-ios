@@ -319,6 +319,10 @@ extension VaultDevice {
             if Self.ms(exp) > st.vault?.tokenExpMs ?? 0 {
                 st.vault?.token = tok
                 st.vault?.tokenExpMs = Self.ms(exp)
+                // Entries held for a spent token go under the new one, now rather than at the next start (§8.6).
+                if st.outbox.contains(where: { $0.quotaToken != nil }) {
+                    afterLock { [weak self] in await self?.gatedFlush() }
+                }
             }
         }
     }

@@ -313,7 +313,8 @@ extension VaultDevice {
         let nowMs = Self.ms(now())
         for e in entries {
             // Not one that is being deposited just now (a renewal reported as failed must not go out later).
-            let taken = mem.withLock { st.outbox.contains(e) && outboxInFlight.insert(e.id).inserted }
+            // By id: an entry re-addressed meanwhile (§8.6) is still the same entry.
+            let taken = mem.withLock { st.outbox.contains { $0.id == e.id } && outboxInFlight.insert(e.id).inserted }
             #if DEBUG
             flushSeen?(!taken)
             #endif
