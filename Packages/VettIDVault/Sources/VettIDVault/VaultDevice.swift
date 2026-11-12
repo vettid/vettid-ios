@@ -147,6 +147,10 @@ public final class VaultDevice: @unchecked Sendable {
     let ownerCheckBroadcast = Broadcast<String>()
     let refusalBroadcast = Broadcast<Int>(), keyBroadcast = Broadcast<CredentialKeySeen>()
     let sasBroadcast = Broadcast<String>()
+    let pairingHeldBroadcast = Broadcast<Bool>()
+    /// The id of the pairing `hs.fin` the relay holds for a quota (``pairingHeldByRelay``), and the value last emitted. Under ``mem``.
+    var pairingHeldFin: String?
+    var pairingHeldEmitted = false
     let countedBroadcast = Broadcast<String>()
     let reconnectBroadcast = Broadcast<Int>()
     /// How many times the collection came back (``relayReconnects()``).

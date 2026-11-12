@@ -252,7 +252,9 @@ extension VaultDevice {
             st.vault?.confirmAtMs = nil
             // The fin of the handshake that is dropped is of no use to anyone.
             st.outbox.removeAll { $0.type == Self.typeHsFin }
+            pairingHeldFin = nil
         }
+        publishPairingHeld()
     }
 
     /// Answers a vault-initiated rekey (§6.5). The responder is persisted before `hs.resp` goes out: the vault switches

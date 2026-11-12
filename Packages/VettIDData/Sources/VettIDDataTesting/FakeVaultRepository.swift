@@ -255,6 +255,8 @@ public final class FakeVaultRepository: CustomStringConvertible {
     /// What ``awaitTransferIn()`` answers: false as from a vault release that sends no `user_guid`.
     public var transferGaveUserGuid = true
     /// When set, the new phone's wait for the vault's `hs.resp` (and so the SAS) lasts until it completes.
+    /// Drives ``transferInRelayBusyUpdates()``: yield to it.
+    public let relayBusy = RelayBusyFeed()
     public var transferHsResp: TestDeferred<String>?
     public var lastTransferCode: String?
     /// Completes (or fails) the new phone's wait for the old phone's approval.

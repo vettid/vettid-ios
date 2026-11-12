@@ -72,6 +72,62 @@ extension VaultDevice {
         await flushOutbox()
     }
 
+    /// Whether this device's pairing `hs.fin` is held by a relay quota (`quota_exceeded` from the deposit, or a wait for a
+    /// quota before it): the comparison code is shown meanwhile, and the vault has not got the fin (chosen; not in the spec).
+    /// False once it is deposited, refused for good, or no longer in the outbox.
+    public var pairingHeldByRelay: Bool { mem.withLock { pairingHeldLocked } }
+
+    /// ``pairingHeldByRelay`` as it changes: the current value first, then each change.
+    public func pairingHeldUpdates() -> AsyncStream<Bool> {
+        let source = pairingHeldBroadcast.stream()
+        let first = pairingHeldByRelay
+        return AsyncStream { c in
+            c.yield(first)
+            let t = Task {
+                var last = first
+                for await v in source where v != last {
+                    last = v
+                    c.yield(v)
+                }
+                c.finish()
+            }
+            c.onTermination = { _ in t.cancel() }
+        }
+    }
+
+    private var pairingHeldLocked: Bool {
+        guard let id = pairingHeldFin else { return false }
+        return st.outbox.contains { $0.id == id }
+    }
+
+    /// What a deposit of [e] ended with ([error] nil: the relay took it), for the pairing `hs.fin` only: a `quota_exceeded`, or
+    /// a wait for a quota before any deposit (``QuotaWait``), holds it; a deposit, or a refusal for good, ends the hold; any
+    /// other failure (transport, a passing refusal) leaves it as it was.
+    func notePairingHold(_ e: OutboxEntry, _ error: (any Error)?) {
+        guard e.type == Self.typeHsFin else { return }
+        if let error {
+            if error is QuotaWait || (error as? RelayError)?.code == RelayError.quotaExceeded {
+                mem.withLock { pairingHeldFin = e.id }
+            } else if let x = error as? RelayError, Self.isTerminal(x) {
+                mem.withLock { pairingHeldFin = nil }
+            }
+        } else {
+            mem.withLock { pairingHeldFin = nil }
+        }
+        publishPairingHeld()
+    }
+
+    /// Emits ``pairingHeldByRelay`` when it differs from the value last emitted.
+    func publishPairingHeld() {
+        let changed: Bool? = mem.withLock {
+            let now = pairingHeldLocked
+            guard now != pairingHeldEmitted else { return nil }
+            pairingHeldEmitted = now
+            return now
+        }
+        if let changed { pairingHeldBroadcast.emit(changed) }
+    }
+
     /// The relay took a deposit to [mailbox]: its quota backoff ends.
     func quotaAccepted(_ mailbox: String) { mem.withLock { quotaBackoff[mailbox] = nil } }
 
