@@ -12,6 +12,7 @@ import VettIDUI
 /// catalog). Mirrors vettid-android `AdvancedSecurityContent`.
 public struct AdvancedSecurityContent: View {
     @Environment(\.vettIDColors) private var colors
+    @Environment(\.vettIDTimeScale) private var timeScale
     let state: SettingsState
     let ownerCheck: OwnerCheckSettingsState
     let actions: SettingsActions
@@ -41,6 +42,17 @@ public struct AdvancedSecurityContent: View {
             ScrollView {
                 VStack(spacing: 0) {
                     LargeTitle(SettingsStrings.securityAdvanced)
+                    // A setting of this screen that failed (the app lock's timeout): said here, as Settings says its own.
+                    if let error = state.error {
+                        NoticeCard(
+                            .urgent, title: error.title(or: SettingsStrings.securityAdvanced), message: error.message(timeScale: timeScale),
+                            announce: .assertive
+                        ) {
+                            NoticeAction(label: SettingsStrings.done, identifier: "settings_error_done", action: actions.dismissError)
+                        }
+                        .padding(.horizontal, Spacing.gutter)
+                        .padding(.vertical, Spacing.s)
+                    }
                     SettingsGroup {
                         let rows = AdvancedSecurityRow.rows(state: state, ownerCheck: ownerCheck)
                         ForEach(Array(rows.enumerated()), id: \.element) { i, row in
@@ -53,6 +65,9 @@ public struct AdvancedSecurityContent: View {
             }
             .accessibilityIdentifier("advanced_security_screen")
         }
+        // A change sent to the vault (the interval, the hold, the idle lock) is not cut off by going back: its answer and the
+        // check it may offer come here.
+        .blocksBackGesture(ownerCheck.busy)
         .confirmDialog(
             isPresented: $confirmScreenshots, title: SecurityStrings.screenshotsConfirmTitle,
             message: SecurityStrings.screenshotsConfirmBody, confirmLabel: SecurityStrings.screenshotsConfirm,

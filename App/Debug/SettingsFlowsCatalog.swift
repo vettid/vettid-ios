@@ -35,7 +35,7 @@ extension ShellCatalog {
         case .alarm(let state): AlarmContent(state: state)
         case .newCredential(let state): NewCredentialContent(state: state)
         case .help: HelpScreen {}
-        case .settingsAskScreenshots(let state): AdvancedSecurityContent(state: state, now: now, askScreenshots: true)
+        case .advancedSecurityAskScreenshots(let state): AdvancedSecurityContent(state: state, now: now, askScreenshots: true)
         case .advancedSecurity(let state, let ownerCheck): AdvancedSecurityContent(state: state, ownerCheck: ownerCheck, now: now)
         default: EmptyView()
         }

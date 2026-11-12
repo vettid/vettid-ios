@@ -387,7 +387,7 @@ enum SettingsPicker: String, Identifiable {
 }
 
 /// The app lock's rows of Security (ANDROID-PLAN D6, IOS-PLAN ID17): the switch and "Unlock with"; "Lock after" is in
-/// Advanced security (``AppLockTimeoutRow``).
+/// Advanced security (``AdvancedSecurityRow/appLockTimeout``).
 struct AppLockRows: View {
     let state: SettingsState
     let actions: SettingsActions

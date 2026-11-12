@@ -43,7 +43,7 @@ enum ShellCatalog {
         case alarm(AlarmState)
         case newCredential(NewCredentialState)
         /// Settings with Allow screenshots' confirmation shown.
-        case settingsAskScreenshots(SettingsState)
+        case advancedSecurityAskScreenshots(SettingsState)
         /// The shared profile and the profile photo's camera (VAULT-MESSAGING §10.8).
         case sharedProfile(SharedProfileState)
         case photoCapture(PhotoCaptureState)
@@ -199,7 +199,7 @@ enum ShellCatalog {
             AttestationContent(state: state, canary: canary, onLoadCanary: {})
         case .canaryDialog(let prompt):
             ComingLaterScreen(destination: .messages, chrome: chrome).canaryManifestDialog(prompt, onConfirm: {}, onDismiss: {})
-        case .changeName, .changePin, .credential, .changePassword, .newPhoneSecret, .deleteVault, .settingsAskScreenshots, .rotate,
+        case .changeName, .changePin, .credential, .changePassword, .newPhoneSecret, .deleteVault, .advancedSecurityAskScreenshots, .rotate,
              .alarm, .newCredential, .help, .sharedProfile, .photoCapture, .advancedSecurity:
             flowScreen(entry.screen)
         }
