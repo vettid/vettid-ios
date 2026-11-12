@@ -163,9 +163,12 @@ extension VaultDeviceTests {
         // A new entry under the same token: held, though the entry that was refused is gone.
         await #expect(throws: QuotaWait.self) { try await d.send("call.end") }
         #expect(await relay.noDeposit(within: 0.2))
-        // After a restart: still held.
+        // After a restart: still held, and so is an entry queued after it under the spent token (the kept list alone).
         let again = try #require(try VaultDevice.load(config(store, uptime: { up.value }), secrets: secrets))
         await again.flushOutbox()
+        #expect(await relay.noDeposit(within: 0.2))
+        _ = try await again.dropFromOutbox("call.end")
+        await #expect(throws: QuotaWait.self) { try await again.send("call.end") }
         #expect(await relay.noDeposit(within: 0.2))
         again.mem.withLock { again.st.vault?.token = "fresh-token" }
         await again.flushOutbox()
@@ -214,5 +217,20 @@ extension VaultDeviceTests {
         d.mem.withLock { d.st.vault?.token = "fresh-token" }
         await d.flushOutbox()
         #expect(try v.open(try await relay.nextDeposit().payload).type == VaultDevice.typeHsFin)
+    }
+
+    /// An earlier fin past its time, behind which a new entry waits, is dropped, not sent (as a flush drops it).
+    @Test func aStaleFinBehindAWaitingMailboxIsDropped() async throws {
+        let (d, v, up) = try await quotaDevice()
+        relay.refuseDeposits = RelayError.quotaExceeded
+        relay.refuseOnly = 1
+        await #expect(throws: RelayError.self) { try await d.send(VaultDevice.typeHsFin) }
+        d.mem.withLock { d.st.outbox[0].dropAfterMs = VaultDevice.ms(Date()) - 1 }
+        up.value += 61
+        let before = relay.depositTokens.count
+        try await d.send("device.features")
+        #expect(try v.open(try await relay.nextDeposit().payload).type == "device.features")
+        #expect(outboxTypes(d).isEmpty)
+        #expect(relay.depositTokens.count == before + 1, "the fin was not sent")
     }
 }
