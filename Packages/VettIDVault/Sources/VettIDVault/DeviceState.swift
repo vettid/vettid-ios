@@ -26,6 +26,10 @@ final class DeviceState: Codable, @unchecked Sendable {
     var utks: [UtkRecord] = []
     var recovery: RecoveryRecord?
     var outbox: [OutboxEntry] = []
+    /// (VAULT-MESSAGING 0.88.8 §8.6, "A device") The tokens to the vault whose quota refused a deposit (`quota: token`), the
+    /// newest last, at most ``VaultDevice/maxSpentTokens``: no outbox entry is sent under one again, also once the entry it
+    /// refused has gone. Optional: older states have none.
+    var quotaSpentTokens: [String]?
     /// The vault has shown this app a signer on its own `device.list` entry (VAULT-MESSAGING 0.27.0 §11.7.1).
     var signerSeen = false
     /// (VAULT-MESSAGING 0.46.0 §11.14.9 step 1) This device's credential requests that may still reach the vault: inner
@@ -159,9 +163,13 @@ struct OutboxEntry: Codable, Sendable, Equatable {
     let type: String
     let relayURL: String
     let mailbox: String
-    let token: String
+    /// The token it is deposited under: re-addressed to the vault's held token once the one it had is spent (§8.6).
+    var token: String
     let envelope: String
     var attempts = 0
+    /// (VAULT-MESSAGING 0.88.8 §8.6 `quota_exceeded`, "A device"; RELAY-PROTOCOL §7.1) The token whose quota refused this
+    /// entry (`quota: token`): it is never sent under it again, and waits for another standing token for the vault.
+    var quotaToken: String?
     /// A handshake's fin: the time (epoch ms) after which it is dropped, not sent again (nil for any other entry).
     var dropAfterMs: Int64?
     /// A handshake's fin: the ids (``Epoch/ctx``) of the epoch it was sealed under and of the epochs a rekey moved that
