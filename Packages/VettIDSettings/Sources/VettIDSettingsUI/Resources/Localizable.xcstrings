@@ -2836,6 +2836,28 @@
         }
       }
     },
+    "settings_security_advanced": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Advanced security"
+          }
+        }
+      }
+    },
+    "settings_security_advanced_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Check interval, idle lock, attestation and more"
+          }
+        }
+      }
+    },
     "settings_security_credential": {
       "extractionState": "manual",
       "localizations": {

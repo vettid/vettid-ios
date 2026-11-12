@@ -21,7 +21,7 @@ import VettIDUI
             .appendingPathComponent("Sources/VettIDSettingsUI/Resources/Localizable.xcstrings")
         let doc = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
         let keys = try #require((doc["strings"] as? [String: Any])?.keys)
-        #expect(keys.count == 472)
+        #expect(keys.count == 474)
         let missing = "\u{0}missing"
         for key in keys {
             let text = Bundle.module.localizedString(forKey: key, value: missing, table: nil)
@@ -337,6 +337,38 @@ import VettIDUI
             #expect(height(AttestationContent(state: s)) > 0)
             #expect(height(AttestationContent(state: s, canary: canary, onLoadCanary: {})) > 0)
         }
+    }
+
+    /// ANDROID-PLAN 0.1.124 §4 "Advanced security": Security keeps Credential, the app lock, Check now, Move to a new phone
+    /// and "Advanced security", in that order; Check now only for a vault that has reported its owner check.
+    @Test func securityShowsItsRows() {
+        let check = OwnerCheckSettingsState(view: OwnerCheckView(state: .ok, deadline: now.addingTimeInterval(3_600)))
+        #expect(SecurityRow.rows(ownerCheck: check, transfer: true) == [.credential, .appLock, .checkNow, .transfer, .advanced])
+        #expect(SecurityRow.rows(ownerCheck: OwnerCheckSettingsState(), transfer: false) == [.credential, .appLock, .advanced])
+        #expect(SettingsStrings.securityAdvanced == "Advanced security")
+        #expect(SettingsStrings.securityAdvancedBody == "Check interval, idle lock, attestation and more")
+    }
+
+    /// Advanced security holds the moved rows in the plan's order, each only where it applies; every state renders, and
+    /// Allow screenshots' confirmation with it.
+    @Test func advancedSecurityHoldsTheMovedRows() {
+        let check = OwnerCheckSettingsState(
+            view: OwnerCheckView(state: .ok, deadline: now.addingTimeInterval(3_600)), idleLock: IdleLockSetting(seconds: 604_800)
+        )
+        let all = SettingsState(appLockOn: true, phoneSecret: true)
+        #expect(
+            AdvancedSecurityRow.rows(state: all, ownerCheck: check, screenshotsShown: true)
+                == [.ownerCheck, .appLockTimeout, .attestation, .newPhoneSecret, .screenshots]
+        )
+        #expect(AdvancedSecurityRow.rows(state: SettingsState(), ownerCheck: OwnerCheckSettingsState()) == [.attestation])
+        #expect(
+            AdvancedSecurityRow.rows(state: SettingsState(), ownerCheck: check) == [.ownerCheck, .attestation],
+            "Allow screenshots waits for the secure layer, as it did in App"
+        )
+        for (s, o) in [(all, check), (SettingsState(), OwnerCheckSettingsState()), (SettingsState(error: .network), check)] {
+            #expect(height(AdvancedSecurityContent(state: s, ownerCheck: o, now: now)) > 0)
+        }
+        #expect(height(AdvancedSecurityContent(state: all, now: now, askScreenshots: true)) > 0)
     }
 
     static func release(_ n: UInt64, _ status: String = "active") -> ReleaseView {

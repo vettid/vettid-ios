@@ -257,6 +257,8 @@ final class FakeFeedOps: FeedOps, @unchecked Sendable {
         #expect(FeedKinds.target(item("connection.active_again", nil, "c1")) == .sheet)
         #expect(FeedKinds.target(item("share.rate_limited", "c1", "rule")) == .shareRule(connectionID: "c1", ruleID: "rule"))
         #expect(FeedKinds.target(item("item.revealed", nil, nil)) == .sheet && FeedKinds.target(item("owner_check.locked", nil, nil)) == .security)
+        #expect(FeedKinds.target(item("owner_check.failed", "password", nil)) == .advancedSecurity)
+        #expect(FeedKinds.target(item("owner_check.hold_changed", "off", nil)) == .advancedSecurity)
         #expect(FeedKinds.isAsk("critical-secret.use.request") && !FeedKinds.isAsk("message.received"))
         #expect(FeedAsks.of("device:device.session.pending:s1")?.kinds == ["device.session.pending"] && FeedAsks.of("device:device.session.pending:s1")?.ref == "s1")
         #expect(FeedAsks.of("outgoing:c1") == nil && FeedAsks.of("auth:r1")?.kinds == ["connection.authenticate.requested"])

@@ -2,7 +2,7 @@ import Foundation
 import Observation
 import VettIDData
 
-/// The owner-check rows of Settings (VAULT-MESSAGING §3.6.2, §3.6.7). Mirrors vettid-android `OwnerCheckSettingsUiState`.
+/// The owner-check rows of Settings → Security and Advanced security (VAULT-MESSAGING §3.6.2, §3.6.7). Mirrors vettid-android `OwnerCheckSettingsUiState`.
 public struct OwnerCheckSettingsState: Equatable, Sendable {
     /// Nil for a vault that has not reported its owner check (not read yet).
     public var view: OwnerCheckView?
