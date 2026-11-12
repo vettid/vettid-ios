@@ -40,9 +40,14 @@ extension VaultDevice {
     /// ``deliverConfirm(_:)``).
     @discardableResult
     func deliverQueued(_ e: OutboxEntry, since mark: Int? = nil) async throws -> Bool {
-        guard await flushMayGo(e.type, since: mark ?? stopMark) == .go else {
+        let mark = mark ?? stopMark
+        if await flushMayGo(e.type, since: mark) != .go {
             mem.withLock { _ = outboxInFlight.remove(e.id) }
-            return false
+            // A flush that ran while it was still marked (the lock ended meanwhile) left it alone: asked once more, and taken
+            // back unless a flush has it now.
+            guard await flushMayGo(e.type, since: mark) == .go,
+                  mem.withLock({ st.outbox.contains { $0.id == e.id } && outboxInFlight.insert(e.id).inserted })
+            else { return false }
         }
         if e.type == HsTypes.confirm {
             await deliverConfirm(e)

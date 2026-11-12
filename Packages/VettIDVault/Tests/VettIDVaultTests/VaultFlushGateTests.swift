@@ -38,6 +38,7 @@ extension VaultDeviceTests {
         d.setFlushGate { false }
         d.start()
         defer { d.stop() }
+        await d.gatedFlush() // a flush the device starts on its own (a quota backoff's end, a new token)
         #expect(await relay.noDeposit(within: 0.5))
         #expect(outboxTypes(d) == ["device.features"])
     }
@@ -118,11 +119,15 @@ extension VaultDeviceTests {
     @Test func aRenewalQueuedByAHandlingWaitsForTheGate() async throws {
         let (d, v) = try await pairedDevice()
         relay.dropDeposits()
-        d.setFlushGate { false }
+        let open = Box(false)
+        d.setFlushGate { open.value }
         d.mem.withLock { d.st.issuedExpMs = VaultDevice.ms(Date()) + 1_000 }
         try await d.handle(try v.seal("vault.notice", "{}"))
         #expect(await relay.noDeposit(within: 0.2))
         #expect(outboxTypes(d) == ["relay.token.issued"] && d.mem.withLock { d.outboxInFlight.isEmpty })
+        open.value = true
+        await d.flushOutbox()
+        #expect(try v.open(try await relay.nextDeposit().payload).type == "relay.token.issued")
     }
 
     /// The vault's rekey while a lock is pending: no `hs.resp` goes, and its responder is dropped, as after a refusal (the

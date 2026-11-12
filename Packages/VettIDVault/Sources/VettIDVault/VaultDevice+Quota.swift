@@ -126,15 +126,15 @@ extension VaultDevice {
         let nowMs = Self.ms(now())
         let mark = stopMark
         for e in earlier {
-            // Each asks the lock gate, as in a flush; one held back holds [entry] behind it.
-            let go = await flushMayGo(e.type, since: mark)
-            if go == .end { break }
-            if go == .hold { continue }
-            // A fin past its time is dropped, not sent, as by a flush.
+            // A fin past its time is dropped, not sent, as by a flush (before the gate is asked).
             if e.type == Self.typeHsFin, let dropAfter = e.dropAfterMs, nowMs >= dropAfter {
                 try? await withLockSaving { st.outbox.removeAll { $0.id == e.id } }
                 continue
             }
+            // Each asks the lock gate, as in a flush; one held back holds [entry] behind it.
+            let go = await flushMayGo(e.type, since: mark)
+            if go == .end { break }
+            if go == .hold { continue }
             // Not one a flush is depositing just now.
             let taken = mem.withLock { st.outbox.contains { $0.id == e.id } && outboxInFlight.insert(e.id).inserted }
             guard taken else { continue }

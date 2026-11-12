@@ -384,6 +384,22 @@ extension InitDepositTests {
         #expect(d.pairingSas == nil, "no code until this handshake's own hs.resp")
     }
 
+    /// A fin past its time is dropped by a flush while the lock gate is shut too: dropping it sends nothing.
+    @Test func aFinPastItsTimeIsDroppedWhileTheGateIsShut() async throws {
+        let offset = Box<TimeInterval>(0)
+        let (d, v) = try await newPhone(now: { Date().addingTimeInterval(offset.value) })
+        d.setFlushGate { false }
+        let (qr, inviteID) = try codeFor(v, d)
+        try await d.startTransfer(link: try qr.link(), attester: TestIOSAttester()) { _, _ in nil }
+        let (_, initMsg) = try await base.relay.nextDeposit()
+        try await d.handle(try v.respondOpening(initMsg, d, ctx: inviteID).message)
+        #expect(d.mem.withLock { d.st.outbox.map(\.type) } == ["hs.fin"])
+        offset.value = 17 * 86_400 // past a handshake's lifetime
+        await d.flushOutbox()
+        #expect(d.mem.withLock { d.st.outbox.isEmpty })
+        #expect(await base.relay.noDeposit(within: 0.2))
+    }
+
     /// A pairing's `hs.fin` asks the lock gate (nothing but the lock while one is pending): held, it waits in the outbox, not
     /// marked in flight, as after a passing failure, and the next flush the gate admits sends it.
     @Test func aFinWaitsForTheLockGate() async throws {
