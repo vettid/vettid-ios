@@ -307,9 +307,14 @@ public struct OwnerCheckScreen: View {
 
     /// The keypad (above the buttons, or in the form: ``keypadFixed``; no notice pushes its keys past the edge), with a wrong
     /// password said over it: the PIN was taken, so the member is back here (§3.6.5 keeps neither entry). Not in the
-    /// password step, after an unlock that kept the PIN, or once the vault locked or is probably locked.
+    /// password step, after an unlock that kept the PIN, once the vault locked or is probably locked, or while the check or
+    /// a lock is sent (its dimmed keys would be read by VoiceOver; it comes back with the answer).
+    static func keypadShown(_ state: OwnerCheckScreenState, passwordStep: Bool) -> Bool {
+        !state.locked && state.watch == .none && !state.pinKept && !passwordStep && !state.busy && !state.locking
+    }
+
     @ViewBuilder private var keypad: some View {
-        if !state.locked, state.watch == .none, !state.pinKept, !passwordStep {
+        if Self.keypadShown(state, passwordStep: passwordStep) {
             VStack(spacing: Spacing.s) {
                 if badPassword {
                     Text(OnboardingStrings.ownerCheckBadPassword)

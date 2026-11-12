@@ -136,9 +136,10 @@ import VettIDUI
         let window = host(UnlockScreen(state: due, actions: NoUnlockActions(), pin: pin, steps: PinThenPassword(pinDone: true)))
         #expect(textFields(in: window).count == 1, "the password step")
         pin.clear()
-        for _ in 0..<10 where !textFields(in: window).isEmpty {
+        // Up to 2 s for the observation to redraw (CI simulators are slow).
+        for _ in 0..<40 where !textFields(in: window).isEmpty {
             window.layoutIfNeeded()
-            try await Task.sleep(for: .milliseconds(30))
+            try await Task.sleep(for: .milliseconds(50))
         }
         #expect(textFields(in: window).isEmpty, "the digits gone: the keypad again")
         window.isHidden = true
@@ -152,6 +153,35 @@ import VettIDUI
         let bad = host(UnlockScreen(state: wrong, actions: NoUnlockActions()))
         #expect(textFields(in: bad).isEmpty, "a wrong PIN: the keypad")
         bad.isHidden = true
+    }
+
+    /// While the unlock is sent (a vault that is starting can take minutes) no dimmed keypad crowds the wait's text or is
+    /// read by VoiceOver; it comes back with the answer.
+    @Test func theKeypadGoesWhileTheUnlockIsSent() {
+        var s = ok
+        s.checkDue = true
+        #expect(UnlockScreen.keypadShown(s, passwordStep: false))
+        #expect(!UnlockScreen.keypadShown(s, passwordStep: true))
+        s.busy = true
+        s.slowUnlock = true
+        #expect(!UnlockScreen.keypadShown(s, passwordStep: false))
+        #expect(height(UnlockScreen(state: s, actions: NoUnlockActions())) > 0)
+    }
+
+    /// The way back while the check gates it: the check-first text in place of "Return to release N"; the screen renders
+    /// either way.
+    @Test func theCheckFirstTextReplacesTheReturn() {
+        var s = ok
+        s.moveUnconfirmed = UnconfirmedMove(
+            from: ReleaseView(number: 3, pcr0: String(repeating: "aa", count: 48), status: "", endsAt: nil, notes: ""),
+            to: ReleaseView(number: 4, pcr0: String(repeating: "a4", count: 48), status: "", endsAt: nil, notes: ""),
+            failed: true
+        )
+        #expect(s.returnOffered && !UnlockScreen.returnWaitsForCheck(s), "the return offered")
+        s.returnGated = true
+        s.checkDue = true
+        #expect(UnlockScreen.returnWaitsForCheck(s), "the check first")
+        #expect(height(UnlockScreen(state: s, actions: NoUnlockActions())) > 0)
     }
 
     /// The keypad stays fixed above the buttons on an iPhone 15 or 16e at the usual text sizes; on an SE, or at an

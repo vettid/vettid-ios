@@ -18,6 +18,9 @@ public final class UnlockViewModel: UnlockActions {
     @ObservationIgnored let vault: any VaultRepository
     @ObservationIgnored let account: any AccountRepository
     @ObservationIgnored private let releaseNotes: (any ReleaseNotesRepository)?
+    /// The owner check, read again when the way back is refused (the gate may have turned on since the last read).
+    @ObservationIgnored private let ownerCheckRepo: (any OwnerCheckRepository)?
+    @ObservationIgnored private let now: @Sendable () -> Date
     @ObservationIgnored private var notesTask: Task<Void, Never>?
     /// One second of a countdown (a virtual clock in the tests).
     @ObservationIgnored private let tick: @Sendable () async throws -> Void
@@ -49,6 +52,8 @@ public final class UnlockViewModel: UnlockActions {
         self.vault = vault
         self.account = account
         self.releaseNotes = releaseNotes
+        self.ownerCheckRepo = ownerCheck
+        self.now = now
         self.tick = tick
         let hint = account.account?.emailHint
         state = UnlockState(email: hint?.isEmpty == false ? hint : nil, phoneSecret: vault.usesPhoneSecret)
@@ -300,8 +305,15 @@ public final class UnlockViewModel: UnlockActions {
         }
         state.returnAsksPin = false
         state.message = nil
-        // Refused before anything was sent (an update running, the owner check or a change first).
-        if !vault.returnToPreviousRelease(pin: pin) { state.message = .failed(.other, code: nil) }
+        // Refused before anything was sent (an update running, the owner check or a change first). The gate is read again
+        // first: it may have turned on since the last read (every 15 s), and then the notice says the check comes first.
+        guard !vault.returnToPreviousRelease(pin: pin) else { return }
+        if let repo = ownerCheckRepo, repo.ownerCheck?.gated(now()) == true || repo.lockedByChecks {
+            let at = now()
+            ownerCheck(due: repo.ownerCheck?.gated(at) == true, lockedByChecks: repo.lockedByChecks, idleLocked: repo.idleLockedNow(at))
+        } else {
+            state.message = .failed(.other, code: nil)
+        }
     }
 
     // MARK: - The lock and the move

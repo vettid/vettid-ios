@@ -115,6 +115,10 @@ public struct UnlockScreen: View {
 
     /// The PIN typed whole, and the password with a check due; a return to the previous release takes the PIN only (its
     /// keypad shows no password, even with a check due).
+    /// The way back's notice says the check comes first instead of offering "Return to release N" (the vault refuses it
+    /// while the check gates it).
+    static func returnWaitsForCheck(_ state: UnlockState) -> Bool { state.returnOffered && state.returnGated }
+
     static func canSubmit(_ state: UnlockState, digits: Int) -> Bool {
         state.pinAllowed && digits >= UnlockState.minPinLength
             && (!state.checkDue || state.returnAsksPin || !state.password.isEmpty)
@@ -195,6 +199,8 @@ public struct UnlockScreen: View {
         .onDisappear { forgetSecrets() }
         // Digits taken by "Unlock" or dropped: the keypad again.
         .onChange(of: pin.count) { _, digits in steps.digitsChanged(to: digits) }
+        // The way back's keypad closed ("Not now", or the check came due): its digits do not stay for the unlock.
+        .onChange(of: state.returnAsksPin) { _, asks in if !asks { pin.clear() } }
         // The password typed goes with its step (back to the keypad, the PIN taken or dropped).
         .onChange(of: passwordStep) { _, shown in if !shown, !state.password.isEmpty { actions.setPassword("") } }
         .onChange(of: scenePhase) { _, now in
@@ -215,9 +221,10 @@ public struct UnlockScreen: View {
     /// the notices no room).
     private var keypadFixed: Bool { PinThenPassword.keypadFixed(height: height, typeSize: typeSize) }
 
-    /// The keypad; gone in the password step and wherever the screen asks for no PIN.
+    /// The keypad; gone in the password step, wherever the screen asks for no PIN, and while the unlock is sent (its
+    /// dimmed keys would crowd out the wait's text and be read by VoiceOver; it comes back with the answer).
     @ViewBuilder private var keypad: some View {
-        if UnlockBlock.blocks(for: state).contains(.pin), !passwordStep {
+        if Self.keypadShown(state, passwordStep: passwordStep) {
             PinEntry(
                 label: OnboardingStrings.unlockPinLabel,
                 buffer: pin,
@@ -229,6 +236,10 @@ public struct UnlockScreen: View {
             .padding(.top, Spacing.s)
             .accessibilityFocused($focus, equals: .keypad)
         }
+    }
+
+    static func keypadShown(_ state: UnlockState, passwordStep: Bool) -> Bool {
+        UnlockBlock.blocks(for: state).contains(.pin) && !passwordStep && !state.busy
     }
 
     /// The PIN's notices, the countdown and, with a check due, the password step (§3.6.5: one screen for both): the keypad
@@ -419,7 +430,7 @@ struct UnlockNotices: View {
                 .warning, title: OnboardingStrings.releaseUpdateNewFailedTitle(to),
                 message: OnboardingStrings.unlockMoveUnconfirmed(to, from)
             ) {
-                if state.returnGated {
+                if UnlockScreen.returnWaitsForCheck(state) {
                     // The vault refuses the way back while the check gates it (as the update screen says): no PIN-only return.
                     Text(OnboardingStrings.releaseUpdateCheckFirstBody)
                         .vettIDFont(.bodyMedium)

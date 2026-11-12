@@ -102,9 +102,8 @@ import VettIDDataTesting
         vm.ownerCheck(due: true, lockedByChecks: false)
         #expect(!vm.state.returnAsksPin && !vm.state.returnConfirm)
         vm.setPin("402817")
-        vm.submit()
-        await vm.settle()
-        #expect(vault.returnPins.count == 1 && !vm.state.returnAsksPin, "gated: the PIN goes to the unlock, never the way back")
+        vm.confirmReturn()
+        #expect(vault.returnPins.count == 1 && !vault.calls.contains("unlock"), "gated: nothing sent, neither the way back nor an unlock")
     }
 
     /// Check again: "not finished yet" while listed, the unreachable text, nothing once gone; the bound's state followed.

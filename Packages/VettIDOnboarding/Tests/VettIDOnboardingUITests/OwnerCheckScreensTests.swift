@@ -43,6 +43,26 @@ import VettIDUI
         window.isHidden = true
     }
 
+    /// A wrong password takes the PIN (§3.6.5 keeps neither entry): the keypad again, no password field until "Next".
+    @Test func aWrongPasswordGoesBackToTheKeypad() {
+        var s = held
+        s.message = .badPassword(checksLeft: 3)
+        let window = host(OwnerCheckScreen(state: s, actions: NoOwnerCheckActions(), now: now))
+        #expect(textFields(in: window).isEmpty)
+        window.isHidden = true
+    }
+
+    /// While the check or a lock is sent, no dimmed keypad is read by VoiceOver; it comes back with the answer.
+    @Test func theKeypadGoesWhileTheCheckIsSent() {
+        var s = held
+        #expect(OwnerCheckScreen.keypadShown(s, passwordStep: false))
+        s.busy = true
+        #expect(!OwnerCheckScreen.keypadShown(s, passwordStep: false))
+        s.busy = false
+        s.locking = true
+        #expect(!OwnerCheckScreen.keypadShown(s, passwordStep: false))
+    }
+
     /// Release L (§3.6.8): the held and daily-check screens say when the vault locks itself, while that time is ahead.
     @Test func theIdleLockTimeIsSaidOnTheGatedCheckOnly() {
         let at = now.addingTimeInterval(3_600)
