@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import VettIDAttestation
 import VettIDData
 
 /// A screen that loads one value: loading, the value, or a failure. Mirrors vettid-android `LoadState`.
@@ -153,6 +154,9 @@ public final class AttestationViewModel {
 
     /// The installed canary manifest, or nil (then nothing about it is shown).
     public var canary: CanaryManifestView? { canaryManifests?.canaryManifest }
+
+    /// (ANDROID-PLAN 0.1.124) The record of this phone's last verification of the vault's enclave, or nil.
+    public var record: EnclaveRecord? { (vault as? any EnclaveRecordSource)?.enclaveRecord }
 
     /// Stops using the canary manifest: the published one is used again.
     public func removeCanary() { canaryManifests?.removeCanaryManifest() }

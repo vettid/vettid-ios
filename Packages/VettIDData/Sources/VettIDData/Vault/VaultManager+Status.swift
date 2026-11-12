@@ -1,5 +1,6 @@
 import Foundation
 import VettIDAltChan
+import VettIDAttestation
 import VettIDCrypto
 import VettIDVault
 
@@ -124,13 +125,30 @@ extension VaultManager {
         try await guarded {
             let device = try await storedSession()?.device
             let alt = device?.altState
-            return AttestationInfo.iPhone(
+            var a = AttestationInfo.iPhone(
                 environment: config.environment,
                 appAttest: AppAttestInfo(accepted: device?.deviceID != nil),
                 lastRelease: alt?.releaseNumber ?? 0,
                 lastReleaseFingerprint: alt.flatMap { Self.fingerprint($0.release) }
             )
+            a.appVersion = Self.appVersion(Bundle.main)
+            a.osVersion = Self.osVersion(ProcessInfo.processInfo.operatingSystemVersion)
+            a.releaseTagPrefix = config.releaseTagPrefix
+            a.rootFingerprint = config.trust.nitroRoots.first.map(NitroRoot.fingerprint) ?? NitroRoot.sha256Hex
+            return a
         }
+    }
+
+    /// "1.2.3 (45)": the bundle's version and build; empty when it has neither.
+    nonisolated static func appVersion(_ b: Bundle) -> String {
+        let v = b.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
+        let n = b.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? ""
+        return n.isEmpty ? v : "\(v) (\(n))"
+    }
+
+    /// "26.1", or "26.1.2" with a patch version.
+    nonisolated static func osVersion(_ v: OperatingSystemVersion) -> String {
+        "\(v.majorVersion).\(v.minorVersion)" + (v.patchVersion > 0 ? ".\(v.patchVersion)" : "")
     }
 
     /// The first 16 hex digits of a release's PCR0, in groups of four; nil for none.

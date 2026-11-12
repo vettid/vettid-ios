@@ -12,6 +12,8 @@ let package = Package(
         .library(name: "VettIDSettings", targets: ["VettIDSettings", "VettIDSettingsUI"]),
     ],
     dependencies: [
+        // The enclave verification's record (Settings → Attestation, ANDROID-PLAN 0.1.124).
+        .package(path: "../VettIDAttestation"),
         .package(path: "../VettIDData"),
         .package(path: "../VettIDKeys"),
         .package(path: "../VettIDUI"),
@@ -27,6 +29,7 @@ let package = Package(
         .target(
             name: "VettIDSettings",
             dependencies: [
+                .product(name: "VettIDAttestation", package: "VettIDAttestation"),
                 .product(name: "VettIDData", package: "VettIDData"),
                 .product(name: "VettIDKeys", package: "VettIDKeys"),
                 .product(name: "VettIDMedia", package: "VettIDMedia"),
@@ -37,6 +40,7 @@ let package = Package(
             name: "VettIDSettingsUI",
             dependencies: [
                 "VettIDSettings",
+                .product(name: "VettIDAttestation", package: "VettIDAttestation"),
                 .product(name: "VettIDData", package: "VettIDData"),
                 .product(name: "VettIDKeys", package: "VettIDKeys"),
                 .product(name: "VettIDMedia", package: "VettIDMedia"),
@@ -50,6 +54,7 @@ let package = Package(
             name: "VettIDSettingsTests",
             dependencies: [
                 "VettIDSettings",
+                .product(name: "VettIDAttestation", package: "VettIDAttestation"),
                 .product(name: "VettIDData", package: "VettIDData"),
                 .product(name: "VettIDDataTesting", package: "VettIDData"),
                 .product(name: "VettIDKeys", package: "VettIDKeys"),
@@ -62,6 +67,7 @@ let package = Package(
             dependencies: [
                 "VettIDSettings",
                 "VettIDSettingsUI",
+                .product(name: "VettIDAttestation", package: "VettIDAttestation"),
                 .product(name: "VettIDData", package: "VettIDData"),
                 .product(name: "VettIDDataTesting", package: "VettIDData"),
                 .product(name: "VettIDMedia", package: "VettIDMedia"),

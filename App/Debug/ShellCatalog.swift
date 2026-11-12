@@ -1,5 +1,6 @@
 #if DEBUG
 import SwiftUI
+import VettIDAttestation
 import VettIDData
 import VettIDKeys
 import VettIDOnboarding
@@ -28,7 +29,7 @@ enum ShellCatalog {
         case settings(SettingsState, OwnerCheckSettingsState)
         case advancedSecurity(SettingsState, OwnerCheckSettingsState)
         case vaultStatus(LoadState<VaultOverview>, InstalledFrom)
-        case attestation(LoadState<AttestationInfo>)
+        case attestation(LoadState<AttestationInfo>, EnclaveRecord?)
         /// Attestation on a canary phone (VAULT-RELEASES §10.1 step 9): the installed test release manifest.
         case attestationCanary(LoadState<AttestationInfo>, CanaryManifestView)
         /// The canary manifest dialog over the shell.
@@ -163,8 +164,7 @@ enum ShellCatalog {
             Entry(id: "status_apple", title: "Vault status: from Apple", screen: .vaultStatus(loaded, .apple)),
             Entry(id: "status_loading", title: "Vault status: loading", screen: .vaultStatus(LoadState(), .apple)),
             Entry(id: "status_failed", title: "Vault status: failed", screen: .vaultStatus(.init(loading: false, error: .network), .apple)),
-            Entry(id: "attestation", title: "Attestation", screen: .attestation(LoadState(loading: false, value: iPhone))),
-        ]
+        ] + attestationEntries(iPhone)
     }
 
     /// The screen for [entry], with actions that do nothing.
@@ -193,8 +193,8 @@ enum ShellCatalog {
             SettingsContent(state: state, ownerCheck: ownerCheck, now: now)
         case .vaultStatus(let state, let installedFrom):
             VaultStatusContent(state: state, installedFrom: installedFrom)
-        case .attestation(let state):
-            AttestationContent(state: state, onLoadCanary: {})
+        case .attestation(let state, let record):
+            AttestationContent(state: state, onLoadCanary: {}, record: record, copy: { _ in })
         case .attestationCanary(let state, let canary):
             AttestationContent(state: state, canary: canary, onLoadCanary: {})
         case .canaryDialog(let prompt):
@@ -246,5 +246,45 @@ struct ShellCatalogScreen: View {
     }
     .tabViewStyle(.page)
     .vettIDTheme(.dark)
+}
+extension ShellCatalog {
+    /// Attestation in detail (ANDROID-PLAN 0.1.124): no verification yet, every check passed, a failed check, and a
+    /// release refused after every check passed.
+    static func attestationEntries(_ iPhone: AttestationInfo) -> [Entry] {
+        let at = Date(timeIntervalSince1970: 1_791_384_000)
+        var info = iPhone
+        info.appVersion = "1.0 (42)"
+        info.osVersion = "26.1"
+        info.releaseTagPrefix = "release/staging/"
+        let state = LoadState(loading: false, value: info)
+        let passed = record(at, passed: AttestationCheck.allCases.count)
+        var refused = passed
+        refused.refusal = .olderRelease
+        let failed = record(at, passed: 2, failed: true)
+        return [
+            Entry(id: "attestation", title: "Attestation: not verified yet", screen: .attestation(state, nil)),
+            Entry(id: "attestation_passed", title: "Attestation: every check passed", screen: .attestation(state, passed)),
+            Entry(id: "attestation_failed", title: "Attestation: the signature failed", screen: .attestation(state, failed)),
+            Entry(id: "attestation_refused", title: "Attestation: refused, an older release", screen: .attestation(state, refused)),
+        ]
+    }
+
+    /// A sample record of [passed] checks passed (the next one failed when [failed]), with the values read so far.
+    private static func record(_ at: Date, passed: Int, failed: Bool = false) -> EnclaveRecord {
+        var r = EnclaveRecord(at: at, passed: passed, failed: failed)
+        r.manifestKeyID = "1edbb48b6669decd"
+        r.manifestSerial = 7
+        guard passed >= 3 else { return r }
+        r.pcr0 = String(repeating: "03", count: 48)
+        r.pcr1 = String(repeating: "11", count: 48)
+        r.pcr2 = String(repeating: "22", count: 48)
+        r.attestedAt = at.addingTimeInterval(-3_600)
+        r.notAfter = at.addingTimeInterval(20 * 3_600)
+        if passed == AttestationCheck.allCases.count {
+            r.releaseNumber = 3
+            r.releaseStatus = .active
+        }
+        return r
+    }
 }
 #endif

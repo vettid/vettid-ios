@@ -39,25 +39,95 @@ public struct EnclaveVerifier: Sendable {
         enroll: Bool,
         now: Date
     ) throws -> VerifiedEnclave {
+        try verify(descriptor: descriptor, attestation: attestation, manifest: manifest, enroll: enroll, now: now).enclave()
+    }
+
+    /// ``verifyEnclave(descriptor:attestation:manifest:enroll:now:)`` with its record (ANDROID-PLAN 0.1.124 §4 "Attestation
+    /// in detail"): the same checks, in the order of ``AttestationCheck`` ([manifest] has passed line 1), each recorded as it
+    /// passes; the first that fails is recorded failed and every later one not run. A release that passed every check and
+    /// is not `active` for an enrollment is refused after them (``EnclaveRefusal/notActive``). Mirrors vettid-android
+    /// `EnclaveVerifier.verify`.
+    public func verify( // swiftlint:disable:this function_body_length cyclomatic_complexity
+        descriptor: [UInt8],
+        attestation: [UInt8],
+        manifest: ReleaseManifest,
+        enroll: Bool,
+        now: Date
+    ) -> EnclaveVerification {
+        // Line 1 passes only for a manifest verified under a pinned key (``ReleaseManifest/keyID``).
+        guard manifest.keyID != nil else {
+            return EnclaveVerification(failure: .signature("manifest"), record: .manifestFailed(at: now))
+        }
+        var r = EnclaveRecord(at: now, passed: 1, failed: false)
+        r.manifestKeyID = manifest.keyID
+        r.manifestSerial = manifest.serial
+        var passed = 1
+        func pass() {
+            passed += 1
+            r = r.with(passed: passed, failed: false)
+        }
+        func fail(_ e: AttestationError) -> EnclaveVerification {
+            EnclaveVerification(failure: e, record: r.with(passed: passed, failed: true))
+        }
+        // Lines 2 and 3: the chain (and the document's format) is checked before the signature, which is the last thing
+        // NitroVerifier checks and the only one it reports as a `signature` failure.
+        let doc: NitroDocument
+        do {
+            doc = try nitro.verify(attestation)
+        } catch AttestationError.signature(let what) {
+            pass()
+            return fail(.signature(what))
+        } catch let e as AttestationError {
+            return fail(e)
+        } catch {
+            return fail(.format("attestation"))
+        }
+        let ms = doc.measurements
+        r.pcr0 = ms.pcr0
+        r.pcr1 = ms.pcr1
+        r.pcr2 = ms.pcr2
+        r.attestedAt = doc.timestamp
+        pass()
+        pass()
+        // Line 4: the descriptor's format and user_data over it.
         let ds: Descriptor
         do {
             ds = try Descriptor.parse(descriptor)
-        } catch is CryptoError {
-            throw AttestationError.format("descriptor")
+        } catch {
+            return fail(.format("descriptor"))
         }
-        let doc = try nitro.verify(attestation)
-        try doc.checkUserData(AltChannel.etkUserData(descriptor))
-        try doc.checkFresh(now: now, maxAge: Self.maxAttestationAge, skew: Self.attestationSkew)
-        let ms = doc.measurements
-        guard !ms.isDebug else { throw AttestationError.debug }
-        guard Bytes.constantTimeEquals(Array(ms.pcr0.utf8), Array(ds.release.utf8)) else { throw AttestationError.pcr("release") }
+        r.notAfter = ds.notAfter
+        do {
+            try doc.checkUserData(AltChannel.etkUserData(descriptor))
+        } catch {
+            return fail(.userData)
+        }
+        pass()
+        do {
+            try doc.checkFresh(now: now, maxAge: Self.maxAttestationAge, skew: Self.attestationSkew)
+        } catch {
+            return fail(.stale)
+        }
+        pass()
+        guard !ms.isDebug else { return fail(.debug) }
+        pass()
+        guard Bytes.constantTimeEquals(Array(ms.pcr0.utf8), Array(ds.release.utf8)) else { return fail(.pcr("release")) }
+        pass()
         guard now < ds.notAfter, ds.notAfter <= doc.timestamp.addingTimeInterval(Self.maxDescriptorLife) else {
-            throw AttestationError.stale
+            return fail(.stale)
         }
-        guard let e = manifest.byPcr0(ms.pcr0) else { throw AttestationError.release("not listed", unknown: true) }
-        guard e.measurements.matches(ms) else { throw AttestationError.pcr("manifest") }
-        if enroll, e.status != .active { throw AttestationError.release("not active") }
-        return VerifiedEnclave(descriptor: ds, measurements: ms, release: e)
+        pass()
+        guard let e = manifest.byPcr0(ms.pcr0) else { return fail(.release("not listed", unknown: true)) }
+        guard e.measurements.matches(ms) else { return fail(.pcr("manifest")) }
+        pass()
+        r.releaseNumber = e.number
+        r.releaseStatus = e.status
+        r.releaseEndsAt = e.endsAt
+        if enroll, e.status != .active {
+            r.refusal = .notActive
+            return EnclaveVerification(failure: .release("not active"), record: r)
+        }
+        return EnclaveVerification(VerifiedEnclave(descriptor: ds, measurements: ms, release: e), record: r)
     }
 
     /// Checks vault.enrolled's attestation (§11.3): nonce = the app's enroll nonce,
