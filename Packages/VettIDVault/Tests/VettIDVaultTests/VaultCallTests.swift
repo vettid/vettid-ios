@@ -110,7 +110,9 @@ extension VaultDeviceTests {
             let ev = try await take(bad)
             #expect(throws: CallMessageError.self, "\(bad.prefix(60))") { try api.callAccept(call, event: ev) }
         }
-        let elsewhere = try await take(try answer().replacingOccurrences(of: callId, with: String(callId.dropLast()) + "1"))
+        // Another call's id: the last character changed (never to itself: a ULID ending in "1" made this the same call).
+        let otherId = String(callId.dropLast()) + (callId.hasSuffix("1") ? "2" : "1")
+        let elsewhere = try await take(try answer().replacingOccurrences(of: callId, with: otherId))
         #expect(throws: CallMessageError.self) { try api.callAccept(call, event: elsewhere) }
         // None of that spent the call's key: the right answer still works.
         let accepted = try api.callAccept(call, event: try await take(try answer()))
