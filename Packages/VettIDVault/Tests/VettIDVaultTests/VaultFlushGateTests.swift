@@ -130,16 +130,19 @@ extension VaultDeviceTests {
         #expect(try v.open(try await relay.nextDeposit().payload).type == "relay.token.issued")
     }
 
-    /// The vault's rekey while a lock is pending: no `hs.resp` goes, and its responder is dropped, as after a refusal (the
-    /// vault starts the rekey again).
-    @Test func aRekeyIsNotAnsweredWhileTheGateIsShut() async throws {
+    /// The vault's rekey while a lock is pending is answered all the same: the vault answers a rekey's `hs.init` once, and one
+    /// left unanswered would hold every later rekey for its lifetime. Its confirmation, once the vault's `hs.fin` arrives,
+    /// waits for the gate.
+    @Test func aRekeyIsAnsweredWhileTheGateIsShut() async throws {
         let (d, v) = try await pairedDevice()
         relay.dropDeposits()
         d.setFlushGate { false }
         let ini = try v.rekey(d)
         try await d.handle(v.msg(ini.envelope))
+        let res = try ini.handleResp(try await relay.nextDeposit().payload, collectSender: d.relayAddr.pk, now: Date())
+        try await d.handle(v.msg(res.fin))
         #expect(await relay.noDeposit(within: 0.2))
-        #expect(d.mem.withLock { d.awaiting.isEmpty })
+        #expect(outboxTypes(d) == ["hs.confirm", "device.features"])
     }
 
     /// A rekey answered before the lock: its `hs.confirm` and `device.features`, queued when the vault's `hs.fin` arrives

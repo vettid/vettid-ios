@@ -1,6 +1,7 @@
 // The lock gate of the outbox: nothing but the lock (and a pending `call.end`) goes to a vault while a lock is pending
 // (ANDROID-PLAN "Locking", "While pending"). Every flush, whoever starts it, asks the gate before each entry, and so does
-// every reply queued while a vault message is handled (``deliverQueued(_:since:)``, a rekey's `hs.resp`). Not gated here:
+// every reply queued while a vault message is handled (``deliverQueued(_:since:)``). A rekey's `hs.resp` is sent ungated,
+// as a pending `call.end` passes (``handleRekey``). Not gated here:
 // the entry a ``send(_:body:id:)`` deposits itself, whose caller is gated by the manager (its one caller today is
 // `call.end`, which passes anyway), and the requests, which the manager gates.
 

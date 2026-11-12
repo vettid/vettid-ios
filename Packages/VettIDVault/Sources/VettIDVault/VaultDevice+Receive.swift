@@ -275,16 +275,9 @@ extension VaultDevice {
         }
         guard let (a, env, v) = prepared else { return }
         // The responder is stored by the save that ends ``handleLocked(_:)``, before this deposit (``afterLock(_:)``).
+        // Sent also while a lock is pending, ungated (as vettid-android sends it): a rekey the vault started and this phone
+        // left unanswered holds every later one until it expires (VAULT-MESSAGING §6.5).
         afterLock { [self] in
-            // Not while a lock is pending (``flushMayGo(_:since:)``): the vault never sees this hs.resp, and the responder goes
-            // as after a refusal; the vault's rekey starts again.
-            guard await flushMayGo(HsTypes.resp, since: stopMark) == .go else {
-                try? await withLockSaving {
-                    awaiting.removeAll { $0.resp === a.resp }
-                    a.resp.abort()
-                }
-                return
-            }
             do {
                 try await depositToVault(v, env)
             } catch let e as RelayError {
