@@ -26,6 +26,7 @@ enum ShellCatalog {
         case banners(OwnerCheckGate)
         case accountSheet(AccountInfo?)
         case settings(SettingsState, OwnerCheckSettingsState)
+        case advancedSecurity(SettingsState, OwnerCheckSettingsState)
         case vaultStatus(LoadState<VaultOverview>, InstalledFrom)
         case attestation(LoadState<AttestationInfo>)
         /// Attestation on a canary phone (VAULT-RELEASES §10.1 step 9): the installed test release manifest.
@@ -142,6 +143,22 @@ enum ShellCatalog {
             Entry(id: "settings_release_r", title: "Settings: phone secret, dark theme", screen: .settings(
                 SettingsState(account: member, phoneSecret: true, theme: .dark), OwnerCheckSettingsState()
             )),
+            Entry(
+                id: "advanced_security", title: "Advanced security",
+                screen: .advancedSecurity(
+                    SettingsState(account: member), .init(view: ownerCheck, idleLock: IdleLockSetting(seconds: 604_800))
+                )
+            ),
+            Entry(
+                id: "advanced_security_all", title: "Advanced security: app lock on, hold off, phone secret",
+                screen: .advancedSecurity(
+                    SettingsState(account: member, appLockOn: true, appLockTimeout: .oneMinute, phoneSecret: true), holdOff
+                )
+            ),
+            Entry(
+                id: "advanced_security_no_check", title: "Advanced security: no owner check yet",
+                screen: .advancedSecurity(SettingsState(account: member), OwnerCheckSettingsState())
+            ),
             Entry(id: "status", title: "Vault status", screen: .vaultStatus(loaded, InstalledFromBuild.current)),
             Entry(id: "status_apple", title: "Vault status: from Apple", screen: .vaultStatus(loaded, .apple)),
             Entry(id: "status_loading", title: "Vault status: loading", screen: .vaultStatus(LoadState(), .apple)),
@@ -183,7 +200,7 @@ enum ShellCatalog {
         case .canaryDialog(let prompt):
             ComingLaterScreen(destination: .messages, chrome: chrome).canaryManifestDialog(prompt, onConfirm: {}, onDismiss: {})
         case .changeName, .changePin, .credential, .changePassword, .newPhoneSecret, .deleteVault, .settingsAskScreenshots, .rotate,
-             .alarm, .newCredential, .help, .sharedProfile, .photoCapture:
+             .alarm, .newCredential, .help, .sharedProfile, .photoCapture, .advancedSecurity:
             flowScreen(entry.screen)
         }
     }

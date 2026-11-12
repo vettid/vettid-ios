@@ -21,14 +21,13 @@ extension ShellCatalog {
         case .changePassword(let state): ChangePasswordContent(state: state)
         case .newPhoneSecret(let state): NewPhoneSecretContent(state: state)
         case .deleteVault(let state): DeleteVaultContent(state: state)
-        case .settingsAskScreenshots(let state): SettingsContent(state: state, now: now, askScreenshots: true)
         case .sharedProfile(let state): SharedProfileContent(state: state, now: now)
         case .photoCapture(let state): PhotoCaptureContent(state: state) { FakeCameraPreview() }
         default: rotateScreen(screen)
         }
     }
 
-    /// The rotation, the clone alarm, a new credential and Help.
+    /// The rotation, the clone alarm, a new credential, Help and Advanced security.
     @MainActor @ViewBuilder
     private static func rotateScreen(_ screen: Screen) -> some View {
         switch screen {
@@ -36,6 +35,8 @@ extension ShellCatalog {
         case .alarm(let state): AlarmContent(state: state)
         case .newCredential(let state): NewCredentialContent(state: state)
         case .help: HelpScreen {}
+        case .settingsAskScreenshots(let state): AdvancedSecurityContent(state: state, now: now, askScreenshots: true)
+        case .advancedSecurity(let state, let ownerCheck): AdvancedSecurityContent(state: state, ownerCheck: ownerCheck, now: now)
         default: EmptyView()
         }
     }

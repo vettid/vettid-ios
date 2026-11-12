@@ -16,6 +16,8 @@ public struct SettingsActions {
     public var releaseUpdate: @MainActor () -> Void = {}
     public var lockVault: @MainActor () -> Void = {}
     public var attestation: @MainActor () -> Void = {}
+    /// Settings → Security → Advanced security.
+    public var advancedSecurity: @MainActor () -> Void = {}
     public var changePin: @MainActor () -> Void = {}
     public var credential: @MainActor () -> Void = {}
     public var newPhoneSecret: @MainActor () -> Void = {}
@@ -41,7 +43,8 @@ public struct SettingsActions {
 }
 
 /// Settings (ANDROID-PLAN §4 "Screens", Settings): the account card, then Vault, Security, Privacy, App and Account, in
-/// vettid-android's order; grouped cards (Proton); the vault's lock and Allow screenshots confirm first. A row is shown
+/// vettid-android's order; grouped cards (Proton); the vault's lock confirms first. Security keeps the rows used often and
+/// opens the rest in Advanced security (ANDROID-PLAN 0.1.124 §4 "Advanced security", ``AdvancedSecurityContent``). A row is shown
 /// only once its feature works; "Update available" while the vault has a release update to approve (RELEASE-UPDATES §2);
 /// the rest come with the rows of IOS-PLAN §8 that bring them: Notifications (phase P, IOS-PLAN §6.7), Recovery
 /// (I3, VAULT-MESSAGING §11.11), Privacy's "Sharing rules" (I3, VAULT-MESSAGING §10.12), and
@@ -51,7 +54,7 @@ public struct SettingsActions {
 public struct SettingsContent: View {
     @Environment(\.vettIDTimeScale) private var timeScale
     /// Allow screenshots is shown once a screen holds the secure layer it turns off (no `SecureContainer` is in use yet).
-    static let screenshotsRowShown = false
+    nonisolated static let screenshotsRowShown = false
 
     @Environment(\.vettIDColors) private var colors
     @Environment(\.openURL) private var openURL
@@ -66,17 +69,14 @@ public struct SettingsContent: View {
     let accountDeletionURL: URL?
     @State private var confirmAccountDeletion = false
     @State private var confirmLock = false
-    @State private var confirmScreenshots: Bool
     @State private var picker: SettingsPicker?
 
-    /// [askScreenshots]: Allow screenshots' confirmation shows from the start (the debug screen catalog).
     public init(
         state: SettingsState,
         ownerCheck: OwnerCheckSettingsState = OwnerCheckSettingsState(),
         actions: SettingsActions = SettingsActions(),
         ownerCheckActions: OwnerCheckSettingsActions = OwnerCheckSettingsActions(),
         now: Date = Date(),
-        askScreenshots: Bool = false,
         accountPhoto: UIImage? = nil,
         accountDeletionURL: URL? = nil
     ) {
@@ -87,7 +87,6 @@ public struct SettingsContent: View {
         self.actions = actions
         self.ownerCheckActions = ownerCheckActions
         self.now = now
-        _confirmScreenshots = State(initialValue: askScreenshots)
     }
 
     public var body: some View {
@@ -101,32 +100,11 @@ public struct SettingsContent: View {
                     vaultSection
                     SettingsSectionHeader(SettingsStrings.sectionSecurity)
                     SettingsGroup {
-                        SettingsRow(
-                            PinStrings.securityCredential, icon: .key, supporting: PinStrings.securityCredentialBody,
-                            action: actions.credential
-                        )
-                        .accessibilityIdentifier("credential_row")
-                        SettingsDivider()
-                        if let transfer = actions.transfer {
-                            SettingsRow(
-                                TransferStrings.securityTransfer, icon: .phonelinkSetup, supporting: TransferStrings.securityTransferBody,
-                                action: transfer
-                            )
-                            .accessibilityIdentifier("transfer")
-                            SettingsDivider()
+                        let rows = SecurityRow.rows(ownerCheck: ownerCheck, transfer: actions.transfer != nil)
+                        ForEach(Array(rows.enumerated()), id: \.element) { i, row in
+                            if i > 0 { SettingsDivider() }
+                            securityRow(row)
                         }
-                        if state.phoneSecret {
-                            SettingsRow(
-                                SecurityStrings.newSecret, icon: .key, supporting: SecurityStrings.newSecretRowBody,
-                                action: actions.newPhoneSecret
-                            )
-                            .accessibilityIdentifier("new_phone_secret_row")
-                            SettingsDivider()
-                        }
-                        SettingsRow(SettingsStrings.securityAttestation, icon: .verifiedUser, action: actions.attestation)
-                            .accessibilityIdentifier("attestation")
-                        OwnerCheckSettingsRows(state: ownerCheck, actions: ownerCheckActions, now: now)
-                        AppLockRows(state: state, actions: actions, picker: $picker)
                     }
                     SettingsSectionHeader(ProfileStrings.sectionPrivacy)
                     SettingsGroup {
@@ -170,20 +148,45 @@ public struct SettingsContent: View {
             isPresented: $confirmLock, title: SettingsStrings.vaultLock, message: SettingsStrings.vaultLockBody,
             confirmLabel: SettingsStrings.vaultLock, dismissLabel: SettingsStrings.cancel, onConfirm: actions.lockVault
         )
-        .confirmDialog(
-            isPresented: $confirmScreenshots, title: SecurityStrings.screenshotsConfirmTitle,
-            message: SecurityStrings.screenshotsConfirmBody, confirmLabel: SecurityStrings.screenshotsConfirm,
-            dismissLabel: SettingsStrings.cancel, onConfirm: { actions.setScreenshotsAllowed(true) }
-        )
         .choiceSheet(item: $picker) { p in
             SettingsPickerSheet(picker: p, state: state, actions: actions) { picker = nil }
+        }
+    }
+
+    /// One of Security's rows (``SecurityRow``).
+    @ViewBuilder private func securityRow(_ row: SecurityRow) -> some View {
+        switch row {
+        case .credential:
+            SettingsRow(
+                PinStrings.securityCredential, icon: .key, supporting: PinStrings.securityCredentialBody, action: actions.credential
+            )
+            .accessibilityIdentifier("credential_row")
+        case .appLock:
+            AppLockRows(state: state, actions: actions, picker: $picker)
+        case .checkNow:
+            OwnerCheckNowRow(actions: ownerCheckActions)
+        case .transfer:
+            if let transfer = actions.transfer {
+                SettingsRow(
+                    TransferStrings.securityTransfer, icon: .phonelinkSetup, supporting: TransferStrings.securityTransferBody,
+                    action: transfer
+                )
+                .accessibilityIdentifier("transfer")
+            }
+        case .advanced:
+            SettingsRow(
+                SettingsStrings.securityAdvanced, icon: .shield, supporting: SettingsStrings.securityAdvancedBody,
+                action: actions.advancedSecurity
+            )
+            .accessibilityIdentifier("advanced_security")
         }
     }
 
     /// "Delete your VettID account" is offered once the account site has a deletion page to open.
     var accountDeletionShown: Bool { accountDeletionURL != nil }
 
-    /// App: Theme (a choice of three, as vettid-android's `ChoiceDialog`), then Allow screenshots once it is shown.
+    /// App: Theme (a choice of three, as vettid-android's `ChoiceDialog`) and what notifications show (Allow screenshots
+    /// moved to Advanced security, ANDROID-PLAN 0.1.124).
     private var appSection: some View {
         VStack(spacing: 0) {
             SettingsSectionHeader(SecurityStrings.sectionApp)
@@ -196,10 +199,6 @@ public struct SettingsContent: View {
                     SettingsDivider()
                     SettingsRow(SettingsStrings.notifyShow, icon: .notifications, supporting: Self.previewsLabel(p)) { picker = .previews }
                         .accessibilityIdentifier("notification_previews")
-                }
-                if Self.screenshotsRowShown {
-                    SettingsDivider()
-                    AllowScreenshotsRow(state: state, actions: actions, confirm: $confirmScreenshots)
                 }
             }
         }
@@ -365,6 +364,21 @@ struct AllowScreenshotsRow: View {
     }
 }
 
+/// The order of Settings → Security (ANDROID-PLAN 0.1.124 §4 "Advanced security"): Credential, the app lock (on/off and
+/// its method), Check now (for a vault that has reported its owner check), Move to a new phone (when offered) and Advanced
+/// security. Recovery, second on Android, comes with I3 (VAULT-MESSAGING §11.11).
+enum SecurityRow: Hashable {
+    case credential, appLock, checkNow, transfer, advanced
+
+    static func rows(ownerCheck: OwnerCheckSettingsState, transfer: Bool) -> [SecurityRow] {
+        var out: [SecurityRow] = [.credential, .appLock]
+        if ownerCheck.view != nil { out.append(.checkNow) }
+        if transfer { out.append(.transfer) }
+        out.append(.advanced)
+        return out
+    }
+}
+
 /// Which of the screen's choices is open: the app lock's method or timeout, the theme, or what notifications show.
 enum SettingsPicker: String, Identifiable {
     case method, timeout, theme, previews
@@ -372,7 +386,8 @@ enum SettingsPicker: String, Identifiable {
     var id: String { rawValue }
 }
 
-/// The app lock's rows (ANDROID-PLAN D6, IOS-PLAN ID17): the switch, "Unlock with", and "Lock after" while it is on.
+/// The app lock's rows of Security (ANDROID-PLAN D6, IOS-PLAN ID17): the switch and "Unlock with"; "Lock after" is in
+/// Advanced security (``AppLockTimeoutRow``).
 struct AppLockRows: View {
     let state: SettingsState
     let actions: SettingsActions
@@ -380,7 +395,6 @@ struct AppLockRows: View {
 
     var body: some View {
         let passcode = state.appLockMethod == .passcode
-        SettingsDivider()
         SettingsSwitchRow(
             SettingsStrings.securityAppLock,
             isOn: Binding(get: { state.appLockOn }, set: { actions.setAppLock($0) }),
@@ -393,13 +407,6 @@ struct AppLockRows: View {
             SettingsStrings.securityLockMethod, icon: .lockOpen, supporting: Self.methodLabel(state.appLockMethod)
         ) { picker = .method }
         .accessibilityIdentifier("app_lock_method")
-        if state.appLockOn {
-            SettingsDivider()
-            SettingsRow(
-                SettingsStrings.securityLockTimeout, icon: .timer, supporting: Self.timeoutLabel(state.appLockTimeout)
-            ) { picker = .timeout }
-            .accessibilityIdentifier("app_lock_timeout")
-        }
     }
 
     static func methodLabel(_ m: AppLockMethod) -> String {

@@ -52,6 +52,8 @@ public enum TopLevelDestination: String, CaseIterable, Sendable {
 public enum ShellRoute: Hashable, Sendable {
     case vaultStatus
     case attestation
+    /// Settings → Security → Advanced security (ANDROID-PLAN 0.1.124 §4 "Advanced security").
+    case advancedSecurity
     /// The account's name change (VAULT-MESSAGING §10.8), from the avatar sheet or the shared profile.
     case changeName
     /// The shared profile and the profile photo (VAULT-MESSAGING §10.8), from Settings → Privacy or the avatar sheet.
