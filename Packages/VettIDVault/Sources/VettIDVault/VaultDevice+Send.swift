@@ -116,7 +116,7 @@ extension VaultDevice {
     ///
     /// The entry is in flight meanwhile (``flushOutbox()`` leaves it alone). With [keepOnFailure] false a failure removes
     /// it, so that a request reported as failed is never deposited later.
-    func deliver(_ e: OutboxEntry, keepOnFailure: Bool = true) async throws {
+    func deliver(_ e: OutboxEntry, keepOnFailure: Bool = true, since asked: Int? = nil) async throws {
         mem.withLock { _ = outboxInFlight.insert(e.id) }
         defer { mem.withLock { _ = outboxInFlight.remove(e.id) } }
         // A handshake's fin is counted before it is sent: a deposit that is cancelled or killed in flight may have reached the vault,
@@ -125,7 +125,7 @@ extension VaultDevice {
         var priorAttempts = e.attempts
         // As deposited: re-addressed when the token it had is spent (§8.6).
         var sent = e
-        let mark = stopMark
+        let mark = asked ?? stopMark // a stop since the caller asked for it wins
         do {
             try refuseSending()
             sent = try await awaitQuota(e)
@@ -133,12 +133,9 @@ extension VaultDevice {
             // that a held one is not, and right before the deposit.
             try await refuseWhileGated(e.type, since: mark)
             if e.type == Self.typeHsFin {
-                // Gone (a new handshake replaced it), or the count could not be saved: nothing is deposited, and a fin still
-                // owed waits for the next flush, so that "saved before sent" holds.
-                guard case .counted(let prior) = await countFinAttempt(e) else { return }
+                guard let prior = try await countGatedFin(e, since: mark) else { return }
                 priorAttempts = prior
             }
-            if e.type == Self.typeHsFin { try await refuseWhileGated(e.type, since: mark) }
             #if DEBUG
             finSendHook?()
             #endif
@@ -207,7 +204,7 @@ extension VaultDevice {
 
     /// Counts a deposit of an `hs.fin` before it is made, and saves the count. The entry is looked up under the device lock: a
     /// flush that chose it before a new handshake removed it finds it gone.
-    private func countFinAttempt(_ e: OutboxEntry) async -> FinCount {
+    func countFinAttempt(_ e: OutboxEntry) async -> FinCount {
         #if DEBUG
         finCountHook?()
         #endif
@@ -332,7 +329,7 @@ extension VaultDevice {
                 continue
             }
             do {
-                try await deliver(e)
+                try await deliver(e, since: mark)
             } catch {} // (a fin refused for good is told to the flow, or not, by ``deliver``)
         }
         // The flush is over before the ack is tried: a vault that does not answer holds up the ack, not every flush.

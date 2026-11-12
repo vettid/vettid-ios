@@ -248,6 +248,12 @@ extension VaultDeviceTests {
         await #expect(throws: OutboxHeld.self) { try await d.send("relay.token.issued") }
         #expect(await relay.noDeposit(within: 0.2))
         #expect(outboxTypes(d) == ["device.features", "relay.token.issued"])
+        // Not left marked in flight: a later flush sends both.
+        #expect(d.mem.withLock { d.outboxInFlight.isEmpty })
+        d.setFlushGate { true }
+        await d.flushOutbox()
+        #expect(relay.dropDeposits() == 2)
+        #expect(outboxTypes(d).isEmpty)
     }
 
     /// Asked again right before the deposit, after the waits a deposit may have (a quota's, a fin's count): a lock that went

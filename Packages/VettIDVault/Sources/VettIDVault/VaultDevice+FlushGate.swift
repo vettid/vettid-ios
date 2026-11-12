@@ -1,19 +1,36 @@
 // The lock gate of the outbox: nothing but the lock (and a pending `call.end`) goes to a vault while a lock is pending
 // (ANDROID-PLAN "Locking", "While pending"). Every flush, whoever starts it, asks the gate before each entry, and so does
-// every reply queued while a vault message is handled (``deliverQueued(_:since:)``). A rekey's `hs.resp` is sent ungated,
-// as a pending `call.end` passes (``handleRekey``). Not gated here:
-// the entry a ``send(_:body:id:)`` deposits itself, whose caller is gated by the manager (its one caller today is
-// `call.end`, which passes anyway), and the requests, which the manager gates.
+// every reply queued while a vault message is handled (``deliverQueued(_:since:)``), and every deposit right before it is
+// made (``deliver(_:keepOnFailure:since:)``, a ``send(_:body:id:)``'s own entry included). A rekey's `hs.resp` is sent
+// ungated, as a pending `call.end` passes (``handleRekey``). Not gated here: the requests, which the manager gates.
 
 import VettIDCrypto
 
 /// An outbox entry not deposited because the lock gate holds it, or the device was stopped since it was asked for: it stays in
-/// the outbox for a later flush (one the gate admits).
+/// the outbox for a later flush (one the gate admits), unless its deposit was one never kept for later (a renewal of the
+/// standing token during a move, ``VaultDevice/renewStandingToken()``), which is then gone, as after any failure.
 public struct OutboxHeld: Error, Equatable, Sendable, CustomStringConvertible {
     public var description: String { "held by the lock gate" }
 }
 
 extension VaultDevice {
+    /// A fin's count before its deposit (``countFinAttempt(_:)``), and the gate asked again after it: the count before this
+    /// deposit, or nil when the fin is not to be deposited (gone, as when a new handshake replaced it, or the count could not
+    /// be saved: a fin still owed waits for the next flush, so that "saved before sent" holds). Held by the gate after the
+    /// count, it is taken back, since this copy never went out, and ``OutboxHeld`` is thrown.
+    func countGatedFin(_ e: OutboxEntry, since mark: Int) async throws -> Int? {
+        guard case .counted(let prior) = await countFinAttempt(e) else { return nil }
+        do {
+            try await refuseWhileGated(e.type, since: mark)
+        } catch {
+            try? await withLockSaving {
+                if let i = st.outbox.firstIndex(where: { $0.id == e.id }) { st.outbox[i].attempts = prior }
+            }
+            throw error
+        }
+        return prior
+    }
+
     /// Throws ``OutboxHeld`` unless an entry of [type] may be deposited now (``flushMayGo(_:since:)``).
     func refuseWhileGated(_ type: String, since mark: Int) async throws {
         if await flushMayGo(type, since: mark) != .go { throw OutboxHeld() }
@@ -66,7 +83,7 @@ extension VaultDevice {
             return true
         }
         do {
-            try await deliver(e)
+            try await deliver(e, since: mark)
         } catch is OutboxHeld {
             return false // held at the deposit itself: in the outbox, and no longer in flight (``deliver``)
         }

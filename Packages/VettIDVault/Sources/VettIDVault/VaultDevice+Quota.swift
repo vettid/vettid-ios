@@ -75,7 +75,7 @@ extension VaultDevice {
     /// Before an outbox entry's deposit: the entry as it is to be deposited, or ``QuotaWait``. An entry under a token whose
     /// quota is spent (its own or an earlier entry's) waits for another standing token for its mailbox, one not known to be
     /// spent, and is re-addressed to it (saved). While its mailbox waits for a quota, an entry goes only after every earlier
-    /// entry of that mailbox has gone, except `relay.token.refresh`, which passes them; and nothing goes while the mailbox's
+    /// entry of that mailbox has gone, except `relay.token.refresh` and `call.end`, which pass them; and nothing goes while the mailbox's
     /// backoff runs. An entry no longer in the outbox is held by the same rules, without a save.
     func awaitQuota(_ e: OutboxEntry) async throws -> OutboxEntry {
         let (out, changed): (OutboxEntry?, Bool) = mem.withLock {
@@ -136,7 +136,11 @@ extension VaultDevice {
             }
             // Each asks the lock gate, as in a flush; one held back holds [entry] behind it.
             let go = await flushMayGo(e.type, since: mark)
-            if go == .end { throw OutboxHeld() } // stopped since the send began: [entry] stays in the outbox
+            if go == .end {
+                // Stopped since the send began: [entry] stays in the outbox, no longer in flight, for a later flush.
+                mem.withLock { _ = outboxInFlight.remove(entry.id) }
+                throw OutboxHeld()
+            }
             if go == .hold { continue }
             // Not one a flush is depositing just now.
             let taken = mem.withLock { st.outbox.contains { $0.id == e.id } && outboxInFlight.insert(e.id).inserted }
@@ -145,9 +149,9 @@ extension VaultDevice {
             if e.type == HsTypes.confirm {
                 await deliverConfirm(e)
             } else {
-                try? await deliver(e)
+                try? await deliver(e, since: mark)
             }
         }
-        try await deliver(entry)
+        try await deliver(entry, since: mark)
     }
 }
