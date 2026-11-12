@@ -28,16 +28,33 @@ extension VaultDevice {
     /// - the **mailbox**'s (`quota: mailbox`, and a `quota_exceeded` with no `quota`, which a device reads as the mailbox's):
     ///   backoff from ``quotaBackoffMin`` doubling to ``quotaBackoffMax``, in memory; a deposit the relay takes ends it.
     func quotaRefused(_ e: OutboxEntry, _ x: RelayError) async {
-        try? await withLockSaving {
-            if x.quota == RelayError.quotaToken {
-                if let i = st.outbox.firstIndex(where: { $0.id == e.id }) { st.outbox[i].quotaToken = e.token }
-            } else {
+        guard x.quota == RelayError.quotaToken else {
+            let next: TimeInterval = mem.withLock {
                 let last = quotaBackoff[e.mailbox]?.last ?? 0
                 let next = last == 0 ? Self.quotaBackoffMin : min(last * 2, Self.quotaBackoffMax)
                 quotaBackoff[e.mailbox] = (cfg.uptime() + next, next)
+                return next
             }
+            // A flush when the wait ends, so that a foreground app tries again on time (not only at its next start or unlock).
+            Task { [weak self] in
+                try? await Task.sleep(for: .seconds(next))
+                await self?.flushOutbox()
+            }
+            return
+        }
+        try? await withLockSaving {
+            // Every entry under the spent token is marked, and the token kept on its own, so that the knowledge outlives
+            // the entry it refused.
+            for i in st.outbox.indices where st.outbox[i].token == e.token { st.outbox[i].quotaToken = e.token }
+            var spent = (st.quotaSpentTokens ?? []).filter { $0 != e.token }
+            spent.append(e.token)
+            st.quotaSpentTokens = Array(spent.suffix(Self.maxSpentTokens))
         }
     }
+
+    /// How many spent tokens are kept (``DeviceState/quotaSpentTokens``), the newest: a device holds one standing token for
+    /// its vault at a time (chosen; not in the spec).
+    static let maxSpentTokens = 8
 
     /// The relay took a deposit to [mailbox]: its quota backoff ends.
     func quotaAccepted(_ mailbox: String) { mem.withLock { quotaBackoff[mailbox] = nil } }
@@ -46,29 +63,30 @@ extension VaultDevice {
     /// quota is spent (its own or an earlier entry's) waits for another standing token for its mailbox, one not known to be
     /// spent, and is re-addressed to it (saved). While its mailbox waits for a quota, an entry goes only after every earlier
     /// entry of that mailbox has gone, except `relay.token.refresh`, which passes them; and nothing goes while the mailbox's
-    /// backoff runs. An entry no longer in the outbox is deposited as it is.
+    /// backoff runs. An entry no longer in the outbox is held by the same rules, without a save.
     func awaitQuota(_ e: OutboxEntry) async throws -> OutboxEntry {
         let (out, changed): (OutboxEntry?, Bool) = mem.withLock {
-            guard let i = st.outbox.firstIndex(where: { $0.id == e.id }) else { return (e, false) }
-            var cur = st.outbox[i]
-            let spent = Set(st.outbox.compactMap(\.quotaToken))
+            let i = st.outbox.firstIndex(where: { $0.id == e.id })
+            var cur = i.map { st.outbox[$0] } ?? e
+            let spent = Set(st.outbox.compactMap(\.quotaToken) + (st.quotaSpentTokens ?? []))
             var changed = false
             if cur.quotaToken == nil, spent.contains(cur.token) {
                 cur.quotaToken = cur.token
                 changed = true
             }
+            // Only to the vault's own token: an entry to another mailbox or relay under a spent token waits until it is
+            // dropped (a fin at its time) or the outbox is (chosen; not in the spec: the device holds no other token for it).
             if cur.quotaToken != nil {
-                guard let v = st.vault, !v.token.isEmpty, v.mailbox == cur.mailbox, v.relayURL == cur.relayURL, !spent.contains(v.token)
-                else {
-                    st.outbox[i] = cur
-                    return (nil, changed)
+                if let v = st.vault, !v.token.isEmpty, v.mailbox == cur.mailbox, v.relayURL == cur.relayURL, !spent.contains(v.token) {
+                    cur.token = v.token
+                    cur.quotaToken = nil
+                    changed = true
                 }
-                cur.token = v.token
-                cur.quotaToken = nil
-                changed = true
             }
-            st.outbox[i] = cur
-            let behindEarlier = st.outbox[..<i].contains { $0.mailbox == cur.mailbox }
+            if let i { st.outbox[i] = cur } else { changed = false } // an entry gone meanwhile is not saved
+            if cur.quotaToken != nil { return (nil, changed) }
+            let before = i.map { st.outbox[..<$0] } ?? st.outbox[...]
+            let behindEarlier = before.contains { $0.mailbox == cur.mailbox && $0.id != cur.id }
             if cur.type != Self.typeTokenRefresh, behindEarlier, quotaWaitingLocked(cur.mailbox) { return (nil, changed) }
             if let b = quotaBackoff[cur.mailbox], cfg.uptime() < b.until { return (nil, changed) }
             return (cur, changed)
@@ -92,7 +110,13 @@ extension VaultDevice {
             guard quotaWaitingLocked(entry.mailbox), let i = st.outbox.firstIndex(where: { $0.id == entry.id }) else { return [] }
             return st.outbox[..<i].filter { $0.mailbox == entry.mailbox }
         }
+        let nowMs = Self.ms(now())
         for e in earlier {
+            // A fin past its time is dropped, not sent, as by a flush.
+            if e.type == Self.typeHsFin, let dropAfter = e.dropAfterMs, nowMs >= dropAfter {
+                try? await withLockSaving { st.outbox.removeAll { $0.id == e.id } }
+                continue
+            }
             // Not one a flush is depositing just now.
             let taken = mem.withLock { st.outbox.contains { $0.id == e.id } && outboxInFlight.insert(e.id).inserted }
             guard taken else { continue }

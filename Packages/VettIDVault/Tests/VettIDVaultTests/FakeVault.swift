@@ -32,6 +32,9 @@ final class FakeRelay: @unchecked Sendable {
     var failDeposits: URLError.Code? { get { lock.withLock { transportFailure } } set { lock.withLock { transportFailure = newValue } } }
     private var transportFailure: URLError.Code?
     private var refuse: String?
+    /// The token each stored deposit was made under, in order.
+    var depositTokens: [String] { lock.withLock { tokens } }
+    private var tokens: [String] = []
     /// The `quota` of a `quota_exceeded` refusal (RELAY-PROTOCOL §7.1); none when nil.
     var refuseQuota: String? { get { lock.withLock { quota } } set { lock.withLock { quota = newValue } } }
     private var quota: String?
@@ -84,6 +87,7 @@ final class FakeRelay: @unchecked Sendable {
                 if let refusal, !recordsRefused { return refusal }
                 let payload = (try? StrictJson.parseObject(r.body).base64("payload")) ?? []
                 deposits.append((String(path.dropFirst("/v1/mailbox/".count)), payload))
+                tokens.append((r.headers["Authorization"] ?? r.headers["authorization"] ?? "").replacingOccurrences(of: "VettID-Deposit ", with: ""))
                 depositHook?()
                 let ws = depositWaiters
                 depositWaiters.removeAll()

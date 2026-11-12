@@ -141,7 +141,36 @@ extension VaultDeviceTests {
         var types: Set<String> = []
         for _ in 0..<2 { types.insert(try v.open(try await relay.nextDeposit().payload).type) }
         #expect(types == ["device.features", "relay.token.refresh"])
+        #expect(Array(relay.depositTokens.suffix(2)) == ["fresh-token", "fresh-token"])
+        #expect(!relay.depositTokens.dropFirst(relay.depositTokens.count - 2).contains(spent))
         #expect(outboxTypes(d).isEmpty)
+    }
+
+    /// The spent token outlives the entry it refused: a later entry under it waits too, and so does one held across a restart.
+    @Test func theSpentTokenIsKeptOnItsOwnAndAcrossARestart() async throws {
+        let store = InMemoryDeviceStateStore()
+        let secrets = try DeviceSecrets.generate()
+        let up = Box(1_000.0)
+        let (d, v) = try await pairedDevice(secrets: secrets, cfg: config(store, uptime: { up.value }))
+        relay.refuseStatus = 429
+        let spent = try #require(d.mem.withLock { d.st.vault?.token })
+        relay.refuseDeposits = RelayError.quotaExceeded
+        relay.refuseQuota = RelayError.quotaToken
+        relay.refuseOnly = 1
+        await #expect(throws: RelayError.self) { try await d.send("device.features") }
+        #expect(try await d.dropFromOutbox("device.features") == 1)
+        #expect(try savedState(store).quotaSpentTokens == [spent])
+        // A new entry under the same token: held, though the entry that was refused is gone.
+        await #expect(throws: QuotaWait.self) { try await d.send("call.end") }
+        #expect(await relay.noDeposit(within: 0.2))
+        // After a restart: still held.
+        let again = try #require(try VaultDevice.load(config(store, uptime: { up.value }), secrets: secrets))
+        await again.flushOutbox()
+        #expect(await relay.noDeposit(within: 0.2))
+        again.mem.withLock { again.st.vault?.token = "fresh-token" }
+        await again.flushOutbox()
+        #expect(try v.open(try await relay.nextDeposit().payload).type == "call.end")
+        #expect(relay.depositTokens.last == "fresh-token")
     }
 
     /// An entry is re-addressed only to a held token not known to be spent.
@@ -152,9 +181,7 @@ extension VaultDeviceTests {
         relay.refuseQuota = RelayError.quotaToken
         relay.refuseOnly = 1
         await #expect(throws: RelayError.self) { try await d.send("device.features") }
-        // A second entry queued under another token, then the vault's token is the spent one again (a relay that errs).
-        d.mem.withLock { d.st.vault?.token = "other" }
-        d.mem.withLock { d.st.vault?.token = spent }
+        // The vault's token is still the spent one: nothing to re-address to.
         await d.flushOutbox()
         #expect(await relay.noDeposit(within: 0.2))
         #expect(d.mem.withLock { d.st.outbox.first?.token } == spent)
