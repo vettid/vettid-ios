@@ -49,33 +49,27 @@ extension VaultDevice {
     /// The count of ``stop()``s so far: a flush asked for before a stop deposits nothing after it.
     var stopMark: Int { mem.withLock { stops } }
 
-    /// The mark of a deposit no ``stop()`` holds: a reply queued while a vault message was handled
-    /// (``deliverQueued(_:since:)``). The handling ran, and its reply goes, as before the gate; only the gate and a forget
-    /// hold it. A pairing's `hs.fin` queued just before the app goes to the background must not wait for the next flush.
-    static let noStopMark = Int.min
-
-    /// Whether an outbox entry of [type] may be deposited now, by a flush asked for at [mark] (``stopMark``; ``noStopMark``: no stop ends it). Asked again
+    /// Whether an outbox entry of [type] may be deposited now, by a flush asked for at [mark] (``stopMark``). Asked again
     /// before each entry, so that a lock that goes pending, or a stop, while a flush runs (or waits for another to end)
     /// holds what is left. [type] nil: a deposit that is not an entry (the flush's `credential.ack`). A `call.end`
     /// passes the gate: a hang-up still goes while a lock is pending. The gate is asked outside the device's locks; a
     /// stop while it is asked wins.
     func flushMayGo(_ type: String?, since mark: Int) async -> FlushGo {
-        let (gate, live) = mem.withLock { (flushGate, (mark == Self.noStopMark || stops == mark) && !forgotten) }
+        let (gate, live) = mem.withLock { (flushGate, stops == mark && !forgotten) }
         guard live else { return .end }
         if type == Self.typeCallEnd { return .go }
         if let gate, await !gate() { return .hold }
-        return mem.withLock({ (mark == Self.noStopMark || stops == mark) && !forgotten }) ? .go : .end
+        return mem.withLock({ stops == mark && !forgotten }) ? .go : .end
     }
 
     /// Deposits an outbox entry queued outside a flush (a reply queued while a vault message was handled, the 12-day
     /// `hs.confirm`), only when the lock gate admits it: a lock pending, the handling's replies wait in the outbox for a
     /// flush after it. Held, the entry is no longer in flight (``enqueueLocked``), so that the flush sends it. False when
     /// held; a deposit's failure is thrown, as ``deliver(_:keepOnFailure:since:)``'s (an `hs.confirm`'s is handled by
-    /// ``deliverConfirm(_:since:)``). [mark]: a flush's stop mark (the 12-day `hs.confirm` of a start); nil for a
-    /// handling's reply, which no stop holds (``noStopMark``).
+    /// ``deliverConfirm(_:since:)``).
     @discardableResult
     func deliverQueued(_ e: OutboxEntry, since mark: Int? = nil) async throws -> Bool {
-        let mark = mark ?? Self.noStopMark
+        let mark = mark ?? stopMark
         if await flushMayGo(e.type, since: mark) != .go {
             mem.withLock { _ = outboxInFlight.remove(e.id) }
             // A flush that ran while it was still marked (the lock ended meanwhile) left it alone: asked once more, and taken
