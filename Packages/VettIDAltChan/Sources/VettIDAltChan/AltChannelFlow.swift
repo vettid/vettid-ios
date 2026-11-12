@@ -333,10 +333,8 @@ public struct AltChannelFlow: Sendable {
             try await beforePost?()
             let (info, v) = try await enclave(release: release, manifest: m, enroll: false, onStarting: onStarting)
             let e = try v.enclave()
-            // With a callback, its answer decides (nil: the earlier shape, no secret); without, the caller's. The rule for the
-            // unlock's record: a pass is recorded once the build has classified the route (``recordedBuild(_:_:)``), whatever
-            // fails after that; a throw before it (here) records nothing, since the route may be an older release or the one a
-            // move left, which are not passes. The screen then keeps the last record (accepted; vettid-android records first).
+            // With a callback, its answer decides (nil: the earlier shape, no secret); without, the caller's. A throw here records
+            // nothing (the rule in ``recordedBuild(_:_:)``).
             var secret: [UInt8]?
             if let f = unlockSecretFor { secret = try await f(e.descriptor.capabilities) } else { secret = options.unlockSecret }
             let built: BuiltUnlock
@@ -387,7 +385,9 @@ public struct AltChannelFlow: Sendable {
     /// the request is built; a release older than one this phone has unlocked into, refused after every check; a list older
     /// than one this phone has used (checked again as the request is built), line 1 failed. A route that still names the
     /// release an unconfirmed move left (``AltRefused/notYetRouted``) is not recorded: nothing is sealed to it, and the
-    /// screen keeps the last record.
+    /// screen keeps the last record. So is any other failure (the build's own, before or after its route checks, or the
+    /// secret's before it): the route may not have been classified, and it may be an older release or the one a move left,
+    /// which are not passes (accepted; vettid-android records the pass before the secret).
     private func recordedBuild(_ v: EnclaveVerification, _ build: () async throws -> BuiltUnlock) async throws -> BuiltUnlock {
         do {
             let b = try await build()
@@ -399,12 +399,6 @@ public struct AltChannelFlow: Sendable {
         } catch AltRefused.manifestOlder {
             records?.record(.manifestFailed(at: now()))
             throw AltRefused.manifestOlder
-        } catch AltRefused.notYetRouted {
-            throw AltRefused.notYetRouted
-        } catch {
-            // Any other failure of the build comes after the route was classified as neither: the pass stands.
-            used(v)
-            throw error
         }
     }
 

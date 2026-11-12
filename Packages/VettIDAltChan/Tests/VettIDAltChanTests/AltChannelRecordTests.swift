@@ -67,6 +67,21 @@ final class RecordSink: EnclaveRecords, @unchecked Sendable {
         #expect(sink.all.isEmpty)
     }
 
+    /// A build that fails for another reason (here the attester's assertion) records nothing either: one rule, a pass only
+    /// once the request is built.
+    @Test func nothingIsRecordedWhenTheBuildFails() async throws {
+        struct NoAssertion: Error {}
+        struct FailingAttester: Attester {
+            func attest(_ challenge: [UInt8]) throws -> DeviceAttest { throw NoAssertion() }
+            func assert(_ signed: AttestSigned) throws -> DeviceAssertion { throw NoAssertion() }
+        }
+        let sink = RecordSink()
+        let (_, p, f) = try AltChannelFlowTests().setUp(records: sink)
+        p.vaultID = vaultID
+        await #expect(throws: NoAssertion.self) { _ = try await f.unlock(party: p, userGuid: "guid-1", pin: "246802", attester: FailingAttester()) }
+        #expect(sink.all.isEmpty)
+    }
+
     @Test func aFailedCheckIsRecordedAndNothingIsSent() async throws {
         let sink = RecordSink()
         let api = FakeAltAPI([try FakeEnclave("inst-a")])
