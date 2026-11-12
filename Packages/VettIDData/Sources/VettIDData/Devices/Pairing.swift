@@ -48,13 +48,15 @@ public protocol PairingRepository: AnyObject, Observable, Sendable {
     func reject(pairingID: String) async
 
     /// The screen of [owner] left (Back, Cancel, or the screen released) without an answer: a pairing not approved is rejected, and
-    /// nothing is held. Only while that screen still owns the pairing of [token] (``PairingState/token``): a late leave of an old
-    /// screen never reaches a newer screen's pairing, and a pairing is ended by its owner only. A screen that saw no state yet
-    /// ([token] nil: it left before its first one) still ends what it started or took over: the owner alone decides then.
+    /// nothing is held. Only while that screen still owns the pairing: a newer screen takes it over (``start(_:owner:)``,
+    /// ``claim(owner:)``), so a late leave of an old screen never reaches it, and a pairing is ended by its owner only. The owner
+    /// alone decides, whatever [token] the screen last saw (``PairingState/token``; nil: it left before its first state): a token
+    /// gone stale in a timing gap must not skip the leave and strand the code.
     func leave(token: Int?, owner: Int)
 
     /// What a screen reads at its start: a final stage or a failure of the one before is cleared (the screen is about to ask for its
-    /// own). An expired code is left alone: ``start(_:owner:)`` rejects it. Every other end is ``acknowledge(token:owner:)``.
+    /// own). Not a comparison's failure (a refused approval kept for another try): that is another screen's to clear, with
+    /// ``acknowledge(token:owner:)``. An expired code is left alone: ``start(_:owner:)`` rejects it.
     func acknowledge()
 
     /// A final stage was read (rejected, paired, ended, expired) by the screen of [owner]: back to nothing held, but only for the
@@ -95,7 +97,7 @@ public final class PairingManager: PairingRepository {
     @ObservationIgnored private var watchFrom = Date.distantPast
     /// The screen of the comparison left while its approval was in flight: if that approval comes back refused with the comparison
     /// kept (the daily check was due), the pairing is rejected instead of staying live with no screen.
-    @ObservationIgnored private var abandoned = false
+    @ObservationIgnored private(set) var abandoned = false
     /// The screen that owns the pairing in hand (``start(_:owner:)``, ``claim(owner:)``); nil after a lock.
     @ObservationIgnored private var owner: Int?
 
@@ -213,7 +215,9 @@ public final class PairingManager: PairingRepository {
 
     public func start(_ role: PairRole, owner: Int) async {
         // Ownership first, before any guard: a start that keeps the pairing already shown (the same role, a live code or a comparison)
-        // hands it to this screen, so the screen it came from can no longer end it.
+        // hands it to this screen, so the screen it came from can no longer end it. The guards below return early for exactly those
+        // kept pairings; were ownership taken after them, the screen showing the kept pairing would not own it, its leave would do
+        // nothing, and the old screen's late leave would end the pairing under it.
         takeOwnership(owner)
         let gen: Int
         // A pairing of the other role that this start replaces: the vault is told it is not wanted.
@@ -423,6 +427,8 @@ public final class PairingManager: PairingRepository {
         if case .compare(let s) = state.stage, s.pairingID == p.pairingID {
             timer?.cancel()
             timer = nil
+            // A leave while the rejection was in flight marked it abandoned: the rejection settled it, so the mark goes with it.
+            abandoned = false
             set(PairingState(stage: .rejected(told: told)))
         }
     }
@@ -431,8 +437,12 @@ public final class PairingManager: PairingRepository {
     func cancel() async { await cancel(token: nil, owner: nil) }
 
     private func cancel(token: Int?, owner: Int?) async {
-        if let token, token != generation { return }
-        if let owner, owner != self.owner { return }
+        // A screen's leave is decided by its owner alone (``leave(token:owner:)``); the token is for an ownerless cancel.
+        if let owner {
+            if owner != self.owner { return }
+        } else if let token, token != generation {
+            return
+        }
         let s = state
         let id: String
         switch s.stage {
@@ -472,10 +482,13 @@ public final class PairingManager: PairingRepository {
     }
 
     public func acknowledge(token: Int, owner: Int) {
-        if token == generation, owner == self.owner { acknowledge() }
+        if token == generation, owner == self.owner { clearFinal(comparison: true) }
     }
 
-    public func acknowledge() {
+    public func acknowledge() { clearFinal(comparison: false) }
+
+    /// Back to nothing held after a final stage or a failure; a comparison's failure only for its owner ([comparison]).
+    private func clearFinal(comparison: Bool) {
         let s = state
         if s.busy { return }
         switch s.stage {
@@ -483,7 +496,7 @@ public final class PairingManager: PairingRepository {
         case .rejected, .paired, .ended: set(PairingState())
         case .idle: if s.error != nil { set(PairingState()) }
         // The daily check passed: the refused approval may be sent again for the same comparison.
-        case .compare: if s.error != nil { set(PairingState(stage: s.stage)) }
+        case .compare: if comparison, s.error != nil { set(PairingState(stage: s.stage)) }
         default: break
         }
     }
