@@ -32,6 +32,9 @@ final class FakeRelay: @unchecked Sendable {
     var failDeposits: URLError.Code? { get { lock.withLock { transportFailure } } set { lock.withLock { transportFailure = newValue } } }
     private var transportFailure: URLError.Code?
     private var refuse: String?
+    /// The `quota` of a `quota_exceeded` refusal (RELAY-PROTOCOL §7.1); none when nil.
+    var refuseQuota: String? { get { lock.withLock { quota } } set { lock.withLock { quota = newValue } } }
+    private var quota: String?
     /// The next [n] deposits are refused with [refuseDeposits]'s code, then the relay accepts again (0: all of them).
     var refuseOnly: Int { get { lock.withLock { refuseCount } } set { lock.withLock { refuseCount = newValue } } }
     private var refuseCount = 0
@@ -119,6 +122,7 @@ final class FakeRelay: @unchecked Sendable {
                 if let f = followUp { (refuse, status) = (f.code, f.status) }
             }
         }
+        if let quota { return .json(answerStatus, #"{"code":"\#(code)","message":"","quota":"\#(quota)"}"#) }
         return .json(answerStatus, #"{"code":"\#(code)","message":""}"#)
     }
 

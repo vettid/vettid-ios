@@ -133,14 +133,14 @@ public final class VaultDevice: @unchecked Sendable {
     var beforeFinalSave: (@Sendable () async -> Void)? // TEST ONLY: before the write that ends a handling
     var flushSeen: (@Sendable (Bool) -> Void)? // TEST ONLY: a flush reached an entry (true: it left it alone)
     #endif
-    /// A flush of the outbox runs (``flushOutbox()``). Read and written under ``mem``.
-    var flushing = false
+    var flushing = false // a flush of the outbox runs (``flushOutbox()``); read and written under ``mem``
     /// Completed when the running flush ends: the flushes that wait for it wake up. Under ``mem``.
     var flushEnded: OneShot<Bool>?
     /// When a pending `credential.ack` was last tried (the device's uptime). Under ``mem``.
     var lastAckTry: TimeInterval?
     /// The ids of outbox entries being deposited now (``deliver(_:keepOnFailure:)``). Under ``mem``.
     var outboxInFlight: Set<String> = []
+    var quotaBackoff: [String: (until: TimeInterval, last: TimeInterval)] = [:] // §8.6, VaultDevice+Quota; under ``mem``
     /// Orders the writes of the state to the store (``save()``).
     let saveOrder = NSLock()
     /// Serializes the credential operations (§3.5.3): one UTK taken, sealed and answered at a time.

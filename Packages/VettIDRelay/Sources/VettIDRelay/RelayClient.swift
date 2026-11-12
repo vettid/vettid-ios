@@ -19,6 +19,9 @@ public struct RelayError: Error, Equatable, Sendable, CustomStringConvertible {
     /// Made by the client: a response over the size it reads (a proxy's page, a blob over the cap); the relay did not say it.
     public static let responseTooLarge = "relay_response_too_large"
     public static let quotaExceeded = "quota_exceeded"
+    /// ``quota`` values (RELAY-PROTOCOL §7.1): the token's messages are spent; the recipient's mailbox is full.
+    public static let quotaToken = "token"
+    public static let quotaMailbox = "mailbox"
     public static let rateLimited = "rate_limited"
     public static let internalError = "internal"
     /// A larger `retry_after` / `Retry-After` is clamped to this (a day).

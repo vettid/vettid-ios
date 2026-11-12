@@ -13,7 +13,7 @@ extension VaultDevice {
         guard Self.outboxTypes.contains(type) else { throw VaultStateError(message: "\(type): not kept in the outbox") }
         let entry = try await lock.withLock { try enqueueLocked(id: id, type: type, body: body, re: nil, status: nil, exp: nil) }
         // The deposit is made outside the device lock: a slow relay holds up this caller only.
-        try await deliver(entry)
+        try await deliverInOrder(entry)
         return entry.id
     }
 
@@ -122,8 +122,11 @@ extension VaultDevice {
         // and a refusal of the next copy is then no evidence that the vault never took the first (chosen; not in the spec; by
         // analogy with VAULT-MESSAGING §8.6, 0.83.0). [priorAttempts] is the count before this one.
         var priorAttempts = e.attempts
+        // As deposited: re-addressed when the token it had is spent (§8.6).
+        var sent = e
         do {
             try refuseSending()
+            sent = try await awaitQuota(e)
             if e.type == Self.typeHsFin {
                 // Gone (a new handshake replaced it), or the count could not be saved: nothing is deposited, and a fin still
                 // owed waits for the next flush, so that "saved before sent" holds.
@@ -133,7 +136,10 @@ extension VaultDevice {
             #if DEBUG
             finSendHook?()
             #endif
-            _ = try await relayFor(e.relayURL).deposit(mailboxID: e.mailbox, token: e.token, payload: try Base64s.decodeStd(e.envelope))
+            _ = try await relayFor(sent.relayURL).deposit(
+                mailboxID: sent.mailbox, token: sent.token, payload: try Base64s.decodeStd(sent.envelope)
+            )
+            quotaAccepted(sent.mailbox)
             // The deposit is made: a failure to save what follows it is not a failure of the deposit. The entry is out of memory
             // at once and the next successful save drops it from the file; if the app ends before that, the file's copy is
             // deposited once more. That is harmless: every outbox type is durable and means the same when it arrives again
@@ -144,13 +150,13 @@ extension VaultDevice {
             // after the restart deposits the entry that was meant never to go out.
             try? await withLockSaving { st.outbox.removeAll { $0.id == e.id && $0.envelope == e.envelope } }
         } catch let x as RelayError {
-            // §8.6: a quota the recipient's mailbox ran out of is not cured by a fresh token; the deposit waits in the
-            // outbox and goes out at a later flush (vettid-android drops it).
+            // §8.6 (0.88.8): never sent again unchanged; held for the mailbox's backoff, or until another standing token.
+            if x.code == RelayError.quotaExceeded { await quotaRefused(sent, x) }
             if keepOnFailure, !Self.isTerminal(x) {
                 await noteAttempt(e)
                 throw x
             }
-            countRefusal(x, mailbox: e.mailbox, token: e.token)
+            countRefusal(x, mailbox: sent.mailbox, token: sent.token)
             // Refused for good: the pairing cannot finish, and the flow that waits for it is told, but only for a fin that was
             // never sent before. A fin sent again may have reached the vault the first time, whose answer was lost: the refusal
             // is then silent, the entry is gone, and the deadline's collect decides.
@@ -249,6 +255,7 @@ extension VaultDevice {
         try refuseSending()
         do {
             _ = try await relayFor(v.relayURL).deposit(mailboxID: v.mailbox, token: v.token, payload: payload)
+            quotaAccepted(v.mailbox) // the mailbox takes deposits again
         } catch let x as RelayError {
             countRefusal(x, mailbox: v.mailbox, token: v.token)
             throw x

@@ -16,11 +16,12 @@ import VettIDTesting
 
     func config(
         _ store: DeviceStateStore, timeout: TimeInterval = 5, attestation: EnrolledAttestation = .skipForTests,
-        now: @escaping @Sendable () -> Date = { Date() }
+        now: @escaping @Sendable () -> Date = { Date() }, uptime: (@Sendable () -> TimeInterval)? = nil
     ) -> DeviceConfig {
         DeviceConfig(
             name: "phone", relayURL: relay.baseURL, transport: HTTPTransport(session: relay.server.session, sleep: { _ in }),
-            store: store, enrolledAttestation: attestation, now: now, requestTimeout: timeout
+            store: store, enrolledAttestation: attestation, now: now, requestTimeout: timeout,
+            uptime: uptime ?? DeviceConfig.monotonicNow
         )
     }
 
@@ -438,16 +439,18 @@ import VettIDTesting
         #expect(types == ["relay.token.issued", "relay.token.refresh"])
     }
 
-    /// §8.6: a deposit refused because the vault's mailbox is full waits in the outbox.
+    /// §8.6: a deposit refused because the vault's mailbox is full waits in the outbox (and its backoff, VaultQuotaTests).
     @Test func aFullMailboxKeepsTheDepositInTheOutbox() async throws {
         let store = InMemoryDeviceStateStore()
-        let (d, v) = try await pairedDevice(store: store)
+        let up = Box(1_000.0)
+        let (d, v) = try await pairedDevice(cfg: config(store, uptime: { up.value }))
         relay.refuseStatus = 429
         relay.refuseDeposits = RelayError.quotaExceeded
         await #expect(throws: RelayError.self) { try await d.send("relay.token.refresh") }
         #expect(relay.refused == 1) // not retried at once
         #expect(try savedState(store).outbox.count == 1)
         relay.refuseDeposits = nil
+        up.value += 61
         await d.flushOutbox()
         #expect(try v.open(try await relay.nextDeposit().payload).type == "relay.token.refresh")
     }
