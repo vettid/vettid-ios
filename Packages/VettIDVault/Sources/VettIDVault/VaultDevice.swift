@@ -79,7 +79,7 @@ public final class VaultDevice: @unchecked Sendable {
     /// The ids of outbox entries being deposited now (``deliver(_:keepOnFailure:)``). Under ``mem``.
     var outboxInFlight: Set<String> = []
     var quotaBackoff: [String: (until: TimeInterval, last: TimeInterval)] = [:] // §8.6, VaultDevice+Quota; under ``mem``
-    /// Whether a flush the device starts on its own may run (``gatedFlush()``): the manager's lock gate, nothing but the lock
+    /// Whether an outbox entry may be deposited now (``flushMayGo(_:since:)``): the manager's lock gate, nothing but the lock
     /// while one is pending. Nil: always. Under ``mem``.
     var flushGate: (@Sendable () async -> Bool)?
     /// How the device waits out a quota backoff before its flush (TEST ONLY: replaced to run it at once).
@@ -163,6 +163,8 @@ public final class VaultDevice: @unchecked Sendable {
     /// When the collector's last request ended (uptime).
     var collectLastEnded: TimeInterval?
     var stopped = true
+    /// How many times ``stop()`` ran (``stopMark``).
+    var stops = 0
     /// Set by ``forget()``: nothing is written to the store any more.
     var forgotten = false
     /// Set by ``halt()``: nothing is sent or written to the store any more, and the stored state stays as it was.
@@ -387,7 +389,7 @@ public final class VaultDevice: @unchecked Sendable {
         guard let round = begin else { return }
         let task = Task { [weak self] in
             guard let self else { return }
-            let flush = Task { await self.tickConfirm(); await self.flushOutbox() } // (0.88.1) hs.confirm again after 12 days
+            let flush = Task { await self.tickConfirm(); await self.flushOutbox() } // (0.88.1) hs.confirm again after 12 days (both gated)
             defer { flush.cancel() }
             do {
                 try await collector(of: round).run { m in try await self.handle(m) }
@@ -429,6 +431,7 @@ public final class VaultDevice: @unchecked Sendable {
     public func stop() {
         let task: Task<Void, Never>? = mem.withLock {
             stopped = true
+            stops += 1
             // A request out is cut: what the relay handed it may stay leased (``collectorCuts``).
             if let out = collectSince {
                 collectCuts = (collectCuts.count + 1, collectStreaming ? (cfg.uptime(), 0) : out.sent)

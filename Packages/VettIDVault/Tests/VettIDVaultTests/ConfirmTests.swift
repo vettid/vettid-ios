@@ -350,6 +350,22 @@ extension VaultDeviceTests {
         try await d.handle(try v.seal("hs.confirm", "{}"))
         await #expect(throws: VaultStateError.self) { _ = try await d.awaitEvent("hs.confirm", timeout: 0.2) }
     }
+
+    /// The 12-day `hs.confirm` of a collection's start asks the lock gate: while a lock is pending it is queued, not
+    /// deposited; the next flush the gate admits sends it.
+    @Test func theTwelveDayConfirmWaitsForTheLockGate() async throws {
+        let clock = Box(Date())
+        let r = try await rekeyed(clock)
+        let open = Box(false)
+        r.device.setFlushGate { open.value }
+        clock.value = clock.value.addingTimeInterval(12 * 86_400 + 60)
+        await r.device.tickConfirm()
+        #expect(r.device.mem.withLock { r.device.st.outbox.map(\.type) } == ["hs.confirm"])
+        #expect(await relay.noDeposit(within: 0.2))
+        open.value = true
+        await r.device.flushOutbox()
+        #expect(try await take(r.new).type == "hs.confirm")
+    }
 }
 
 // swiftlint:enable line_length

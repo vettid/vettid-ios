@@ -95,8 +95,16 @@ extension VaultDevice {
     /// ``tickConfirmLocked(_:save:)`` under the device lock, and the deposit of what it queued outside it (a transport
     /// failure leaves it in the outbox for the next flush).
     func tickConfirm() async {
+        let mark = stopMark
         let e = await lock.withLock { tickConfirmLocked(now(), save: true) }
-        if let e { await deliverConfirm(e) }
+        guard let e else { return }
+        // Queued in any case; deposited only when the lock gate admits it (``flushMayGo(_:since:)``). Held, it is no longer
+        // in flight (``enqueueLocked``), so that a later flush sends it.
+        guard await flushMayGo(e.type, since: mark) == .go else {
+            mem.withLock { _ = outboxInFlight.remove(e.id) }
+            return
+        }
+        await deliverConfirm(e)
     }
 
     /// Deposits an `hs.confirm` (also from ``flushOutbox()``). One the relay refuses for good (``isTerminal(_:)``) is gone

@@ -58,16 +58,13 @@ extension VaultDevice {
     /// its vault at a time (chosen; not in the spec).
     static let maxSpentTokens = 8
 
-    /// Sets the gate of the flushes the device starts on its own (``gatedFlush()``).
+    /// Sets the lock gate every outbox deposit asks (``flushMayGo(_:since:)``), whoever starts the flush.
     public func setFlushGate(_ gate: @escaping @Sendable () async -> Bool) { mem.withLock { flushGate = gate } }
 
     /// A flush the device starts on its own (the end of a quota backoff, a new standing token for held entries): only while
-    /// it collects, and only when the manager's gate admits it (nothing but the lock while one is pending).
+    /// it collects; each entry then asks the lock gate (nothing but the lock while one is pending).
     func gatedFlush() async {
-        let (gate, running) = mem.withLock { (flushGate, !stopped && !forgotten) }
-        guard running else { return }
-        if let gate, await !gate() { return }
-        // A stop() while the gate was asked wins.
+        // Each entry asks the gate (``flushOutbox()``).
         guard mem.withLock({ !stopped && !forgotten }) else { return }
         await flushOutbox()
     }
@@ -127,7 +124,12 @@ extension VaultDevice {
             return st.outbox[..<i].filter { $0.mailbox == entry.mailbox }
         }
         let nowMs = Self.ms(now())
+        let mark = stopMark
         for e in earlier {
+            // Each asks the lock gate, as in a flush; one held back holds [entry] behind it.
+            let go = await flushMayGo(e.type, since: mark)
+            if go == .end { break }
+            if go == .hold { continue }
             // A fin past its time is dropped, not sent, as by a flush.
             if e.type == Self.typeHsFin, let dropAfter = e.dropAfterMs, nowMs >= dropAfter {
                 try? await withLockSaving { st.outbox.removeAll { $0.id == e.id } }
