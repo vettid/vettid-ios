@@ -100,10 +100,13 @@ public final class PairViewModel {
             repo.acknowledge()
             // A pairing held for the other role is rejected and replaced by the repository in this one call.
             let (role, owner) = (role, owner)
-            work.launch {
+            work.launch { [weak self] in
                 // Not for a start whose screen is already gone (cancelled before it ran).
                 guard !Task.isCancelled else { return }
                 await repo.start(role, owner: owner)
+                // Now that this screen owns what it shows: a comparison kept with a refused approval, whose daily check has
+                // already passed, is cleared for another try (the follow of the check fires only on its next change).
+                self?.onOwnerCheck(self?.ownerChecks?.ownerCheck?.state)
             }
         } else {
             // The feed item's screen takes over what is held: the screen it came from can no longer end it.

@@ -116,6 +116,22 @@ import VettIDDataTesting
         #expect(pairing.calls.contains("acknowledge"))
     }
 
+    /// A new screen opened over a comparison kept with a refused approval, when the daily check has already passed: once it owns
+    /// the comparison (its start), it clears the refusal for another try.
+    @Test func aNewScreenOverAKeptRefusalClearsItOnceItOwnsIt() async {
+        let owner = FakeVaultRepository()
+        owner.ownerCheck = OwnerCheckView(state: .ok, deadline: Date(), hold: false)
+        var kept = PairingState(stage: .compare(pending), error: .ownerCheckRequired)
+        kept.token = 7
+        pairing.state = kept
+        let m = vm(owner: owner)
+        await sync(m)
+        // (The fake takes any owner, so the screen's first look counts here too; the real repository refuses it before the start.)
+        let start = pairing.calls.firstIndex(of: "start") ?? Int.max
+        #expect(pairing.calls.indices.contains { $0 > start && pairing.calls[$0] == "acknowledge" }, "\(pairing.calls)")
+        #expect(pairing.acknowledgedTokens.last == 7)
+    }
+
     @Test func aPassedCheckClearsNothingWhenNoApprovalWasRefused() async {
         let owner = FakeVaultRepository()
         owner.ownerCheck = OwnerCheckView(state: .due, deadline: nil, hold: false)

@@ -55,8 +55,8 @@ public protocol PairingRepository: AnyObject, Observable, Sendable {
     func leave(token: Int?, owner: Int)
 
     /// What a screen reads at its start: a final stage or a failure of the one before is cleared (the screen is about to ask for its
-    /// own). Not a comparison's failure (a refused approval kept for another try): that is another screen's to clear, with
-    /// ``acknowledge(token:owner:)``. An expired code is left alone: ``start(_:owner:)`` rejects it.
+    /// own). Not a comparison's failure (a refused approval kept for another try): only its owner clears that, with
+    /// ``acknowledge(token:owner:)`` (the screen itself, once its start has made it the owner). An expired code is left alone: ``start(_:owner:)`` rejects it.
     func acknowledge()
 
     /// A final stage was read (rejected, paired, ended, expired) by the screen of [owner]: back to nothing held, but only for the
