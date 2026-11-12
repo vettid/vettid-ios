@@ -96,7 +96,7 @@ extension InitDepositTests {
         #expect(!e.pairingHeldByRelay)
     }
 
-    /// A held fin dropped at its time (a flush) or by the handshake's end ends the hold, on the stream too.
+    /// A held fin that a flush drops at its time ends the hold, on the stream too.
     @Test func aHeldFinDroppedAtItsTimeEndsTheHold() async throws {
         let td = try await transferringPhone()
         let (d, v, initMsg, inviteID) = (td.d, td.v, td.initMsg, td.inviteID)
