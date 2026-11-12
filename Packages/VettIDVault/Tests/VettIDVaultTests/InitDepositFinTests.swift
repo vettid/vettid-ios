@@ -437,6 +437,24 @@ extension InitDepositTests {
         try v.fin(try await base.relay.nextDeposit().payload, d)
         #expect(d.mem.withLock { d.st.outbox.isEmpty })
     }
+
+    /// A pairing's `hs.fin` queued before a stop (the app going to the background right after the code) is deposited all
+    /// the same: a stop ends a flush, not a handling's reply, which only the lock gate holds.
+    @Test func aFinQueuedBeforeAStopIsDeposited() async throws {
+        let (d, v) = try await newPhone()
+        let stopped = Box(false)
+        d.setFlushGate { [d] in
+            if !stopped.value { stopped.value = true; d.stop() } // the stop lands between the fin's queueing and its deposit
+            return true
+        }
+        let (qr, inviteID) = try codeFor(v, d)
+        try await d.startTransfer(link: try qr.link(), attester: TestIOSAttester()) { _, _ in nil }
+        let (_, initMsg) = try await base.relay.nextDeposit()
+        try await d.handle(try v.respondOpening(initMsg, d, ctx: inviteID).message)
+        #expect(stopped.value)
+        try v.fin(try await base.relay.nextDeposit().payload, d)
+        #expect(d.mem.withLock { d.st.outbox.isEmpty })
+    }
 }
 
 // swiftlint:enable line_length
