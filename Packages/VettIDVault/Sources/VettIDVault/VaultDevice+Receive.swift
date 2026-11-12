@@ -355,7 +355,10 @@ extension VaultDevice {
                 afterLock { [self] in _ = try? await deliverQueued(e) }
             }
             let exp = Double(v.tokenExpMs) / 1000
-            if exp - t.timeIntervalSince1970 < Self.refreshBefore, t.timeIntervalSince1970 < exp {
+            // Not a second one while the device's own is still in the outbox (held by the lock gate, or a quota): they would all
+            // go at once.
+            let owed = mem.withLock { st.outbox.contains { $0.type == Self.typeTokenRefresh && $0.re == nil } }
+            if !owed, exp - t.timeIntervalSince1970 < Self.refreshBefore, t.timeIntervalSince1970 < exp {
                 let e = try enqueueLocked(
                     id: nil, type: "relay.token.refresh", body: VaultJSON.empty, re: nil, status: nil, exp: nil, save: false
                 )

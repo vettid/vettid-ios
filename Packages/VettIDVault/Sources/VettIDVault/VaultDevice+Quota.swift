@@ -100,7 +100,10 @@ extension VaultDevice {
             if cur.quotaToken != nil { return (nil, changed) }
             let before = i.map { st.outbox[..<$0] } ?? st.outbox[...]
             let behindEarlier = before.contains { $0.mailbox == cur.mailbox && $0.id != cur.id }
-            if cur.type != Self.typeTokenRefresh, behindEarlier, quotaWaitingLocked(cur.mailbox) { return (nil, changed) }
+            // The refresh (it asks for the token they may need) and a hang-up (it goes while a lock is pending, ahead of what the
+            // lock gate holds) pass the earlier entries; the backoff holds them as any other.
+            let passes = cur.type == Self.typeTokenRefresh || cur.type == Self.typeCallEnd
+            if !passes, behindEarlier, quotaWaitingLocked(cur.mailbox) { return (nil, changed) }
             if let b = quotaBackoff[cur.mailbox], cfg.uptime() < b.until { return (nil, changed) }
             return (cur, changed)
         }
@@ -133,7 +136,7 @@ extension VaultDevice {
             }
             // Each asks the lock gate, as in a flush; one held back holds [entry] behind it.
             let go = await flushMayGo(e.type, since: mark)
-            if go == .end { break }
+            if go == .end { throw OutboxHeld() } // stopped since the send began: [entry] stays in the outbox
             if go == .hold { continue }
             // Not one a flush is depositing just now.
             let taken = mem.withLock { st.outbox.contains { $0.id == e.id } && outboxInFlight.insert(e.id).inserted }

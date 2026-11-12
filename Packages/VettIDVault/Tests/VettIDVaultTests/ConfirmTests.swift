@@ -351,6 +351,19 @@ extension VaultDeviceTests {
         await #expect(throws: VaultStateError.self) { _ = try await d.awaitEvent("hs.confirm", timeout: 0.2) }
     }
 
+    /// The 12-day `hs.confirm` of a collection's start keeps the stop mark of that start: after a stop since, it is queued,
+    /// not deposited.
+    @Test func theTwelveDayConfirmOfAStartStoppedSinceIsNotDeposited() async throws {
+        let clock = Box(Date())
+        let r = try await rekeyed(clock)
+        let mark = r.device.stopMark
+        r.device.stop()
+        clock.value = clock.value.addingTimeInterval(12 * 86_400 + 60)
+        await r.device.tickConfirm(since: mark)
+        #expect(r.device.mem.withLock { r.device.st.outbox.map(\.type) } == ["hs.confirm"])
+        #expect(await relay.noDeposit(within: 0.2))
+    }
+
     /// The 12-day `hs.confirm` of a collection's start asks the lock gate: while a lock is pending it is queued, not
     /// deposited; the next flush the gate admits sends it.
     @Test func theTwelveDayConfirmWaitsForTheLockGate() async throws {

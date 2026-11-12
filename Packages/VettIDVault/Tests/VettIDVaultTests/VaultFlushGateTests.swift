@@ -38,7 +38,6 @@ extension VaultDeviceTests {
         d.setFlushGate { false }
         d.start()
         defer { d.stop() }
-        await d.gatedFlush() // a flush the device starts on its own (a quota backoff's end, a new token)
         #expect(await relay.noDeposit(within: 0.5))
         #expect(outboxTypes(d) == ["device.features"])
     }
@@ -49,7 +48,7 @@ extension VaultDeviceTests {
         let asks = Box(0)
         d.setFlushGate {
             asks.value += 1
-            return asks.value == 1
+            return asks.value <= 2 // the first entry's flush ask and its deposit's
         }
         await d.flushOutbox()
         #expect(try v.open(try await relay.nextDeposit().payload).type == "device.features")
@@ -149,8 +148,8 @@ extension VaultDeviceTests {
         await #expect(throws: RelayError.self) { try await d.send("device.features") }
         up.value += 61
         d.setFlushGate { false }
-        await #expect(throws: QuotaWait.self) { try await d.send("call.end") }
-        #expect(outboxTypes(d) == ["device.features", "call.end"])
+        await #expect(throws: (any Error).self) { try await d.send("relay.token.issued") }
+        #expect(outboxTypes(d) == ["device.features", "relay.token.issued"])
     }
 
     /// The renewals a handling queues (a standing token near its end, §7.2) wait for the gate too.
@@ -219,14 +218,78 @@ extension VaultDeviceTests {
     /// While the mailbox waits for its quota, a new entry first tries the earlier ones: they ask the gate too, and one held
     /// back holds the new entry behind it.
     @Test func theEarlierEntriesOfASendAskTheGate() async throws {
-        let (d, _, up) = try await quotaDevice()
+        let (d, v, up) = try await quotaDevice()
         relay.refuseDeposits = RelayError.quotaExceeded
         relay.refuseOnly = 1
         await #expect(throws: RelayError.self) { try await d.send("device.features") }
         up.value += 61
         d.setFlushGate { false }
-        await #expect(throws: QuotaWait.self) { try await d.send("call.end") }
+        await #expect(throws: (any Error).self) { try await d.send("relay.token.issued") }
         #expect(await relay.noDeposit(within: 0.2))
-        #expect(outboxTypes(d) == ["device.features", "call.end"])
+        #expect(outboxTypes(d) == ["device.features", "relay.token.issued"])
+        // A hang-up passes them (the quota's order and the gate both): it goes while a lock is pending.
+        _ = try await d.send("call.end")
+        #expect(try v.open(try await relay.nextDeposit().payload).type == "call.end")
+        #expect(outboxTypes(d) == ["device.features", "relay.token.issued"])
+    }
+
+    /// A stop that comes while a send's earlier entries ask the gate ends the send: nothing is deposited, and its own entry
+    /// stays in the outbox.
+    @Test func aStopWhileASendsEarlierEntriesAskTheGateEndsIt() async throws {
+        let (d, _, up) = try await quotaDevice()
+        relay.refuseDeposits = RelayError.quotaExceeded
+        relay.refuseOnly = 1
+        await #expect(throws: RelayError.self) { try await d.send("device.features") }
+        up.value += 61
+        d.setFlushGate {
+            d.stop()
+            return true
+        }
+        await #expect(throws: OutboxHeld.self) { try await d.send("relay.token.issued") }
+        #expect(await relay.noDeposit(within: 0.2))
+        #expect(outboxTypes(d) == ["device.features", "relay.token.issued"])
+    }
+
+    /// Asked again right before the deposit, after the waits a deposit may have (a quota's, a fin's count): a lock that went
+    /// pending meanwhile holds the entry.
+    @Test func theGateIsAskedAgainRightBeforeTheDeposit() async throws {
+        let (d, v) = try await heldOutbox(["device.features"])
+        let asks = Box(0)
+        let open = Box(true)
+        d.setFlushGate {
+            asks.value += 1
+            return asks.value == 1 || open.value
+        }
+        open.value = false
+        await d.flushOutbox() // the flush's own ask admits it; the deposit's does not
+        #expect(await relay.noDeposit(within: 0.2))
+        #expect(outboxTypes(d) == ["device.features"] && d.mem.withLock { d.outboxInFlight.isEmpty })
+        open.value = true
+        await d.flushOutbox()
+        #expect(try v.open(try await relay.nextDeposit().payload).type == "device.features")
+    }
+
+    /// A send's own entry asks the gate too (a hang-up passes): held, it stays in the outbox.
+    @Test func aSendsOwnEntryAsksTheGate() async throws {
+        let (d, _) = try await pairedDevice()
+        relay.dropDeposits()
+        d.setFlushGate { false }
+        await #expect(throws: OutboxHeld.self) { try await d.send("device.features") }
+        #expect(await relay.noDeposit(within: 0.2))
+        #expect(outboxTypes(d) == ["device.features"])
+    }
+
+    /// The device's own refresh is queued once while it waits in the outbox (held by the gate): not again at every message.
+    @Test func aHeldRefreshIsNotQueuedAgainAtEachMessage() async throws {
+        let (d, v) = try await pairedDevice()
+        relay.dropDeposits()
+        d.setFlushGate { false }
+        d.mem.withLock { d.st.vault?.tokenExpMs = VaultDevice.ms(Date().addingTimeInterval(86_400)) }
+        try await d.handle(try v.seal("vault.notice", "{}"))
+        try await d.handle(try v.seal("vault.notice", "{}"))
+        // The vault's own refresh request is answered all the same (an answer, not the device's own).
+        try await d.handle(try v.seal("relay.token.refresh", "{}"))
+        #expect(outboxTypes(d).filter { $0 == "relay.token.refresh" }.count == 2)
+        #expect(d.mem.withLock { d.st.outbox.filter { $0.type == "relay.token.refresh" && $0.re == nil }.count } == 1)
     }
 }

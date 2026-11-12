@@ -176,6 +176,8 @@ struct OutboxEntry: Codable, Sendable, Equatable {
     /// handshake to, so that the `device.paired` that opened under any of them removes it and no other handshake's does (nil
     /// for any other entry).
     var epochIDs: [String]?
+    /// The vault request this entry answers (an answer to the vault's `relay.token.refresh`), nil for the device's own.
+    var re: String?
 }
 
 /// Where the device state is kept. [save] must be durable before it returns (ack after persist, §8.3).

@@ -44,6 +44,24 @@ import VettIDDataTesting
 
     func seen(_ type: String) -> Int { service.requestsSeen.filter { $0 == type }.count }
 
+    /// Going to the background with a lock pending flushes all the same (no longer skipped): a pending `call.end` goes, and
+    /// the gate holds the rest.
+    @Test func theBackgroundsFlushWithALockPendingSendsOnlyACallEnd() async throws {
+        defer { phone.close() }
+        try await openVault()
+        service.relayLockAnswer = .noAnswer
+        service.memberLockAnswer = .queued
+        try await m.lock()
+        #expect(m.lockPending)
+        let d = try await keep("device.features")
+        _ = try await keep("call.end")
+        let features = seen("device.features")
+        await m.onBackground(budget: .seconds(5))
+        #expect(await eventually { seen("call.end") == 1 }, "a pending call.end still goes")
+        #expect(seen("device.features") == features)
+        #expect(d.mem.withLock { d.st.outbox.map(\.type) } == ["device.features"])
+    }
+
     @Test func aForegroundWithALockPendingDepositsNothingButACallEnd() async throws {
         defer { phone.close() }
         try await openVault()

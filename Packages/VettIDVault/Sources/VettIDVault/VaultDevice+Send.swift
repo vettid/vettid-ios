@@ -90,9 +90,10 @@ extension VaultDevice {
             let env = try ep.seal(
                 Inner(id: iid, type: type, ts: t, re: re, exp: exp, status: status, features: DeviceFeatures.all, body: body)
             )
-            let e = OutboxEntry(
+            var e = OutboxEntry(
                 id: iid, type: type, relayURL: v.relayURL, mailbox: v.mailbox, token: v.token, envelope: Base64s.encodeStd(env)
             )
+            e.re = re
             st.outbox.append(e)
             outboxInFlight.insert(e.id)
             return e
@@ -124,15 +125,20 @@ extension VaultDevice {
         var priorAttempts = e.attempts
         // As deposited: re-addressed when the token it had is spent (§8.6).
         var sent = e
+        let mark = stopMark
         do {
             try refuseSending()
             sent = try await awaitQuota(e)
+            // The lock gate (``flushMayGo(_:since:)``), asked again here, after the waits above: before a fin is counted, so
+            // that a held one is not, and right before the deposit.
+            try await refuseWhileGated(e.type, since: mark)
             if e.type == Self.typeHsFin {
                 // Gone (a new handshake replaced it), or the count could not be saved: nothing is deposited, and a fin still
                 // owed waits for the next flush, so that "saved before sent" holds.
                 guard case .counted(let prior) = await countFinAttempt(e) else { return }
                 priorAttempts = prior
             }
+            if e.type == Self.typeHsFin { try await refuseWhileGated(e.type, since: mark) }
             #if DEBUG
             finSendHook?()
             #endif

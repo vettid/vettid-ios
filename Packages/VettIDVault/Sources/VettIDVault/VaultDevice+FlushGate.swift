@@ -7,7 +7,18 @@
 
 import VettIDCrypto
 
+/// An outbox entry not deposited because the lock gate holds it, or the device was stopped since it was asked for: it stays in
+/// the outbox for a later flush (one the gate admits).
+public struct OutboxHeld: Error, Equatable, Sendable, CustomStringConvertible {
+    public var description: String { "held by the lock gate" }
+}
+
 extension VaultDevice {
+    /// Throws ``OutboxHeld`` unless an entry of [type] may be deposited now (``flushMayGo(_:since:)``).
+    func refuseWhileGated(_ type: String, since mark: Int) async throws {
+        if await flushMayGo(type, since: mark) != .go { throw OutboxHeld() }
+    }
+
     /// What a flush may do with its next entry (``flushMayGo(_:since:)``).
     enum FlushGo {
         /// Deposit it.
@@ -52,8 +63,12 @@ extension VaultDevice {
         }
         if e.type == HsTypes.confirm {
             await deliverConfirm(e)
-        } else {
+            return true
+        }
+        do {
             try await deliver(e)
+        } catch is OutboxHeld {
+            return false // held at the deposit itself: in the outbox, and no longer in flight (``deliver``)
         }
         return true
     }
