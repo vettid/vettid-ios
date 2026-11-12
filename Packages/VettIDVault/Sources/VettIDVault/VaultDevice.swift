@@ -70,16 +70,17 @@ public final class VaultDevice: @unchecked Sendable {
     #if DEBUG
     var beforeFinalSave: (@Sendable () async -> Void)? // TEST ONLY: before the write that ends a handling
     var flushSeen: (@Sendable (Bool) -> Void)? // TEST ONLY: a flush reached an entry (true: it left it alone)
+    var flushWaits: (@Sendable () -> Void)? // TEST ONLY: a flush waits for a running one to end
     #endif
     var flushing = false // a flush of the outbox runs (``flushOutbox()``); read and written under ``mem``
     /// Completed when the running flush ends: the flushes that wait for it wake up. Under ``mem``.
     var flushEnded: OneShot<Bool>?
     /// When a pending `credential.ack` was last tried (the device's uptime). Under ``mem``.
     var lastAckTry: TimeInterval?
-    /// The ids of outbox entries being deposited now (``deliver(_:keepOnFailure:)``). Under ``mem``.
+    /// The ids of outbox entries being deposited now (``deliver(_:keepOnFailure:since:)``). Under ``mem``.
     var outboxInFlight: Set<String> = []
     var quotaBackoff: [String: (until: TimeInterval, last: TimeInterval)] = [:] // §8.6, VaultDevice+Quota; under ``mem``
-    /// Whether a flush the device starts on its own may run (``gatedFlush()``): the manager's lock gate, nothing but the lock
+    /// Whether an outbox entry may be deposited now (``flushMayGo(_:since:)``): the manager's lock gate, nothing but the lock
     /// while one is pending. Nil: always. Under ``mem``.
     var flushGate: (@Sendable () async -> Bool)?
     /// How the device waits out a quota backoff before its flush (TEST ONLY: replaced to run it at once).
@@ -163,6 +164,8 @@ public final class VaultDevice: @unchecked Sendable {
     /// When the collector's last request ended (uptime).
     var collectLastEnded: TimeInterval?
     var stopped = true
+    /// How many times ``stop()`` ran (``stopMark``).
+    var stops = 0
     /// Set by ``forget()``: nothing is written to the store any more.
     var forgotten = false
     /// Set by ``halt()``: nothing is sent or written to the store any more, and the stored state stays as it was.
@@ -375,19 +378,21 @@ public final class VaultDevice: @unchecked Sendable {
     /// Starts collecting from the device's mailbox and flushes the outbox; does nothing while a collection runs. A
     /// terminal relay error ends the collection (``collectionEnded``); start it again to go on.
     public func start() {
-        let begin: Int? = mem.withLock {
+        let begin: (round: Int, mark: Int)? = mem.withLock {
             // A quieted device collects nothing again (``quiet()``): its answers could not be sent.
             if quieted { return nil }
             stopped = false
             if collector != nil, collectEnded == nil { return nil }
             collectEnded = nil
             collectRound += 1
-            return collectRound
+            return (collectRound, stops)
         }
-        guard let round = begin else { return }
+        guard let (round, mark) = begin else { return }
         let task = Task { [weak self] in
             guard let self else { return }
-            let flush = Task { await self.tickConfirm(); await self.flushOutbox() } // (0.88.1) hs.confirm again after 12 days
+            // (0.88.1) hs.confirm again after 12 days, then the outbox: both through the lock gate, and neither after a stop
+            // since this start.
+            let flush = Task { await self.tickConfirm(since: mark); await self.flushOutbox(since: mark) }
             defer { flush.cancel() }
             do {
                 try await collector(of: round).run { m in try await self.handle(m) }
@@ -429,6 +434,7 @@ public final class VaultDevice: @unchecked Sendable {
     public func stop() {
         let task: Task<Void, Never>? = mem.withLock {
             stopped = true
+            stops += 1
             // A request out is cut: what the relay handed it may stay leased (``collectorCuts``).
             if let out = collectSince {
                 collectCuts = (collectCuts.count + 1, collectStreaming ? (cfg.uptime(), 0) : out.sent)

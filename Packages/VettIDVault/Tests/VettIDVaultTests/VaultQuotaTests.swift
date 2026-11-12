@@ -95,11 +95,12 @@ extension VaultDeviceTests {
         relay.refuseDeposits = "unavailable"
         relay.refuseStatus = 503
         relay.refuseOnly = RelayClient.defaultAttempts
-        await #expect(throws: QuotaWait.self) { try await d.send("call.end") }
+        // (A hang-up passes the earlier entries, as the refresh does: not used here.)
+        await #expect(throws: QuotaWait.self) { try await d.send("relay.token.issued") }
         #expect(await relay.noDeposit(within: 0.2))
         await d.flushOutbox()
         #expect(try v.open(try await relay.nextDeposit().payload).type == "device.features")
-        #expect(try v.open(try await relay.nextDeposit().payload).type == "call.end")
+        #expect(try v.open(try await relay.nextDeposit().payload).type == "relay.token.issued")
     }
 
     /// The refresh is not held behind earlier entries (it asks for the token they may need); the backoff holds it as any other.
@@ -239,11 +240,20 @@ extension VaultDeviceTests {
         for (started, gate) in [(false, true), (true, false), (true, true)] {
             let (d, v, up) = try await quotaDevice()
             relay.serveMailbox = true
-            d.setFlushGate { gate }
+            // The send's own deposit is admitted (it is the one the relay refuses); the backoff's flush then asks [gate].
+            let admitOnce = Box(false)
+            d.setFlushGate {
+                if admitOnce.value {
+                    admitOnce.value = false
+                    return true
+                }
+                return gate
+            }
             if started {
                 d.start()
                 #expect(await relay.noDeposit(within: 0.2)) // its own flush, of an empty outbox, is over
             }
+            admitOnce.value = true
             // The wait "passes" at once: the clock moves by it.
             let slept = Box(false)
             d.mem.withLock { d.quotaSleep = { secs in up.value += secs + 1; slept.value = true } }
@@ -288,8 +298,17 @@ extension VaultDeviceTests {
     @Test func aNewTokensFlushPassesTheGate() async throws {
         let (d, v, _) = try await quotaDevice()
         relay.serveMailbox = true
-        d.setFlushGate { false }
+        let admitOnce = Box(false) // the send's own deposit, which the relay refuses
+        d.setFlushGate {
+            if admitOnce.value {
+                admitOnce.value = false
+                return true
+            }
+            return false
+        }
         d.start()
+        #expect(await relay.noDeposit(within: 0.2)) // its own flush, of an empty outbox, is over
+        admitOnce.value = true
         relay.refuseDeposits = RelayError.quotaExceeded
         relay.refuseQuota = RelayError.quotaToken
         relay.refuseOnly = 1

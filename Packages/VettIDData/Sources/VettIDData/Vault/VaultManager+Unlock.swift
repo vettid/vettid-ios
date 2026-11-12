@@ -242,6 +242,7 @@ extension VaultManager {
             // No lock from before this unlock: none is ever left in the outbox (locks never go through it).
             _ = try? await s.device.dropFromOutbox(VaultManager.typeVaultLock)
             // Nothing but the lock while one is pending: what the member wrote earlier waits for the next unlock.
+            // The device's lock gate asks again before each entry (``setFlushGate``).
             if !overtaken && guardRef.admits() { await s.device.flushOutbox() }
         }
         if overtaken {

@@ -58,16 +58,13 @@ extension VaultDevice {
     /// its vault at a time (chosen; not in the spec).
     static let maxSpentTokens = 8
 
-    /// Sets the gate of the flushes the device starts on its own (``gatedFlush()``).
+    /// Sets the lock gate every outbox deposit asks (``flushMayGo(_:since:)``), whoever starts the flush.
     public func setFlushGate(_ gate: @escaping @Sendable () async -> Bool) { mem.withLock { flushGate = gate } }
 
     /// A flush the device starts on its own (the end of a quota backoff, a new standing token for held entries): only while
-    /// it collects, and only when the manager's gate admits it (nothing but the lock while one is pending).
+    /// it collects; each entry then asks the lock gate (nothing but the lock while one is pending).
     func gatedFlush() async {
-        let (gate, running) = mem.withLock { (flushGate, !stopped && !forgotten) }
-        guard running else { return }
-        if let gate, await !gate() { return }
-        // A stop() while the gate was asked wins.
+        // Each entry asks the gate (``flushOutbox()``).
         guard mem.withLock({ !stopped && !forgotten }) else { return }
         await flushOutbox()
     }
@@ -78,7 +75,7 @@ extension VaultDevice {
     /// Before an outbox entry's deposit: the entry as it is to be deposited, or ``QuotaWait``. An entry under a token whose
     /// quota is spent (its own or an earlier entry's) waits for another standing token for its mailbox, one not known to be
     /// spent, and is re-addressed to it (saved). While its mailbox waits for a quota, an entry goes only after every earlier
-    /// entry of that mailbox has gone, except `relay.token.refresh`, which passes them; and nothing goes while the mailbox's
+    /// entry of that mailbox has gone, except `relay.token.refresh` and `call.end`, which pass them; and nothing goes while the mailbox's
     /// backoff runs. An entry no longer in the outbox is held by the same rules, without a save.
     func awaitQuota(_ e: OutboxEntry) async throws -> OutboxEntry {
         let (out, changed): (OutboxEntry?, Bool) = mem.withLock {
@@ -103,7 +100,10 @@ extension VaultDevice {
             if cur.quotaToken != nil { return (nil, changed) }
             let before = i.map { st.outbox[..<$0] } ?? st.outbox[...]
             let behindEarlier = before.contains { $0.mailbox == cur.mailbox && $0.id != cur.id }
-            if cur.type != Self.typeTokenRefresh, behindEarlier, quotaWaitingLocked(cur.mailbox) { return (nil, changed) }
+            // The refresh (it asks for the token they may need) and a hang-up (it goes while a lock is pending, ahead of what the
+            // lock gate holds) pass the earlier entries; the backoff holds them as any other.
+            let passes = cur.type == Self.typeTokenRefresh || cur.type == Self.typeCallEnd
+            if !passes, behindEarlier, quotaWaitingLocked(cur.mailbox) { return (nil, changed) }
             if let b = quotaBackoff[cur.mailbox], cfg.uptime() < b.until { return (nil, changed) }
             return (cur, changed)
         }
@@ -120,29 +120,38 @@ extension VaultDevice {
 
     /// [entry], new, after every older entry of its mailbox still in the outbox while the mailbox waits for a quota: they
     /// are tried first, in order; one still there after its try holds [entry] for the next flush (``awaitQuota(_:)``), so a
-    /// new entry never overtakes one queued before it. [entry]'s own failure (or wait) is thrown, as ``deliver(_:keepOnFailure:)``'s.
+    /// new entry never overtakes one queued before it. [entry]'s own failure (or wait) is thrown, as ``deliver(_:keepOnFailure:since:)``'s.
     func deliverInOrder(_ entry: OutboxEntry) async throws {
         let earlier: [OutboxEntry] = mem.withLock {
             guard quotaWaitingLocked(entry.mailbox), let i = st.outbox.firstIndex(where: { $0.id == entry.id }) else { return [] }
             return st.outbox[..<i].filter { $0.mailbox == entry.mailbox }
         }
         let nowMs = Self.ms(now())
+        let mark = stopMark
         for e in earlier {
-            // A fin past its time is dropped, not sent, as by a flush.
+            // A fin past its time is dropped, not sent, as by a flush (before the gate is asked).
             if e.type == Self.typeHsFin, let dropAfter = e.dropAfterMs, nowMs >= dropAfter {
                 try? await withLockSaving { st.outbox.removeAll { $0.id == e.id } }
                 continue
             }
+            // Each asks the lock gate, as in a flush; one held back holds [entry] behind it.
+            let go = await flushMayGo(e.type, since: mark)
+            if go == .end {
+                // Stopped since the send began: [entry] stays in the outbox, no longer in flight, for a later flush.
+                mem.withLock { _ = outboxInFlight.remove(entry.id) }
+                throw OutboxHeld()
+            }
+            if go == .hold { continue }
             // Not one a flush is depositing just now.
             let taken = mem.withLock { st.outbox.contains { $0.id == e.id } && outboxInFlight.insert(e.id).inserted }
             guard taken else { continue }
             defer { mem.withLock { _ = outboxInFlight.remove(e.id) } }
             if e.type == HsTypes.confirm {
-                await deliverConfirm(e)
+                await deliverConfirm(e, since: mark)
             } else {
-                try? await deliver(e)
+                try? await deliver(e, since: mark)
             }
         }
-        try await deliver(entry)
+        try await deliver(entry, since: mark)
     }
 }

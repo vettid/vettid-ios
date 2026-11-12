@@ -216,7 +216,7 @@ extension VaultDevice {
                 let entry = try enqueueLocked(
                     id: nil, type: inner.type, body: Self.standing(tok), re: inner.id, status: Inner.statusOK, exp: nil, save: false
                 )
-                afterLock { [self] in try? await deliver(entry) }
+                afterLock { [self] in _ = try? await deliverQueued(entry) }
             } else {
                 storeVaultToken(body)
             }
@@ -275,6 +275,8 @@ extension VaultDevice {
         }
         guard let (a, env, v) = prepared else { return }
         // The responder is stored by the save that ends ``handleLocked(_:)``, before this deposit (``afterLock(_:)``).
+        // Sent also while a lock is pending, ungated (as vettid-android sends it): a rekey the vault started and this phone
+        // left unanswered holds every later one until it expires (VAULT-MESSAGING §6.5).
         afterLock { [self] in
             do {
                 try await depositToVault(v, env)
@@ -350,14 +352,17 @@ extension VaultDevice {
                 let e = try enqueueLocked(
                     id: nil, type: "relay.token.issued", body: Self.standing(tok), re: nil, status: nil, exp: nil, save: false
                 )
-                afterLock { [self] in try? await deliver(e) }
+                afterLock { [self] in _ = try? await deliverQueued(e) }
             }
             let exp = Double(v.tokenExpMs) / 1000
-            if exp - t.timeIntervalSince1970 < Self.refreshBefore, t.timeIntervalSince1970 < exp {
+            // Not a second one while the device's own is still in the outbox (held by the lock gate, or a quota): they would all
+            // go at once.
+            let owed = mem.withLock { st.outbox.contains { $0.type == Self.typeTokenRefresh && $0.re == nil } }
+            if !owed, exp - t.timeIntervalSince1970 < Self.refreshBefore, t.timeIntervalSince1970 < exp {
                 let e = try enqueueLocked(
                     id: nil, type: "relay.token.refresh", body: VaultJSON.empty, re: nil, status: nil, exp: nil, save: false
                 )
-                afterLock { [self] in try? await deliver(e) }
+                afterLock { [self] in _ = try? await deliverQueued(e) }
             }
         } catch {
             // retried at the next message

@@ -137,7 +137,8 @@ extension VaultDevice {
         let mine = generation
         afterLock(keep: true) { [self] in
             do {
-                try await deliver(fin)
+                // Held by the lock gate, it waits in the outbox, as after a passing failure.
+                try await deliverQueued(fin)
             } catch let x as RelayError where Self.isTerminal(x) {
                 // Refused for good: when the flow was told (``deliver``: the fin's first attempt), it gets no code.
                 if mem.withLock({ finFailed }) { return }

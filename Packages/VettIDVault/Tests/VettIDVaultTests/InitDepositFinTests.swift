@@ -383,6 +383,60 @@ extension InitDepositTests {
         try await d.startTransfer(link: try qr.link(), attester: TestIOSAttester()) { _, _ in nil }
         #expect(d.pairingSas == nil, "no code until this handshake's own hs.resp")
     }
+
+    /// A fin past its time is dropped by a flush while the lock gate is shut too: dropping it sends nothing.
+    @Test func aFinPastItsTimeIsDroppedWhileTheGateIsShut() async throws {
+        let offset = Box<TimeInterval>(0)
+        let (d, v) = try await newPhone(now: { Date().addingTimeInterval(offset.value) })
+        d.setFlushGate { false }
+        let (qr, inviteID) = try codeFor(v, d)
+        try await d.startTransfer(link: try qr.link(), attester: TestIOSAttester()) { _, _ in nil }
+        let (_, initMsg) = try await base.relay.nextDeposit()
+        try await d.handle(try v.respondOpening(initMsg, d, ctx: inviteID).message)
+        #expect(d.mem.withLock { d.st.outbox.map(\.type) } == ["hs.fin"])
+        offset.value = 17 * 86_400 // past a handshake's lifetime
+        await d.flushOutbox()
+        #expect(d.mem.withLock { d.st.outbox.isEmpty })
+        #expect(await base.relay.noDeposit(within: 0.2))
+    }
+
+    /// A fin held by the gate after it was counted (a lock went pending while the count waited) is not counted: it never went
+    /// out (its attempts stay 0, which lets a later refusal for good of its first copy tell the flow).
+    @Test func aFinHeldAfterItsCountIsNotCounted() async throws {
+        let (d, v) = try await newPhone()
+        let asks = Box(0)
+        d.setFlushGate {
+            asks.value += 1
+            return asks.value <= 2 // the handling's ask and the deposit's first; the one after the count holds it
+        }
+        let (qr, inviteID) = try codeFor(v, d)
+        try await d.startTransfer(link: try qr.link(), attester: TestIOSAttester()) { _, _ in nil }
+        let (_, initMsg) = try await base.relay.nextDeposit()
+        try await d.handle(try v.respondOpening(initMsg, d, ctx: inviteID).message)
+        #expect(await base.relay.noDeposit(within: 0.2))
+        #expect(asks.value == 3) // held at the third: after the count
+        #expect(d.mem.withLock { d.st.outbox.first.map { $0.type == "hs.fin" && $0.attempts == 0 } } == true)
+        #expect(d.mem.withLock { d.outboxInFlight.isEmpty })
+    }
+
+    /// A pairing's `hs.fin` asks the lock gate (nothing but the lock while one is pending): held, it waits in the outbox, not
+    /// marked in flight, as after a passing failure, and the next flush the gate admits sends it.
+    @Test func aFinWaitsForTheLockGate() async throws {
+        let (d, v) = try await newPhone()
+        let open = Box(false)
+        d.setFlushGate { open.value }
+        let (qr, inviteID) = try codeFor(v, d)
+        try await d.startTransfer(link: try qr.link(), attester: TestIOSAttester()) { _, _ in nil }
+        let (_, initMsg) = try await base.relay.nextDeposit()
+        try await d.handle(try v.respondOpening(initMsg, d, ctx: inviteID).message)
+        #expect(await base.relay.noDeposit(within: 0.2))
+        #expect(d.mem.withLock { d.st.outbox.map(\.type) == ["hs.fin"] && d.outboxInFlight.isEmpty })
+        #expect(!d.mem.withLock { d.finFailed })
+        open.value = true
+        await d.flushOutbox()
+        try v.fin(try await base.relay.nextDeposit().payload, d)
+        #expect(d.mem.withLock { d.st.outbox.isEmpty })
+    }
 }
 
 // swiftlint:enable line_length
