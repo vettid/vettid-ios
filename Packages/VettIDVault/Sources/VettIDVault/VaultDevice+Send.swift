@@ -325,7 +325,7 @@ extension VaultDevice {
             ended = go == .end
             if ended { break }
             if e.type == HsTypes.confirm {
-                await deliverConfirm(e) // its time follows a refusal for good
+                await deliverConfirm(e, since: mark) // its time follows a refusal for good
                 continue
             }
             do {

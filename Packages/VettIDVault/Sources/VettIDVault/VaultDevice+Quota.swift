@@ -147,7 +147,7 @@ extension VaultDevice {
             guard taken else { continue }
             defer { mem.withLock { _ = outboxInFlight.remove(e.id) } }
             if e.type == HsTypes.confirm {
-                await deliverConfirm(e)
+                await deliverConfirm(e, since: mark)
             } else {
                 try? await deliver(e, since: mark)
             }

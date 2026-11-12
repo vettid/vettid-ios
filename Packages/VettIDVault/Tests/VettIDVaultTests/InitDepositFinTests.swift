@@ -414,6 +414,7 @@ extension InitDepositTests {
         let (_, initMsg) = try await base.relay.nextDeposit()
         try await d.handle(try v.respondOpening(initMsg, d, ctx: inviteID).message)
         #expect(await base.relay.noDeposit(within: 0.2))
+        #expect(asks.value == 3) // held at the third: after the count
         #expect(d.mem.withLock { d.st.outbox.first.map { $0.type == "hs.fin" && $0.attempts == 0 } } == true)
         #expect(d.mem.withLock { d.outboxInFlight.isEmpty })
     }

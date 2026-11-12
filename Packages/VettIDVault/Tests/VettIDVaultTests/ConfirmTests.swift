@@ -364,6 +364,27 @@ extension VaultDeviceTests {
         #expect(await relay.noDeposit(within: 0.2))
     }
 
+    /// A queued `hs.confirm` held at its deposit (the lock went pending after the first ask) reports held, and one asked for
+    /// before a stop is not deposited after it.
+    @Test func aConfirmHeldAtItsDepositReportsHeldAndHonoursTheStopMark() async throws {
+        let clock = Box(Date())
+        let r = try await rekeyed(clock)
+        let asks = Box(0)
+        r.device.setFlushGate {
+            asks.value += 1
+            return asks.value == 1
+        }
+        clock.value = clock.value.addingTimeInterval(12 * 86_400 + 60)
+        let e = try #require(await r.device.lock.withLock { r.device.tickConfirmLocked(r.device.now(), save: true) })
+        #expect(try await r.device.deliverQueued(e) == false)
+        #expect(r.device.mem.withLock { r.device.st.outbox.map(\.type) == ["hs.confirm"] && r.device.outboxInFlight.isEmpty })
+        r.device.setFlushGate { true }
+        let mark = r.device.stopMark
+        r.device.stop()
+        #expect(await r.device.deliverConfirm(e, since: mark) == false)
+        #expect(await relay.noDeposit(within: 0.2))
+    }
+
     /// The 12-day `hs.confirm` of a collection's start asks the lock gate: while a lock is pending it is queued, not
     /// deposited; the next flush the gate admits sends it.
     @Test func theTwelveDayConfirmWaitsForTheLockGate() async throws {

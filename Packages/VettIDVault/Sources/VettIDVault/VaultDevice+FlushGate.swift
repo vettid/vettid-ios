@@ -66,7 +66,7 @@ extension VaultDevice {
     /// `hs.confirm`), only when the lock gate admits it: a lock pending, the handling's replies wait in the outbox for a
     /// flush after it. Held, the entry is no longer in flight (``enqueueLocked``), so that the flush sends it. False when
     /// held; a deposit's failure is thrown, as ``deliver(_:keepOnFailure:since:)``'s (an `hs.confirm`'s is handled by
-    /// ``deliverConfirm(_:)``).
+    /// ``deliverConfirm(_:since:)``).
     @discardableResult
     func deliverQueued(_ e: OutboxEntry, since mark: Int? = nil) async throws -> Bool {
         let mark = mark ?? stopMark
@@ -78,10 +78,7 @@ extension VaultDevice {
                   mem.withLock({ st.outbox.contains { $0.id == e.id } && outboxInFlight.insert(e.id).inserted })
             else { return false }
         }
-        if e.type == HsTypes.confirm {
-            await deliverConfirm(e)
-            return true
-        }
+        if e.type == HsTypes.confirm { return await deliverConfirm(e, since: mark) }
         do {
             try await deliver(e, since: mark)
         } catch is OutboxHeld {
