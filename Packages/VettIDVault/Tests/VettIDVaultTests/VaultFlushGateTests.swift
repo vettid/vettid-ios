@@ -115,6 +115,44 @@ extension VaultDeviceTests {
         #expect(answer.type == "relay.token.refresh" && answer.re != nil)
     }
 
+    /// A reply held while the lock ends: a flush that ran meanwhile left it alone (still marked in flight), so it asks the
+    /// gate once more after its mark is cleared, and goes without waiting for another flush.
+    @Test func aHeldReplyAsksAgainWhenTheLockEndsMeanwhile() async throws {
+        let (d, v) = try await pairedDevice()
+        relay.dropDeposits()
+        let asks = Box(0)
+        d.setFlushGate {
+            asks.value += 1
+            guard asks.value == 1 else { return true }
+            await d.flushOutbox() // the lock ended: a flush runs, and leaves the reply alone
+            return false
+        }
+        try await d.handle(try v.seal("relay.token.refresh", "{}"))
+        let answer = try v.open(try await relay.nextDeposit().payload)
+        #expect(answer.type == "relay.token.refresh" && answer.re != nil)
+        #expect(outboxTypes(d).isEmpty)
+    }
+
+    /// While the mailbox waits for its quota, a new entry's earlier ones are tried first: a fin past its time among them is
+    /// dropped before the gate is asked, as a flush drops it.
+    @Test func aSendDropsAnExpiredFinBeforeAskingTheGate() async throws {
+        let (d, _, up) = try await quotaDevice()
+        let fin = try await d.lock.withLock {
+            try d.enqueueLocked(id: nil, type: VaultDevice.typeHsFin, body: VaultJSON.empty, re: nil, status: nil, exp: nil)
+        }
+        d.mem.withLock {
+            d.outboxInFlight.remove(fin.id)
+            if let i = d.st.outbox.firstIndex(where: { $0.id == fin.id }) { d.st.outbox[i].dropAfterMs = 1 }
+        }
+        relay.refuseDeposits = RelayError.quotaExceeded
+        relay.refuseOnly = 1
+        await #expect(throws: RelayError.self) { try await d.send("device.features") }
+        up.value += 61
+        d.setFlushGate { false }
+        await #expect(throws: QuotaWait.self) { try await d.send("call.end") }
+        #expect(outboxTypes(d) == ["device.features", "call.end"])
+    }
+
     /// The renewals a handling queues (a standing token near its end, §7.2) wait for the gate too.
     @Test func aRenewalQueuedByAHandlingWaitsForTheGate() async throws {
         let (d, v) = try await pairedDevice()
