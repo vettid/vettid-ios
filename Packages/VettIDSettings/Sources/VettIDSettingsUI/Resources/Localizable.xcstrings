@@ -914,6 +914,17 @@
         }
       }
     },
+    "ios_settings_attestation_ios_version": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iOS version"
+          }
+        }
+      }
+    },
     "ios_settings_canary_load": {
       "extractionState": "manual",
       "localizations": {
@@ -1419,7 +1430,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Last verified release"
+            "value": "Release"
           }
         }
       }
@@ -1464,6 +1475,468 @@
           "stringUnit": {
             "state": "translated",
             "value": "Attestation version"
+          }
+        }
+      }
+    },
+    "settings_attestation_none": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This phone hasn't verified your vault's enclave yet. It does at the next unlock."
+          }
+        }
+      }
+    },
+    "settings_attestation_failed_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verification failed"
+          }
+        }
+      }
+    },
+    "settings_attestation_failed_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This phone couldn't verify your vault's enclave, so it sent it nothing. The check that failed is marked below."
+          }
+        }
+      }
+    },
+    "settings_attestation_refused_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Every check passed, but this phone refused the release: %@"
+          }
+        }
+      }
+    },
+    "settings_attestation_refused_not_active": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "it isn't offered to new phones."
+          }
+        }
+      }
+    },
+    "settings_attestation_refused_older": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "it's older than a release this phone has already used."
+          }
+        }
+      }
+    },
+    "settings_attestation_refused_other_instance": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "your vault's address named a different enclave."
+          }
+        }
+      }
+    },
+    "settings_attestation_refused_time_scale": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "its time setting is for test builds, not this app."
+          }
+        }
+      }
+    },
+    "settings_attestation_ends": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": ", ends %@"
+          }
+        }
+      }
+    },
+    "settings_attestation_status_active": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Active"
+          }
+        }
+      }
+    },
+    "settings_attestation_status_deprecated": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Deprecated"
+          }
+        }
+      }
+    },
+    "settings_attestation_status_retired": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Retired"
+          }
+        }
+      }
+    },
+    "settings_attestation_status_removed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Removed"
+          }
+        }
+      }
+    },
+    "settings_attestation_attested_at": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Attested at"
+          }
+        }
+      }
+    },
+    "settings_attestation_valid_until": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Valid until"
+          }
+        }
+      }
+    },
+    "settings_attestation_not_verified": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not verified"
+          }
+        }
+      }
+    },
+    "settings_attestation_copy": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copy"
+          }
+        }
+      }
+    },
+    "settings_attestation_copied": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copied"
+          }
+        }
+      }
+    },
+    "settings_attestation_copy_all": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copy all"
+          }
+        }
+      }
+    },
+    "settings_attestation_section_checks": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Checks"
+          }
+        }
+      }
+    },
+    "settings_attestation_as_of": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "as of %@"
+          }
+        }
+      }
+    },
+    "settings_attestation_check_passed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Passed"
+          }
+        }
+      }
+    },
+    "settings_attestation_check_failed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Failed"
+          }
+        }
+      }
+    },
+    "settings_attestation_check_not_run": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not checked"
+          }
+        }
+      }
+    },
+    "settings_attestation_check_manifest": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Release list signed by VettID"
+          }
+        }
+      }
+    },
+    "settings_attestation_check_chain": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Certificate chain to the AWS Nitro root"
+          }
+        }
+      }
+    },
+    "settings_attestation_check_signature": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Signed by AWS Nitro hardware"
+          }
+        }
+      }
+    },
+    "settings_attestation_check_key": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Covers the key this phone encrypts to"
+          }
+        }
+      }
+    },
+    "settings_attestation_check_recent": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recent"
+          }
+        }
+      }
+    },
+    "settings_attestation_check_not_debug": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not a debug enclave"
+          }
+        }
+      }
+    },
+    "settings_attestation_check_own_release": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Names its own release"
+          }
+        }
+      }
+    },
+    "settings_attestation_check_validity": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Within its validity"
+          }
+        }
+      }
+    },
+    "settings_attestation_check_match": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Measurements match a signed release"
+          }
+        }
+      }
+    },
+    "settings_attestation_root_fingerprint": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Root fingerprint (SHA-256)"
+          }
+        }
+      }
+    },
+    "settings_attestation_section_release": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Release"
+          }
+        }
+      }
+    },
+    "settings_attestation_source": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Source"
+          }
+        }
+      }
+    },
+    "settings_attestation_reproducible": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reproducible build"
+          }
+        }
+      }
+    },
+    "settings_attestation_rebuild_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Anyone can rebuild this release from its tag and compare the measurements."
+          }
+        }
+      }
+    },
+    "settings_attestation_rebuild": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "How to rebuild it"
+          }
+        }
+      }
+    },
+    "settings_attestation_app_version": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "App version"
+          }
+        }
+      }
+    },
+    "settings_attestation_manifest_key": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Key %@ · serial %lld"
+          }
+        }
+      }
+    },
+    "settings_attestation_check_spoken": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@: %2$@"
           }
         }
       }

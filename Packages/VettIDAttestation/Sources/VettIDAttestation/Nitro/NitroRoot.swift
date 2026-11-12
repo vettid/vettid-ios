@@ -19,6 +19,10 @@ public enum NitroRoot {
         "MQCjfy+Rocm9Xue4YnwWmNJVA44fA0P5W2OpYow9OYCVRaEevL8uO1XYru5xtMPWrfMCMQCi85sWBbJwKKXdS6BptQFuZbT7" +
         "3o/gBh1qUxl/nNr12UO8Yfwr6wPLb+6NIwLz3/Y="
 
+    /// SHA-256 of a root certificate's DER, lower-case hex, as AWS publishes it for its root (ANDROID-PLAN 0.1.124: shown
+    /// under the attestation's line 2). Of the roots built into the app, never one from the network.
+    public static func fingerprint(_ der: [UInt8]) -> String { Bytes.hex(Bytes.sha256(der)) }
+
     /// The root certificate's DER.
     public static let der: [UInt8] = {
         do {

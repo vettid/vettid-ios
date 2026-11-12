@@ -435,12 +435,8 @@ public final class FakeVaultService: @unchecked Sendable {
     public var trust: AltTrust { get throws { AltTrust(nitroRoots: [], manifestKeys: [try manifestKey], timeScales: timeScales) } }
 
     /// The enclave check of the tests (§11.2 without Nitro): the descriptor as served, the manifest's entry for its
-    /// release.
-    public static let enclaveCheck: EnclaveCheck = { descriptor, _, manifest, _, _ in
-        let d = try Descriptor.parse(descriptor)
-        guard let r = manifest.byPcr0(d.release) else { throw AttestationError.release("not listed", unknown: true) }
-        return VerifiedEnclave(descriptor: d, measurements: r.measurements, release: r)
-    }
+    /// release; its record says every check passed (nothing is checked), or which one failed.
+    public static let enclaveCheck: EnclaveCheck = { descriptor, _, manifest, _, now in fakeVerification(descriptor, manifest, now) }
 
     /// The served manifest of [serial], listing this service's release 3 `active` (and release 4 `active` when
     /// [release4]), signed by [signer] (the TEST key).

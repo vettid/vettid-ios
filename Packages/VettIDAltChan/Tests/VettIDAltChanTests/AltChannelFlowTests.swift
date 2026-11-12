@@ -278,7 +278,7 @@ final class FakeAltAPI: @unchecked Sendable {
 /// The alternate-channel flows (VAULT-MESSAGING §11.3, §11.4, §11.9) against a fake member API and enclave. Mirrors the
 /// flow-level cases of vettid-android `MemberApiTest`.
 @Suite struct AltChannelFlowTests {
-    func setUp(_ enclaves: [FakeEnclave]? = nil, timeScales: TimeScalePolicy = .production) throws -> (FakeAltAPI, TestParty, AltChannelFlow) { // swiftlint:disable:this large_tuple
+    func setUp(_ enclaves: [FakeEnclave]? = nil, timeScales: TimeScalePolicy = .production, records: EnclaveRecords? = nil) throws -> (FakeAltAPI, TestParty, AltChannelFlow) { // swiftlint:disable:this large_tuple
         let api = FakeAltAPI(try enclaves ?? [FakeEnclave("inst-a")])
         let party = try TestParty()
         api.party = party
@@ -288,9 +288,11 @@ final class FakeAltAPI: @unchecked Sendable {
             transport: HTTPTransport(session: api.server.session, sleep: { _ in }), auth: .bearer("guid-1"), sleep: { _ in }
         )
         let flow = AltChannelFlow(api: client, trust: AltTrust(nitroRoots: [], manifestKeys: [try api.manifestKey], timeScales: timeScales), verifyEnclave: { d, _, m, _, _ in
-            guard let e = api.lock.withLock({ api.enclaves.first }), d == e.descriptor else { throw AttestationError.userData }
-            return try e.verified(m)
-        })
+            FakeEnclave.verification {
+                guard let e = api.lock.withLock({ api.enclaves.first }), d == e.descriptor else { throw AttestationError.userData }
+                return try e.verified(m)
+            }
+        }, records: records)
         return (api, party, flow)
     }
 
@@ -441,7 +443,7 @@ final class FakeAltAPI: @unchecked Sendable {
         api.party = p
         api.start()
         let client = MemberApiClient(apiBase: api.server.baseURL, manifestURL: api.server.baseURL + MemberApiClient.manifestPath, transport: HTTPTransport(session: api.server.session, sleep: { _ in }), auth: .bearer("guid-1"), sleep: { _ in })
-        let f = AltChannelFlow(api: client, trust: AltTrust(nitroRoots: [], manifestKeys: [try api.manifestKey]), verifyEnclave: { _, _, _, _, _ in throw AttestationError.chain })
+        let f = AltChannelFlow(api: client, trust: AltTrust(nitroRoots: [], manifestKeys: [try api.manifestKey]), verifyEnclave: { _, _, _, _, _ in FakeEnclave.verification { throw AttestationError.chain } })
         await #expect(throws: AttestationError.chain) { _ = try await f.enroll(party: p, vaultID: "v", userGuid: "guid-1", pin: "246802", attester: SoftAttester()) }
         #expect(!api.requests.contains { $0.path == "/api/vault/enroll" })
     }
@@ -451,7 +453,7 @@ final class FakeAltAPI: @unchecked Sendable {
         let (api, p, _) = try setUp()
         let client = MemberApiClient(apiBase: api.server.baseURL, manifestURL: api.server.baseURL + MemberApiClient.manifestPath, transport: HTTPTransport(session: api.server.session, sleep: { _ in }), auth: .bearer("guid-1"), sleep: { _ in })
         let other = try FakeEnclave("inst-z")
-        let f = AltChannelFlow(api: client, trust: AltTrust(nitroRoots: [], manifestKeys: [try api.manifestKey]), verifyEnclave: { _, _, m, _, _ in try other.verified(m) })
+        let f = AltChannelFlow(api: client, trust: AltTrust(nitroRoots: [], manifestKeys: [try api.manifestKey]), verifyEnclave: { _, _, m, _, _ in other.verification(m) })
         await #expect(throws: AltChannelFailure.self) { _ = try await f.enroll(party: p, vaultID: "v", userGuid: "guid-1", pin: "246802", attester: SoftAttester()) }
     }
 

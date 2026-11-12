@@ -84,8 +84,9 @@ extension VaultManager {
         ownerChecks.clear()
         clearLists()
         releaseUpdate.clear()
-        // The canary manifest's file is in the data directory the wipe erases.
+        // The canary manifest's file and the enclave record's are in the data directory the wipe erases.
         canary.forget()
+        enclaveRecords.forget()
         try? phoneSecrets.delete()
         usesPhoneSecret = false
         renewSecretSuggested = false
@@ -180,6 +181,7 @@ extension VaultManager {
         clearLists()
         releaseUpdate.clear()
         canary.forget()
+        enclaveRecords.forget()
         record.endWipe(complete: true)
         wipeEnded(.signedOut)
         return true

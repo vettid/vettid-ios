@@ -116,6 +116,7 @@ public enum VettIDSymbol: String, CaseIterable, Sendable {
     case info = "info.circle" // Info
     case checkCircle = "checkmark.circle.fill" // CheckCircle
     case errorOutline = "exclamationmark.circle" // ErrorOutline
+    case cancel = "xmark.circle" // Cancel (a check that failed, Settings → Attestation)
     case warning = "exclamationmark.triangle" // WarningAmber
     case reportProblem = "exclamationmark.octagon" // ReportProblem
     case radioUnchecked = "circle" // RadioButtonUnchecked

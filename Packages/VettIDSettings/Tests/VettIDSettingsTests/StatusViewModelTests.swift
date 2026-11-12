@@ -1,6 +1,7 @@
 import Foundation
 import LocalAuthentication
 import Testing
+import VettIDAttestation
 import VettIDData
 import VettIDDataTesting
 @testable import VettIDSettings
@@ -29,6 +30,11 @@ import VettIDDataTesting
         let m = AttestationViewModel(vault: repo)
         await m.settle()
         #expect(m.state.value?.appAttest?.accepted == true && m.state.value?.environment == "staging")
+        // (ANDROID-PLAN 0.1.124) The last verification's record, as the vault keeps it.
+        #expect(m.record == nil)
+        let r = EnclaveRecord.manifestFailed(at: Date(timeIntervalSince1970: 1_791_384_000))
+        repo.enclaveRecord = r
+        #expect(m.record == r)
         repo.fail["attestationInfo"] = VaultFailure(.other)
         let failed = AttestationViewModel(vault: repo)
         await failed.settle()

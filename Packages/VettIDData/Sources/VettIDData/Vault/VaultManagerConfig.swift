@@ -46,6 +46,9 @@ public enum VaultFiles {
     /// The canary manifest installed out of band (``CanaryManifestManager``). Not one of ``all(in:)``: it holds nothing
     /// of a vault, so its presence alone does not refuse the first-run cleanup (chosen; not in the spec).
     public static let canary = "canary-manifest"
+    /// The last enclave verification's record (``EnclaveRecordStore``, IOS-PLAN §6.9): public material only. Not one of
+    /// ``all(in:)``, for the same reason as the canary's; a wipe erases it with the data directory.
+    public static let enclaveRecord = "enclave-record"
     /// The last attempt at each vote's results (VAULT-MESSAGING 0.83.6 §10.19.6): times and hashes, never a choice, a row or
     /// a proof (``ResultsAttempts``). Not one of ``all(in:)`` for the same reason as the canary's; a wipe erases it with the
     /// data directory and ``VotesManager/forgetStored()`` empties it.
@@ -166,6 +169,9 @@ public struct VaultManagerConfig: Sendable {
     /// (iPhone) Told whether no vault made or being made here can hold an App Attest key of this phone, from the account
     /// record (``AttestStartOver``); nil where nothing listens.
     public var attestStartOver: AttestStartOver?
+    /// (ANDROID-PLAN 0.1.124, VAULT-RELEASES §5.2) The signed tag prefix of this build's channel, `release/prod/` or
+    /// `release/staging/`; nil where no tag names the vault's releases (the dev stack, the tests).
+    public var releaseTagPrefix: String?
     /// TEST ONLY. Whether the device state's write fails now (a full or locked disk); false in the app.
     public var deviceSaveFails: @Sendable () -> Bool = { false }
     /// TEST ONLY. Whether the phone secrets' records write fails now (a full or locked disk); false in the app.

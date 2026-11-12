@@ -100,6 +100,7 @@ final class AppComposition {
             environment: environment.kind.rawValue.uppercased()
         )
         config.attestStartOver = startOver
+        config.releaseTagPrefix = environment.releaseTagPrefix
         // IOS-PLAN §6.6: while the app is open the relay WebSocket collects (RELAY-PROTOCOL §6.4); the long-poll is its
         // fallback, and the collection stops when the app leaves the foreground.
         config.collectMode = .webSocket
