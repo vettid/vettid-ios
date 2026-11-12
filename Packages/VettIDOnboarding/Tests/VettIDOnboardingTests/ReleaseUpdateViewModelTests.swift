@@ -403,8 +403,10 @@ import VettIDDataTesting
 final class StepTicker {
     private var waiters: [CheckedContinuation<Void, any Error>] = []
 
+    /// Isolated to the main actor, as the view model's countdowns are: a countdown's waiter is added before it suspends, with
+    /// no hop off the main actor between, so a second the test gives right after is never one it was not yet waiting for.
     var tick: @Sendable () async throws -> Void {
-        { [weak self] in try await self?.wait() }
+        { @MainActor [weak self] in try await self?.wait() }
     }
 
     private func wait() async throws {
