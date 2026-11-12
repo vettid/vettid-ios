@@ -191,7 +191,8 @@ private struct PcrRow: View {
                     .font(.system(.footnote, design: .monospaced))
                     .foregroundStyle(colors.onSurfaceVariant)
                     .fixedSize(horizontal: false, vertical: true)
-                    .textSelection(.enabled)
+                // Not selectable: the system's Copy would put it on the general pasteboard, without expiry and synced to the
+                // member's other devices (IOS-PLAN §4.17). "Copy" is the only way.
                 if !verified {
                     Text(AttestationStrings.notVerified).vettIDFont(.bodySmall).foregroundStyle(colors.error)
                 }

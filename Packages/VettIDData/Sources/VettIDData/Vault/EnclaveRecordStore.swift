@@ -86,8 +86,10 @@ final class EnclaveRecordStore: @unchecked Sendable {
             guard g == generation else { return false }
             settled = true
             current = r
-            // Best effort: the screen shows the record in memory either way; a failed write leaves the earlier one on disk.
-            if let bytes = Self.encode(r) { try? file.save(bytes) }
+            // Best effort: the screen shows the record in memory either way. A failed write clears the file, so that a restart
+            // never reads an older record (a pass) after a newer one (a failure): it reads none.
+            let saved = Self.encode(r).map { (try? file.save($0)) != nil } ?? false
+            if !saved { try? file.clear() }
             return true
         }
         if kept { notify() }
@@ -133,7 +135,8 @@ final class EnclaveRecordStore: @unchecked Sendable {
             r.releaseStatus = status
         }
         if let why = s.refusal {
-            guard let refusal = EnclaveRefusal(rawValue: why) else { return nil }
+            // A refusal comes only after every check passed.
+            guard let refusal = EnclaveRefusal(rawValue: why), r.allPassed else { return nil }
             r.refusal = refusal
         }
         values(s, into: &r, passed: run.passed)

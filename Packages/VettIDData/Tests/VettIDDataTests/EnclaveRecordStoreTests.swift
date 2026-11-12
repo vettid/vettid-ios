@@ -66,11 +66,17 @@ import VettIDKeys
         #expect(EnclaveRecordStore.decode(try stored { $0.results[AttestationCheck.recent.rawValue] = nil }) == nil)
         #expect(EnclaveRecordStore.decode(try stored { $0.releaseStatus = "paused" }) == nil)
         #expect(EnclaveRecordStore.decode(try stored { $0.refusal = "unknown" }) == nil)
+        // A refusal comes only after every check passed.
+        let refusedEarly = try stored { s in
+            s.results[AttestationCheck.match.rawValue] = CheckResult.failed.rawValue
+        }
+        #expect(EnclaveRecordStore.decode(refusedEarly) == nil)
         #expect(EnclaveRecordStore.decode(Array("not json".utf8)) == nil)
         // Values of a step the run never reached are dropped: a refused list shows only the environment.
         let listFailed = try stored { s in
             let states = AttestationCheck.allCases.map { ($0.rawValue, $0 == .manifest ? "failed" : "notRun") }
             s.results = Dictionary(uniqueKeysWithValues: states)
+            s.refusal = nil
         }
         let dropped = try #require(EnclaveRecordStore.decode(listFailed))
         #expect(dropped.pcr0 == nil && dropped.notAfter == nil && dropped.manifestKeyID == nil)

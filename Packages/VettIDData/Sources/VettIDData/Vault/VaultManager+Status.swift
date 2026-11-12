@@ -134,7 +134,8 @@ extension VaultManager {
             a.appVersion = Self.appVersion(Bundle.main)
             a.osVersion = Self.osVersion(ProcessInfo.processInfo.operatingSystemVersion)
             a.releaseTagPrefix = config.releaseTagPrefix
-            a.rootFingerprint = config.trust.nitroRoots.first.map(NitroRoot.fingerprint) ?? NitroRoot.sha256Hex
+            // The root this build checks the chain against; "-" for a build that pins none.
+            a.rootFingerprint = config.trust.nitroRoots.first.map(NitroRoot.fingerprint) ?? "-"
             return a
         }
     }
