@@ -90,9 +90,10 @@ extension VaultDevice {
             let env = try ep.seal(
                 Inner(id: iid, type: type, ts: t, re: re, exp: exp, status: status, features: DeviceFeatures.all, body: body)
             )
-            let e = OutboxEntry(
+            var e = OutboxEntry(
                 id: iid, type: type, relayURL: v.relayURL, mailbox: v.mailbox, token: v.token, envelope: Base64s.encodeStd(env)
             )
+            e.re = re
             st.outbox.append(e)
             outboxInFlight.insert(e.id)
             return e
@@ -115,7 +116,7 @@ extension VaultDevice {
     ///
     /// The entry is in flight meanwhile (``flushOutbox()`` leaves it alone). With [keepOnFailure] false a failure removes
     /// it, so that a request reported as failed is never deposited later.
-    func deliver(_ e: OutboxEntry, keepOnFailure: Bool = true) async throws {
+    func deliver(_ e: OutboxEntry, keepOnFailure: Bool = true, since asked: Int? = nil) async throws {
         mem.withLock { _ = outboxInFlight.insert(e.id) }
         defer { mem.withLock { _ = outboxInFlight.remove(e.id) } }
         // A handshake's fin is counted before it is sent: a deposit that is cancelled or killed in flight may have reached the vault,
@@ -124,13 +125,15 @@ extension VaultDevice {
         var priorAttempts = e.attempts
         // As deposited: re-addressed when the token it had is spent (§8.6).
         var sent = e
+        let mark = asked ?? stopMark // a stop since the caller asked for it wins
         do {
             try refuseSending()
             sent = try await awaitQuota(e)
+            // The lock gate (``flushMayGo(_:since:)``), asked again here, after the waits above: before a fin is counted, so
+            // that a held one is not, and right before the deposit.
+            try await refuseWhileGated(e.type, since: mark)
             if e.type == Self.typeHsFin {
-                // Gone (a new handshake replaced it), or the count could not be saved: nothing is deposited, and a fin still
-                // owed waits for the next flush, so that "saved before sent" holds.
-                guard case .counted(let prior) = await countFinAttempt(e) else { return }
+                guard let prior = try await countGatedFin(e, since: mark) else { return }
                 priorAttempts = prior
             }
             #if DEBUG
@@ -204,7 +207,7 @@ extension VaultDevice {
 
     /// Counts a deposit of an `hs.fin` before it is made, and saves the count. The entry is looked up under the device lock: a
     /// flush that chose it before a new handshake removed it finds it gone.
-    private func countFinAttempt(_ e: OutboxEntry) async -> FinCount {
+    func countFinAttempt(_ e: OutboxEntry) async -> FinCount {
         #if DEBUG
         finCountHook?()
         #endif
@@ -294,26 +297,16 @@ extension VaultDevice {
     ]
 
     /// Re-deposits what the outbox still holds (after a restart or a transport failure). The deposits are made outside the
-    /// device lock, one flush at a time: a slow relay holds up the flush and nothing else.
-    public func flushOutbox() async {
-        // One flush at a time. A caller that comes while one runs waits for it and then runs its own, so that it always sees a
-        // flush that began after it asked (the credential settle wait relies on it).
-        var entries: [OutboxEntry] = []
-        while true {
-            let (mine, running): (Bool, OneShot<Bool>?) = mem.withLock {
-                if flushing { return (false, flushEnded) }
-                flushing = true
-                flushEnded = OneShot<Bool>()
-                entries = st.outbox
-                return (true, nil)
-            }
-            if mine { break }
-            // Woken when the running flush ends; a cancelled waiter returns at once. The timeout only bounds one wait: the
-            // loop looks again.
-            _ = await running?.wait(timeout: 60)
-            if Task.isCancelled { return }
-        }
+    /// device lock, one flush at a time: a slow relay holds up the flush and nothing else. Each entry asks the lock gate
+    /// first (``flushMayGo(_:since:)``): while a lock is pending only a `call.end` goes, and nothing goes after a ``stop()``
+    /// that came since this flush was asked for, also when it waited for another flush to end.
+    public func flushOutbox() async { await flushOutbox(since: stopMark) }
+
+    /// ``flushOutbox()`` for a flush asked for at [mark] (``stopMark``): a stop since then ends it.
+    func flushOutbox(since mark: Int) async {
+        guard let entries = await takeFlushSlot() else { return }
         let nowMs = Self.ms(now())
+        var ended = false
         for e in entries {
             // Not one that is being deposited just now (a renewal reported as failed must not go out later).
             // By id: an entry re-addressed meanwhile (§8.6) is still the same entry.
@@ -330,23 +323,50 @@ extension VaultDevice {
                 try? await withLockSaving { st.outbox.removeAll { $0.id == e.id } }
                 continue
             }
+            let go = await flushMayGo(e.type, since: mark)
+            if go == .hold { continue }
+            ended = go == .end
+            if ended { break }
             if e.type == HsTypes.confirm {
-                await deliverConfirm(e) // its time follows a refusal for good
+                await deliverConfirm(e, since: mark) // its time follows a refusal for good
                 continue
             }
             do {
-                try await deliver(e)
+                try await deliver(e, since: mark)
             } catch {} // (a fin refused for good is told to the flow, or not, by ``deliver``)
         }
         // The flush is over before the ack is tried: a vault that does not answer holds up the ack, not every flush.
-        let ended: OneShot<Bool>? = mem.withLock {
+        let waiters: OneShot<Bool>? = mem.withLock {
             flushing = false
             defer { flushEnded = nil }
             return flushEnded
         }
-        ended?.complete(true)
+        waiters?.complete(true)
         publishPairingHeld() // a fin past its time may have left the outbox
-        await sendPendingAck()
+        // The ack is a deposit to the vault too: it asks the gate as an entry does.
+        if !ended, await flushMayGo(nil, since: mark) == .go { await sendPendingAck() }
+    }
+
+    /// One flush at a time. A caller that comes while one runs waits for it and then runs its own, so that it always sees a
+    /// flush that began after it asked (the credential settle wait relies on it). The outbox as the slot was taken, or nil
+    /// when the waiter was cancelled.
+    private func takeFlushSlot() async -> [OutboxEntry]? {
+        while true {
+            let (entries, running): ([OutboxEntry]?, OneShot<Bool>?) = mem.withLock {
+                if flushing { return (nil, flushEnded) }
+                flushing = true
+                flushEnded = OneShot<Bool>()
+                return (st.outbox, nil)
+            }
+            if let entries { return entries }
+            // Woken when the running flush ends; a cancelled waiter returns at once. The timeout only bounds one wait: the
+            // loop looks again.
+            #if DEBUG
+            flushWaits?()
+            #endif
+            _ = await running?.wait(timeout: 60)
+            if Task.isCancelled { return nil }
+        }
     }
 
     /// Whether a terminal refusal of an `hs.fin` shows that the vault never took it: the fin had not been sent before

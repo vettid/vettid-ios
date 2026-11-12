@@ -43,7 +43,7 @@ extension VaultManagerTransferInTests {
         defer { phone.close() }
         _ = try await scanned()
         phone.clockAhead = 600
-        m.session?.device.stop()
+        await suspendCollector()
         service.approveTransferIn()
         let waiting = Task { try await m.awaitTransferIn() }
         #expect(await deadlineWaiting())
@@ -74,7 +74,7 @@ extension VaultManagerTransferInTests {
         defer { phone.close() }
         _ = try await scanned()
         phone.clockAhead = 600
-        m.session?.device.stop()
+        await suspendCollector()
         service.approveTransferIn()
         service.refusesCollect = true
         let waiting = Task { try await m.awaitTransferIn() }
@@ -204,7 +204,7 @@ extension VaultManagerTransferInTests {
     @Test func aCollectOfAnEndedProcessTakesNothing() async throws {
         defer { phone.close() }
         _ = try await scanned()
-        m.session?.device.stop()
+        await suspendCollector()
         service.approveTransferIn()
         #expect(await eventually { service.mailboxCounts.queued == 1 }, "\(service.mailboxCounts)")
         let url = try #require(URL(string: service.relay.baseURL + "/v1/mailbox?wait=0&max=10"))

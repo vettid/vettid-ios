@@ -350,6 +350,56 @@ extension VaultDeviceTests {
         try await d.handle(try v.seal("hs.confirm", "{}"))
         await #expect(throws: VaultStateError.self) { _ = try await d.awaitEvent("hs.confirm", timeout: 0.2) }
     }
+
+    /// The 12-day `hs.confirm` of a collection's start keeps the stop mark of that start: after a stop since, it is queued,
+    /// not deposited.
+    @Test func theTwelveDayConfirmOfAStartStoppedSinceIsNotDeposited() async throws {
+        let clock = Box(Date())
+        let r = try await rekeyed(clock)
+        let mark = r.device.stopMark
+        r.device.stop()
+        clock.value = clock.value.addingTimeInterval(12 * 86_400 + 60)
+        await r.device.tickConfirm(since: mark)
+        #expect(r.device.mem.withLock { r.device.st.outbox.map(\.type) } == ["hs.confirm"])
+        #expect(await relay.noDeposit(within: 0.2))
+    }
+
+    /// A queued `hs.confirm` held at its deposit (the lock went pending after the first ask) reports held, and one asked for
+    /// before a stop is not deposited after it.
+    @Test func aConfirmHeldAtItsDepositReportsHeldAndHonoursTheStopMark() async throws {
+        let clock = Box(Date())
+        let r = try await rekeyed(clock)
+        let asks = Box(0)
+        r.device.setFlushGate {
+            asks.value += 1
+            return asks.value == 1
+        }
+        clock.value = clock.value.addingTimeInterval(12 * 86_400 + 60)
+        let e = try #require(await r.device.lock.withLock { r.device.tickConfirmLocked(r.device.now(), save: true) })
+        #expect(try await r.device.deliverQueued(e) == false)
+        #expect(r.device.mem.withLock { r.device.st.outbox.map(\.type) == ["hs.confirm"] && r.device.outboxInFlight.isEmpty })
+        r.device.setFlushGate { true }
+        let mark = r.device.stopMark
+        r.device.stop()
+        #expect(await r.device.deliverConfirm(e, since: mark) == false)
+        #expect(await relay.noDeposit(within: 0.2))
+    }
+
+    /// The 12-day `hs.confirm` of a collection's start asks the lock gate: while a lock is pending it is queued, not
+    /// deposited; the next flush the gate admits sends it.
+    @Test func theTwelveDayConfirmWaitsForTheLockGate() async throws {
+        let clock = Box(Date())
+        let r = try await rekeyed(clock)
+        let open = Box(false)
+        r.device.setFlushGate { open.value }
+        clock.value = clock.value.addingTimeInterval(12 * 86_400 + 60)
+        await r.device.tickConfirm()
+        #expect(r.device.mem.withLock { r.device.st.outbox.map(\.type) } == ["hs.confirm"])
+        #expect(await relay.noDeposit(within: 0.2))
+        open.value = true
+        await r.device.flushOutbox()
+        #expect(try await take(r.new).type == "hs.confirm")
+    }
 }
 
 // swiftlint:enable line_length
