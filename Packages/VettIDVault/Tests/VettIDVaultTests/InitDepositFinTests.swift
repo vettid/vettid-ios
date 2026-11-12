@@ -401,7 +401,7 @@ extension InitDepositTests {
     }
 
     /// A fin held by the gate after it was counted (a lock went pending while the count waited) is not counted: it never went
-    /// out, so a later refusal for good of its first copy still tells the flow.
+    /// out (its attempts stay 0, which lets a later refusal for good of its first copy tell the flow).
     @Test func aFinHeldAfterItsCountIsNotCounted() async throws {
         let (d, v) = try await newPhone()
         let asks = Box(0)

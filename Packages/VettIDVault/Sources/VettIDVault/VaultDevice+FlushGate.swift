@@ -65,7 +65,7 @@ extension VaultDevice {
     /// Deposits an outbox entry queued outside a flush (a reply queued while a vault message was handled, the 12-day
     /// `hs.confirm`), only when the lock gate admits it: a lock pending, the handling's replies wait in the outbox for a
     /// flush after it. Held, the entry is no longer in flight (``enqueueLocked``), so that the flush sends it. False when
-    /// held; a deposit's failure is thrown, as ``deliver(_:keepOnFailure:)``'s (an `hs.confirm`'s is handled by
+    /// held; a deposit's failure is thrown, as ``deliver(_:keepOnFailure:since:)``'s (an `hs.confirm`'s is handled by
     /// ``deliverConfirm(_:)``).
     @discardableResult
     func deliverQueued(_ e: OutboxEntry, since mark: Int? = nil) async throws -> Bool {

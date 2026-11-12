@@ -77,7 +77,7 @@ public final class VaultDevice: @unchecked Sendable {
     var flushEnded: OneShot<Bool>?
     /// When a pending `credential.ack` was last tried (the device's uptime). Under ``mem``.
     var lastAckTry: TimeInterval?
-    /// The ids of outbox entries being deposited now (``deliver(_:keepOnFailure:)``). Under ``mem``.
+    /// The ids of outbox entries being deposited now (``deliver(_:keepOnFailure:since:)``). Under ``mem``.
     var outboxInFlight: Set<String> = []
     var quotaBackoff: [String: (until: TimeInterval, last: TimeInterval)] = [:] // §8.6, VaultDevice+Quota; under ``mem``
     /// Whether an outbox entry may be deposited now (``flushMayGo(_:since:)``): the manager's lock gate, nothing but the lock

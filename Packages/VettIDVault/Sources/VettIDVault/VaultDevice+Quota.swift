@@ -120,7 +120,7 @@ extension VaultDevice {
 
     /// [entry], new, after every older entry of its mailbox still in the outbox while the mailbox waits for a quota: they
     /// are tried first, in order; one still there after its try holds [entry] for the next flush (``awaitQuota(_:)``), so a
-    /// new entry never overtakes one queued before it. [entry]'s own failure (or wait) is thrown, as ``deliver(_:keepOnFailure:)``'s.
+    /// new entry never overtakes one queued before it. [entry]'s own failure (or wait) is thrown, as ``deliver(_:keepOnFailure:since:)``'s.
     func deliverInOrder(_ entry: OutboxEntry) async throws {
         let earlier: [OutboxEntry] = mem.withLock {
             guard quotaWaitingLocked(entry.mailbox), let i = st.outbox.firstIndex(where: { $0.id == entry.id }) else { return [] }
