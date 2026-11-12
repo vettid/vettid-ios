@@ -169,8 +169,8 @@ extension VaultDeviceTests {
     }
 
     /// The vault's rekey while a lock is pending is answered all the same: the vault answers a rekey's `hs.init` once, and one
-    /// left unanswered would hold every later rekey for its lifetime. Its confirmation, once the vault's `hs.fin` arrives,
-    /// waits for the gate.
+    /// left unanswered would hold every later rekey for its lifetime. The vault's `hs.fin` is processed (the epoch is active);
+    /// its confirmation waits for the gate.
     @Test func aRekeyIsAnsweredWhileTheGateIsShut() async throws {
         let (d, v) = try await pairedDevice()
         relay.dropDeposits()
@@ -179,6 +179,8 @@ extension VaultDeviceTests {
         try await d.handle(v.msg(ini.envelope))
         let res = try ini.handleResp(try await relay.nextDeposit().payload, collectSender: d.relayAddr.pk, now: Date())
         try await d.handle(v.msg(res.fin))
+        // The vault's hs.fin is processed: the new epoch is the device's, and nothing else is deposited.
+        #expect(d.mem.withLock { d.keyring.current()?.ctx } == res.epoch.ctx)
         #expect(await relay.noDeposit(within: 0.2))
         #expect(outboxTypes(d) == ["hs.confirm", "device.features"])
     }
