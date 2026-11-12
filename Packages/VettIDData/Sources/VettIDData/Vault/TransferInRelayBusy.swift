@@ -20,9 +20,10 @@ extension TransferInRelayBusy {
 }
 
 extension VaultManager {
-    /// The pairing fin's relay quota hold, from the session's device; with no session, one `false`.
+    /// The pairing fin's relay quota hold, from the session's device, or the transfer's while the session is put aside (a
+    /// background); with neither, one `false`.
     public func transferInRelayBusyUpdates() -> AsyncStream<Bool> {
-        guard let d = session?.device else {
+        guard let d = session?.device ?? moveFlags.book.transferSession?.device else {
             return AsyncStream { c in
                 c.yield(false)
                 c.finish()

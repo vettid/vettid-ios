@@ -461,6 +461,7 @@ public final class VaultDevice: @unchecked Sendable {
     /// nothing is written to the store again, and it holds no vault. Refused on a halted device (``halt()``), whose store
     /// the next process uses.
     public func forget() async throws {
+        defer { publishPairingHeld() }
         try await lock.withLock {
             try refuseHalted()
             stop()

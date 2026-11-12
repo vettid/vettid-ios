@@ -96,6 +96,22 @@ extension InitDepositTests {
         #expect(!e.pairingHeldByRelay)
     }
 
+    /// A held fin dropped at its time (a flush) or by the handshake's end ends the hold, on the stream too.
+    @Test func aHeldFinDroppedAtItsTimeEndsTheHold() async throws {
+        let td = try await transferringPhone()
+        let (d, v, initMsg, inviteID) = (td.d, td.v, td.initMsg, td.inviteID)
+        let updates = Updates(d)
+        _ = await updates.next()
+        base.relay.refuseStatus = 429
+        base.relay.refuseDeposits = RelayError.quotaExceeded
+        try await d.handle(try v.respondOpening(initMsg, d, ctx: inviteID).message)
+        #expect(await updates.next() == true)
+        d.mem.withLock { d.st.outbox[0].dropAfterMs = 1 }
+        await d.flushOutbox()
+        #expect(d.mem.withLock { d.st.outbox.isEmpty })
+        #expect(await updates.next() == false)
+    }
+
     /// The held fin's refusal for good, and a new handshake or a dropped pairing, end the hold.
     @Test func theHoldEndsWithTheFin() async throws {
         let td = try await transferringPhone()
@@ -114,15 +130,19 @@ extension InitDepositTests {
         base.relay.refuseDeposits = nil
         let te = try await transferringPhone()
         let (e, w, initMsg2, inviteID2) = (te.d, te.v, te.initMsg, te.inviteID)
+        let updates2 = Updates(e)
+        _ = await updates2.next()
         base.relay.refuseStatus = 429
         base.relay.refuseDeposits = RelayError.quotaExceeded
         try await e.handle(try w.respondOpening(initMsg2, e, ctx: inviteID2).message)
         #expect(e.pairingHeldByRelay)
+        #expect(await updates2.next() == true)
         base.relay.refuseStatus = 403
         base.relay.refuseDeposits = RelayError.tokenRevoked
         te.up.value += 61
         await e.flushOutbox()
         #expect(e.mem.withLock { e.st.outbox.isEmpty })
         #expect(!e.pairingHeldByRelay)
+        #expect(await updates2.next() == false)
     }
 }

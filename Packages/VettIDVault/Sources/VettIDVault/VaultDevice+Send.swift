@@ -345,6 +345,7 @@ extension VaultDevice {
             return flushEnded
         }
         ended?.complete(true)
+        publishPairingHeld() // a fin past its time may have left the outbox
         await sendPendingAck()
     }
 

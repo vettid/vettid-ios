@@ -118,14 +118,15 @@ extension VaultDevice {
     }
 
     /// Emits ``pairingHeldByRelay`` when it differs from the value last emitted.
+    /// Decided and emitted under ``mem``, so that two of them never reach the subscribers in the other order (the
+    /// broadcast only yields).
     func publishPairingHeld() {
-        let changed: Bool? = mem.withLock {
+        mem.withLock {
             let now = pairingHeldLocked
-            guard now != pairingHeldEmitted else { return nil }
+            guard now != pairingHeldEmitted else { return }
             pairingHeldEmitted = now
-            return now
+            pairingHeldBroadcast.emit(now)
         }
-        if let changed { pairingHeldBroadcast.emit(changed) }
     }
 
     /// The relay took a deposit to [mailbox]: its quota backoff ends.
@@ -178,6 +179,7 @@ extension VaultDevice {
     /// are tried first, in order; one still there after its try holds [entry] for the next flush (``awaitQuota(_:)``), so a
     /// new entry never overtakes one queued before it. [entry]'s own failure (or wait) is thrown, as ``deliver(_:keepOnFailure:)``'s.
     func deliverInOrder(_ entry: OutboxEntry) async throws {
+        defer { publishPairingHeld() } // a fin past its time may have left the outbox
         let earlier: [OutboxEntry] = mem.withLock {
             guard quotaWaitingLocked(entry.mailbox), let i = st.outbox.firstIndex(where: { $0.id == entry.id }) else { return [] }
             return st.outbox[..<i].filter { $0.mailbox == entry.mailbox }

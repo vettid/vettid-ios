@@ -8,6 +8,8 @@ extension VaultDevice {
     /// rekey's new epoch that arrived before the rekey's `hs.fin` is neither recorded as seen nor acked
     /// (``LeaveUnacked``): the relay delivers it again, and it is opened once `hs.fin` has arrived (§6.3, §8.4).
     public func handle(_ m: RelayMessage) async throws {
+        // A handling can take the held fin out of the outbox (`device.paired`, a failed handling's undo).
+        defer { publishPairingHeld() }
         let after = AfterLockWork()
         do {
             try await AfterLockWork.$current.withValue(after) { try await handleLocked(m) }
