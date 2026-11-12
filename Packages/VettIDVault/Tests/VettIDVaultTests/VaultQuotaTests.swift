@@ -239,8 +239,11 @@ extension VaultDeviceTests {
         for (started, gate) in [(false, true), (true, false), (true, true)] {
             let (d, v, up) = try await quotaDevice()
             relay.serveMailbox = true
-            if started { d.start() }
             d.setFlushGate { gate }
+            if started {
+                d.start()
+                #expect(await relay.noDeposit(within: 0.2)) // its own flush, of an empty outbox, is over
+            }
             // The wait "passes" at once: the clock moves by it.
             let slept = Box(false)
             d.mem.withLock { d.quotaSleep = { secs in up.value += secs + 1; slept.value = true } }
@@ -270,6 +273,32 @@ extension VaultDeviceTests {
         await #expect(throws: QuotaWait.self) { try await d.renewStandingToken() }
         #expect(outboxTypes(d).isEmpty)
         #expect(await relay.noDeposit(within: 0.2))
+    }
+
+    @Test func aRenewalRefusedForTheTokensQuotaIsNotKept() async throws {
+        let (d, _, _) = try await quotaDevice()
+        relay.refuseDeposits = RelayError.quotaExceeded
+        relay.refuseQuota = RelayError.quotaToken
+        relay.refuseOnly = 1
+        await #expect(throws: RelayError.self) { try await d.renewStandingToken() }
+        #expect(outboxTypes(d).isEmpty)
+    }
+
+    /// The flush a new token starts passes the gate too.
+    @Test func aNewTokensFlushPassesTheGate() async throws {
+        let (d, v, _) = try await quotaDevice()
+        relay.serveMailbox = true
+        d.setFlushGate { false }
+        d.start()
+        relay.refuseDeposits = RelayError.quotaExceeded
+        relay.refuseQuota = RelayError.quotaToken
+        relay.refuseOnly = 1
+        await #expect(throws: RelayError.self) { try await d.send("device.features") }
+        v.requestTokenTTL = DepositTokens.standingTTL + 3_600
+        try await d.handle(try v.seal("relay.token.issued", #"{"kind":"standing","token":"\#(try v.token(for: d))"}"#))
+        #expect(await relay.noDeposit(within: 0.3))
+        #expect(outboxTypes(d) == ["device.features"])
+        d.stop()
     }
 
     /// A new standing token from the vault sends the entries held for the spent one at once, under it.

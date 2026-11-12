@@ -67,6 +67,8 @@ extension VaultDevice {
         let (gate, running) = mem.withLock { (flushGate, !stopped && !forgotten) }
         guard running else { return }
         if let gate, await !gate() { return }
+        // A stop() while the gate was asked wins.
+        guard mem.withLock({ !stopped && !forgotten }) else { return }
         await flushOutbox()
     }
 

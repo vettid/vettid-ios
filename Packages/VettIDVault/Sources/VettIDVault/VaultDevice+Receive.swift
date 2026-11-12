@@ -321,7 +321,8 @@ extension VaultDevice {
                 st.vault?.tokenExpMs = Self.ms(exp)
                 // Entries held for a spent token go under the new one, now rather than at the next start (§8.6).
                 if st.outbox.contains(where: { $0.quotaToken != nil }) {
-                    afterLock { [weak self] in await self?.gatedFlush() }
+                    // In a task of its own: a whole flush does not hold up this message's handling and its ack.
+                    afterLock { [weak self] in Task { await self?.gatedFlush() } }
                 }
             }
         }
