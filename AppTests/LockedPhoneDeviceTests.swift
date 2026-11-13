@@ -61,12 +61,21 @@ final class LockedPhoneDeviceTests: XCTestCase {
         // Locked after its first unlock: the AfterFirstUnlock keys work.
         XCTAssertEqual(KeysUsableCheck.appKey(app), .usable, "the app key signs while the phone is locked")
         XCTAssertEqual(KeysUsableCheck.agreement(seed.lookup()), .usable, "the seed key agrees while the phone is locked")
-        // The WhenUnlocked phone key is refused for now: never lost.
+        // The WhenUnlocked phone key is refused for now: never lost. On iOS 27 the keychain still returns the key's
+        // reference and its name while the phone is locked; only its use is refused. Either answer is "not missing".
         let lookup = phone.lookup(keyVault: "v", keyID: p.keyID)
-        XCTAssertTrue(isUnavailable(lookup), "a locked lookup is not missing")
+        XCTAssertTrue(isUnavailable(lookup) || isFound(lookup), "a locked lookup is not missing: \(lookup)")
+        if case .found(let k) = lookup {
+            XCTAssertThrowsError(try k.agree(ePub)) { XCTAssertEqual(KeysUsability.of($0), .unavailable, "\($0)") }
+        }
         XCTAssertEqual(KeysUsableCheck.agreement(lookup), .unavailable)
         XCTAssertThrowsError(try p.key.agree(ePub)) { XCTAssertEqual(KeysUsability.of($0), .unavailable, "\($0)") }
-        XCTAssertThrowsError(try phone.keyNames()) { XCTAssertEqual(KeysUsability.of($0), .unavailable, "\($0)") }
+        do {
+            let names = try phone.keyNames()
+            XCTAssertTrue(names.contains { $0.keyID == p.keyID }, "listed while locked: the key is there")
+        } catch {
+            XCTAssertEqual(KeysUsability.of(error), .unavailable, "\(error)")
+        }
         // A stale flag that still says "available": the keychain's and the Secure Enclave's own answers keep it a refusal
         // for now, never missing or invalid.
         let stale = SecureEnclavePhoneSecretSource(tag: Self.phoneTag, protectedData: ProtectedDataFlag(available: true))

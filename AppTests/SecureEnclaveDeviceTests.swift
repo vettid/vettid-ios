@@ -249,6 +249,11 @@ func isUnavailable<T>(_ l: ItemLookup<T>) -> Bool {
     return false
 }
 
+func isFound<T>(_ l: ItemLookup<T>) -> Bool {
+    if case .found = l { return true }
+    return false
+}
+
 /// Protected data that is available for the first [availableReads] reads and then goes away: a lookup during which the
 /// iPhone locks.
 final class FadingProtectedData: ProtectedData, @unchecked Sendable {
