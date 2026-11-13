@@ -392,6 +392,9 @@ extension VaultDevice {
         let d = OneShot<Inner>()
         mem.withLock { pending[id] = d }
         defer { mem.withLock { _ = pending.removeValue(forKey: id) } }
+        // Its first send the lock gate holds: nothing is sent, nothing counted (``requestMayGo(_:)``; a client handed out
+        // before the lock began sends nothing new after it).
+        guard await requestMayGo(type) else { throw OutboxHeld() }
         _ = try await countingSend(type) { try await sendOnceUnlocked(id: id, type: type, body: body, exp: exp) }
         for attempt in 0...retries {
             if let inner = await d.wait(timeout: timeout ?? cfg.requestTimeout(for: type)) {

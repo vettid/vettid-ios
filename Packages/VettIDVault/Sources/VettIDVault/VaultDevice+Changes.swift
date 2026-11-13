@@ -61,8 +61,9 @@ extension VaultDevice {
         defer { mem.withLock { _ = pending.removeValue(forKey: held.id) } }
         var sent = false
         for n in 0..<sends where vaultNow() < held.exp {
-            // (ANDROID-PLAN "While pending") A re-send the lock gate holds is not deposited: the change goes on waiting for the
-            // copy already out (``requestMayGo(_:)``). Its first send is the manager's (`openApi`).
+            // (ANDROID-PLAN "While pending") Its first send the lock gate holds: nothing is sent (``OutboxHeld``). A re-send it
+            // holds is not deposited: the change goes on waiting for the copy already out (``requestMayGo(_:)``).
+            if n == 0, await !requestMayGo(held.type) { throw OutboxHeld() }
             if n > 0, await !requestMayGo(held.type) {
                 if let inner = await d.wait(timeout: timeout ?? cfg.requestTimeout(for: held.type)) {
                     return VaultMessage(inner: countingAnswer(held.type, inner))

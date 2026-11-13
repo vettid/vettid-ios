@@ -147,8 +147,12 @@ import VettIDCrypto
         d.setFlushGate { open.value }
         let create = Task { try await api.credentialCreate(password: "a long password", pin: "123456") }
         try await answer(v, d, "credential.utk.get", utks)
-        open.value = false
-        try await answer(v, d, "credential.create", #"{"credential":"AQID","version":1,"key":"x"}"#)
+        let req = try v.open(try await base.relay.nextDeposit().payload)
+        #expect(req.type == "credential.create")
+        open.value = false // the lock goes pending once the create is out
+        let ok = Inner(id: Ulid.new(), type: req.type, ts: Date(), re: req.id, status: Inner.statusOK,
+                       body: Array(#"{"credential":"AQID","version":1,"key":"x"}"#.utf8))
+        try await d.handle(v.msg(try #require(v.keyring.current()).seal(ok)))
         try await create.value
         #expect(await base.relay.noDeposit(within: 0.3), "no ack while a lock is pending")
         #expect(d.ackPendingVersion == 1)
