@@ -251,7 +251,7 @@ public final class Keyring: @unchecked Sendable {
     public func activate(_ e: Epoch, now: Date) { activate(e, now: now, pruneAt: now) }
 
     /// ``activate(_:now:)`` with the retained epochs past their life destroyed as of [pruneAt] (nil: none now; a caller whose
-    /// wall clock may run ahead postpones it, ``prune(now:)``).
+    /// wall clock may run ahead postpones it to a later activation or ``prune(now:)``).
     public func activate(_ e: Epoch, now: Date, pruneAt: Date?) {
         lock.withLock {
             if let c = currentEpoch {

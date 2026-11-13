@@ -103,6 +103,9 @@ extension VaultDevice {
             // handshake's fin). The message itself was handled; it is acked and never handled again. Letting it out
             // would end the collector, and without the ack the same message would fail again at every start.
         }
+        // A rekey whose hs.fin never came ends at its HandshakeTTL by the vault's time (``pruneAwaiting(_:)``), written by
+        // the save below: none is dropped by age at a restart (``restoreAwaiting()``).
+        mem.withLock { pruneAwaiting(t) }
         #if DEBUG
         await beforeFinalSave?()
         #endif

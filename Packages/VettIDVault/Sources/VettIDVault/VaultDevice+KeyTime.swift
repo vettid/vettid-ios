@@ -12,9 +12,9 @@ extension VaultDevice {
     /// (``keyClockLocked()``) plus ``pruneSkew``; nil (nothing destroyed now) while no message from the vault in this process
     /// has shown its time. A wall clock set ahead so postpones a destruction and never makes one early: until a key is
     /// destroyed, ``Keyring/open(_:now:)`` only hides it while the clock says it is past its life, and it is usable again once
-    /// the clock is back. A vault that sends nothing in this process destroys nothing (keys past their life stay hidden, not
-    /// destroyed, until it speaks), and the first message after a restart may be up to 16 days old (the durable `ts` window),
-    /// so its time is the vault's of then. Callers hold ``mem``.
+    /// the clock is back. Keys are destroyed only at an activation, and before the vault has shown its time in this process
+    /// nothing is (keys past their life stay hidden, not destroyed); the first message after a restart may be up to 16 days
+    /// old (the durable `ts` window), so its time is the vault's of then. Callers hold ``mem``.
     func pruneTimeLocked(_ t: Date) -> Date? {
         keyClockLocked().map { min(t, $0.addingTimeInterval(Self.pruneSkew)) }
     }

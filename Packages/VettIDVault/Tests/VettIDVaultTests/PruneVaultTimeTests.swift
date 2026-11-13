@@ -247,5 +247,49 @@ extension VaultDeviceTests {
         try await rekeyAcross(k, under: k.new, at: clock.value, jump: 8 * Self.day, clock: clock)
         #expect(holds(k.device, k.old), "the released epoch is not destroyed by a clock ahead")
     }
+
+    /// A rekey whose `hs.fin` never comes ends at its 16 days by the vault's time: once 17 days really passed, the next handled
+    /// message ends it.
+    @Test func anAwaitingRekeyEndsByTheVaultsTime() async throws {
+        let clock = Box(Date())
+        let up = Box<TimeInterval>(1000)
+        let store = InMemoryDeviceStateStore()
+        let (d, v) = try await pairedDevice(store: store, cfg: config(store, now: { clock.value }, uptime: { up.value }))
+        try await d.handle(v.msg(try v.rekey(d).envelope))
+        _ = try await relay.nextDeposit()
+        #expect(d.mem.withLock { d.awaiting.count } == 1)
+        clock.value = clock.value.addingTimeInterval(17 * Self.day)
+        up.value += 17 * Self.day
+        try await d.handle(try v.seal("message.new", #"{"connection_id":"c1","message_id":"m1","direction":"in","text":"hi","sent_at":"x"}"#, ts: clock.value))
+        #expect(d.mem.withLock { d.awaiting.isEmpty }, "ended by the vault's time")
+        #expect(try savedState(store).vault?.awaiting.isEmpty == true)
+    }
+
+    /// After a restart with the clock 10 days behind, the first message (under the current epoch) releases the kept one before
+    /// any vault time is known: its 16 days count from the message's own `ts`.
+    @Test func aReleaseBeforeTheVaultsTimeIsKnownCountsFromTheMessage() async throws {
+        let clock = Box(Date())
+        let up = Box<TimeInterval>(1000)
+        let k = try await kept(clock, up)
+        clock.value = clock.value.addingTimeInterval(-10 * Self.day)
+        let r = try restarted(k, clock, up)
+        try? await r.device.handle(r.vault.msg(try r.new.seal(note("first", at: Date())))) // dropped after (in the future)
+        let open15 = r.device.mem.withLock { r.device.keyring.find(r.old.id, now: Date().addingTimeInterval(15 * Self.day)) != nil }
+        #expect(open15, "kept 16 days from the message's ts, not 6")
+    }
+
+    /// A stamp far in the future does not keep a released epoch to that date: counted from at most the durable window plus the
+    /// allowed skew past the known time.
+    @Test func aReleaseIsCappedAgainstAStampFarAhead() async throws {
+        let clock = Box(Date())
+        let up = Box<TimeInterval>(1000)
+        let k = try await kept(clock, up)
+        try? await k.device.handle(k.vault.msg(try k.new.seal(note("far", at: Date().addingTimeInterval(100 * Self.day)))))
+        let held40 = k.device.mem.withLock { k.device.keyring.find(k.old.id, now: Date().addingTimeInterval(40 * Self.day)) != nil }
+        #expect(!held40, "not kept to the stamp's date (+116 days)")
+        let held30 = k.device.mem.withLock { k.device.keyring.find(k.old.id, now: Date().addingTimeInterval(30 * Self.day)) != nil }
+        #expect(held30, "kept to the cap (+32 days)")
+    }
 }
+
 // swiftlint:enable line_length

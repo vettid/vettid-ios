@@ -364,7 +364,7 @@ public final class VaultDevice: @unchecked Sendable {
 
     /// The persisted rekeys awaiting `hs.fin`; one that does not restore is dropped. None is dropped by age here: the vault's
     /// time is not known at load, and a clock jumped ahead would end them for good; ``pruneAwaiting(_:)`` ends them once it is
-    /// (``pruneTimeLocked(_:)``).
+    /// (``pruneTimeLocked(_:)``), at the end of each handled message.
     func restoreAwaiting() -> [Awaiting] {
         (st.vault?.awaiting ?? []).compactMap { a in
             guard let b = try? Base64s.decodeStd(a.state), let r = try? Responder.import(b) else { return nil }
