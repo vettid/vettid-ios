@@ -41,6 +41,8 @@ public struct DrawerContainer<Drawer: View, Content: View>: View {
                         .frame(maxHeight: .infinity)
                         .offset(x: -closing * (direction == .rightToLeft ? -1 : 1))
                         .gesture(closeGesture(width))
+                        // A container, so the modal trait never makes the drawer a single element (as it did the asked check).
+                        .accessibilityElement(children: .contain)
                         .accessibilityAddTraits(.isModal)
                         .accessibilityAction(.escape) { isOpen = false }
                         // VoiceOver moves into the drawer once it is in place (the content is hidden from it then), and

@@ -114,7 +114,8 @@ extension VaultManager {
             guard let self, let s = try? await storedSession() else { return }
             // A session opened in the background (a lock's retry) has not collected yet.
             s.device.start()
-            if lockGuard.admits() { await s.device.flushOutbox() }
+            // The device's lock gate holds what may not go while a lock is pending (``setFlushGate``).
+            await s.device.flushOutbox()
         }
     }
 
@@ -135,7 +136,7 @@ extension VaultManager {
             guard let self else { return }
             await lockGuard.keeper.firstAttemptDone()
             if Task.isCancelled { return }
-            if let s = session, lockGuard.admits() { await s.device.flushOutbox() }
+            if let s = session { await s.device.flushOutbox() } // through the device's lock gate
             if Task.isCancelled { return }
             // The lock of a vote's unlock window (IOS-PLAN §6.6): its answer can arrive only while the collection runs.
             await votes.windowLocksEnded()

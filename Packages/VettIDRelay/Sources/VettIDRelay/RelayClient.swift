@@ -19,6 +19,9 @@ public struct RelayError: Error, Equatable, Sendable, CustomStringConvertible {
     /// Made by the client: a response over the size it reads (a proxy's page, a blob over the cap); the relay did not say it.
     public static let responseTooLarge = "relay_response_too_large"
     public static let quotaExceeded = "quota_exceeded"
+    /// ``quota`` values (RELAY-PROTOCOL §7.1): the token's messages are spent; the recipient's mailbox is full.
+    public static let quotaToken = "token"
+    public static let quotaMailbox = "mailbox"
     public static let rateLimited = "rate_limited"
     public static let internalError = "internal"
     /// A larger `retry_after` / `Retry-After` is clamped to this (a day).
@@ -205,6 +208,10 @@ public final class RelayClient: Sendable {
         var onSend: (@Sendable () -> Void)?
         /// Each attempt on a connection of its own (``HTTPTransport/freshSession()``).
         var fresh = false
+        /// False: an attempt that may have reached the relay and then failed without the relay's own refusal (a transport
+        /// failure other than one before the request could reach the server, a 5xx, `replay_detected`) is not sent again,
+        /// since the relay may have done it; a refusal then comes only after attempts the relay applied nothing of.
+        var resendAfterSent = true
     }
 
     private func backoff(_ attempt: Int) -> TimeInterval {
@@ -225,7 +232,7 @@ public final class RelayClient: Sendable {
             do {
                 return try await once(c)
             } catch var e as RelayError {
-                guard e.retryable else {
+                guard e.retryable, c.resendAfterSent || (e.status < 500 && e.code != RelayError.replayDetected) else {
                     e.afterRetry = i > 0
                     throw e
                 }
@@ -234,6 +241,7 @@ public final class RelayClient: Sendable {
                 // A certificate or pin that does not match, or a cancelled call, is not a passing state of the network.
                 try Task.checkCancellation()
                 guard !HTTPTransport.fatal.contains(e.code) else { throw e }
+                guard c.resendAfterSent || HTTPTransport.unsent.contains(e.code) else { throw e }
                 last = e
             }
         }
@@ -343,10 +351,13 @@ public final class RelayClient: Sendable {
     }
 
     /// Deposits [payload] into [mailboxID] with [token] (§6.2) and returns the relay's msg_id. A retried deposit whose
-    /// first attempt succeeded leaves two messages: receivers dedupe at the E2E layer too.
-    public func deposit(mailboxID: String, token: String, payload: [UInt8]) async throws -> String {
+    /// first attempt succeeded leaves two messages: receivers dedupe at the E2E layer too. [resendAfterSent] false: an
+    /// attempt that may have reached the relay is not sent again (``Call/resendAfterSent``), so that a refusal is the
+    /// relay's word on attempts it applied nothing of.
+    public func deposit(mailboxID: String, token: String, payload: [UInt8], resendAfterSent: Bool = true) async throws -> String {
         let body = JsonBuilder().base64("payload", payload).bytes()
-        return try await requireJSON(Call(method: "POST", path: "/v1/mailbox/\(mailboxID)", body: body, token: token)).string("msg_id")
+        let c = Call(method: "POST", path: "/v1/mailbox/\(mailboxID)", body: body, token: token, resendAfterSent: resendAfterSent)
+        return try await requireJSON(c).string("msg_id")
     }
 
     /// Long-polls this mailbox (§6.3): [wait] ≤ 25 s, [max] ≤ 100. [attempts]: how many times it is tried (nil: the

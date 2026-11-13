@@ -28,10 +28,19 @@ final class FakeRelay: @unchecked Sendable {
     /// own, not on the relay's lock or the cooperative pool.
     var holdDeposits: FakeHTTPServer.Gate? { get { lock.withLock { heldGate } } set { lock.withLock { heldGate = newValue } } }
     private var heldGate: FakeHTTPServer.Gate?
+    /// Refusals are held by ``holdDeposits`` as well (a refused deposit still on its way).
+    var holdRefusals: Bool { get { lock.withLock { holdsRefusals } } set { lock.withLock { holdsRefusals = newValue } } }
+    private var holdsRefusals = false
     /// Every deposit fails in transport with this code (no answer at all).
     var failDeposits: URLError.Code? { get { lock.withLock { transportFailure } } set { lock.withLock { transportFailure = newValue } } }
     private var transportFailure: URLError.Code?
     private var refuse: String?
+    /// The token each stored deposit was made under, in order.
+    var depositTokens: [String] { lock.withLock { tokens } }
+    private var tokens: [String] = []
+    /// The `quota` of a `quota_exceeded` refusal (RELAY-PROTOCOL §7.1); none when nil.
+    var refuseQuota: String? { get { lock.withLock { quota } } set { lock.withLock { quota = newValue } } }
+    private var quota: String?
     /// The next [n] deposits are refused with [refuseDeposits]'s code, then the relay accepts again (0: all of them).
     var refuseOnly: Int { get { lock.withLock { refuseCount } } set { lock.withLock { refuseCount = newValue } } }
     private var refuseCount = 0
@@ -78,14 +87,15 @@ final class FakeRelay: @unchecked Sendable {
                 let refusal = depositRefusal()
                 // A refusal the relay gave after it had stored the message (its answer to the first attempt was lost, and the
                 // retry was refused): the message is there, the depositor is told otherwise.
-                if let refusal, !recordsRefused { return refusal }
+                if let refusal, !recordsRefused { return heldRefusal(refusal) }
                 let payload = (try? StrictJson.parseObject(r.body).base64("payload")) ?? []
                 deposits.append((String(path.dropFirst("/v1/mailbox/".count)), payload))
+                tokens.append((r.headers["Authorization"] ?? r.headers["authorization"] ?? "").replacingOccurrences(of: "VettID-Deposit ", with: ""))
                 depositHook?()
                 let ws = depositWaiters
                 depositWaiters.removeAll()
                 for w in ws { w.resume() }
-                if let refusal { return refusal }
+                if let refusal { return heldRefusal(refusal) }
                 let ok = FakeHTTPServer.Answer.json(201, #"{"msg_id":"\#(Ulid.new())"}"#)
                 if let gate = heldGate { return .held(gate, ok) } // (the lock is held: the stored properties)
                 return ok
@@ -107,6 +117,12 @@ final class FakeRelay: @unchecked Sendable {
         }
     }
 
+    /// [refusal], held by ``holdDeposits`` too when ``holdRefusals`` is set. Callers hold ``lock``.
+    private func heldRefusal(_ refusal: FakeHTTPServer.Answer) -> FakeHTTPServer.Answer {
+        if holdsRefusals, let gate = heldGate { return .held(gate, refusal) }
+        return refusal
+    }
+
     /// The refusal of a deposit, when one is set (the next ``refuseOnly`` of them, or all). Callers hold ``lock``.
     private func depositRefusal() -> FakeHTTPServer.Answer? {
         guard let code = refuse else { return nil }
@@ -119,6 +135,7 @@ final class FakeRelay: @unchecked Sendable {
                 if let f = followUp { (refuse, status) = (f.code, f.status) }
             }
         }
+        if let quota { return .json(answerStatus, #"{"code":"\#(code)","message":"","quota":"\#(quota)"}"#) }
         return .json(answerStatus, #"{"code":"\#(code)","message":""}"#)
     }
 

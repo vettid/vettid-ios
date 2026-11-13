@@ -120,6 +120,10 @@ import VettIDVault
         let c = { (k: String) in title(Self.item(k, connection: "c1")) }
         #expect(c("connection.added") == "You are now connected with \u{2068}Sam Lee\u{2069}")
         #expect(c("connection.removed") == "\u{2068}Sam Lee\u{2069} was removed" && c("connection.stale") == "\u{2068}Sam Lee\u{2069} has not been reachable")
+        #expect(c("connection.active_again") == "Your connection with \u{2068}Sam Lee\u{2069} works again.")
+        #expect(title(Self.item("connection.active_again")) == "Your connection with Someone works again.")
+        #expect(title(Self.item("connection.active_again", connection: "c2")) == "Your connection with A connection works again.")
+        #expect(title(Self.item("connection.active_again", connection: "gone")) == "Your connection with Removed connection works again.")
         #expect(c("connection.request.peer_declined") == "\u{2068}Sam Lee\u{2069} did not accept your request")
         #expect(c("connection.asks_paused") == "\u{2068}Sam\u{2069}’s requests are paused")
         #expect(c("connection.authenticate.requested") == "\u{2068}Sam Lee\u{2069} asks you to confirm it is you")

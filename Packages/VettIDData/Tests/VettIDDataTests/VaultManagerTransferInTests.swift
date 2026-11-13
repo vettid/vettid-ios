@@ -41,6 +41,17 @@ import VettIDDataTesting
         return sas
     }
 
+    /// Stops the collector, as the app's suspension does, and waits until the fake relay holds no collect of it: the long
+    /// poll the stop cut would otherwise still take what the vault queues next and, with no lease
+    /// (``FakeVaultService/leasesCollected``), lose it, where a relay leases it and hands it out again within the window.
+    /// Called before a window runs (its own long polls would keep a collect in flight). A request the server was taking in
+    /// at the stop is counted only once its collect begins: the wait first lets it get there.
+    func suspendCollector() async {
+        m.session?.device.stop()
+        try? await Task.sleep(for: .milliseconds(100)) // twice the fake relay's long poll (``FakeVaultService/collectHold``)
+        #expect(await eventually { service.collectsInFlight.isEmpty }, "the cut long poll ended at the relay")
+    }
+
     // MARK: - The code and the hs.init
 
     @Test func theHsInitCarriesTheAttestationTheAppKeyAndTheUnlockSecret() async throws {
@@ -303,7 +314,7 @@ import VettIDDataTesting
         service.transferLosesFinAnswers = true
         service.transferRequestTokenTTL = 600
         _ = try await scanned()
-        m.session?.device.stop() // the collector is not running while the app is suspended
+        await suspendCollector() // the collector is not running while the app is suspended
         service.approveTransferIn()
         service.transferLosesFinAnswers = false
         phone.clockAhead = 600
@@ -343,7 +354,7 @@ import VettIDDataTesting
         service.transferLosesFinAnswers = true
         service.transferRequestTokenTTL = 600 // a pairing's request token
         _ = try await scanned()
-        m.session?.device.stop() // the collector is not running while the app is suspended
+        await suspendCollector() // the collector is not running while the app is suspended
         service.approveTransferIn()
         phone.clockAhead = 700 // past the transfer's 11 minutes and the token's exp and the minute
         await m.session?.device.flushOutbox() // the aged fin is dropped, silently

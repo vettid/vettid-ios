@@ -29,7 +29,7 @@ import VettIDUI
             .appendingPathComponent("Sources/VettIDOnboardingUI/Resources/Localizable.xcstrings")
         let doc = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
         let keys = try #require((doc["strings"] as? [String: Any])?.keys)
-        #expect(keys.count == 479)
+        #expect(keys.count == 480)
         let missing = "\u{0}missing"
         // vettid-android's names: the onboarding feature's, its unlock, owner-check and app-lock screens', the app's root
         // screens', core/ui's erase text, the release update's and What's new's, a vault being deleted (`vault_delet`,
@@ -157,6 +157,8 @@ private final class Log {
             """)
         #expect(MoveStrings.transferEndTitle(.declined) == "The move was declined")
         #expect(MoveStrings.transferInChecking == "Checking whether your old phone approved in time…")
+        #expect(MoveStrings.transferInRelayBusy
+            == "VettID's message relay is busy. This phone will finish pairing as soon as the relay takes its message.")
         #expect(MoveStrings.transferInCheckingTitle == "Checking with your vault")
         #expect(MoveStrings.transferInCheckingLeave
             == "You can leave the app. The check finishes in the background or the next time you open VettID.")

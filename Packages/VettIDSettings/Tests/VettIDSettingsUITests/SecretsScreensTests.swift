@@ -39,7 +39,7 @@ import VettIDUI
     @Test func everyStateRenders() {
         for s in [SettingsState(phoneSecret: true), SettingsState(screenshotsAllowed: true, screenshotsStayOn: true)] {
             #expect(height(SettingsContent(state: s)) > 0)
-            #expect(height(SettingsContent(state: s, askScreenshots: true)) > 0)
+            #expect(height(AdvancedSecurityContent(state: s, askScreenshots: true)) > 0)
         }
         var refused = NewPhoneSecretState(error: .badPassword)
         refused.busy = false

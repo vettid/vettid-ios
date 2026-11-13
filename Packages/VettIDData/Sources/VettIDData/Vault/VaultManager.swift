@@ -1,6 +1,7 @@
 import Foundation
 import Observation
 import VettIDAltChan
+import VettIDAttestation
 import VettIDCrypto
 import VettIDKeys
 import VettIDVault
@@ -136,6 +137,10 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
     @ObservationIgnored public private(set) lazy var pairing: PairingManager = Self.pairingManager(self) // §6.7, §10.3, with devices
     /// The canary manifest installed out of band (VAULT-RELEASES §10.1 step 9, VAULT-MESSAGING §11.10.1): used by the alternate channel instead of the published manifest only while it is newer.
     @ObservationIgnored public let canary: CanaryManifestManager
+    /// (IOS-PLAN §6.9, ANDROID-PLAN 0.1.124) The record of this phone's last verification of the enclave its vault runs on,
+    /// for Settings → Attestation; nil when there is none yet.
+    public private(set) var enclaveRecord: EnclaveRecord?
+    @ObservationIgnored let enclaveRecords: EnclaveRecordStore
     /// The proactive release update (RELEASE-UPDATES §2): the offer and the one-step update.
     @ObservationIgnored public let releaseUpdate: ReleaseUpdateManager
     /// The `pin.change` the member started and whose answer has not confirmed it: a retry reuses its next-epoch record
@@ -212,7 +217,7 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
         phoneSecrets = PhoneSecrets(keys: config.keys.phone, store: config.file(VaultFiles.phoneSecrets), now: config.now,
             timeScale: { scale.value }, writeFails: config.phoneSecretsWriteFails
         )
-        canary = Self.canaryManifests(config, member, ref)
+        (canary, enclaveRecords) = (Self.canaryManifests(config, member, ref), Self.enclaveRecordStore(config, ref))
         releaseUpdate = ReleaseUpdateManager(ops: VaultReleaseUpdateOps(ref: ref))
         let timing = config.lockTiming
         let rec = record
@@ -276,6 +281,14 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
         )
     }
 
+    /// The last enclave verification's record in its encrypted file; the manager's ``enclaveRecord`` follows it, read when
+    /// the change is taken in, so that a change told before a wipe never brings back a record the wipe erased.
+    private static func enclaveRecordStore(_ config: VaultManagerConfig, _ ref: ManagerRef) -> EnclaveRecordStore {
+        let records = EnclaveRecordStore(file: config.file(VaultFiles.enclaveRecord))
+        records.onChange { [weak records] in Task { @MainActor in ref.manager?.enclaveRecord = records?.record } }
+        return records
+    }
+
     /// The canary manifest in its encrypted file, checked against the serial this phone used and the published manifest.
     private static func canaryManifests(_ config: VaultManagerConfig, _ api: MemberApiClient, _ ref: ManagerRef) -> CanaryManifestManager {
         CanaryManifestManager(
@@ -302,6 +315,10 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
         try record.load(read: reads.record)
         ownerChecks.loadIfNeeded()
         canary.loadIfNeeded(read: reads.canary)
+        if enclaveRecords.needsLoad {
+            let store = enclaveRecords
+            Task.detached { store.load() }
+        }
         memberVault.set(recorded: record.value.vaultID)
         if account == nil { publishAccount() }
         if !moveFlags.book.lockResumed {
@@ -352,7 +369,7 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
         try refuseWhileDeleting()
         let c = config
         let member = member
-        let source = canary.store
+        let stores = SessionStores(canary: canary.store, records: enclaveRecords.sink())
         let generation = sessionGeneration
         // §11.14.9 "A lost answer": checked again under the credential lock, where a change that began after an
         // operation's own check is seen.
@@ -361,7 +378,7 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
         }
         let identity = record.value.activeIdentity // (more than one identity: which App Attest keys)
         let two = identity != .first || record.value.couldNotTell != nil
-        let task = Task { try await Self.makeSession(c, member, source, gate: gate, identity: (identity, two)) }
+        let task = Task { try await Self.makeSession(c, member, stores, gate: gate, identity: (identity, two)) }
         opening = task
         defer { opening = nil }
         let s = try await task.value
@@ -373,6 +390,13 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
         memberVault.set(device: s.device)
         // A phone registered for a recovery holds the key the vault bound at the register (IOS-PLAN §6.2).
         config.attestStartOver?.set(recovering: s.device.recovering)
+        // Every flush of the outbox, whoever starts it (the device's start, a quota backoff's end, a fresh token for held
+        // entries, the manager), and every reply the device queues while handling a vault message, asks the lock gate before
+        // each entry: nothing but the lock, and a pending `call.end`, while a lock is pending (ANDROID-PLAN "While pending").
+        // Only then: in "opened again" (``LockKeeper/openedAgain``, the lock already ended) the phone's replies go as before,
+        // and so does the flush's `credential.ack` (only the version). None carries member data, and holding them until an
+        // unlock here would let the tokens run towards expiry and hold the vault's rekeys on the `hs.confirm`.
+        s.device.setFlushGate { @MainActor [weak self] in self.map { !$0.lockGuard.pending } ?? false }
         // In the background nothing starts the collection again (a lock's retry opens the session): the return to the
         // foreground does (IOS-PLAN §6.6).
         if !backgrounded { s.device.start() }
@@ -383,7 +407,7 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
     }
 
     private nonisolated static func makeSession(
-        _ c: VaultManagerConfig, _ member: MemberApiClient, _ canary: CanaryManifestStore,
+        _ c: VaultManagerConfig, _ member: MemberApiClient, _ stores: SessionStores,
         gate: @escaping @Sendable (Bool) async throws -> Void,
         identity: (set: IdentitySet, twoIdentities: Bool)
     ) async throws -> VaultSession {
@@ -412,7 +436,9 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
         try Task.checkCancellation()
         // IOS-PLAN ID8: every vault this app holds is of release R, whose passwords are normalized to NFC (§11.14.7).
         let api = VaultApi(device: device, normalizePasswords: { true }, credentialGate: gate, changeWaitSleep: c.changeWaitSleep)
-        let alt = AltChannelFlow(api: member, trust: c.trust, now: c.now, canary: canary, verifyEnclave: c.enclaveCheck)
+        let alt = AltChannelFlow(
+            api: member, trust: c.trust, now: c.now, canary: stores.canary, verifyEnclave: c.enclaveCheck, records: stores.records
+        )
         return VaultSession(identity: identity, device: device, api: api, alt: alt)
     }
 

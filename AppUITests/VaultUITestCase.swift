@@ -160,6 +160,18 @@ class VaultUITestCase: XCTestCase {
         return found
     }
 
+    /// Types [text] into [field] once it has the keyboard: a tap made while the layout above it is still moving (the
+    /// strength meter appearing under the first password) can leave the focus where it was, so the tap is repeated.
+    @MainActor
+    func typeInto(_ field: XCUIElement, _ text: String) {
+        let focused = { (field.value(forKey: "hasKeyboardFocus") as? Bool) == true }
+        for _ in 0..<3 where !focused() {
+            field.tap()
+            _ = waitUntil(timeout: 2, focused)
+        }
+        field.typeText(text)
+    }
+
     /// Polls [condition] every half second until it holds or [timeout] passes.
     @MainActor
     func waitUntil(timeout: TimeInterval, _ condition: () -> Bool) -> Bool {
@@ -303,11 +315,9 @@ class VaultUITestCase: XCTestCase {
         let passwordField = app.secureTextFields["password"]
         if !passwordField.waitForExistence(timeout: 30) { return fail(app, "The password screen did not open.") }
         if shown(app)["credential_pin"] != nil { enterPin(app, pin) }
-        passwordField.tap()
-        passwordField.typeText(password)
+        typeInto(passwordField, password)
         let confirmField = app.secureTextFields["password_confirm"]
-        confirmField.tap()
-        confirmField.typeText(password)
+        typeInto(confirmField, password)
         let primary = app.buttons["form_primary"]
         if !waitUntil(timeout: 10, { primary.isEnabled }) {
             let rule = shown(app)["password_rule"] ?? ""

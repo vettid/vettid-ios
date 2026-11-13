@@ -28,68 +28,6 @@ public enum EnrolledAttestation: Sendable {
     #endif
 }
 
-/// How a device is set up.
-public struct DeviceConfig: Sendable {
-    public static let roleApp = "app"
-    /// Interactive requests time out after 30 s (§8.1); a request is re-sent with the same inner id at most twice (§8.6).
-    public static let defaultTimeout: TimeInterval = 30
-
-    public let role: String
-    /// The name the vault shows for this device (`profile.name`).
-    public let name: String
-    /// The device's own relay base URL, as tokens name it (`aud`).
-    public let relayURL: String
-    public let transport: HTTPTransport
-    public let store: DeviceStateStore
-    /// vault.enrolled's attestation check (§11.3).
-    public let enrolledAttestation: EnrolledAttestation
-    public let now: @Sendable () -> Date
-    public let collectMode: MailboxCollector.Mode
-    public let pollWait: TimeInterval
-    public let requestTimeout: TimeInterval
-    /// TEST ONLY. The request timeout for a request of the given type instead of [requestTimeout] (nil: none): a test
-    /// that makes the answers to one type go missing waits briefly for those alone, and keeps room for every other answer
-    /// on a loaded machine.
-    public let requestTimeoutOf: (@Sendable (String) -> TimeInterval)?
-    /// The phone's monotonic clock in seconds, counting the time the phone sleeps (the vault's clock as last seen is the
-    /// newest answer's `ts` plus the time elapsed on it since, VAULT-MESSAGING §11.14.9 "A lost answer").
-    public let uptime: @Sendable () -> TimeInterval
-
-    /// `CLOCK_MONOTONIC`, which on Apple's systems keeps counting while the phone sleeps (`systemUptime` does not).
-    @Sendable public static func monotonicNow() -> TimeInterval { Double(clock_gettime_nsec_np(CLOCK_MONOTONIC)) / 1e9 }
-
-    public init(
-        role: String = roleApp,
-        name: String,
-        relayURL: String,
-        transport: HTTPTransport,
-        store: DeviceStateStore,
-        enrolledAttestation: EnrolledAttestation,
-        now: @escaping @Sendable () -> Date = { Date() },
-        collectMode: MailboxCollector.Mode = .longPoll,
-        pollWait: TimeInterval = RelayClient.defaultWait,
-        requestTimeout: TimeInterval = defaultTimeout,
-        requestTimeoutOf: (@Sendable (String) -> TimeInterval)? = nil,
-        uptime: @escaping @Sendable () -> TimeInterval = DeviceConfig.monotonicNow
-    ) {
-        self.role = role
-        self.name = name
-        self.relayURL = relayURL.hasSuffix("/") ? String(relayURL.dropLast()) : relayURL
-        self.transport = transport
-        self.store = store
-        self.enrolledAttestation = enrolledAttestation
-        self.now = now
-        self.collectMode = collectMode
-        self.pollWait = pollWait
-        self.requestTimeout = requestTimeout
-        self.requestTimeoutOf = requestTimeoutOf
-        self.uptime = uptime
-    }
-
-    /// How long a request of [type] waits for its answer before it is sent again (VAULT-MESSAGING §8.6).
-    func requestTimeout(for type: String) -> TimeInterval { requestTimeoutOf?(type) ?? requestTimeout }
-}
-
 /// One owner device of a vault (VAULT-MESSAGING §6.7, §9.1, §11.3), the counterpart of vettid-vault's reference
 /// `client.Device` and vettid-android `VaultDevice`.
 ///
@@ -131,16 +69,24 @@ public final class VaultDevice: @unchecked Sendable {
     let lock = AsyncLock()
     #if DEBUG
     var beforeFinalSave: (@Sendable () async -> Void)? // TEST ONLY: before the write that ends a handling
+    var beforeRespDeposit: (@Sendable () async -> Void)? // TEST ONLY: after a handling, before its hs.resp's deposit
+    var beforeStartResend: (@Sendable () async -> Void)? // TEST ONLY: a start's work, before its hs.resp re-send
     var flushSeen: (@Sendable (Bool) -> Void)? // TEST ONLY: a flush reached an entry (true: it left it alone)
+    var flushWaits: (@Sendable () -> Void)? // TEST ONLY: a flush waits for a running one to end
     #endif
-    /// A flush of the outbox runs (``flushOutbox()``). Read and written under ``mem``.
-    var flushing = false
+    var flushing = false // a flush of the outbox runs (``flushOutbox()``); read and written under ``mem``
     /// Completed when the running flush ends: the flushes that wait for it wake up. Under ``mem``.
     var flushEnded: OneShot<Bool>?
     /// When a pending `credential.ack` was last tried (the device's uptime). Under ``mem``.
     var lastAckTry: TimeInterval?
-    /// The ids of outbox entries being deposited now (``deliver(_:keepOnFailure:)``). Under ``mem``.
+    /// The ids of outbox entries being deposited now (``deliver(_:keepOnFailure:since:)``). Under ``mem``.
     var outboxInFlight: Set<String> = []
+    var quotaBackoff: [String: (until: TimeInterval, last: TimeInterval)] = [:] // §8.6, VaultDevice+Quota; under ``mem``
+    /// Whether an outbox entry may be deposited now (``flushMayGo(_:since:)``): the manager's lock gate, nothing but the lock
+    /// while one is pending. Nil: always. Under ``mem``.
+    var flushGate: (@Sendable () async -> Bool)?
+    /// How the device waits out a quota backoff before its flush (TEST ONLY: replaced to run it at once).
+    var quotaSleep: @Sendable (TimeInterval) async -> Void = { try? await Task.sleep(for: .seconds($0)) }
     /// Orders the writes of the state to the store (``save()``).
     let saveOrder = NSLock()
     /// Serializes the credential operations (§3.5.3): one UTK taken, sealed and answered at a time.
@@ -176,13 +122,28 @@ public final class VaultDevice: @unchecked Sendable {
     /// The `hs.fin` of the handshake was refused for good (``notifyFinFailed(ifOwed:)``). Under ``mem``.
     var finFailed = false
 
-    /// A vault rekey this device answered (`hs.resp` sent), awaiting its `hs.fin` (§6.5).
+    /// A vault rekey this device answered (`hs.resp` sent), awaiting its `hs.fin` (§6.5): the `hs.init`'s inner id, and its
+    /// `hs.resp` bytes until the relay has accepted them (nil after: a redelivered `hs.init` sends them again only while
+    /// they may not have arrived, §6.3, and is dropped otherwise, §6.5). Both nil in a record written before.
     struct Awaiting {
         let resp: Responder
         let createdMs: Int64
+        var initID: String?
+        var respBytes: [UInt8]?
+        /// After a `quota_exceeded` the re-send waits (``noteRespQuota(_:)``), on ``DeviceConfig/uptime``. Memory only.
+        var quotaUntil: TimeInterval = 0
+        var quotaBackoff: TimeInterval = 0
+        /// A deposit of its `hs.resp` was begun (``depositResp(_:_:)``): a later one is a re-send, whose refusal does not end
+        /// the responder, since an earlier copy may be at the vault. True for one restored from the file. Memory only.
+        var attempted = false
     }
 
     var awaiting: [Awaiting] = []
+    /// Responders a handling added that no successful ``save()`` has written yet: their `hs.resp` is never deposited before
+    /// a save holds them (§8.3). Under ``mem``.
+    var unsavedResps: Set<ObjectIdentifier> = []
+    /// Responders whose `hs.resp` is being deposited just now: a re-send does not overlap it. Under ``mem``.
+    var respsInFlight: Set<ObjectIdentifier> = []
     /// The unlock built and not yet answered (§11.4): what its result is opened and applied with.
     var pendingUnlock: PendingUnlock?
     /// The unlock last built (its request id), the standing token's recorded expiry before it and the one its build
@@ -204,6 +165,10 @@ public final class VaultDevice: @unchecked Sendable {
     let ownerCheckBroadcast = Broadcast<String>()
     let refusalBroadcast = Broadcast<Int>(), keyBroadcast = Broadcast<CredentialKeySeen>()
     let sasBroadcast = Broadcast<String>()
+    let pairingHeldBroadcast = Broadcast<Bool>()
+    /// The id of the pairing `hs.fin` the relay holds for a quota (``pairingHeldByRelay``), and the value last emitted. Under ``mem``.
+    var pairingHeldFin: String?
+    var pairingHeldEmitted = false
     let countedBroadcast = Broadcast<String>()
     let reconnectBroadcast = Broadcast<Int>()
     /// How many times the collection came back (``relayReconnects()``).
@@ -220,6 +185,8 @@ public final class VaultDevice: @unchecked Sendable {
     /// When the collector's last request ended (uptime).
     var collectLastEnded: TimeInterval?
     var stopped = true
+    /// How many times ``stop()`` ran (``stopMark``).
+    var stops = 0
     /// Set by ``forget()``: nothing is written to the store any more.
     var forgotten = false
     /// Set by ``halt()``: nothing is sent or written to the store any more, and the stored state stays as it was.
@@ -393,19 +360,27 @@ public final class VaultDevice: @unchecked Sendable {
     func save() throws {
         // One write at a time, in the order of the snapshots: an older snapshot must not be stored after a newer one.
         try saveOrder.withLock {
-            let data: Data? = try mem.withLock {
+            let snap: (Data, Set<ObjectIdentifier>)? = try mem.withLock {
                 if forgotten { return nil }
                 if halted { throw Self.haltedError }
                 if st.vault != nil {
                     st.vault?.sessions = Base64s.encodeStd(try keyring.export())
                     st.vault?.awaiting = awaiting.compactMap { a in
                         // A responder that is done (aborted) has nothing left to keep.
-                        (try? a.resp.export()).map { AwaitingRekey(createdMs: a.createdMs, state: Base64s.encodeStd($0)) }
+                        (try? a.resp.export()).map {
+                            AwaitingRekey(
+                                createdMs: a.createdMs, state: Base64s.encodeStd($0), initId: a.initID,
+                                resp: a.respBytes.map(Base64s.encodeStd)
+                            )
+                        }
                     }
                 }
-                return try JSONEncoder().encode(st)
+                return (try JSONEncoder().encode(st), Set(awaiting.map { ObjectIdentifier($0.resp) }))
             }
-            if let data { try cfg.store.save(Array(data)) }
+            guard let (data, held) = snap else { return }
+            try cfg.store.save(Array(data))
+            // Every responder of the snapshot is in the file now.
+            mem.withLock { unsavedResps.subtract(held) }
         }
     }
 
@@ -414,7 +389,10 @@ public final class VaultDevice: @unchecked Sendable {
         let cutoff = Self.ms(now().addingTimeInterval(-Self.handshakeTTL))
         return (st.vault?.awaiting ?? []).filter { $0.createdMs >= cutoff }.compactMap { a in
             guard let b = try? Base64s.decodeStd(a.state), let r = try? Responder.import(b) else { return nil }
-            return Awaiting(resp: r, createdMs: a.createdMs)
+            return Awaiting(
+                resp: r, createdMs: a.createdMs, initID: a.initId, respBytes: a.resp.flatMap { try? Base64s.decodeStd($0) },
+                attempted: true
+            )
         }
     }
 
@@ -423,7 +401,10 @@ public final class VaultDevice: @unchecked Sendable {
         let cutoff = Self.ms(t.addingTimeInterval(-Self.handshakeTTL))
         let sorted = awaiting.sorted { $0.createdMs > $1.createdMs }
         let keep = sorted.prefix(Self.maxAwaiting).filter { $0.createdMs >= cutoff }
-        for a in awaiting where !keep.contains(where: { $0.resp === a.resp }) { a.resp.abort() }
+        for a in awaiting where !keep.contains(where: { $0.resp === a.resp }) {
+            a.resp.abort()
+            unsavedResps.remove(ObjectIdentifier(a.resp))
+        }
         awaiting = Array(keep)
     }
 
@@ -432,19 +413,30 @@ public final class VaultDevice: @unchecked Sendable {
     /// Starts collecting from the device's mailbox and flushes the outbox; does nothing while a collection runs. A
     /// terminal relay error ends the collection (``collectionEnded``); start it again to go on.
     public func start() {
-        let begin: Int? = mem.withLock {
+        let begin: (round: Int, mark: Int)? = mem.withLock {
             // A quieted device collects nothing again (``quiet()``): its answers could not be sent.
             if quieted { return nil }
             stopped = false
             if collector != nil, collectEnded == nil { return nil }
             collectEnded = nil
             collectRound += 1
-            return collectRound
+            return (collectRound, stops)
         }
-        guard let round = begin else { return }
+        guard let (round, mark) = begin else { return }
         let task = Task { [weak self] in
             guard let self else { return }
-            let flush = Task { await self.tickConfirm(); await self.flushOutbox() } // (0.88.1) hs.confirm again after 12 days
+            // An hs.resp that may not have reached the relay (ungated, as a handling's), then (0.88.1) hs.confirm again after
+            // 12 days, then the outbox through the lock gate; none of them after a stop since this start. Accepted trade-offs:
+            // the re-send can hold up the confirmation and the flush while it waits (a `rate_limited`'s retries), and a cancel
+            // between its claim and its request leaves it attempted with nothing sent, which errs towards no second answer.
+            let flush = Task {
+                #if DEBUG
+                await self.beforeStartResend?()
+                #endif
+                await self.resendResps(since: mark)
+                await self.tickConfirm(since: mark)
+                await self.flushOutbox(since: mark)
+            }
             defer { flush.cancel() }
             do {
                 try await collector(of: round).run { m in try await self.handle(m) }
@@ -486,6 +478,7 @@ public final class VaultDevice: @unchecked Sendable {
     public func stop() {
         let task: Task<Void, Never>? = mem.withLock {
             stopped = true
+            stops += 1
             // A request out is cut: what the relay handed it may stay leased (``collectorCuts``).
             if let out = collectSince {
                 collectCuts = (collectCuts.count + 1, collectStreaming ? (cfg.uptime(), 0) : out.sent)
@@ -514,6 +507,7 @@ public final class VaultDevice: @unchecked Sendable {
     /// nothing is written to the store again, and it holds no vault. Refused on a halted device (``halt()``), whose store
     /// the next process uses.
     public func forget() async throws {
+        defer { publishPairingHeld() }
         try await lock.withLock {
             try refuseHalted()
             stop()
@@ -526,6 +520,7 @@ public final class VaultDevice: @unchecked Sendable {
                 ini = nil
                 for a in awaiting { a.resp.abort() }
                 awaiting.removeAll()
+                unsavedResps.removeAll()
                 st.vault = nil
                 st.outbox.removeAll()
                 st.utks.removeAll()
@@ -551,6 +546,7 @@ public final class VaultDevice: @unchecked Sendable {
                 ini = nil
                 for a in awaiting { a.resp.abort() }
                 awaiting.removeAll()
+                unsavedResps.removeAll()
                 defer { inboxWaiters.removeAll() }
                 return (Array(pending.values), inboxWaiters)
             }

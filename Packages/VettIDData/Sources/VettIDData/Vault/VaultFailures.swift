@@ -46,6 +46,10 @@ enum VaultFailures {
         case let o as OpenTokenRefused:
             VaultFailure(o.relay.code == RelayError.tokenExpired ? .inviteExpired : .inviteUnavailable, code: o.relay.code, cause: o)
         case let r as RelayError: relay(r)
+        // An outbox entry held for a relay quota (VAULT-MESSAGING §8.6): kept, and sent once the quota allows.
+        case let q as QuotaWait: VaultFailure(.relayQuota, code: RelayError.quotaExceeded, cause: q)
+        // An outbox entry held by the lock gate (nothing but the lock while one is pending), or by a stop: kept, and sent later.
+        case let h as OutboxHeld: VaultFailure(.other, code: VaultManager.codeLockPending, cause: h)
         case let u as URLError: VaultFailure(u.code == .notConnectedToInternet ? .offline : .network, cause: u)
         case let k as KeysError: keys(k)
         case let a as AppAttestError: appAttest(a)

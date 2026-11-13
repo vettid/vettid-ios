@@ -81,20 +81,32 @@ public final class ShellModel {
     }
 
     /// The screen a feed item opens (ANDROID-PLAN §4 Notifications, 4), as vettid-android's `openFeedTarget`: Connections,
-    /// History and Settings (the daily check) as drawer destinations, the others over the current screen: Shared with you
+    /// History and Settings (the lock; the daily check and the hold in Advanced security, over it) as drawer destinations, the others over the current screen: Shared with you
     /// and a share rule open their own screens (the rule editor, IOS-PLAN §8 I3.2). An item opens over the current screen;
     /// ``FeedTarget/sheet`` stays with the Notifications screen's sheet.
     public func openFeedTarget(_ t: FeedTarget) {
+        if let d = Self.drawerDestination(t) {
+            navigate(d)
+            if t == .advancedSecurity { push(.advancedSecurity) }
+            return
+        }
         switch t {
-        case .connections: navigate(.connections)
-        case .history: navigate(.history)
-        case .security: navigate(.settings)
         case .conversation(let id): openConversation(id)
-        case .voteList: navigate(.votes)
-        case .deviceList: navigate(.devices)
         case .pairing: pushPairing(.pair(held: true, desktop: false))
         case .sheet: break
         default: if let r = Self.screen(t) { pushOnce(r) }
+        }
+    }
+
+    /// The drawer destination a feed target opens (its pushed screens dropped); nil for one opened over the current screen.
+    static func drawerDestination(_ t: FeedTarget) -> TopLevelDestination? {
+        switch t {
+        case .connections: .connections
+        case .history: .history
+        case .security, .advancedSecurity: .settings
+        case .voteList: .votes
+        case .deviceList: .devices
+        default: nil
         }
     }
 

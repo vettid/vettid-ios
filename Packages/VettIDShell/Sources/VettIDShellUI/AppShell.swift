@@ -249,16 +249,7 @@ public struct AppShell: View {
             // (VAULT-MESSAGING §3.6.5).
             .accessibilityHidden(model.asked != nil)
             .allowsHitTesting(model.asked == nil)
-            if let mode = model.asked {
-                OwnerCheckFlow(
-                    mode: mode, repo: ownerChecks, vault: vault, onDone: { model.ownerCheckDone() }, onCancel: { model.ownerCheckDone() }
-                )
-                .accessibilityAddTraits(.isModal)
-                // It comes up by itself: VoiceOver moves into it, and back to the app when it goes.
-                .announcesAsLayer()
-                .transition(.move(edge: .bottom))
-                .zIndex(1)
-            }
+            askedCheck
         }
         .animation(.easeOut(duration: 0.25), value: model.asked)
         // A request to open the update screen (on Android a notification tap; on the iPhone with phase P) waits until the
@@ -379,6 +370,11 @@ public struct AppShell: View {
             VaultStatusRoute(vault: vault, installedFrom: installedFrom) { model.pop() }
         case .attestation:
             AttestationRoute(vault: vault, canary: canary, canaryInbox: canaryInbox) { model.pop() }
+        case .advancedSecurity:
+            AdvancedSecurityRoute(
+                account: account, vault: vault, ownerChecks: ownerChecks, appLock: appLock, promptReason: promptReason,
+                host: settingsHost
+            ) { model.pop() }
         case .changeName, .sharedProfile:
             profileDetail(route)
         case .changePin, .newPhoneSecret, .deleteVault, .transferOut:
@@ -539,6 +535,7 @@ public struct AppShell: View {
         h.onVaultStatus = { model.push(.vaultStatus) }
         h.onReleaseUpdate = { model.push(.releaseUpdate) }
         h.onAttestation = { model.push(.attestation) }
+        h.onAdvancedSecurity = { model.push(.advancedSecurity) }
         h.onChangePin = { model.push(.changePin(fromAttempts: false)) }
         h.onCredential = { model.push(.credential) }
         h.onNewPhoneSecret = { model.push(.newPhoneSecret) }
@@ -547,6 +544,24 @@ public struct AppShell: View {
         h.onSharedProfile = { model.push(.sharedProfile) }
         h.onOwnerCheck = { holdOff in model.ownerCheck(holdOff: holdOff) }
         return h
+    }
+}
+
+extension AppShell {
+    /// The check the member asked for ("Check now", or turning the hold off), over the open app.
+    @ViewBuilder var askedCheck: some View {
+        if let mode = model.asked {
+            OwnerCheckFlow(
+                mode: mode, repo: ownerChecks, vault: vault, onDone: { model.ownerCheckDone() }, onCancel: { model.ownerCheckDone() }
+            )
+            // A container: the modal trait alone made the check one element, its keypad and fields unreachable.
+            .accessibilityElement(children: .contain)
+            .accessibilityAddTraits(.isModal)
+            // It comes up by itself: VoiceOver moves into it, and back to the app when it goes.
+            .announcesAsLayer()
+            .transition(.move(edge: .bottom))
+            .zIndex(1)
+        }
     }
 }
 #endif

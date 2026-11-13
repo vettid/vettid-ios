@@ -85,6 +85,16 @@ struct AppEnvironment: Equatable, Sendable {
         )
     }
 
+    /// The signed tag prefix of this build's channel (VAULT-RELEASES §5.2; ANDROID-PLAN 0.1.124 "Source" on the attestation
+    /// screen): Debug talks to staging; nil on the dev stack, whose releases no tag names.
+    var releaseTagPrefix: String? {
+        switch kind {
+        case .production: "release/prod/"
+        case .staging, .debug: "release/staging/"
+        case .devstack: nil
+        }
+    }
+
     /// The time scales this build accepts from a vault (STAGING-TIME-SCALE §4 item 4, §5.2): production only 1 (in
     /// ``AltTrust/production``); Staging and Debug, which talk to staging, 1 and 24; DevStack the dev stack's 1 to 86,400.
     var timeScales: TimeScalePolicy {

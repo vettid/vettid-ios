@@ -83,9 +83,9 @@ public struct AltChannelFailure: Error, Equatable, Sendable, CustomStringConvert
     public var description: String { "alternate channel: \(message)" }
 }
 
-/// Verifies a routed enclave (descriptor, attestation, manifest, enroll, now): VettIDAttestation's
-/// `EnclaveVerifier.verifyEnclave` with the pinned Nitro roots by default.
-public typealias EnclaveCheck = @Sendable ([UInt8], [UInt8], ReleaseManifest, Bool, Date) throws -> VerifiedEnclave
+/// Verifies a routed enclave (descriptor, attestation, manifest, enroll, now) and records each check (ANDROID-PLAN 0.1.124):
+/// VettIDAttestation's `EnclaveVerifier.verify` with the pinned Nitro roots by default.
+public typealias EnclaveCheck = @Sendable ([UInt8], [UInt8], ReleaseManifest, Bool, Date) -> EnclaveVerification
 
 /// The alternate-channel flows (§11.3, §11.4, §11.9), as vettid-vault's reference client runs them: verify the served
 /// manifest (signature and serial floor) and the routed enclave (Nitro chain, user_data over the descriptor, PCRs listed
@@ -114,35 +114,50 @@ public struct AltChannelFlow: Sendable {
     private let canary: CanaryManifestSource?
     private let verifyEnclave: EnclaveCheck
     private let timeScales: TimeScalePolicy
+    private let records: EnclaveRecords?
 
+    /// [records] (ANDROID-PLAN 0.1.124) hears the record of each verification of the enclave the vault runs on (the one a
+    /// request is sealed to), and of a manifest refused before any enclave was checked. A verification that could not be
+    /// made (nothing fetched) makes none.
     public init(
         api: MemberApiClient,
         trust: AltTrust,
         now: @escaping @Sendable () -> Date = { Date() },
         canary: CanaryManifestSource? = nil,
-        verifyEnclave: EnclaveCheck? = nil
+        verifyEnclave: EnclaveCheck? = nil,
+        records: EnclaveRecords? = nil
     ) {
         self.api = api
         manifests = ManifestVerifier(pinned: trust.manifestKeys)
         self.now = now
         self.canary = canary
         timeScales = trust.timeScales
+        self.records = records
         let verifier = EnclaveVerifier(nitro: NitroVerifier(roots: trust.nitroRoots))
         self.verifyEnclave = verifyEnclave ?? { d, a, m, e, t in
-            try verifier.verifyEnclave(descriptor: d, attestation: a, manifest: m, enroll: e, now: t)
+            verifier.verify(descriptor: d, attestation: a, manifest: m, enroll: e, now: t)
         }
     }
 
     /// Fetches and verifies the served manifest; refuses one older than [seen]. With a canary manifest installed the one
     /// with the higher serial is used (``CanaryManifests/choose(published:canary:)``): the canary document while it is
     /// newer than the published one, also while nothing is published yet (404); once the published manifest reaches its
-    /// serial, the canary document is retired. Only a 404 falls back to the canary (§11.10.1).
-    public func manifest(seen: UInt64) async throws -> ReleaseManifest {
+    /// serial, the canary document is retired. Only a 404 falls back to the canary (§11.10.1). [record]: the flows that
+    /// verify the vault's enclave record a list refused (line 1 failed, no enclave checked; ANDROID-PLAN 0.1.124), not the
+    /// update check.
+    public func manifest(seen: UInt64, record: Bool = false) async throws -> ReleaseManifest {
+        let sink = record ? records : nil
         let canaryDoc = canary?.served()
         let c = canaryDoc.flatMap(canaryManifest)
         var published: ReleaseManifest?
         do {
-            published = try manifests.verify(try await api.manifest())
+            let served = try await api.manifest()
+            do {
+                published = try manifests.verify(served)
+            } catch {
+                sink?.record(.manifestFailed(at: now()))
+                throw error
+            }
         } catch let e as MemberApiError {
             guard c != nil, e.code == MemberApiError.manifestUnavailable, e.status == 404 else { throw e }
         }
@@ -150,7 +165,10 @@ public struct AltChannelFlow: Sendable {
         guard let m = CanaryManifests.choose(published: published, canary: c) else {
             throw MemberApiError(status: 0, code: MemberApiError.manifestUnavailable)
         }
-        guard m.serial >= seen else { throw AltRefused.manifestOlder }
+        guard m.serial >= seen else {
+            sink?.record(.manifestFailed(at: now()))
+            throw AltRefused.manifestOlder
+        }
         return m
     }
 
@@ -164,15 +182,42 @@ public struct AltChannelFlow: Sendable {
         }
     }
 
+    /// The routed enclave (for [release], a PCR0, or the vault's route), verified, with its verification: a failure, or a
+    /// refusal after every check passed, is recorded at once; a pass by the caller (``used(_:)``) once the request is to
+    /// go to it.
     private func enclave(
         release: String?, manifest m: ReleaseManifest, enroll: Bool, onStarting: (@Sendable (Int) -> Void)? = nil
-    ) async throws -> (EnclaveInfo, VerifiedEnclave) {
+    ) async throws -> (EnclaveInfo, EnclaveVerification) {
         let info = try await api.enclaveWait(release: release, onStarting: onStarting)
-        let e = try verifyEnclave(info.descriptor, info.attestation, m, enroll, now())
-        guard e.descriptor.instanceID == info.instanceID else { throw AltChannelFailure(message: "descriptor names another instance") }
+        let v = verifyEnclave(info.descriptor, info.attestation, m, enroll, now())
+        let e: VerifiedEnclave
+        do {
+            e = try v.enclave()
+        } catch {
+            records?.record(v.record)
+            throw error
+        }
+        // Refused after every check passed: recorded so, so that an earlier pass is not left on the screen.
+        guard e.descriptor.instanceID == info.instanceID else {
+            refused(v, .otherInstance)
+            throw AltChannelFailure(message: "descriptor names another instance")
+        }
         // §11.10.9 (0.43.0): a time scale this build does not accept is a malformed descriptor; nothing is sent.
-        try timeScales.check(e.descriptor.timeScale)
-        return (info, e)
+        if !timeScales.accepts(e.descriptor.timeScale) {
+            refused(v, .timeScale)
+            try timeScales.check(e.descriptor.timeScale)
+        }
+        return (info, v)
+    }
+
+    /// Records the verification of the instance a request goes to.
+    private func used(_ v: EnclaveVerification) { records?.record(v.record) }
+
+    /// That verification refused after its checks: every line passed (ANDROID-PLAN 0.1.124 "Every check passed, but…").
+    private func refused(_ v: EnclaveVerification, _ why: EnclaveRefusal) {
+        var r = v.record
+        r.refusal = why
+        records?.record(r)
     }
 
     private static func retryable(_ e: Error?, _ s: Slot?) -> Bool {
@@ -223,11 +268,13 @@ public struct AltChannelFlow: Sendable {
         onPosting: @Sendable () async throws -> Void = {},
         onUnprocessed: @Sendable () async -> Void = {}
     ) async throws -> EnrollOutcome {
-        var m = try await manifest(seen: party.manifestSerialSeen())
+        var m = try await manifest(seen: party.manifestSerialSeen(), record: true)
         var refetched = false
         var attempt = 1
         while true {
-            let (info, e) = try await enclave(release: nil, manifest: m, enroll: true)
+            let (info, v) = try await enclave(release: nil, manifest: m, enroll: true)
+            let e = try v.enclave()
+            used(v)
             var secret = try await unlockSecretFor(e.descriptor.capabilities)
             let req: SealedRequest
             do {
@@ -259,7 +306,7 @@ public struct AltChannelFlow: Sendable {
             try Self.settle(attester, req, ok: r.ok)
             if !r.ok, r.code == Self.codeManifest, !refetched {
                 refetched = true
-                m = try await manifest(seen: party.manifestSerialSeen())
+                m = try await manifest(seen: party.manifestSerialSeen(), record: true)
                 continue
             }
             return EnrollOutcome(vaultID: vid, ok: r.ok, code: r.code, instanceID: info.instanceID, timeScale: e.descriptor.timeScale)
@@ -277,15 +324,17 @@ public struct AltChannelFlow: Sendable {
         beforePost: (@Sendable () async throws -> Void)? = nil
     ) async throws -> UnlockOutcome {
         guard let vaultID = party.vaultIDForUnlock() else { throw AltRefused.notPaired }
-        var m = try await manifest(seen: party.manifestSerialSeen())
+        var m = try await manifest(seen: party.manifestSerialSeen(), record: true)
         var refetched = false
         var attempt = 1
         var switched = 0
         while true {
             // Before anything is built (each pass): building attests, mints the standing token and records the unlock.
             try await beforePost?()
-            let (info, e) = try await enclave(release: release, manifest: m, enroll: false, onStarting: onStarting)
-            // With a callback, its answer decides (nil: the earlier shape, no secret); without, the caller's.
+            let (info, v) = try await enclave(release: release, manifest: m, enroll: false, onStarting: onStarting)
+            let e = try v.enclave()
+            // With a callback, its answer decides (nil: the earlier shape, no secret); without, the caller's. A throw here records
+            // nothing (the rule in ``recordedBuild(_:_:)``).
             var secret: [UInt8]?
             if let f = unlockSecretFor { secret = try await f(e.descriptor.capabilities) } else { secret = options.unlockSecret }
             let built: BuiltUnlock
@@ -296,9 +345,9 @@ public struct AltChannelFlow: Sendable {
                     opts.unlockSecret = nil // drop the second reference first, so the wipe reaches the buffer itself
                     if secret != nil { Bytes.wipe(&secret!) }
                 }
-                built = try await party.prepareUnlock(
-                    userGuid: userGuid, pin: pin, enclave: e, manifest: m, attester: attester, options: opts
-                )
+                built = try await recordedBuild(v) {
+                    try await party.prepareUnlock(userGuid: userGuid, pin: pin, enclave: e, manifest: m, attester: attester, options: opts)
+                }
             }
             try await Self.beforePost(beforePost, abandoning: built, party)
             let (err, slot) = try await postAndPoll(
@@ -323,12 +372,33 @@ public struct AltChannelFlow: Sendable {
             }
             if !r.ok, r.code == Self.codeManifest, !refetched {
                 refetched = true
-                m = try await manifest(seen: party.manifestSerialSeen())
+                m = try await manifest(seen: party.manifestSerialSeen(), record: true)
                 continue
             }
             return UnlockOutcome(
                 result: r, instanceID: info.instanceID, releaseChanged: built.releaseChanged, timeScale: e.descriptor.timeScale
             )
+        }
+    }
+
+    /// [build] of an unlock to the instance [v] verified, and that verification recorded (ANDROID-PLAN 0.1.124): a pass once
+    /// the request is built; a release older than one this phone has unlocked into, refused after every check; a list older
+    /// than one this phone has used (checked again as the request is built), line 1 failed. A route that still names the
+    /// release an unconfirmed move left (``AltRefused/notYetRouted``) is not recorded: nothing is sealed to it, and the
+    /// screen keeps the last record. So is any other failure (the build's own, before or after its route checks, or the
+    /// secret's before it): the route may not have been classified, and it may be an older release or the one a move left,
+    /// which are not passes (accepted; vettid-android records the pass before the secret).
+    private func recordedBuild(_ v: EnclaveVerification, _ build: () async throws -> BuiltUnlock) async throws -> BuiltUnlock {
+        do {
+            let b = try await build()
+            used(v)
+            return b
+        } catch AltRefused.rollbackRelease {
+            refused(v, .olderRelease)
+            throw AltRefused.rollbackRelease
+        } catch AltRefused.manifestOlder {
+            records?.record(.manifestFailed(at: now()))
+            throw AltRefused.manifestOlder
         }
     }
 
@@ -347,12 +417,27 @@ public struct AltChannelFlow: Sendable {
     /// What the app must know before it asks for the PIN (§11.2 step 4, §11.10.6): the verified manifest and the release
     /// the vault is routed to, compared with the release this device last unlocked into ([state]).
     public func preflight(_ state: AltState, release: String? = nil) async throws -> UnlockPreflight {
-        let m = try await manifest(seen: state.manifestSerial)
-        let (_, e) = try await enclave(release: release, manifest: m, enroll: false)
+        let m = try await manifest(seen: state.manifestSerial, record: true)
+        let (_, v) = try await enclave(release: release, manifest: m, enroll: false)
+        let e = try v.enclave()
         var p = UnlockPreflight.of(state, routed: e.release, manifest: m)
+        // An older release than this phone has unlocked into gets no PIN (§11.10.6); the way back of an unconfirmed move
+        // ([release]) may be older, and a route that still names the release the move left is not recorded (as for the
+        // unlock: nothing is sealed to it).
+        if release != nil || !p.rollback {
+            used(v)
+        } else if !Self.namesMovedFrom(state, e.release) {
+            refused(v, .olderRelease)
+        }
         p.capabilities = e.descriptor.capabilities
         p.timeScale = e.descriptor.timeScale
         return p
+    }
+
+    /// [routed] is exactly the release an unconfirmed move left (number and PCR0, IOS-PLAN §4.3 point 6).
+    static func namesMovedFrom(_ state: AltState, _ routed: Release) -> Bool {
+        guard let m = state.moveUnconfirmed else { return false }
+        return routed.pcr0 == m.from.pcr0 && routed.number == m.from.number
     }
 
     /// Asks the leaseholder to lock the vault and waits for the slot: until it is no longer queued, or for [atMost]. An
@@ -378,10 +463,12 @@ public struct AltChannelFlow: Sendable {
         open: @Sendable ([UInt8], String) async throws -> RecoveryResult,
         onSent: @Sendable () async -> Void = {}
     ) async throws -> RecoveryResult {
-        let m = try await manifest(seen: 0)
+        let m = try await manifest(seen: 0, record: true)
         var attempt = 1
         while true {
-            let (info, e) = try await enclave(release: nil, manifest: m, enroll: false)
+            let (info, v) = try await enclave(release: nil, manifest: m, enroll: false)
+            let e = try v.enclave()
+            used(v)
             let req = try await build(e)
             let taken = TakenMark()
             // A transport error (no answer to the POST: the member API may have taken it) is thrown with the key kept (chosen; not in
@@ -420,10 +507,12 @@ public struct AltChannelFlow: Sendable {
         open: @Sendable ([UInt8], String) async throws -> RecoveryOpen.Result,
         onSent: @Sendable () async -> Void = {}
     ) async throws -> RecoveryOpen.Result {
-        let m = try await manifest(seen: 0)
+        let m = try await manifest(seen: 0, record: true)
         var switched = 0
         while true {
-            let (info, e) = try await enclave(release: nil, manifest: m, enroll: false)
+            let (info, v) = try await enclave(release: nil, manifest: m, enroll: false)
+            let e = try v.enclave()
+            used(v)
             let req = try await build(e, m)
             try await api.recoveryOpen(vaultID: vaultID, instanceID: info.instanceID, req)
             await onSent()
