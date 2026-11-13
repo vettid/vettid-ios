@@ -69,6 +69,8 @@ public final class VaultDevice: @unchecked Sendable {
     let lock = AsyncLock()
     #if DEBUG
     var beforeFinalSave: (@Sendable () async -> Void)? // TEST ONLY: before the write that ends a handling
+    var beforeRespDeposit: (@Sendable () async -> Void)? // TEST ONLY: after a handling, before its hs.resp's deposit
+    var beforeStartResend: (@Sendable () async -> Void)? // TEST ONLY: a start's work, before its hs.resp re-send
     var flushSeen: (@Sendable (Bool) -> Void)? // TEST ONLY: a flush reached an entry (true: it left it alone)
     var flushWaits: (@Sendable () -> Void)? // TEST ONLY: a flush waits for a running one to end
     #endif
@@ -120,13 +122,28 @@ public final class VaultDevice: @unchecked Sendable {
     /// The `hs.fin` of the handshake was refused for good (``notifyFinFailed(ifOwed:)``). Under ``mem``.
     var finFailed = false
 
-    /// A vault rekey this device answered (`hs.resp` sent), awaiting its `hs.fin` (§6.5).
+    /// A vault rekey this device answered (`hs.resp` sent), awaiting its `hs.fin` (§6.5): the `hs.init`'s inner id, and its
+    /// `hs.resp` bytes until the relay has accepted them (nil after: a redelivered `hs.init` sends them again only while
+    /// they may not have arrived, §6.3, and is dropped otherwise, §6.5). Both nil in a record written before.
     struct Awaiting {
         let resp: Responder
         let createdMs: Int64
+        var initID: String?
+        var respBytes: [UInt8]?
+        /// After a `quota_exceeded` the re-send waits (``noteRespQuota(_:)``), on ``DeviceConfig/uptime``. Memory only.
+        var quotaUntil: TimeInterval = 0
+        var quotaBackoff: TimeInterval = 0
+        /// A deposit of its `hs.resp` was begun (``depositResp(_:_:)``): a later one is a re-send, whose refusal does not end
+        /// the responder, since an earlier copy may be at the vault. True for one restored from the file. Memory only.
+        var attempted = false
     }
 
     var awaiting: [Awaiting] = []
+    /// Responders a handling added that no successful ``save()`` has written yet: their `hs.resp` is never deposited before
+    /// a save holds them (§8.3). Under ``mem``.
+    var unsavedResps: Set<ObjectIdentifier> = []
+    /// Responders whose `hs.resp` is being deposited just now: a re-send does not overlap it. Under ``mem``.
+    var respsInFlight: Set<ObjectIdentifier> = []
     /// The unlock built and not yet answered (§11.4): what its result is opened and applied with.
     var pendingUnlock: PendingUnlock?
     /// The unlock last built (its request id), the standing token's recorded expiry before it and the one its build
@@ -346,19 +363,27 @@ public final class VaultDevice: @unchecked Sendable {
     func save() throws {
         // One write at a time, in the order of the snapshots: an older snapshot must not be stored after a newer one.
         try saveOrder.withLock {
-            let data: Data? = try mem.withLock {
+            let snap: (Data, Set<ObjectIdentifier>)? = try mem.withLock {
                 if forgotten { return nil }
                 if halted { throw Self.haltedError }
                 if st.vault != nil {
                     st.vault?.sessions = Base64s.encodeStd(try keyring.export())
                     st.vault?.awaiting = awaiting.compactMap { a in
                         // A responder that is done (aborted) has nothing left to keep.
-                        (try? a.resp.export()).map { AwaitingRekey(createdMs: a.createdMs, state: Base64s.encodeStd($0)) }
+                        (try? a.resp.export()).map {
+                            AwaitingRekey(
+                                createdMs: a.createdMs, state: Base64s.encodeStd($0), initId: a.initID,
+                                resp: a.respBytes.map(Base64s.encodeStd)
+                            )
+                        }
                     }
                 }
-                return try JSONEncoder().encode(st)
+                return (try JSONEncoder().encode(st), Set(awaiting.map { ObjectIdentifier($0.resp) }))
             }
-            if let data { try cfg.store.save(Array(data)) }
+            guard let (data, held) = snap else { return }
+            try cfg.store.save(Array(data))
+            // Every responder of the snapshot is in the file now.
+            mem.withLock { unsavedResps.subtract(held) }
         }
     }
 
@@ -368,7 +393,10 @@ public final class VaultDevice: @unchecked Sendable {
     func restoreAwaiting() -> [Awaiting] {
         (st.vault?.awaiting ?? []).compactMap { a in
             guard let b = try? Base64s.decodeStd(a.state), let r = try? Responder.import(b) else { return nil }
-            return Awaiting(resp: r, createdMs: a.createdMs)
+            return Awaiting(
+                resp: r, createdMs: a.createdMs, initID: a.initId, respBytes: a.resp.flatMap { try? Base64s.decodeStd($0) },
+                attempted: true
+            )
         }
     }
 
@@ -379,7 +407,10 @@ public final class VaultDevice: @unchecked Sendable {
         let cutoff = pruneTimeLocked(t).map { Self.ms($0.addingTimeInterval(-Self.handshakeTTL)) } ?? Int64.min
         let sorted = awaiting.sorted { $0.createdMs > $1.createdMs }
         let keep = sorted.prefix(Self.maxAwaiting).filter { $0.createdMs >= cutoff }
-        for a in awaiting where !keep.contains(where: { $0.resp === a.resp }) { a.resp.abort() }
+        for a in awaiting where !keep.contains(where: { $0.resp === a.resp }) {
+            a.resp.abort()
+            unsavedResps.remove(ObjectIdentifier(a.resp))
+        }
         awaiting = Array(keep)
     }
 
@@ -400,9 +431,18 @@ public final class VaultDevice: @unchecked Sendable {
         guard let (round, mark) = begin else { return }
         let task = Task { [weak self] in
             guard let self else { return }
-            // (0.88.1) hs.confirm again after 12 days, then the outbox: both through the lock gate, and neither after a stop
-            // since this start.
-            let flush = Task { await self.tickConfirm(since: mark); await self.flushOutbox(since: mark) }
+            // An hs.resp that may not have reached the relay (ungated, as a handling's), then (0.88.1) hs.confirm again after
+            // 12 days, then the outbox through the lock gate; none of them after a stop since this start. Accepted trade-offs:
+            // the re-send can hold up the confirmation and the flush while it waits (a `rate_limited`'s retries), and a cancel
+            // between its claim and its request leaves it attempted with nothing sent, which errs towards no second answer.
+            let flush = Task {
+                #if DEBUG
+                await self.beforeStartResend?()
+                #endif
+                await self.resendResps(since: mark)
+                await self.tickConfirm(since: mark)
+                await self.flushOutbox(since: mark)
+            }
             defer { flush.cancel() }
             do {
                 try await collector(of: round).run { m in try await self.handle(m) }
@@ -486,6 +526,7 @@ public final class VaultDevice: @unchecked Sendable {
                 ini = nil
                 for a in awaiting { a.resp.abort() }
                 awaiting.removeAll()
+                unsavedResps.removeAll()
                 st.vault = nil
                 st.outbox.removeAll()
                 st.utks.removeAll()
@@ -511,6 +552,7 @@ public final class VaultDevice: @unchecked Sendable {
                 ini = nil
                 for a in awaiting { a.resp.abort() }
                 awaiting.removeAll()
+                unsavedResps.removeAll()
                 defer { inboxWaiters.removeAll() }
                 return (Array(pending.values), inboxWaiters)
             }
