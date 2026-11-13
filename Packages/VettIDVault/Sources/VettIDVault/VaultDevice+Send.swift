@@ -22,7 +22,9 @@ extension VaultDevice {
     /// `vault.lock`, call signalling). Returns the inner id.
     @discardableResult
     public func sendOnce(_ type: String, body: [UInt8] = VaultJSON.empty, exp: Date? = nil) async throws -> String {
-        try await sendOnceUnlocked(id: Ulid.new(now()), type: type, body: body, exp: exp)
+        // (ANDROID-PLAN "While pending") Held by the lock gate: nothing is sent (`call.answer`, `call.ringing`, `call.ice`).
+        guard await requestMayGo(type) else { throw OutboxHeld() }
+        return try await sendOnceUnlocked(id: Ulid.new(now()), type: type, body: body, exp: exp)
     }
 
     /// Seals and persists under the device lock, then deposits outside it: a deposit that stalls holds up its own caller
@@ -46,31 +48,6 @@ extension VaultDevice {
         }
         try save() // the epoch's send counter
         return (v, env)
-    }
-
-    /// A request deposited once (``sendOnce(_:body:exp:)``) and awaited for [timeout]: no second deposit, unlike
-    /// ``request(_:body:timeout:innerID:)``. [exp]: the vault drops the request after it (§5.3).
-    public func requestOnce(
-        _ type: String, body: [UInt8] = VaultJSON.empty, timeout: TimeInterval? = nil, exp: Date? = nil
-    ) async throws -> VaultMessage {
-        let id = Ulid.new(now())
-        let d = OneShot<Inner>()
-        mem.withLock { pending[id] = d }
-        defer { mem.withLock { _ = pending.removeValue(forKey: id) } }
-        _ = try await countingSend(type) { try await sendOnceUnlocked(id: id, type: type, body: body, exp: exp) }
-        guard let inner = await d.wait(timeout: timeout ?? cfg.requestTimeout(for: type)) else {
-            try Task.checkCancellation()
-            countingNoAnswer(type)
-            throw VaultStateError(message: "\(type): no response")
-        }
-        return VaultMessage(inner: countingAnswer(type, inner))
-    }
-
-    /// ``requestOnce(_:body:timeout:exp:)``, returning the body of an ok response or throwing ``VaultOpError``.
-    public func opOnce(
-        _ type: String, body: [UInt8] = VaultJSON.empty, timeout: TimeInterval? = nil, exp: Date? = nil
-    ) async throws -> [UInt8] {
-        try Self.okBody(type, try await requestOnce(type, body: body, timeout: timeout, exp: exp))
     }
 
     /// Seals a message into the outbox and saves; the caller delivers it (``deliver(_:)``). Callers hold ``lock``.
@@ -381,7 +358,8 @@ extension VaultDevice {
     /// through the outbox: a request whose deposit fails is reported as failed and is not sent later, nor after a restart.
     /// One that throws after a deposit may still have reached the vault: a caller that tries again does so with the same
     /// [innerID] (``newRequestID()``), never a fresh one, or the vault may act twice.
-    /// [exp]: the vault drops the request after it, unanswered (§5.3).
+    /// [exp]: the vault drops the request after it, unanswered (§5.3). While a lock is pending its first send is held
+    /// (``OutboxHeld``, nothing sent) and a re-send is not sent (``requestMayGo(_:)``).
     public func request(
         _ type: String, body: [UInt8] = VaultJSON.empty, timeout: TimeInterval? = nil, innerID: String? = nil, exp: Date? = nil
     ) async throws -> VaultMessage {
@@ -396,6 +374,9 @@ extension VaultDevice {
         let d = OneShot<Inner>()
         mem.withLock { pending[id] = d }
         defer { mem.withLock { _ = pending.removeValue(forKey: id) } }
+        // Its first send the lock gate holds: nothing is sent, nothing counted (``requestMayGo(_:)``; a client handed out
+        // before the lock began sends nothing new after it).
+        guard await requestMayGo(type) else { throw OutboxHeld() }
         _ = try await countingSend(type) { try await sendOnceUnlocked(id: id, type: type, body: body, exp: exp) }
         for attempt in 0...retries {
             if let inner = await d.wait(timeout: timeout ?? cfg.requestTimeout(for: type)) {
@@ -407,7 +388,9 @@ extension VaultDevice {
             try refuseSending()
             // No answer: the collection may have ended (the answer would then wait in the mailbox unread).
             ensureCollecting()
-            if attempt < retries {
+            // A re-send the lock gate holds is not sent: the request goes on waiting for the copy already out, as after a
+            // re-send the relay could not take (``requestMayGo(_:)``).
+            if attempt < retries, await requestMayGo(type) {
                 _ = try await countingSend(type) { try await sendOnceUnlocked(id: id, type: type, body: body, exp: exp) }
             }
         }

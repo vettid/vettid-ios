@@ -136,6 +136,35 @@ import VettIDCrypto
         #expect(d.ackPendingVersion == nil)
     }
 
+    /// The operation's own `credential.ack` while a lock is pending: held by the lock gate, nothing is sent and the operation
+    /// is done all the same; the ack stays pending for a flush the gate admits.
+    @Test func anOperationsAckHeldByTheLockGateLeavesItDoneAndTheAckPending() async throws {
+        let (d, v) = try await base.pairedDevice(cfg: base.config(InMemoryDeviceStateStore(), timeout: 0.3))
+        let api = VaultApi(device: d) { true }
+        let (utks, _) = try pool(2)
+        // The create goes (the manager admitted it); the lock goes pending before its ack.
+        let open = Box(true)
+        d.setFlushGate { open.value }
+        let create = Task { try await api.credentialCreate(password: "a long password", pin: "123456") }
+        try await answer(v, d, "credential.utk.get", utks)
+        let req = try v.open(try await base.relay.nextDeposit().payload)
+        #expect(req.type == "credential.create")
+        open.value = false // the lock goes pending once the create is out
+        let ok = Inner(id: Ulid.new(), type: req.type, ts: Date(), re: req.id, status: Inner.statusOK,
+                       body: Array(#"{"credential":"AQID","version":1,"key":"x"}"#.utf8))
+        try await d.handle(v.msg(try #require(v.keyring.current()).seal(ok)))
+        try await create.value
+        #expect(await base.relay.noDeposit(within: 0.3), "no ack while a lock is pending")
+        #expect(d.ackPendingVersion == 1)
+        open.value = true
+        d.holdBackAckRetries(false)
+        let flush = Task { await d.flushOutbox() }
+        let ack = try await answer(v, d, "credential.ack")
+        #expect(VaultJSON.int(VaultJSON.object(ack.body), "version") == 1)
+        await flush.value
+        #expect(d.ackPendingVersion == nil)
+    }
+
     /// `stale_credential` to a `credential.ack`: the vault has moved past that version, so nothing is owed for it.
     @Test func aStaleAckIsSettled() async throws {
         let (d, v) = try await base.pairedDevice()

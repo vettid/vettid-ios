@@ -412,6 +412,10 @@ extension VaultApi {
             // The vault's own refusal: there is no call.
             key.destroy()
             throw e
+        } catch let e as OutboxHeld {
+            // Held by the lock gate: nothing left this phone, so there is no call to end.
+            key.destroy()
+            throw e
         } catch {
             key.destroy()
             // No answer in time, an answer that was lost, or an answer that does not verify: the vault may have taken the

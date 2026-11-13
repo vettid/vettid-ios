@@ -53,14 +53,24 @@ extension VaultDevice {
 
     /// [held] deposited at most [sends] times while its `exp` has not passed by ``vaultNow()``, each straight to the
     /// relay and never through the outbox, so that the request is never written to the phone's storage (§11.14.9 step 1:
-    /// kept in memory only); a deposit that fails is a send without an answer. Its answer, or ``VaultStateError``.
+    /// kept in memory only); a deposit that fails is a send without an answer. Its answer, ``OutboxHeld`` when the lock gate holds its first send, or ``VaultStateError``.
     func requestKept(_ held: HeldRequest, sends: Int, timeout: TimeInterval? = nil) async throws -> VaultMessage {
         try refuseSending()
         let d = OneShot<Inner>()
         mem.withLock { pending[held.id] = d }
         defer { mem.withLock { _ = pending.removeValue(forKey: held.id) } }
         var sent = false
-        for _ in 0..<sends where vaultNow() < held.exp {
+        for n in 0..<sends where vaultNow() < held.exp {
+            // (ANDROID-PLAN "While pending") Its first send the lock gate holds: nothing is sent (``OutboxHeld``). A re-send it
+            // holds is not deposited: the change goes on waiting for the copy already out (``requestMayGo(_:)``).
+            if n == 0, await !requestMayGo(held.type) { throw OutboxHeld() }
+            if n > 0, await !requestMayGo(held.type) {
+                if let inner = await d.wait(timeout: timeout ?? cfg.requestTimeout(for: held.type)) {
+                    return VaultMessage(inner: countingAnswer(held.type, inner))
+                }
+                try Task.checkCancellation()
+                continue
+            }
             sent = true
             // A failed deposit is a send without an answer; a halted or quieted device refuses at once.
             do {

@@ -26,10 +26,13 @@ extension VaultDeviceTests {
     }
 
     /// A paired device that answered the vault's rekey and got its `hs.fin`; the confirmation and `device.features` are taken.
-    private func rekeyed(_ clock: Box<Date>) async throws -> Rekeyed {
+    /// [up]: the monotonic clock, for a test whose days really pass (the vault's time moves with it); nil: the real one.
+    private func rekeyed(_ clock: Box<Date>, up: Box<TimeInterval>? = nil) async throws -> Rekeyed {
         let store = InMemoryDeviceStateStore()
         let secrets = try DeviceSecrets.generate()
-        let (d, v) = try await pairedDevice(store: store, secrets: secrets, cfg: config(store, now: { clock.value }))
+        var uptime: (@Sendable () -> TimeInterval)?
+        if let up { uptime = { up.value } }
+        let (d, v) = try await pairedDevice(store: store, secrets: secrets, cfg: config(store, now: { clock.value }, uptime: uptime))
         let old = try #require(v.keyring.current())
         let ini = try v.rekey(d)
         try await d.handle(v.msg(ini.envelope))
@@ -270,15 +273,19 @@ extension VaultDeviceTests {
     }
 
     /// The kept epoch's 48 days (§6.3.1 table): on day 47 a message under it still brings hs.confirm; on day 49 it no
-    /// longer opens.
+    /// longer opens. The days really pass (the monotonic clock moves too): a wall clock alone moving on does not hide it
+    /// while the vault's time still keeps it (``VaultDevice/pruneTimeLocked(_:)``).
     @Test func theConfirmedEpochKeepsItsKeysFortyEightDays() async throws {
         let clock = Box(Date())
-        let r = try await rekeyed(clock)
+        let up = Box<TimeInterval>(1000)
+        let r = try await rekeyed(clock, up: up)
         clock.value = clock.value.addingTimeInterval(47 * 86_400)
+        up.value += 47 * 86_400
         try await r.device.handle(r.vault.msg(try r.old.seal(message(at: clock.value))))
         #expect(try await take(r.new).type == "hs.confirm")
         _ = relay.dropDeposits() // the standing token's renewal, due by now (§7.2)
         clock.value = clock.value.addingTimeInterval(2 * 86_400)
+        up.value += 2 * 86_400
         try await r.device.handle(r.vault.msg(try r.old.seal(message(at: clock.value))))
         #expect(await relay.noDeposit(within: 0.5))
     }

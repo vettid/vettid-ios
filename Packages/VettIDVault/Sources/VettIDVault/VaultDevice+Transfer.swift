@@ -208,6 +208,9 @@ extension VaultDevice {
     /// `relay.token.issued{kind: "standing"}`, deposited to the vault's mailbox, returning once the relay answered `201`.
     /// The previous token's `jti` is not denylisted. Throws when the renewal could not be deposited (the caller goes on).
     public func renewStandingToken() async throws {
+        // (ANDROID-PLAN "While pending") Asked before anything is minted: a held renewal leaves the token's recorded expiry
+        // (`issuedExpMs`) as it was.
+        guard await requestMayGo("relay.token.issued") else { throw OutboxHeld() }
         // Sealed and saved under the lock, deposited after it.
         let entry = try await lock.withLock {
             let tok = try mintForVault()

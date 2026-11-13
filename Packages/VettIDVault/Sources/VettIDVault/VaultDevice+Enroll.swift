@@ -122,7 +122,8 @@ extension VaultDevice {
             // A new pairing (enrollment, transfer, recovery) starts with its own epoch confirmed (§6.3.1), as dropPairing.
             st.vault?.confirmed = nil
             st.vault?.confirmAtMs = nil
-            keyring.activate(res.epoch, now: t)
+            noteKeyTimeLocked(res.inner.ts) // its ts passed checkTime; the keys' clock only
+            keyring.activate(res.epoch, now: keyBaseLocked(t), pruneAt: pruneTimeLocked(t))
             return (res, try requireVault())
         }
         // The fin is kept in the outbox until the relay accepts it: a pairing or transfer code is spent by its handshake, and
@@ -435,7 +436,8 @@ extension VaultDevice {
         CredentialOps.codeStaleCredential, "credential_frozen",
     ]
 
-    /// Sends `credential.ack` for [version] once and, taken, settles it. Throws what the vault answers or the cancel.
+    /// Sends `credential.ack` for [version] once and, taken, settles it. Throws what the vault answers, the cancel, or
+    /// ``OutboxHeld`` when the lock gate holds it (it stays pending).
     func sendAck(_ version: Int64) async throws {
         let body = JsonBuilder().uint("version", UInt64(version)).bytes()
         do {
@@ -462,6 +464,8 @@ extension VaultDevice {
             try? await ackSettled(pending)
             return
         }
+        // Asked before the retry's time is taken: a held one does not count as tried (``requestMayGo(_:)``).
+        guard await requestMayGo("credential.ack") else { return }
         let go: Bool = mem.withLock {
             let t = cfg.uptime()
             if let last = lastAckTry, t - last < Self.ackRetryEvery { return false }

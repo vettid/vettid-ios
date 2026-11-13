@@ -2,13 +2,17 @@
 // (ANDROID-PLAN "Locking", "While pending"). Every flush, whoever starts it, asks the gate before each entry, and so does
 // every reply queued while a vault message is handled (``deliverQueued(_:since:)``), and every deposit right before it is
 // made (``deliver(_:keepOnFailure:since:)``, a ``send(_:body:id:)``'s own entry included). A rekey's `hs.resp` is sent
-// ungated, as a pending `call.end` passes (``handleRekey``). Not gated here: the requests, which the manager gates.
+// ungated, as a pending `call.end` passes (``handleRekey``). Every send of a request asks it too (``requestMayGo(_:)``): its
+// first send, its re-sends, a kept change's sends and a single send (``requestOnce(_:body:timeout:exp:)``), so that a client
+// handed out before a lock began sends nothing new after it; the lock and a lock-time call always go.
 
 import VettIDCrypto
 
 /// An outbox entry not deposited because the lock gate holds it, or the device was stopped since it was asked for: it stays in
 /// the outbox for a later flush (one the gate admits), unless its deposit was one never kept for later (a renewal of the
-/// standing token during a move, ``VaultDevice/renewStandingToken()``), which is then gone, as after any failure.
+/// standing token during a move, ``VaultDevice/renewStandingToken()``), which is then gone, as after any failure. Also a
+/// request whose first send the gate holds (a request, a single send, a kept change): nothing was sent (the app's
+/// `lock_pending`).
 public struct OutboxHeld: Error, Equatable, Sendable, CustomStringConvertible {
     public var description: String { "held by the lock gate" }
 }
@@ -29,6 +33,29 @@ extension VaultDevice {
             throw error
         }
         return prior
+    }
+
+    /// (ANDROID-PLAN "While pending") Marks a call made for the lock itself, "Lock it now"'s one `vault.status`
+    /// (``VaultApi/statusUnlockID()``): its sends, a re-send included, are not held by the lock gate.
+    @TaskLocal static var lockTimeSend = false
+
+    /// The requests the lock gate never holds: the lock itself (a `call.end`, an outbox entry, passes ``flushMayGo(_:since:)``).
+    static let ungatedRequests: Set<String> = ["vault.lock"]
+
+    /// Whether a request of [type] may be sent now (ANDROID-PLAN "While pending"): asked before every send of a request
+    /// (``request(_:body:timeout:innerID:exp:retries:)``, its first and its re-sends), of ``requestOnce(_:body:timeout:exp:)``
+    /// (the `credential.ack`, the settle probe, `call.start`) and of a kept change (``requestKept(_:sends:timeout:)``). A
+    /// first send it holds throws ``OutboxHeld``; a re-send it holds is not sent. The lock and a lock-time call
+    /// (``lockTimeSend``) always go. Also asked before a single send (``sendOnce(_:body:exp:)``: the call's answer, ringing
+    /// and ICE), a blob upload and a renewal of the standing token.
+    ///
+    /// Accepted residual (chosen; vettid-android asks it under the device lock): it is asked before the device lock and the
+    /// sealing, so a lock that goes pending while a send waits for that lock (a save, another seal) lets that one send go,
+    /// as a request already on its way when a lock begins does.
+    func requestMayGo(_ type: String) async -> Bool {
+        if Self.lockTimeSend || Self.ungatedRequests.contains(type) { return true }
+        guard let gate = mem.withLock({ flushGate }) else { return true }
+        return await gate()
     }
 
     /// Throws ``OutboxHeld`` unless an entry of [type] may be deposited now (``flushMayGo(_:since:)``).

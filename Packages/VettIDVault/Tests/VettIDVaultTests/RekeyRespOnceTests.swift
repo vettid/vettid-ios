@@ -229,17 +229,20 @@ extension VaultDeviceTests {
         #expect(await relay.noDeposit(within: 0.2), "answered once")
     }
 
-    /// A responder past ``VaultDevice/handshakeTTL`` is not re-sent.
+    /// A responder past ``VaultDevice/handshakeTTL`` by the vault's time (the days really pass: the monotonic clock moves too)
+    /// is not re-sent.
     @Test func anExpiredRespIsNotResent() async throws {
         let clock = Box(Date())
+        let up = Box<TimeInterval>(1000)
         let store = InMemoryDeviceStateStore()
-        let (d, v) = try await pairedDevice(store: store, cfg: config(store, now: { clock.value }))
+        let (d, v) = try await pairedDevice(store: store, cfg: config(store, now: { clock.value }, uptime: { up.value }))
         let ini = try v.rekey(d)
         relay.refuseStatus = 503
         relay.refuseDeposits = RelayError.internalError
         relay.refuseOnly = 1
         try await d.handle(v.msg(ini.envelope))
         clock.value = clock.value.addingTimeInterval(VaultDevice.handshakeTTL + 60)
+        up.value += VaultDevice.handshakeTTL + 60
         await d.resendResps()
         #expect(await relay.noDeposit(within: 0.2) && relay.refused == 1)
     }
