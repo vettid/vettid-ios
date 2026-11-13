@@ -202,7 +202,10 @@ public struct UnlockScreen: View {
             actions.confirmReturn()
         }
         .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height = $0 }
-        .onDisappear { forgetSecrets() }
+        .onDisappear {
+            forgetSecrets()
+            focusMove?.cancel()
+        }
         // Digits taken by "Unlock" or dropped: the keypad again.
         .onChange(of: pin.count) { _, digits in steps.digitsChanged(to: digits) }
         // The way back's keypad opens empty (fewer digits than a PIN typed for the unlock are not its start), and when it

@@ -234,7 +234,10 @@ public struct OwnerCheckScreen: View {
             }
         }
         .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height = $0 }
-        .onDisappear { forgetSecrets() }
+        .onDisappear {
+            forgetSecrets()
+            focusMove?.cancel()
+        }
         // Digits taken by the submit or dropped: the keypad again.
         .onChange(of: pin.count) { _, digits in steps.digitsChanged(to: digits) }
         // The password typed goes with its step (back to the keypad, the PIN taken or dropped).

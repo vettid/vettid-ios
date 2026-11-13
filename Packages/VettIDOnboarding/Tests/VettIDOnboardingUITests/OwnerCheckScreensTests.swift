@@ -56,7 +56,14 @@ import VettIDUI
             window.layoutIfNeeded()
             try await Task.sleep(for: .milliseconds(50))
         }
-        #expect(textFields(in: window).isEmpty, "the keypad again, no password field until \"Next\"")
+        #expect(textFields(in: window).isEmpty, "the keypad again")
+        // A whole PIN typed again: still the keypad, with "Next" (the step was reset with the digits).
+        for d in 0..<6 { pin.append(d) }
+        for _ in 0..<10 {
+            window.layoutIfNeeded()
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        #expect(textFields(in: window).isEmpty, "no password field until \"Next\"")
         window.isHidden = true
 
         var s = held
