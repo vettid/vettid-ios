@@ -80,8 +80,8 @@ public final class VaultDevice: @unchecked Sendable {
     /// The ids of outbox entries being deposited now (``deliver(_:keepOnFailure:since:)``). Under ``mem``.
     var outboxInFlight: Set<String> = []
     var quotaBackoff: [String: (until: TimeInterval, last: TimeInterval)] = [:] // §8.6, VaultDevice+Quota; under ``mem``
-    /// Whether an outbox entry may be deposited now (``flushMayGo(_:since:)``), or a request's re-send or single send go
-    /// (``requestMayGo(_:)``): the manager's lock gate, nothing but the lock while one is pending. Nil: always. Under ``mem``.
+    /// Whether an outbox entry may be deposited now (``flushMayGo(_:since:)``), or a request be sent (``requestMayGo(_:)``):
+    /// the manager's lock gate, nothing but the lock while one is pending. Nil: always. Under ``mem``.
     var flushGate: (@Sendable () async -> Bool)?
     /// How the device waits out a quota backoff before its flush (TEST ONLY: replaced to run it at once).
     var quotaSleep: @Sendable (TimeInterval) async -> Void = { try? await Task.sleep(for: .seconds($0)) }

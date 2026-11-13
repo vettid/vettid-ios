@@ -53,7 +53,7 @@ extension VaultDevice {
 
     /// [held] deposited at most [sends] times while its `exp` has not passed by ``vaultNow()``, each straight to the
     /// relay and never through the outbox, so that the request is never written to the phone's storage (§11.14.9 step 1:
-    /// kept in memory only); a deposit that fails is a send without an answer. Its answer, or ``VaultStateError``.
+    /// kept in memory only); a deposit that fails is a send without an answer. Its answer, ``OutboxHeld`` when the lock gate holds its first send, or ``VaultStateError``.
     func requestKept(_ held: HeldRequest, sends: Int, timeout: TimeInterval? = nil) async throws -> VaultMessage {
         try refuseSending()
         let d = OneShot<Inner>()

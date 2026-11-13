@@ -377,7 +377,8 @@ extension VaultDevice {
     /// through the outbox: a request whose deposit fails is reported as failed and is not sent later, nor after a restart.
     /// One that throws after a deposit may still have reached the vault: a caller that tries again does so with the same
     /// [innerID] (``newRequestID()``), never a fresh one, or the vault may act twice.
-    /// [exp]: the vault drops the request after it, unanswered (§5.3).
+    /// [exp]: the vault drops the request after it, unanswered (§5.3). While a lock is pending its first send is held
+    /// (``OutboxHeld``, nothing sent) and a re-send is not sent (``requestMayGo(_:)``).
     public func request(
         _ type: String, body: [UInt8] = VaultJSON.empty, timeout: TimeInterval? = nil, innerID: String? = nil, exp: Date? = nil
     ) async throws -> VaultMessage {

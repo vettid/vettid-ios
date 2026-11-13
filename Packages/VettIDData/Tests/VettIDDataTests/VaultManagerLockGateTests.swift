@@ -171,4 +171,25 @@ import VettIDDataTesting
         let s = try #require(try await m.storedSession())
         #expect(throws: VaultFailure.self) { _ = try m.openApi(s) }
     }
+
+    /// A PIN change whose lock goes pending after its checks (the manager let it in) is held at its send by the device's
+    /// gate: nothing is sent, the change is `lock_pending`, and its marker is cleared (no change left to decide).
+    @Test func aChangeHeldAtItsSendLeavesNoMarker() async throws {
+        defer { phone.close() }
+        try await openVault()
+        let d = try #require(m.session?.device)
+        let versions = seen("credential.version")
+        let service = service
+        // The gate shuts once the change's pre-check went out (as a lock that goes pending then would).
+        d.setFlushGate { service.requestsSeen.filter { $0 == "credential.version" }.count <= versions }
+        let changes = seen("pin.change")
+        do {
+            try await m.changePin(pin: pin, newPin: "135792", password: "correct horse battery")
+            Issue.record("not held")
+        } catch let f as VaultFailure {
+            #expect(f.code == VaultManager.codeLockPending)
+        }
+        #expect(seen("pin.change") == changes, "nothing sent")
+        #expect(try m.phoneSecrets.unresolvedChange() == nil && m.heldChange == nil)
+    }
 }
