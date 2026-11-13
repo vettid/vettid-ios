@@ -195,6 +195,9 @@ public final class VaultDevice: @unchecked Sendable {
     var quieted = false
     /// The newest `ts` of a message from the vault and the monotonic time it arrived (in memory only).
     var vaultClock: (ts: Date, at: TimeInterval)?
+    /// The newest verified `ts` of a handshake message from the vault and the monotonic time it arrived (in memory only):
+    /// the keys' clock reads it besides ``vaultClock`` (``keyClockLocked()``).
+    var keyStamp: (ts: Date, at: TimeInterval)?
     /// The newest `ts` the vault stamped on an **answer** (in memory only): only answers settle a request (VAULT-MESSAGING
     /// 0.46.0 §11.14.9 step 1).
     var answerTs: Date?
@@ -382,30 +385,6 @@ public final class VaultDevice: @unchecked Sendable {
             // Every responder of the snapshot is in the file now.
             mem.withLock { unsavedResps.subtract(held) }
         }
-    }
-
-    /// The persisted rekeys awaiting `hs.fin`; one that does not restore or is past ``handshakeTTL`` is dropped.
-    func restoreAwaiting() -> [Awaiting] {
-        let cutoff = Self.ms(now().addingTimeInterval(-Self.handshakeTTL))
-        return (st.vault?.awaiting ?? []).filter { $0.createdMs >= cutoff }.compactMap { a in
-            guard let b = try? Base64s.decodeStd(a.state), let r = try? Responder.import(b) else { return nil }
-            return Awaiting(
-                resp: r, createdMs: a.createdMs, initID: a.initId, respBytes: a.resp.flatMap { try? Base64s.decodeStd($0) },
-                attempted: true
-            )
-        }
-    }
-
-    /// Ends the rekeys awaiting `hs.fin` for longer than ``handshakeTTL``, and all but the newest ``maxAwaiting``.
-    func pruneAwaiting(_ t: Date) {
-        let cutoff = Self.ms(t.addingTimeInterval(-Self.handshakeTTL))
-        let sorted = awaiting.sorted { $0.createdMs > $1.createdMs }
-        let keep = sorted.prefix(Self.maxAwaiting).filter { $0.createdMs >= cutoff }
-        for a in awaiting where !keep.contains(where: { $0.resp === a.resp }) {
-            a.resp.abort()
-            unsavedResps.remove(ObjectIdentifier(a.resp))
-        }
-        awaiting = Array(keep)
     }
 
     // MARK: - Lifecycle

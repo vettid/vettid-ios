@@ -122,7 +122,8 @@ extension VaultDevice {
             // A new pairing (enrollment, transfer, recovery) starts with its own epoch confirmed (§6.3.1), as dropPairing.
             st.vault?.confirmed = nil
             st.vault?.confirmAtMs = nil
-            keyring.activate(res.epoch, now: t)
+            noteKeyTimeLocked(res.inner.ts) // its ts passed checkTime; the keys' clock only
+            keyring.activate(res.epoch, now: keyBaseLocked(t), pruneAt: pruneTimeLocked(t))
             return (res, try requireVault())
         }
         // The fin is kept in the outbox until the relay accepts it: a pairing or transfer code is spent by its handshake, and
