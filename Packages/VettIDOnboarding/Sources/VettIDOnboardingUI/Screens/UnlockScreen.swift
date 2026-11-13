@@ -64,6 +64,8 @@ public struct UnlockScreen: View {
     @Environment(\.dynamicTypeSize) private var typeSize
     /// VoiceOver's cursor: to the password on "Next", back to the keypad on "Edit PIN".
     @AccessibilityFocusState private var focus: PinThenPassword.Focus?
+    /// The cursor's move still waiting (``PinThenPassword/moveFocus(_:to:after:)``).
+    @State private var focusMove: Task<Void, Never>?
     @Environment(\.openURL) private var openURL
     @Environment(\.scenePhase) private var scenePhase
 
@@ -125,7 +127,7 @@ public struct UnlockScreen: View {
     }
 
     private func moveFocus(to target: PinThenPassword.Focus) {
-        PinThenPassword.moveFocus({ focus = $0 }, to: target)
+        focusMove = PinThenPassword.moveFocus({ focus = $0 }, to: target, after: focusMove)
     }
 
     private func submit() {
@@ -203,8 +205,9 @@ public struct UnlockScreen: View {
         .onDisappear { forgetSecrets() }
         // Digits taken by "Unlock" or dropped: the keypad again.
         .onChange(of: pin.count) { _, digits in steps.digitsChanged(to: digits) }
-        // The way back's keypad closed ("Not now", or the check came due): its digits do not stay for the unlock.
-        .onChange(of: state.returnAsksPin) { _, asks in if !asks { pin.clear() } }
+        // The way back's keypad opens empty (fewer digits than a PIN typed for the unlock are not its start), and when it
+        // closes ("Not now", or the check came due) its digits do not stay for the unlock.
+        .onChange(of: state.returnAsksPin) { _, _ in pin.clear() }
         // The password typed goes with its step (back to the keypad, the PIN taken or dropped).
         .onChange(of: passwordStep) { _, shown in if !shown, !state.password.isEmpty { actions.setPassword("") } }
         .onChange(of: scenePhase) { _, now in

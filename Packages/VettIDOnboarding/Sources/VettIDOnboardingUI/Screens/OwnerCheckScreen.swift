@@ -75,6 +75,8 @@ public struct OwnerCheckScreen: View {
     @Environment(\.dynamicTypeSize) private var typeSize
     /// VoiceOver's cursor: to the password on "Next", back to the keypad on "Edit PIN".
     @AccessibilityFocusState private var focus: PinThenPassword.Focus?
+    /// The cursor's move still waiting (``PinThenPassword/moveFocus(_:to:after:)``).
+    @State private var focusMove: Task<Void, Never>?
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.vettIDColors) private var colors
 
@@ -141,7 +143,7 @@ public struct OwnerCheckScreen: View {
     }
 
     private func moveFocus(to target: PinThenPassword.Focus) {
-        PinThenPassword.moveFocus({ focus = $0 }, to: target)
+        focusMove = PinThenPassword.moveFocus({ focus = $0 }, to: target, after: focusMove)
     }
 
     private func submit() {

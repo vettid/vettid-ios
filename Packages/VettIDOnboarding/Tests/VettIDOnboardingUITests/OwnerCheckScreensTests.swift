@@ -44,12 +44,26 @@ import VettIDUI
     }
 
     /// A wrong password takes the PIN (§3.6.5 keeps neither entry): the keypad again, no password field until "Next".
-    @Test func aWrongPasswordGoesBackToTheKeypad() {
+    @Test func aWrongPasswordGoesBackToTheKeypad() async throws {
+        let pin = PinBuffer()
+        for d in 0..<6 { pin.append(d) }
+        let steps = PinThenPassword(pinDone: true)
+        let window = host(OwnerCheckScreen(state: held, actions: NoOwnerCheckActions(), now: now, pin: pin, steps: steps))
+        #expect(textFields(in: window).count == 1, "the password step")
+        // The check is sent (the PIN taken), and the vault answers that the password was wrong.
+        _ = pin.take()
+        for _ in 0..<40 where !textFields(in: window).isEmpty {
+            window.layoutIfNeeded()
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        #expect(textFields(in: window).isEmpty, "the keypad again, no password field until \"Next\"")
+        window.isHidden = true
+
         var s = held
         s.message = .badPassword(checksLeft: 3)
-        let window = host(OwnerCheckScreen(state: s, actions: NoOwnerCheckActions(), now: now))
-        #expect(textFields(in: window).isEmpty)
-        window.isHidden = true
+        let answered = host(OwnerCheckScreen(state: s, actions: NoOwnerCheckActions(), now: now))
+        #expect(textFields(in: answered).isEmpty)
+        answered.isHidden = true
     }
 
     /// While the check or a lock is sent, no dimmed keypad is read by VoiceOver; it comes back with the answer.

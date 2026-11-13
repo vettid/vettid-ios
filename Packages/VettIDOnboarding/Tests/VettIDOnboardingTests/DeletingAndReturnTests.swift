@@ -104,6 +104,35 @@ import VettIDDataTesting
         vm.setPin("402817")
         vm.confirmReturn()
         #expect(vault.returnPins.count == 1 && !vault.calls.contains("unlock"), "gated: nothing sent, neither the way back nor an unlock")
+        // The primary action with the keypad's PIN and no password: neither the way back nor a PIN-only unlock.
+        vm.setPin("402817")
+        vm.submit()
+        await vm.settle()
+        #expect(vault.returnPins.count == 1, "no way back while gated")
+        #expect(!vault.calls.contains("unlock"), "no unlock without the password while the check is due")
+    }
+
+    /// A return the manager refuses reads the gate again: when the check came due since the last read, the notice says
+    /// the check comes first; otherwise the general failure.
+    @Test func aRefusedReturnReadsTheGateAgain() async {
+        vault.unconfirmedMove = Self.move(failed: true)
+        vault.returnStarts = false
+        let vm = UnlockViewModel(vault: vault, account: vault, ownerCheck: vault)
+        await vm.settle()
+        #expect(vm.state.returnOffered && !vm.state.returnGated)
+        vm.askReturn()
+        vm.setPin("402817")
+        vm.confirmReturn()
+        #expect(vault.returnPins.count == 1 && vm.state.message == .failed(.other, code: nil), "not gated: the general failure")
+
+        // The check came due since the last read (every 15 s): the notice, never a failure.
+        vault.ownerCheck = OwnerCheckView(state: .ok, deadline: Date().addingTimeInterval(-60))
+        vm.askReturn()
+        vm.setPin("402817")
+        vm.confirmReturn()
+        #expect(vault.returnPins.count == 2)
+        #expect(vm.state.returnGated && vm.state.checkDue && vm.state.message == nil && !vm.state.returnAsksPin)
+        #expect(!vault.calls.contains("unlock"))
     }
 
     /// Check again: "not finished yet" while listed, the unreachable text, nothing once gone; the bound's state followed.

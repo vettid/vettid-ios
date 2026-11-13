@@ -308,8 +308,8 @@ public final class UnlockViewModel: UnlockActions {
         // Refused before anything was sent (an update running, the owner check or a change first). The gate is read again
         // first: it may have turned on since the last read (every 15 s), and then the notice says the check comes first.
         guard !vault.returnToPreviousRelease(pin: pin) else { return }
-        if let repo = ownerCheckRepo, repo.ownerCheck?.gated(now()) == true || repo.lockedByChecks {
-            let at = now()
+        let at = now()
+        if let repo = ownerCheckRepo, repo.ownerCheck?.gated(at) == true || repo.lockedByChecks {
             ownerCheck(due: repo.ownerCheck?.gated(at) == true, lockedByChecks: repo.lockedByChecks, idleLocked: repo.idleLockedNow(at))
         } else {
             state.message = .failed(.other, code: nil)

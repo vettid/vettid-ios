@@ -188,12 +188,17 @@ struct PinThenPassword: Equatable {
     static let focusDelay: Duration = .milliseconds(400)
 
     /// VoiceOver's cursor to [target] once the step's view is in place: cleared first, so that the same target set
-    /// twice still moves it, then set after ``focusDelay``.
+    /// twice still moves it, then set after ``focusDelay``. A move still waiting ([previous]) is cancelled, so that an
+    /// older step's target never lands after a newer one.
     @MainActor
-    static func moveFocus(_ set: @escaping @MainActor (Focus?) -> Void, to target: Focus) {
+    static func moveFocus(
+        _ set: @escaping @MainActor (Focus?) -> Void, to target: Focus, after previous: Task<Void, Never>?
+    ) -> Task<Void, Never> {
+        previous?.cancel()
         set(nil)
-        Task { @MainActor in
+        return Task { @MainActor in
             try? await Task.sleep(for: focusDelay)
+            guard !Task.isCancelled else { return }
             set(target)
         }
     }

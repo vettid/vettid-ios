@@ -194,16 +194,24 @@ import VettIDUI
     }
 
     /// VoiceOver's cursor is cleared at once and moved only after the step's view is in place, so that the same target
-    /// asked for a second time ("Next", "Edit PIN", "Next") still moves it.
+    /// asked for a second time ("Next", "Edit PIN", "Next") still moves it; a newer move cancels an older one still waiting.
     @Test @MainActor func theFocusMovesOnceTheStepIsInPlace() async {
         let seen = FocusLog()
-        PinThenPassword.moveFocus({ seen.all.append($0) }, to: .password)
+        let first = PinThenPassword.moveFocus({ seen.all.append($0) }, to: .password, after: nil)
         #expect(seen.all == [nil], "cleared at once, not yet moved")
-        try? await Task.sleep(for: PinThenPassword.focusDelay * 3)
+        await first.value
         #expect(seen.all == [nil, .password])
-        PinThenPassword.moveFocus({ seen.all.append($0) }, to: .password)
-        try? await Task.sleep(for: PinThenPassword.focusDelay * 3)
+        let again = PinThenPassword.moveFocus({ seen.all.append($0) }, to: .password, after: first)
+        await again.value
         #expect(seen.all == [nil, .password, nil, .password], "the same target again moves it again")
+
+        // "Next", then "Edit PIN" within the delay: only the keypad.
+        let late = FocusLog()
+        let next = PinThenPassword.moveFocus({ late.all.append($0) }, to: .password, after: nil)
+        let edit = PinThenPassword.moveFocus({ late.all.append($0) }, to: .keypad, after: next)
+        await next.value
+        await edit.value
+        #expect(late.all == [nil, nil, .keypad], "the older move never lands")
     }
 
     /// "Unlock" needs the whole PIN, and the password with a check due; a return to the previous release takes the PIN only,
