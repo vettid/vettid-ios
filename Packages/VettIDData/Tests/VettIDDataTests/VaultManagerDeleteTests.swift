@@ -362,10 +362,11 @@ import VettIDVault
     }
 
     /// A build that cannot wipe: "being deleted" starts as in any build, and the confirmed removal is refused (nothing is
-    /// erased).
+    /// erased). No answer is lost here, so the phone waits the usual request time: with the suite's short one, a full parallel
+    /// run (every manager on the one main actor) could leave the deletion's answer unhandled past three short waits.
     @Test func aDeletionWithoutAWiperStartsBeingDeleted() async throws {
         let service = try FakeVaultService()
-        let phone = try TestVaultPhone(service: service, requestTimeout: TestVaultPhone.shortRequestTimeout, wipes: false)
+        let phone = try TestVaultPhone(service: service, wipes: false)
         defer { phone.close() }
         let m = phone.manager
         _ = try await m.redeemSetupCode(.secret(service.secret))
