@@ -69,6 +69,7 @@ public final class VaultDevice: @unchecked Sendable {
     let lock = AsyncLock()
     #if DEBUG
     var beforeFinalSave: (@Sendable () async -> Void)? // TEST ONLY: before the write that ends a handling
+    var beforeRespDeposit: (@Sendable () async -> Void)? // TEST ONLY: after a handling, before its hs.resp's deposit
     var flushSeen: (@Sendable (Bool) -> Void)? // TEST ONLY: a flush reached an entry (true: it left it alone)
     var flushWaits: (@Sendable () -> Void)? // TEST ONLY: a flush waits for a running one to end
     #endif
@@ -131,6 +132,9 @@ public final class VaultDevice: @unchecked Sendable {
         /// After a `quota_exceeded` the re-send waits (``noteRespQuota(_:)``), on ``DeviceConfig/uptime``. Memory only.
         var quotaUntil: TimeInterval = 0
         var quotaBackoff: TimeInterval = 0
+        /// A deposit of its `hs.resp` was begun (``depositResp(_:_:)``): a later one is a re-send, whose refusal does not end
+        /// the responder, since an earlier copy may be at the vault. True for one restored from the file. Memory only.
+        var attempted = false
     }
 
     var awaiting: [Awaiting] = []
@@ -380,7 +384,10 @@ public final class VaultDevice: @unchecked Sendable {
         let cutoff = Self.ms(now().addingTimeInterval(-Self.handshakeTTL))
         return (st.vault?.awaiting ?? []).filter { $0.createdMs >= cutoff }.compactMap { a in
             guard let b = try? Base64s.decodeStd(a.state), let r = try? Responder.import(b) else { return nil }
-            return Awaiting(resp: r, createdMs: a.createdMs, initID: a.initId, respBytes: a.resp.flatMap { try? Base64s.decodeStd($0) })
+            return Awaiting(
+                resp: r, createdMs: a.createdMs, initID: a.initId, respBytes: a.resp.flatMap { try? Base64s.decodeStd($0) },
+                attempted: true
+            )
         }
     }
 
@@ -413,9 +420,9 @@ public final class VaultDevice: @unchecked Sendable {
             // (0.88.1) hs.confirm again after 12 days, then the outbox: both through the lock gate, and neither after a stop
             // since this start.
             let flush = Task {
-                await self.resendResps() // an hs.resp that may not have reached the relay (ungated, as a handling's)
                 await self.tickConfirm(since: mark)
                 await self.flushOutbox(since: mark)
+                await self.resendResps() // an hs.resp that may not have reached the relay (ungated, as a handling's)
             }
             defer { flush.cancel() }
             do {

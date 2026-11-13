@@ -50,7 +50,9 @@ extension VaultDeviceTests {
         try await expectConfirm(v, res.epoch)
         try await third.handle(v.msg(ini.envelope))
         try await Task.sleep(nanoseconds: 200_000_000)
-        while let p = try? await relay.nextDeposit(timeout: 0) { #expect(try res.epoch.open(try Envelope.parse(p.payload)).type == "hs.confirm") }
+        while let p = try? await relay.nextDeposit(timeout: 0) {
+            #expect(try res.epoch.open(try Envelope.parse(p.payload)).type == "hs.confirm")
+        }
         #expect(try savedState(store).vault?.awaiting.isEmpty == true)
     }
 
@@ -109,7 +111,7 @@ extension VaultDeviceTests {
         relay.refuseOnly = 1
         try await d.handle(v.msg(ini.envelope))
         #expect(relay.refused == 1)
-        try await d.handle(try v.seal("message.new", #"{"connection_id":"c1","message_id":"m1","direction":"in","text":"hi","sent_at":"x"}"#))
+        try await d.handle(try v.seal("message.new", Self.hello))
         let resent = try await relay.nextDeposit().payload
         _ = try ini.handleResp(resent, collectSender: d.relayAddr.pk, now: Date()) // a valid answer to this hs.init
         #expect(await relay.noDeposit(within: 0.2), "accepted: not again")
@@ -131,7 +133,12 @@ extension VaultDeviceTests {
     @Test func aRespIsNotResentBeforeASaveHoldsItsResponder() async throws {
         let (d, v) = try await pairedDevice()
         let ini = try v.rekey(d)
-        d.beforeFinalSave = { [d] in await d.resendResps() }
+        let relay = relay
+        d.beforeFinalSave = { [d] in
+            // In a task of its own: the handling holds the device lock, which a re-send's bookkeeping waits for.
+            Task { await d.resendResps() }
+            #expect(await relay.noDeposit(within: 0.2), "nothing before the save")
+        }
         try await d.handle(v.msg(ini.envelope))
         d.beforeFinalSave = nil
         _ = try ini.handleResp(try await relay.nextDeposit().payload, collectSender: d.relayAddr.pk, now: Date())
@@ -156,5 +163,107 @@ extension VaultDeviceTests {
         up.value += 61
         await d.resendResps()
         _ = try ini.handleResp(try await relay.nextDeposit().payload, collectSender: d.relayAddr.pk, now: Date())
+    }
+
+    static let hello = #"{"connection_id":"c1","message_id":"m1","direction":"in","text":"hi","sent_at":"x"}"#
+
+    /// A re-send that runs between the handling's save and its own deposit is the first attempt: the handling's deposit
+    /// after it is a re-send, whose refusal keeps the responder and its mark (the first copy may be at the vault).
+    @Test func aDepositAfterAnEarlierAttemptIsAReSend() async throws {
+        let store = InMemoryDeviceStateStore()
+        let (d, v) = try await pairedDevice(store: store)
+        let ini = try v.rekey(d)
+        lostFirstAnswer()
+        relay.thenRefuse = (403, RelayError.tokenInvalid)
+        d.beforeRespDeposit = { [d] in await d.resendResps() }
+        try await d.handle(v.msg(ini.envelope))
+        d.beforeRespDeposit = nil
+        let first = try await relay.nextDeposit().payload
+        #expect(try await relay.nextDeposit().payload == first, "the handling's deposit: the same bytes (recorded, then refused)")
+        #expect(relay.refused == 2)
+        relay.refuseDeposits = nil
+        relay.recordRefused = false
+        #expect(try savedState(store).vault?.awaiting.count == 1)
+        try await d.handle(v.msg(ini.envelope))
+        #expect(await relay.noDeposit(within: 0.2), "no second answer")
+        let res = try ini.handleResp(first, collectSender: d.relayAddr.pk, now: Date())
+        v.keyring.activate(res.epoch, now: Date())
+        try await d.handle(v.msg(res.fin))
+        try await expectConfirm(v, res.epoch)
+    }
+
+    /// The device's own re-send refused for good stops re-sending, and makes no second answer.
+    @Test func aRefusedSelfResendMakesNoSecondAnswer() async throws {
+        let store = InMemoryDeviceStateStore()
+        let (d, v) = try await pairedDevice(store: store)
+        let ini = try v.rekey(d)
+        relay.refuseStatus = 503
+        relay.refuseDeposits = RelayError.internalError
+        relay.refuseOnly = 1
+        relay.thenRefuse = (403, RelayError.tokenInvalid)
+        try await d.handle(v.msg(ini.envelope))
+        try await d.handle(try v.seal("message.new", Self.hello))
+        #expect(relay.refused == 2)
+        relay.refuseDeposits = nil
+        try await d.handle(try v.seal("message.new", Self.hello))
+        try await d.handle(v.msg(ini.envelope))
+        #expect(await relay.noDeposit(within: 0.2) && relay.refused == 2)
+        #expect(try savedState(store).vault?.awaiting.count == 1)
+        #expect(try savedState(store).vault?.awaiting.first?.resp == nil, "saved: the re-sending stopped")
+    }
+
+    /// A rekey handling whose save failed sent nothing and kept nothing: no re-send, also at a start, and the redelivery is
+    /// answered once.
+    @Test func theSelfResendWaitsForASave() async throws {
+        let store = FlakyStore()
+        let (d, v) = try await pairedDevice(store: store)
+        let ini = try v.rekey(d)
+        store.arm()
+        await #expect(throws: (any Error).self) { try await d.handle(v.msg(ini.envelope)) }
+        await d.resendResps()
+        #expect(await relay.noDeposit(within: 0.2))
+        store.disarm()
+        try await d.handle(v.msg(ini.envelope))
+        _ = try ini.handleResp(try await relay.nextDeposit().payload, collectSender: d.relayAddr.pk, now: Date())
+        await d.resendResps()
+        #expect(await relay.noDeposit(within: 0.2), "answered once")
+    }
+
+    /// A responder past ``VaultDevice/handshakeTTL`` is not re-sent.
+    @Test func anExpiredRespIsNotResent() async throws {
+        let clock = Box(Date())
+        let store = InMemoryDeviceStateStore()
+        let (d, v) = try await pairedDevice(store: store, cfg: config(store, now: { clock.value }))
+        let ini = try v.rekey(d)
+        relay.refuseStatus = 503
+        relay.refuseDeposits = RelayError.internalError
+        relay.refuseOnly = 1
+        try await d.handle(v.msg(ini.envelope))
+        clock.value = clock.value.addingTimeInterval(VaultDevice.handshakeTTL + 60)
+        await d.resendResps()
+        #expect(await relay.noDeposit(within: 0.2) && relay.refused == 1)
+    }
+
+    /// A responder restored after a restart counts as attempted (its first deposit may have gone before the restart): a
+    /// refusal of its deposit then keeps it and its mark, and makes no second answer.
+    @Test func aRestoredRespIsNeverAFirstAttempt() async throws {
+        let store = InMemoryDeviceStateStore()
+        let secrets = try DeviceSecrets.generate()
+        let (d, v) = try await pairedDevice(store: store, secrets: secrets)
+        let ini = try v.rekey(d)
+        relay.refuseStatus = 503
+        relay.refuseDeposits = RelayError.internalError
+        relay.refuseOnly = 1
+        try await d.handle(v.msg(ini.envelope))
+        d.stop()
+        let again = try #require(try VaultDevice.load(config(store), secrets: secrets))
+        relay.refuseStatus = 403
+        relay.refuseDeposits = RelayError.tokenInvalid
+        relay.refuseOnly = 1
+        try await again.handle(v.msg(ini.envelope))
+        #expect(relay.refused == 2)
+        try await again.handle(v.msg(ini.envelope))
+        #expect(await relay.noDeposit(within: 0.2) && relay.refused == 2, "no second answer")
+        #expect(try savedState(store).vault?.awaiting.count == 1)
     }
 }
