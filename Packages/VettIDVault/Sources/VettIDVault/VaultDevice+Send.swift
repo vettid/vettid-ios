@@ -257,10 +257,12 @@ extension VaultDevice {
     }
 
     /// A deposit straight to the vault (handshake messages, outside the outbox), its refusal counted as deliver's.
-    func depositToVault(_ v: VaultRecord, _ payload: [UInt8]) async throws {
+    func depositToVault(_ v: VaultRecord, _ payload: [UInt8], resendAfterSent: Bool = true) async throws {
         try refuseSending()
         do {
-            _ = try await relayFor(v.relayURL).deposit(mailboxID: v.mailbox, token: v.token, payload: payload)
+            _ = try await relayFor(v.relayURL).deposit(
+                mailboxID: v.mailbox, token: v.token, payload: payload, resendAfterSent: resendAfterSent
+            )
             quotaAccepted(v.mailbox) // the mailbox takes deposits again
         } catch let x as RelayError {
             countRefusal(x, mailbox: v.mailbox, token: v.token)

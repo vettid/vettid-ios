@@ -83,10 +83,14 @@ struct VaultRecord: Codable, Sendable {
     var confirmAtMs: Int64?
 }
 
-/// A responder awaiting `hs.fin` (its export, base64) and when it began.
+/// A responder awaiting `hs.fin` (its export, base64) and when it began; the inner id of the `hs.init` it answers and the
+/// `hs.resp` it deposits (base64) while that may not have reached the relay, so that a redelivered `hs.init` gets the same
+/// bytes again (VAULT-MESSAGING §6.3: one `hs.resp` per `hs.init`). Both absent in a record written before.
 struct AwaitingRekey: Codable, Sendable {
     let createdMs: Int64
     let state: String
+    var initId: String?
+    var resp: String?
 }
 
 /// This app's copy of the Protean Credential (§3.5): the sealed blob, useless without the vault's CEK and the password.
