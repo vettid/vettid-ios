@@ -66,10 +66,12 @@ extension FakeVaultService {
     /// lock when it arrives (``lockByItself(on:)``) or is locked (the request waits in its mailbox), the relay holds
     /// what the vault sends (``holdMessages``), or the last request of its type has an `exp` the vault's clock passed
     /// (with ``stampsOnVaultClock``: a copy sent again is dropped). A ``TestVaultPhone`` waits its short request timeout
-    /// for those, and a roomy one for every other request.
+    /// for those, and a roomy one for every other request. A `vault.delete` the vault answered and then deleted itself for
+    /// is answered: the vault being gone does not make it one that may go unanswered (its answer is on its way).
     public func unanswered(_ type: String) -> Bool {
         locked {
-            lostAnswerTypes.contains(type) || lostRequestTypes.contains(type) || lockOn == type || !vaultOpen || holdMessagesValue
+            let closed = !vaultOpen && !(type == Self.typeVaultDelete && vaultDeletedValue)
+            return lostAnswerTypes.contains(type) || lostRequestTypes.contains(type) || lockOn == type || closed || holdMessagesValue
                 || expired(type)
         }
     }
