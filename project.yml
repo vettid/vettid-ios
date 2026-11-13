@@ -366,9 +366,9 @@ schemes:
         VettIDAppUITests: [test]
     test:
       config: Debug
-      targets:
-        - name: VettIDAppUITests
-          skippedTests: [StagingTests]
+      testPlans:
+        - path: AppUITests/DebugUITests.xctestplan
+          defaultPlan: true
 
   # The staging end-to-end tests (STAGING-TESTING §3, §5) against the Staging build on a real iPhone, through
   # scripts/staging-ui-test.sh; each test is skipped without its inputs. The UI test bundle is built for testing only,
