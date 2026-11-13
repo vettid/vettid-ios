@@ -423,8 +423,7 @@ public final class VaultDevice: @unchecked Sendable {
             return (collectRound, stops)
         }
         guard let (round, mark) = begin else { return }
-        // Not a lock-time call's (``lockTimeSend``), whoever starts it (a status read's `ensureCollecting()`): the collection and
-        // its start's work ask the lock gate as any.
+        // Never a lock-time call's (``lockTimeSend``), whoever starts it: its work asks the lock gate as any.
         let task = Task { [weak self] in
             guard let self else { return }
             await Self.$lockTimeSend.withValue(false) {
