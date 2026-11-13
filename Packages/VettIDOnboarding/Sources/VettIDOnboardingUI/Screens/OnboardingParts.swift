@@ -183,6 +183,21 @@ struct PinThenPassword: Equatable {
     /// Where VoiceOver's cursor goes when the step changes.
     enum Focus: Hashable { case keypad, password }
 
+    /// How long after "Next" or "Edit PIN" VoiceOver's cursor is moved: set in the same update that inserts the field or
+    /// the keypad, the move was lost on an iPhone the second time round (the cursor stayed on "Edit PIN").
+    static let focusDelay: Duration = .milliseconds(400)
+
+    /// VoiceOver's cursor to [target] once the step's view is in place: cleared first, so that the same target set
+    /// twice still moves it, then set after ``focusDelay``.
+    @MainActor
+    static func moveFocus(_ set: @escaping @MainActor (Focus?) -> Void, to target: Focus) {
+        set(nil)
+        Task { @MainActor in
+            try? await Task.sleep(for: focusDelay)
+            set(target)
+        }
+    }
+
     /// The screen height (points, inside the safe area) from which the keypad stays fixed above the buttons: an iPhone 15
     /// or 16e (about 760) and up; an iPhone SE (about 650) keeps it in the scroll.
     static let fixedKeypadHeight: CGFloat = 700
@@ -210,7 +225,7 @@ struct PinThenPassword: Equatable {
     }
 }
 
-/// The PIN once typed, in the password step: its label, its dots and "Change PIN", which brings the keypad back with the
+/// The PIN once typed, in the password step: its label, its dots and "Edit PIN", which brings the keypad back with the
 /// digits as they are.
 struct EnteredPin: View {
     @Environment(\.vettIDColors) private var colors

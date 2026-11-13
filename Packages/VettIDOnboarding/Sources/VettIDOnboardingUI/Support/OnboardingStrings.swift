@@ -271,7 +271,7 @@ extension OnboardingStrings {
     }
     /// Back from the password to the keypad, to change the PIN typed.
     static var pinStepChange: String {
-        String(localized: "ios_pin_step_change", defaultValue: "Change PIN", bundle: .module)
+        String(localized: "ios_pin_step_change", defaultValue: "Edit PIN", bundle: .module)
     }
     static var unlockPinLabel: String {
         String(localized: "unlock_pin_label", defaultValue: "Vault PIN", bundle: .module)

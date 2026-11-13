@@ -127,7 +127,7 @@ import VettIDUI
     }
 
     /// The steps as the member sees them, with the check due: the keypad (no field); after "Next" the password field and
-    /// no keypad key; the digits taken by "Unlock" or dropped (backgrounding) bring the keypad back; "Change PIN"
+    /// no keypad key; the digits taken by "Unlock" or dropped (backgrounding) bring the keypad back; "Edit PIN"
     /// (``PinThenPassword/pinDone`` false) too; a wrong PIN shows the keypad.
     @Test func theStepsFollowThePin() async throws {
         var due = ok
@@ -145,7 +145,7 @@ import VettIDUI
         window.isHidden = true
 
         let back = host(UnlockScreen(state: due, actions: NoUnlockActions(), pin: typed(6), steps: PinThenPassword(pinDone: false)))
-        #expect(textFields(in: back).isEmpty, "Change PIN: the keypad, the digits kept")
+        #expect(textFields(in: back).isEmpty, "Edit PIN: the keypad, the digits kept")
         back.isHidden = true
 
         var wrong = due
@@ -191,6 +191,19 @@ import VettIDUI
         #expect(PinThenPassword.keypadFixed(height: 763, typeSize: .xxxLarge))
         #expect(!PinThenPassword.keypadFixed(height: 763, typeSize: .accessibility1))
         #expect(!PinThenPassword.keypadFixed(height: 647, typeSize: .large), "an iPhone SE")
+    }
+
+    /// VoiceOver's cursor is cleared at once and moved only after the step's view is in place, so that the same target
+    /// asked for a second time ("Next", "Edit PIN", "Next") still moves it.
+    @Test @MainActor func theFocusMovesOnceTheStepIsInPlace() async {
+        let seen = FocusLog()
+        PinThenPassword.moveFocus({ seen.all.append($0) }, to: .password)
+        #expect(seen.all == [nil], "cleared at once, not yet moved")
+        try? await Task.sleep(for: PinThenPassword.focusDelay * 3)
+        #expect(seen.all == [nil, .password])
+        PinThenPassword.moveFocus({ seen.all.append($0) }, to: .password)
+        try? await Task.sleep(for: PinThenPassword.focusDelay * 3)
+        #expect(seen.all == [nil, .password, nil, .password], "the same target again moves it again")
     }
 
     /// "Unlock" needs the whole PIN, and the password with a check due; a return to the previous release takes the PIN only,
@@ -334,5 +347,10 @@ import VettIDUI
         for d in 0..<digits { b.append(d % 10) }
         return b
     }
+}
+
+/// The focus targets set, in order.
+@MainActor private final class FocusLog {
+    var all: [PinThenPassword.Focus?] = []
 }
 #endif

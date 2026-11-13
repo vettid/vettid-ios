@@ -73,7 +73,7 @@ public struct OwnerCheckScreen: View {
     /// The screen's height, for whether the keypad stays fixed above the buttons (``PinThenPassword/keypadFixed(height:typeSize:)``).
     @State private var height: CGFloat = .infinity
     @Environment(\.dynamicTypeSize) private var typeSize
-    /// VoiceOver's cursor: to the password on "Next", back to the keypad on "Change PIN".
+    /// VoiceOver's cursor: to the password on "Next", back to the keypad on "Edit PIN".
     @AccessibilityFocusState private var focus: PinThenPassword.Focus?
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.vettIDColors) private var colors
@@ -140,6 +140,10 @@ public struct OwnerCheckScreen: View {
         steps.passwordShown(asksPin: !state.pinKept, digits: pin.count, minPin: OwnerCheckScreenState.minPin)
     }
 
+    private func moveFocus(to target: PinThenPassword.Focus) {
+        PinThenPassword.moveFocus({ focus = $0 }, to: target)
+    }
+
     private func submit() {
         guard canSubmit else { return }
         if !state.pinKept { actions.setPin(pin.take()) }
@@ -178,7 +182,7 @@ public struct OwnerCheckScreen: View {
             onPrimary: {
                 if asksNext {
                     steps.pinDone = true
-                    focus = .password
+                    moveFocus(to: .password)
                 } else if state.watch == .silent {
                     actions.checkAgain()
                 } else {
@@ -343,7 +347,7 @@ public struct OwnerCheckScreen: View {
         if !state.pinKept, passwordStep {
             EnteredPin(label: OnboardingStrings.ownerCheckPinLabel, digits: pin.count, identifier: "owner_check_pin") {
                 steps.pinDone = false
-                focus = .keypad
+                moveFocus(to: .keypad)
             }
             .disabled(!state.entriesAllowed)
             .padding(.top, Spacing.s)

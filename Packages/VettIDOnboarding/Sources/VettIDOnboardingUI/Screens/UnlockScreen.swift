@@ -62,7 +62,7 @@ public struct UnlockScreen: View {
     /// The screen's height, for whether the keypad stays fixed above "Unlock" (``PinThenPassword/keypadFixed(height:typeSize:)``).
     @State private var height: CGFloat = .infinity
     @Environment(\.dynamicTypeSize) private var typeSize
-    /// VoiceOver's cursor: to the password on "Next", back to the keypad on "Change PIN".
+    /// VoiceOver's cursor: to the password on "Next", back to the keypad on "Edit PIN".
     @AccessibilityFocusState private var focus: PinThenPassword.Focus?
     @Environment(\.openURL) private var openURL
     @Environment(\.scenePhase) private var scenePhase
@@ -124,6 +124,10 @@ public struct UnlockScreen: View {
             && (!state.checkDue || state.returnAsksPin || !state.password.isEmpty)
     }
 
+    private func moveFocus(to target: PinThenPassword.Focus) {
+        PinThenPassword.moveFocus({ focus = $0 }, to: target)
+    }
+
     private func submit() {
         guard canSubmit else { return }
         actions.setPin(pin.take())
@@ -141,7 +145,7 @@ public struct UnlockScreen: View {
             onPrimary: {
                 if asksNext {
                     steps.pinDone = true
-                    focus = .password
+                    moveFocus(to: .password)
                 } else if state.preflightError != nil && !state.returnAsksPin {
                     actions.retryPreflight()
                 } else {
@@ -259,7 +263,7 @@ public struct UnlockScreen: View {
         if passwordStep {
             EnteredPin(label: OnboardingStrings.unlockPinLabel, digits: pin.count, identifier: "unlock_pin") {
                 steps.pinDone = false
-                focus = .keypad
+                moveFocus(to: .keypad)
             }
                 .disabled(!state.pinAllowed)
                 .padding(.top, Spacing.s)
