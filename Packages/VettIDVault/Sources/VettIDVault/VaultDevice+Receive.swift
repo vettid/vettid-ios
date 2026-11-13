@@ -84,7 +84,10 @@ extension VaultDevice {
             st.outbox.removeAll { gone.contains($0.id) }
             outboxInFlight.subtract(gone)
             let known: (Responder) -> Bool = { r in before.awaiting.contains { $0 === r } }
-            for a in awaiting where !known(a.resp) { a.resp.abort() }
+            for a in awaiting where !known(a.resp) {
+                a.resp.abort()
+                unsavedResps.remove(ObjectIdentifier(a.resp))
+            }
             awaiting.removeAll { !known($0.resp) }
         }
     }
@@ -157,7 +160,7 @@ extension VaultDevice {
         // §6.3.1: any message but hs.fin tells which epoch the vault uses (a redelivered hs.fin of an active epoch opens here).
         if inner.type != Self.typeHsFin { noteConfirmed(ep, t) }
         if inner.type == Self.typeHsInit {
-            try await handleRekey(raw, epoch: ep, sender: sender, t)
+            try await handleRekey(raw, epoch: ep, sender: sender, t, inner: inner)
             return
         }
         // Not a request, so never answered; a device starts no rekey, so one confirms nothing here (§6.3.1).
@@ -232,6 +235,8 @@ extension VaultDevice {
             publishOnce(VaultMessage(inner: inner))
         }
         await maintain(t)
+        // An `hs.resp` that may not have reached the relay goes again, after this handling's save (``resendResps()``).
+        afterLock { [self] in await resendResps() }
     }
 
     /// `device.pair.rejected` (§6.7, 0.10.5): stop waiting, drop the handshake's epoch and the request token of its
@@ -246,6 +251,7 @@ extension VaultDevice {
             ini = nil
             for a in awaiting { a.resp.abort() }
             awaiting.removeAll()
+            unsavedResps.removeAll()
             keyring.destroy()
             keyring = Keyring()
             st.vault?.token = ""
@@ -261,8 +267,24 @@ extension VaultDevice {
 
     /// Answers a vault-initiated rekey (§6.5). The responder is persisted before `hs.resp` goes out: the vault switches
     /// to the new epoch on `hs.resp`, so a restart that lost it would leave this device unable to read anything.
-    func handleRekey(_ raw: [UInt8], epoch ep: Epoch, sender: [UInt8], _ t: Date) async throws {
-        let prepared: (Awaiting, [UInt8], VaultRecord)? = try mem.withLock { // swiftlint:disable:this large_tuple
+    ///
+    /// One `hs.resp` per `hs.init` (§6.3): the `hs.init`'s inner id is marked seen in the save that holds its responder, kept
+    /// from the later of this phone's time and the `hs.init`'s `ts`, so that it outlives the `hs.init`'s own window. The mark
+    /// is keyed on the inner id: it is inside the epoch's AEAD, and a vault that deposits the `hs.init` again (a new msg_id,
+    /// §6.5; the relay's own redelivery of the same msg_id is dropped by `seen`) sends the same bytes, so the same id. A
+    /// repeat makes no second responder (§6.5: acked and dropped); only while its `hs.resp` may not have reached the relay
+    /// are the same bytes deposited again.
+    func handleRekey(_ raw: [UInt8], epoch ep: Epoch, sender: [UInt8], _ t: Date, inner: Inner) async throws {
+        let initID = inner.id
+        let prepared: (Responder, VaultRecord)? = try mem.withLock {
+            pruneAwaiting(t)
+            if st.seenInner[initID] != nil {
+                guard let a = awaiting.first(where: { $0.initID == initID }), a.respBytes != nil, let v = st.vault else { return nil }
+                // Its deposit is on its way: whether a repeat is to be answered is known only once it ends (a first attempt
+                // refused for good is answered afresh). Left for the relay's redelivery, not acked unanswered.
+                if respsInFlight.contains(ObjectIdentifier(a.resp)) { throw LeaveUnacked("hs.resp in flight") }
+                return (a.resp, v)
+            }
             // §6.3.1: a rekey under the confirmed epoch while it is not current is accepted as if current.
             guard keyring.current() === ep || isConfirmedLocked(ep) else { return nil }
             let v = try requireVault()
@@ -272,30 +294,104 @@ extension VaultDevice {
                 recordRelayKey: try Base64s.decodeStd(v.relayPk), knownInitiatorIk: try Base64s.decodeStd(v.ik), now: t,
                 features: DeviceFeatures.all
             ))
-            let a = Awaiting(resp: resp, createdMs: Self.ms(t))
-            awaiting.append(a)
+            awaiting.append(Awaiting(resp: resp, createdMs: Self.ms(t), initID: initID, respBytes: env))
+            unsavedResps.insert(ObjectIdentifier(resp))
             pruneAwaiting(t)
-            return (a, env, v)
+            st.seenInner[initID] = Self.ms(max(t, inner.ts))
+            Self.prune(&st.seenInner, t)
+            return (resp, v)
         }
-        guard let (a, env, v) = prepared else { return }
+        guard let (resp, v) = prepared else { return }
         // The responder is stored by the save that ends ``handleLocked(_:)``, before this deposit (``afterLock(_:)``).
         // Sent also while a lock is pending, ungated (as vettid-android sends it): a rekey the vault started and this phone
         // left unanswered holds every later one until it expires (VAULT-MESSAGING §6.5).
         afterLock { [self] in
-            do {
-                try await depositToVault(v, env)
-            } catch let e as RelayError {
-                // Refused: the vault never sees this hs.resp. Otherwise it may have arrived: the responder stays for its
-                // hs.fin, and expires if none comes.
-                if !e.retryable {
-                    try? await withLockSaving {
-                        awaiting.removeAll { $0.resp === a.resp }
-                        a.resp.abort()
-                    }
-                }
-            } catch {}
+            #if DEBUG
+            await beforeRespDeposit?()
+            #endif
+            await depositResp(v, resp)
         }
     }
+
+    /// Deposits [r]'s `hs.resp` bytes in one attempt the client does not send again once it may have reached the relay
+    /// (``RelayClient/deposit(mailboxID:token:payload:resendAfterSent:)``), so that a refusal is the relay's word on it.
+    /// Claimed under ``mem``: only while the bytes are kept (not yet accepted), never before a save holds the responder
+    /// (§8.3), nor while another deposit of it runs; the first claim is its first attempt (``Awaiting/attempted``). Never
+    /// called with ``lock`` held: its bookkeeping takes it.
+    ///
+    /// Accepted: the bytes are no longer kept, saved (a later redelivery of its `hs.init` is dropped). `quota_exceeded`: not
+    /// a refusal of this `hs.resp` but a full mailbox; the device's re-send waits (``noteRespQuota(_:)``), then goes again,
+    /// the same bytes. Any other failure (a lost answer, a retryable error, a stop, an answer that is no refusal): it may have
+    /// arrived; the responder stays for its `hs.fin`, expires if none comes, and keeps the bytes for a re-send
+    /// (``resendResps()``).
+    ///
+    /// Refused for good (a 4xx or 5xx that trying again will not cure): on the first attempt the vault never sees it, so the
+    /// responder ends and so does its mark, and the `hs.init` may be answered afresh (that is no second `hs.resp`). On a
+    /// re-send an earlier attempt's outcome was unknown, so the vault may hold that copy: the responder and the mark stay,
+    /// and only the re-sending stops (saved; no second, different `hs.resp`; at worst the responder waits out
+    /// ``handshakeTTL``). A responder restored from the file counts as attempted: its first deposit may have happened
+    /// before the restart, so a refusal then leaves it until ``handshakeTTL`` too.
+    func depositResp(_ v: VaultRecord, _ r: Responder, since mark: Int? = nil) async {
+        let id = ObjectIdentifier(r)
+        if Task.isCancelled { return }
+        let claim: (bytes: [UInt8], first: Bool)? = mem.withLock {
+            // [mark]: a stop since then claims nothing (so nothing is left attempted with nothing sent).
+            if let mark, stops != mark { return nil }
+            guard let i = awaiting.firstIndex(where: { $0.resp === r }), let b = awaiting[i].respBytes,
+                  !unsavedResps.contains(id), respsInFlight.insert(id).inserted else { return nil }
+            defer { awaiting[i].attempted = true }
+            return (b, !awaiting[i].attempted)
+        }
+        guard let (bytes, first) = claim else { return }
+        defer { mem.withLock { _ = respsInFlight.remove(id) } }
+        do {
+            try await depositToVault(v, bytes, resendAfterSent: false)
+            try? await withLockSaving { updateAwaiting(r) { $0.respBytes = nil } }
+        } catch let e as RelayError where e.code == RelayError.quotaExceeded {
+            mem.withLock { updateAwaiting(r) { noteRespQuota(&$0) } }
+        } catch let e as RelayError where e.status >= 400 && !e.retryable {
+            try? await withLockSaving {
+                guard first else { return updateAwaiting(r) { $0.respBytes = nil } }
+                let mark = awaiting.first { $0.resp === r }?.initID
+                awaiting.removeAll { $0.resp === r }
+                r.abort()
+                if let mark { st.seenInner[mark] = nil }
+            }
+        } catch {}
+    }
+
+    /// Re-deposits, by itself, every `hs.resp` whose deposit may not have reached the relay (``Awaiting/respBytes`` kept: a
+    /// retryable failure or a lost answer, a stop before the deposit), the same bytes, as an outbox would: at each
+    /// collection start and after each handled message. Not one waiting out a `quota_exceeded`, nor one past
+    /// ``handshakeTTL``, nor one a save does not hold yet (``depositResp(_:_:)``). With no inbound traffic and no
+    /// collection start nothing is re-sent: the vault then sends nothing either, and its rekey ends at its bound, as one
+    /// this device never answered. [mark] (``stopMark``): a stop since then, or a cancelled task, sends nothing more.
+    func resendResps(since mark: Int? = nil) async {
+        let due: ([Responder], VaultRecord?) = mem.withLock {
+            let cutoff = Self.ms(now().addingTimeInterval(-Self.handshakeTTL))
+            let up = cfg.uptime()
+            let list = awaiting.filter { $0.respBytes != nil && $0.createdMs >= cutoff && up >= $0.quotaUntil }.map(\.resp)
+            return (list, st.vault)
+        }
+        guard let v = due.1 else { return }
+        for r in due.0 { await depositResp(v, r, since: mark) }
+    }
+
+    /// Changes the awaiting rekey of [r] in place. Callers hold ``mem``.
+    private func updateAwaiting(_ r: Responder, _ change: (inout Awaiting) -> Void) {
+        guard let i = awaiting.firstIndex(where: { $0.resp === r }) else { return }
+        change(&awaiting[i])
+    }
+
+    /// An `hs.resp`'s re-send after a `quota_exceeded` waits: from a minute, doubling to an hour (RELAY-PROTOCOL §7.1;
+    /// VAULT-MESSAGING §8.6 for a device). Memory only.
+    private func noteRespQuota(_ a: inout Awaiting) {
+        a.quotaBackoff = min(max(a.quotaBackoff * 2, Self.respQuotaFirst), Self.respQuotaMax)
+        a.quotaUntil = cfg.uptime() + a.quotaBackoff
+    }
+
+    static let respQuotaFirst: TimeInterval = 60
+    static let respQuotaMax: TimeInterval = 3600
 
     // MARK: - Tokens (§7)
 
