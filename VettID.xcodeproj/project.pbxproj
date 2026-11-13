@@ -51,6 +51,7 @@
 		5395E0025FC61CCE44A33E9D /* AppNotifications.swift in Sources */ = {isa = PBXBuildFile; fileRef = D699240BD1D9309A3E11DD26 /* AppNotifications.swift */; };
 		56E730CA2E4280BD26BA2CBF /* VettIDRelay in Frameworks */ = {isa = PBXBuildFile; productRef = 2373D4A3A26B7B0852A64CED /* VettIDRelay */; };
 		57980359429661BC8F1B2A55 /* UnlockCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA46D6F62E13C2404BDC26A2 /* UnlockCatalog.swift */; };
+		5FBFB663688197A814401138 /* PasscodeChangeDeviceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 82E1E00285D9A5B5B9B19A72 /* PasscodeChangeDeviceTests.swift */; };
 		6085BB158AB86E6AEA865472 /* VaultUITestCase.swift in Sources */ = {isa = PBXBuildFile; fileRef = 461CF475BEF16D6D464D6ECE /* VaultUITestCase.swift */; };
 		61E7FF33E738CD4854250E6D /* VettIDNotify in Frameworks */ = {isa = PBXBuildFile; productRef = 192F7580C9DB53918B812AF4 /* VettIDNotify */; };
 		6399BE86742FD6377430A80D /* VettIDItems in Frameworks */ = {isa = PBXBuildFile; productRef = CBBA6BED416D91423D172501 /* VettIDItems */; };
@@ -213,6 +214,7 @@
 		7D7EDC35DFC7C75093301E1B /* vettid_urgent.caf */ = {isa = PBXFileReference; path = vettid_urgent.caf; sourceTree = "<group>"; };
 		7E77B96EF99D2D40E1073B67 /* VettIDKeys */ = {isa = PBXFileReference; lastKnownFileType = folder; name = VettIDKeys; path = Packages/VettIDKeys; sourceTree = SOURCE_ROOT; };
 		7F2EA67554B107444FF813EF /* CanaryManifestFiles.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CanaryManifestFiles.swift; sourceTree = "<group>"; };
+		82E1E00285D9A5B5B9B19A72 /* PasscodeChangeDeviceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PasscodeChangeDeviceTests.swift; sourceTree = "<group>"; };
 		8B98D2160C0CA834233FD82C /* OpenedLinkTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenedLinkTests.swift; sourceTree = "<group>"; };
 		8DCA5F5A4698204295F4776B /* PhotoPermissionsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoPermissionsTests.swift; sourceTree = "<group>"; };
 		8EA490A99EEA3D46D0CCDA5B /* VettIDOnboarding */ = {isa = PBXFileReference; lastKnownFileType = folder; name = VettIDOnboarding; path = Packages/VettIDOnboarding; sourceTree = SOURCE_ROOT; };
@@ -380,6 +382,7 @@
 				ABC062C8E50CF3A935F64F87 /* OnboardingCatalogTests.swift */,
 				8B98D2160C0CA834233FD82C /* OpenedLinkTests.swift */,
 				6F7BEE9D1A68B506BF601FEE /* OwnerCheckCoverTests.swift */,
+				82E1E00285D9A5B5B9B19A72 /* PasscodeChangeDeviceTests.swift */,
 				8DCA5F5A4698204295F4776B /* PhotoPermissionsTests.swift */,
 				B0D14B2DBE5EF0620ED73CEC /* SecureEnclaveDeviceTests.swift */,
 				27784FA957AF2CC5794ED472 /* SecureInputTests.swift */,
@@ -802,6 +805,7 @@
 				A360D45B8318FDF8128CA89C /* OnboardingCatalogTests.swift in Sources */,
 				E31752E547A8824927CA5268 /* OpenedLinkTests.swift in Sources */,
 				EA989A05A068E243533C3451 /* OwnerCheckCoverTests.swift in Sources */,
+				5FBFB663688197A814401138 /* PasscodeChangeDeviceTests.swift in Sources */,
 				ADA6D6AB984FC3CF825EA65B /* PhotoPermissionsTests.swift in Sources */,
 				B80076DE16F2BEDB9AC3AE54 /* SecureEnclaveDeviceTests.swift in Sources */,
 				6C78BEF34322DEFA23FAF443 /* SecureInputTests.swift in Sources */,
