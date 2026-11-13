@@ -143,6 +143,7 @@ extension VaultDevice {
                 mailboxID: sent.mailbox, token: sent.token, payload: try Base64s.decodeStd(sent.envelope)
             )
             quotaAccepted(sent.mailbox)
+            notePairingHold(e, nil)
             // The deposit is made: a failure to save what follows it is not a failure of the deposit. The entry is out of memory
             // at once and the next successful save drops it from the file; if the app ends before that, the file's copy is
             // deposited once more. That is harmless: every outbox type is durable and means the same when it arrives again
@@ -155,6 +156,7 @@ extension VaultDevice {
         } catch let x as RelayError {
             // §8.6 (0.88.8): never sent again unchanged; held for the mailbox's backoff, or until another standing token.
             if x.code == RelayError.quotaExceeded { await quotaRefused(sent, x) }
+            notePairingHold(e, x)
             if keepOnFailure, !Self.isTerminal(x) {
                 await noteAttempt(e)
                 throw x
@@ -175,6 +177,7 @@ extension VaultDevice {
             }
             throw u
         } catch {
+            notePairingHold(e, error)
             // Refused to send, cancelled, or an unreadable entry: a request reported as failed is not kept either.
             if !keepOnFailure { try? await withLockSaving { st.outbox.removeAll { $0.id == e.id } } }
             throw error
@@ -341,6 +344,7 @@ extension VaultDevice {
             return flushEnded
         }
         waiters?.complete(true)
+        publishPairingHeld() // a fin past its time may have left the outbox
         // The ack is a deposit to the vault too: it asks the gate as an entry does.
         if !ended, await flushMayGo(nil, since: mark) == .go { await sendPendingAck() }
     }

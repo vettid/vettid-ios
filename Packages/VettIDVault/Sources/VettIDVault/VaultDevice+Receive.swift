@@ -8,6 +8,8 @@ extension VaultDevice {
     /// rekey's new epoch that arrived before the rekey's `hs.fin` is neither recorded as seen nor acked
     /// (``LeaveUnacked``): the relay delivers it again, and it is opened once `hs.fin` has arrived (§6.3, §8.4).
     public func handle(_ m: RelayMessage) async throws {
+        // A handling can take the held fin out of the outbox (`device.paired`, a failed handling's undo).
+        defer { publishPairingHeld() }
         let after = AfterLockWork()
         do {
             try await AfterLockWork.$current.withValue(after) { try await handleLocked(m) }
@@ -258,7 +260,9 @@ extension VaultDevice {
             st.vault?.confirmAtMs = nil
             // The fin of the handshake that is dropped is of no use to anyone.
             st.outbox.removeAll { $0.type == Self.typeHsFin }
+            pairingHeldFin = nil
         }
+        publishPairingHeld()
     }
 
     /// Answers a vault-initiated rekey (§6.5). The responder is persisted before `hs.resp` goes out: the vault switches

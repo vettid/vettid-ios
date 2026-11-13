@@ -177,6 +177,14 @@ public final class TransferInViewModel: TransferInActions {
             vm.state.deadline = deadline
             vm.startTicker(deadline)
         }
+        // The pairing message's hold by a relay quota, while the approval is awaited; holds the model weakly.
+        let busy = Task { @MainActor [move] in
+            for await held in move.transferInRelayBusyUpdates() {
+                if Task.isCancelled { return }
+                w.model?.setRelayBusy(held)
+            }
+        }
+        defer { busy.cancel() }
         let canUnlock: Bool
         do {
             canUnlock = try await move.awaitTransferIn()
@@ -186,6 +194,7 @@ public final class TransferInViewModel: TransferInActions {
         }
         guard !Task.isCancelled, let vm = w.model else { return }
         vm.ticker?.cancel()
+        vm.state.relayBusy = false
         vm.state.step = .done
         vm.state.sas = nil
         vm.state.canUnlockLater = canUnlock
@@ -197,8 +206,14 @@ public final class TransferInViewModel: TransferInActions {
         (error as? VaultFailure) ?? VaultFailure(.other)
     }
 
+    /// The relay's hold of the pairing message, shown only in the comparison step and before the deadline's check.
+    private func setRelayBusy(_ held: Bool) {
+        state.relayBusy = held && state.step == .compare && !state.checking
+    }
+
     private func approvalFailed(_ e: VaultFailure) {
         ticker?.cancel()
+        state.relayBusy = false
         state.sas = nil
         if e.code == VaultManager.codeTransferSessionEnded {
             state.step = .stopped

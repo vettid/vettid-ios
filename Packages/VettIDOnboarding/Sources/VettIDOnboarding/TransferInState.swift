@@ -28,7 +28,12 @@ public enum TransferInStep: Equatable, Sendable {
 /// vettid-android `TransferInUiState` (`errorShown` is not needed: an unknown vault code is already
 /// ``FailureKind/vaultCode(_:)``).
 public struct TransferInState: Equatable, Sendable, CustomStringConvertible, CustomDebugStringConvertible, CustomReflectable {
-    public var step: TransferInStep = .intro
+    public var step: TransferInStep = .intro {
+        didSet { if step != .compare { relayBusy = false } }
+    }
+    /// In ``TransferInStep/compare``: the relay holds this phone's pairing message for a quota, so the vault has not got it
+    /// yet (VAULT-MESSAGING 0.88.8 §8.6). False in every other step.
+    public var relayBusy = false
     /// (Release R) This phone made a phone key for the transfer: "Finish the move" follows the approval.
     public var phoneSecret = false
     public var input = ""
@@ -40,7 +45,9 @@ public struct TransferInState: Equatable, Sendable, CustomStringConvertible, Cus
     public var secondsLeft: Int64 = 0
     /// The deadline passed while the screen waited: the old phone can no longer approve, and the vault is being checked for
     /// an approval that came in time (§11.14.10 rule 5's window). The code is no longer shown.
-    public var checking = false
+    public var checking = false {
+        didSet { if checking { relayBusy = false } }
+    }
     /// From the end of the vault's 10 minutes (counted from the stored start of the `hs.init`) the transfer can no longer
     /// be abandoned (§11.14.10 rule 5): no Cancel, and leaving the screen hands the wait to the background.
     public var closing = false
