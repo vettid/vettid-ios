@@ -48,33 +48,6 @@ extension VaultDevice {
         return (v, env)
     }
 
-    /// A request deposited once (``sendOnce(_:body:exp:)``) and awaited for [timeout]: no second deposit, unlike
-    /// ``request(_:body:timeout:innerID:)``. [exp]: the vault drops the request after it (§5.3).
-    public func requestOnce(
-        _ type: String, body: [UInt8] = VaultJSON.empty, timeout: TimeInterval? = nil, exp: Date? = nil
-    ) async throws -> VaultMessage {
-        let id = Ulid.new(now())
-        let d = OneShot<Inner>()
-        mem.withLock { pending[id] = d }
-        defer { mem.withLock { _ = pending.removeValue(forKey: id) } }
-        // Held by the lock gate: nothing is sent (``requestMayGo(_:)``).
-        guard await requestMayGo(type) else { throw OutboxHeld() }
-        _ = try await countingSend(type) { try await sendOnceUnlocked(id: id, type: type, body: body, exp: exp) }
-        guard let inner = await d.wait(timeout: timeout ?? cfg.requestTimeout(for: type)) else {
-            try Task.checkCancellation()
-            countingNoAnswer(type)
-            throw VaultStateError(message: "\(type): no response")
-        }
-        return VaultMessage(inner: countingAnswer(type, inner))
-    }
-
-    /// ``requestOnce(_:body:timeout:exp:)``, returning the body of an ok response or throwing ``VaultOpError``.
-    public func opOnce(
-        _ type: String, body: [UInt8] = VaultJSON.empty, timeout: TimeInterval? = nil, exp: Date? = nil
-    ) async throws -> [UInt8] {
-        try Self.okBody(type, try await requestOnce(type, body: body, timeout: timeout, exp: exp))
-    }
-
     /// Seals a message into the outbox and saves; the caller delivers it (``deliver(_:)``). Callers hold ``lock``.
     /// [save]: false while a message is being handled: the save that ends ``handleLocked(_:)`` stores the entry, and the
     /// deposit is made after it (``afterLock(_:)``), so the entry is stored before it goes out all the same.
