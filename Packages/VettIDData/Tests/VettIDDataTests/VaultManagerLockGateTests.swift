@@ -6,7 +6,8 @@ import VettIDDataTesting
 
 /// The lock gate of the outbox, end to end (ANDROID-PLAN "Locking", "While pending": nothing is sent to the vault but the
 /// lock and a pending `call.end`): a return to the foreground with a lock pending starts the collection and flushes, and
-/// the device's gate holds what the outbox has; once the lock is confirmed, the next unlock's flush sends it as before.
+/// the device's gate holds what the outbox has; once the lock is confirmed, the next unlock's flush sends it as before. Only
+/// a pending lock holds it: in "opened again" the replies go.
 @MainActor
 @Suite(.serialized) struct VaultManagerLockGateTests {
     let service: FakeVaultService
@@ -83,5 +84,27 @@ import VettIDDataTesting
         #expect(try await m.unlock(pin: pin) == .success)
         #expect(await eventually { seen("device.features") > features })
         #expect(await eventually { d.mem.withLock { d.st.outbox.isEmpty } })
+    }
+
+    /// Only a pending lock holds the outbox: in "opened again" (the lock ended as stale, this phone stays locked until an
+    /// unlock here) the phone's replies go, as before.
+    @Test func inOpenedAgainThePhonesRepliesGo() async throws {
+        defer { phone.close() }
+        service.announcesUnlockID = true
+        try await openVault()
+        try await m.lock()
+        #expect(try await m.unlock(pin: pin) == .success)
+        service.openedByAnotherDevice(notifying: false)
+        try await m.lock()
+        #expect(await eventually { m.lockNotice == .openedAgain })
+        #expect(!m.lockPending && m.lockHoldsPhone)
+        let d = try await keep("device.features")
+        _ = try await keep("relay.token.issued")
+        let features = seen("device.features")
+        let issued = seen("relay.token.issued")
+        m.onForeground()
+        #expect(await eventually { seen("device.features") > features && seen("relay.token.issued") > issued })
+        #expect(await eventually { d.mem.withLock { d.st.outbox.isEmpty } })
+        #expect(m.lockHoldsPhone, "the phone stays locked")
     }
 }

@@ -392,8 +392,11 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
         config.attestStartOver?.set(recovering: s.device.recovering)
         // Every flush of the outbox, whoever starts it (the device's start, a quota backoff's end, a fresh token for held
         // entries, the manager), and every reply the device queues while handling a vault message, asks the lock gate before
-        // each entry: nothing but the lock, and a pending `call.end`, while a lock is pending.
-        s.device.setFlushGate { @MainActor [weak self] in self?.lockGuard.admits() ?? false }
+        // each entry: nothing but the lock, and a pending `call.end`, while a lock is pending (ANDROID-PLAN "While pending").
+        // Only then: in "opened again" (``LockKeeper/openedAgain``, the lock already ended) the phone's replies go as before,
+        // and so does the flush's `credential.ack` (only the version). None carries member data, and holding them until an
+        // unlock here would let the tokens run towards expiry and hold the vault's rekeys on the `hs.confirm`.
+        s.device.setFlushGate { @MainActor [weak self] in self.map { !$0.lockGuard.pending } ?? false }
         // In the background nothing starts the collection again (a lock's retry opens the session): the return to the
         // foreground does (IOS-PLAN §6.6).
         if !backgrounded { s.device.start() }
