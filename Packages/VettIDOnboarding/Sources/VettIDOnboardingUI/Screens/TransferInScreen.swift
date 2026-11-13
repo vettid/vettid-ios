@@ -183,6 +183,10 @@ public struct TransferInContent: View {
                     }
                 } else {
                     if let sas = state.sas { SasBox(sas: sas) }
+                    if state.relayBusy {
+                        NoticeCard(.info, title: MoveStrings.transferInRelayBusy, message: "", announce: .polite)
+                            .accessibilityIdentifier("relay_busy_hint")
+                    }
                     WaitingRow(
                         text: MoveStrings.transferInWaiting(formatWait(state.secondsLeft)), identifier: "waiting_old_phone",
                         timeLeft: (state.secondsLeft, MoveStrings.transferInWaiting(spokenDuration(state.secondsLeft)))

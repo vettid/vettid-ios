@@ -320,6 +320,8 @@ extension FakeVaultRepository: MoveRepository {
         return transferGaveUserGuid
     }
 
+    public func transferInRelayBusyUpdates() -> AsyncStream<Bool> { relayBusy.stream() }
+
     public func abandonTransferIn() async throws { try call("abandonTransferIn") }
 
     public func waitForTransferInBackground() { calls.append("waitForTransferInBackground") }

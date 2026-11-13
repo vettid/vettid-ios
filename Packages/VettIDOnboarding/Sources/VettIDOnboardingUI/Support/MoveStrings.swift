@@ -230,6 +230,15 @@ enum MoveStrings {
         )
     }
 
+    /// Under the code while the relay holds this phone's pairing message for a quota (iOS only; VAULT-MESSAGING 0.88.8 §8.6).
+    static var transferInRelayBusy: String {
+        String(
+            localized: "ios_transfer_in_relay_busy",
+            defaultValue: "VettID's message relay is busy. This phone will finish pairing as soon as the relay takes its message.",
+            bundle: .module
+        )
+    }
+
     /// After the deadline, while the vault is checked for an approval that came in time.
     static var transferInChecking: String {
         String(localized: "transfer_in_checking", defaultValue: "Checking whether your old phone approved in time…", bundle: .module)
