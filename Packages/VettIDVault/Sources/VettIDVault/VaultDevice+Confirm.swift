@@ -39,9 +39,12 @@ extension VaultDevice {
     func activateRekeyLocked(_ e: Epoch, _ t: Date) {
         if let cur = keyring.current(), cur.id == confirmedIDLocked() {
             if st.vault?.confirmed == nil { st.vault?.confirmed = cur.ctx }
-            keyring.activateKeeping(e, now: t, until: t.addingTimeInterval(Self.confirmedKeysFor))
+            // Counted from the keys' clock and destroyed by it (``keyBaseLocked(_:)``, ``pruneTimeLocked(_:)``): a phone clock
+            // ahead neither lengthens these lives nor ends a kept one early.
+            let base = keyBaseLocked(t)
+            keyring.activateKeeping(e, now: base, until: base.addingTimeInterval(Self.confirmedKeysFor), pruneAt: pruneTimeLocked(t))
         } else {
-            keyring.activate(e, now: t)
+            keyring.activate(e, now: keyBaseLocked(t), pruneAt: pruneTimeLocked(t))
         }
     }
 
@@ -58,14 +61,15 @@ extension VaultDevice {
 
     /// A message other than `hs.fin` opened under [ep]. Under the current epoch it confirms it: the previous confirmed
     /// epoch loses its rk and keeps its receive key for 16 days (§6.3.1 table). Under the confirmed epoch while it is not
-    /// current, `hs.confirm` goes again. Callers hold ``lock``.
-    func noteConfirmed(_ ep: Epoch, _ t: Date) {
+    /// current, `hs.confirm` goes again. [ts]: the message's own authenticated stamp, which a release counts from too
+    /// (``releaseUntilLocked(_:_:)``: a clock behind does not shorten the 16 days). Callers hold ``lock``.
+    func noteConfirmed(_ ep: Epoch, _ t: Date, _ ts: Date) {
         let again: Bool = mem.withLock {
             guard st.vault != nil else { return false }
             if keyring.current() === ep {
                 if let c = st.vault?.confirmed {
                     if let id = try? Base64s.decodeStd(c), id != ep.id {
-                        keyring.release(id, until: t.addingTimeInterval(Epoch.receiveKeyRetention))
+                        keyring.release(id, until: releaseUntilLocked(t, ts))
                     }
                     st.vault?.confirmed = nil
                 }

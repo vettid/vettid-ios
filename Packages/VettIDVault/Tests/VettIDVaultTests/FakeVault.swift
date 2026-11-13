@@ -277,11 +277,13 @@ final class FakeVault: @unchecked Sendable {
 
     func open(_ raw: [UInt8]) throws -> Inner { try keyring.open(try Envelope.parse(raw), now: Date()).inner }
 
-    /// A vault-initiated rekey's initiator (§6.5).
-    func rekey(_ d: VaultDevice) throws -> Initiator {
+    /// A vault-initiated rekey's initiator (§6.5): under [under] (default the vault's current epoch), stamped [at] (default
+    /// now).
+    func rekey(_ d: VaultDevice, under: Epoch? = nil, at: Date? = nil) throws -> Initiator {
         try Initiator.create(InitiatorConfig(
             purpose: .rekey, ctx: "", identity: ik, staticKem: kem.publicKey, relay: principal.relay,
-            responderIk: d.identityKey, responderEk: nil, responderRelayKey: d.relayAddr.pk, current: keyring.current(), policy: .vaultToDevice
+            responderIk: d.identityKey, responderEk: nil, responderRelayKey: d.relayAddr.pk, current: under ?? keyring.current(), policy: .vaultToDevice,
+            now: at
         ))
     }
 }

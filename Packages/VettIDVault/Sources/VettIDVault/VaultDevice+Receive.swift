@@ -129,7 +129,15 @@ extension VaultDevice {
         guard let v = mem.withLock({ st.vault }) else { return }
         // §6.3: only the vault's relay key sends to a device.
         guard Ed25519.equalPublic(sender, try Base64s.decodeStd(v.relayPk)) else { return }
-        let opened = mem.withLock { try? keyring.open(env, now: t) }
+        // (as vettid-android #350) Opened against the same time keys are destroyed by (``pruneTimeLocked(_:)``): a wall clock
+        // ahead does not hide a retained epoch the vault's time still keeps. Before the vault's time is known in this process, a
+        // message under a retained epoch hidden by this phone's clock alone is left for redelivery, never dropped.
+        let (opened, hidden): ((inner: Inner, epoch: Epoch)?, Bool) = mem.withLock {
+            let keyTime = pruneTimeLocked(t)
+            let o = try? keyring.open(env, now: keyTime ?? t)
+            return (o, o == nil && keyTime == nil && keyring.hiddenAt(env.recipientKid, now: t))
+        }
+        if hidden { throw LeaveUnacked("hidden by this phone's clock") }
         guard let (inner, ep) = opened else {
             let activated: Bool = try mem.withLock {
                 pruneAwaiting(t)
@@ -139,6 +147,7 @@ extension VaultDevice {
                 }
                 // CryptoError.early: a message of the new epoch ahead of its hs.fin (handle leaves it for redelivery).
                 let fr = try awaiting[i].resp.handleFin(raw, collectSender: sender, now: t)
+                noteKeyTimeLocked(fr.inner.ts) // its ts passed checkTime; the keys' clock only
                 // A fin still owed follows its handshake's epoch into the rekey's.
                 if let old = keyring.current()?.ctx {
                     for j in st.outbox.indices where st.outbox[j].epochIDs?.contains(old) == true {
@@ -155,7 +164,7 @@ extension VaultDevice {
         }
         resetRefusals() // the vault spoke to this device under its session
         // §6.3.1: any message but hs.fin tells which epoch the vault uses (a redelivered hs.fin of an active epoch opens here).
-        if inner.type != Self.typeHsFin { noteConfirmed(ep, t) }
+        if inner.type != Self.typeHsFin { noteConfirmed(ep, t, inner.ts) }
         if inner.type == Self.typeHsInit {
             try await handleRekey(raw, epoch: ep, sender: sender, t)
             return
@@ -267,6 +276,7 @@ extension VaultDevice {
             guard keyring.current() === ep || isConfirmedLocked(ep) else { return nil }
             let v = try requireVault()
             let pi = try PendingInit.openRekey(raw, current: ep, now: t)
+            noteKeyTimeLocked(pi.inner.ts) // its ts passed checkTime; the keys' clock only
             let (resp, env) = try pi.respond(ResponderConfig(
                 identity: secrets.identity, pinnedSuite: v.suite, policy: .vaultToDevice, collectSender: sender,
                 recordRelayKey: try Base64s.decodeStd(v.relayPk), knownInitiatorIk: try Base64s.decodeStd(v.ik), now: t,

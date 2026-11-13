@@ -178,6 +178,9 @@ public final class VaultDevice: @unchecked Sendable {
     var quieted = false
     /// The newest `ts` of a message from the vault and the monotonic time it arrived (in memory only).
     var vaultClock: (ts: Date, at: TimeInterval)?
+    /// The newest verified `ts` of a handshake message from the vault and the monotonic time it arrived (in memory only):
+    /// the keys' clock reads it besides ``vaultClock`` (``keyClockLocked()``).
+    var keyStamp: (ts: Date, at: TimeInterval)?
     /// The newest `ts` the vault stamped on an **answer** (in memory only): only answers settle a request (VAULT-MESSAGING
     /// 0.46.0 §11.14.9 step 1).
     var answerTs: Date?
@@ -359,18 +362,21 @@ public final class VaultDevice: @unchecked Sendable {
         }
     }
 
-    /// The persisted rekeys awaiting `hs.fin`; one that does not restore or is past ``handshakeTTL`` is dropped.
+    /// The persisted rekeys awaiting `hs.fin`; one that does not restore is dropped. None is dropped by age here: the vault's
+    /// time is not known at load, and a clock jumped ahead would end them for good; ``pruneAwaiting(_:)`` ends them once it is
+    /// (``pruneTimeLocked(_:)``).
     func restoreAwaiting() -> [Awaiting] {
-        let cutoff = Self.ms(now().addingTimeInterval(-Self.handshakeTTL))
-        return (st.vault?.awaiting ?? []).filter { $0.createdMs >= cutoff }.compactMap { a in
+        (st.vault?.awaiting ?? []).compactMap { a in
             guard let b = try? Base64s.decodeStd(a.state), let r = try? Responder.import(b) else { return nil }
             return Awaiting(resp: r, createdMs: a.createdMs)
         }
     }
 
-    /// Ends the rekeys awaiting `hs.fin` for longer than ``handshakeTTL``, and all but the newest ``maxAwaiting``.
+    /// Ends the rekeys awaiting `hs.fin` for longer than ``handshakeTTL``, and all but the newest ``maxAwaiting``. Judged by
+    /// the vault's time too (``pruneTimeLocked(_:)``): a clock jumped ahead aborts no responder, and none ends by age before
+    /// the vault's time is known. Callers hold ``mem``.
     func pruneAwaiting(_ t: Date) {
-        let cutoff = Self.ms(t.addingTimeInterval(-Self.handshakeTTL))
+        let cutoff = pruneTimeLocked(t).map { Self.ms($0.addingTimeInterval(-Self.handshakeTTL)) } ?? Int64.min
         let sorted = awaiting.sorted { $0.createdMs > $1.createdMs }
         let keep = sorted.prefix(Self.maxAwaiting).filter { $0.createdMs >= cutoff }
         for a in awaiting where !keep.contains(where: { $0.resp === a.resp }) { a.resp.abort() }

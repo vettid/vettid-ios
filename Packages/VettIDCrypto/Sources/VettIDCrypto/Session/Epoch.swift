@@ -248,28 +248,35 @@ public final class Keyring: @unchecked Sendable {
     public init() {}
 
     /// Makes [e] current; the previous epoch's send key and rk are deleted at once.
-    public func activate(_ e: Epoch, now: Date) {
+    public func activate(_ e: Epoch, now: Date) { activate(e, now: now, pruneAt: now) }
+
+    /// ``activate(_:now:)`` with the retained epochs past their life destroyed as of [pruneAt] (nil: none now; a caller whose
+    /// wall clock may run ahead postpones it, ``prune(now:)``).
+    public func activate(_ e: Epoch, now: Date, pruneAt: Date?) {
         lock.withLock {
             if let c = currentEpoch {
                 c.retireSend()
                 retired.append((c, now.addingTimeInterval(Epoch.receiveKeyRetention)))
             }
             currentEpoch = e
-            pruneLocked(now)
+            if let pruneAt { pruneLocked(pruneAt) }
         }
     }
 
     /// Makes [e] current while the previous current epoch stays the responder's confirmed epoch (§6.3.1 "Responder"):
     /// only its send key is deleted, and its rk and receive key are kept until [until]. Mirrors vettid-vault
     /// `Keyring.ActivateKeeping(…, KeepRK)`.
-    public func activateKeeping(_ e: Epoch, now: Date, until: Date) {
+    public func activateKeeping(_ e: Epoch, now: Date, until: Date) { activateKeeping(e, now: now, until: until, pruneAt: now) }
+
+    /// ``activateKeeping(_:now:until:)`` with the retained epochs past their life destroyed as of [pruneAt] (nil: none now).
+    public func activateKeeping(_ e: Epoch, now: Date, until: Date, pruneAt: Date?) {
         lock.withLock {
             if let c = currentEpoch {
                 c.retireSendOnly()
                 retired.append((c, until))
             }
             currentEpoch = e
-            pruneLocked(now)
+            if let pruneAt { pruneLocked(pruneAt) }
         }
     }
 
@@ -318,6 +325,12 @@ public final class Keyring: @unchecked Sendable {
         }
         guard let e = found else { throw CryptoError.protocolViolation("kid") }
         return (try e.open(env), e)
+    }
+
+    /// Whether a retained epoch for [recipientKid] is still held but past its life as of [now] (hidden by ``open(_:now:)``,
+    /// not destroyed by ``prune(now:)`` yet).
+    public func hiddenAt(_ recipientKid: Kid, now: Date) -> Bool {
+        lock.withLock { retired.contains { now > $0.until && $0.epoch.recvKid == recipientKid } }
     }
 
     public func destroy() {
