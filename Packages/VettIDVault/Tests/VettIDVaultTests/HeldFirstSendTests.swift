@@ -21,6 +21,7 @@ extension LostAnswerTests {
     /// A credential operation held at its send: its UTK back, nothing unsettled.
     @Test func aHeldCredentialOperationGivesItsUtkBack() async throws {
         let h = try await holder()
+        #expect(h.d.knowsVaultTime, "its exp is fixed with nothing sent: held at the request itself")
         let utks = h.d.utkCount
         h.d.setFlushGate { false }
         await #expect(throws: OutboxHeld.self) {
@@ -80,5 +81,40 @@ extension LostAnswerTests {
         h.d.setFlushGate { false }
         await #expect(throws: ChangeUnanswered.self) { _ = try await h.api.resendChange(held) }
         #expect(await ops.base.relay.noDeposit(within: 0.2))
+    }
+
+    /// A credential operation in a process that has not heard the vault yet: held at the `credential.version` that fixes its
+    /// `exp`, its UTK back, nothing unsettled.
+    @Test func aCredentialOperationHeldWhileItsExpIsFixedGivesItsUtkBack() async throws {
+        let store = InMemoryDeviceStateStore()
+        let h = try await holder(store: store)
+        h.d.stop()
+        let d = try #require(try VaultDevice.load(config(timeout: 5, store: store), secrets: h.d.secrets))
+        #expect(!d.knowsVaultTime)
+        let utks = d.utkCount
+        d.setFlushGate { false }
+        await #expect(throws: OutboxHeld.self) {
+            let api = VaultApi(device: d) { true }
+            _ = try await api.criticalUseApprove("r7", password: "pw", payloadSha256: Bytes.sha256(Array("x".utf8)))
+        }
+        #expect(await ops.base.relay.noDeposit(within: 0.2))
+        #expect(d.utkCount == utks)
+        #expect(unsettled(d).isEmpty)
+    }
+
+    /// A reset held at its send, as a change: its UTK back, nothing unsettled, thrown as held.
+    @Test func aHeldResetGivesItsUtkBack() async throws {
+        let h = try await holder()
+        let utks = h.d.utkCount
+        let open = Box(true)
+        h.d.setFlushGate { open.value }
+        let task = Task {
+            try await h.api.credentialReset(pin: "975310", password: "pw", newPassword: "a new password") { _ in open.value = false }
+        }
+        try await ops.answer(h.v, h.d, "credential.version", #"{"exists":true,"version":1,"key":"k1"}"#)
+        await #expect(throws: OutboxHeld.self) { try await task.value }
+        #expect(await ops.base.relay.noDeposit(within: 0.2))
+        #expect(h.d.utkCount == utks)
+        #expect(unsettled(h.d).isEmpty)
     }
 }

@@ -22,7 +22,8 @@ extension CredentialOps {
     }
 
     /// [send], whose request the lock gate may hold before it is sent (``OutboxHeld``): [utk] then goes back to the pool, since
-    /// it never left the phone.
+    /// it never left the phone. The secret it carried stays counted as sent (``VaultDevice/secretSent()``), so an operation
+    /// begun before it is refused as "an earlier request" with nothing sent: that fails closed (chosen; as vettid-android).
     func heldGivesBack<T>(_ utk: UtkRecord, _ send: () async throws -> T) async throws -> T {
         do {
             return try await send()

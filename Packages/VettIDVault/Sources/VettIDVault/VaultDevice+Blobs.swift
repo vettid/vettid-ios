@@ -6,11 +6,16 @@ import VettIDRelay
 // fresh blobs the vault uploads to this device's own mailbox when the member opens a photo. Mirrors the blob part of
 // vettid-android `VaultDevice`.
 extension VaultDevice {
+    /// What the lock gate is asked for a blob upload (``requestMayGo(_:)``): not a message type, as on vettid-android.
+    static let typeBlobPut = "blob.put"
+
     /// Uploads [blob] to the vault's mailbox under the standing token the vault issued this device. Once: the caller never
     /// uploads the same photo again after a lost answer (every abandoned upload fills the mailbox's shared storage).
     /// A `token_revoked` refusal counts as a deposit's (§7.4). Returns the relay's `blob_id`.
     public func uploadBlobToVault(_ blob: [UInt8]) async throws -> String {
         try refuseSending()
+        // (ANDROID-PLAN "While pending") Not while the lock gate holds it: nothing is uploaded.
+        guard await requestMayGo(Self.typeBlobPut) else { throw OutboxHeld() }
         let v = try mem.withLock { try requireVault() }
         guard !v.token.isEmpty else { throw VaultStateError(message: "no token for the vault") }
         do {

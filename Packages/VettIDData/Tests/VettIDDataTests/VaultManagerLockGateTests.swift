@@ -173,15 +173,23 @@ import VettIDDataTesting
     }
 
     /// A PIN change whose lock goes pending after its checks (the manager let it in) is held at its send by the device's
-    /// gate: nothing is sent, the change is `lock_pending`, and its marker is cleared (no change left to decide).
+    /// gate: nothing is sent, the change is `lock_pending`, its UTK goes back, and its marker, stored before the send, is
+    /// cleared (no change left to decide).
     @Test func aChangeHeldAtItsSendLeavesNoMarker() async throws {
         defer { phone.close() }
         try await openVault()
         let d = try #require(m.session?.device)
+        let utks = d.utkCount
         let versions = seen("credential.version")
         let service = service
+        let markerSeen = SeenFlag()
+        let manager = m
         // The gate shuts once the change's pre-check went out (as a lock that goes pending then would).
-        d.setFlushGate { service.requestsSeen.filter { $0 == "credential.version" }.count <= versions }
+        d.setFlushGate { @MainActor in
+            let shut = service.requestsSeen.filter { $0 == "credential.version" }.count > versions
+            if shut, (try? manager.phoneSecrets.unresolvedChange()) != nil { markerSeen.value = true }
+            return !shut
+        }
         let changes = seen("pin.change")
         do {
             try await m.changePin(pin: pin, newPin: "135792", password: "correct horse battery")
@@ -189,7 +197,38 @@ import VettIDDataTesting
         } catch let f as VaultFailure {
             #expect(f.code == VaultManager.codeLockPending)
         }
+        #expect(markerSeen.value, "the marker was stored before the send")
         #expect(seen("pin.change") == changes, "nothing sent")
         #expect(try m.phoneSecrets.unresolvedChange() == nil && m.heldChange == nil)
+        #expect(d.utkCount == utks)
+    }
+
+    /// A renew held at its send the same way: `lock_pending`, nothing sent, and nothing left to decide (its sent record cleared).
+    @Test func aRenewHeldAtItsSendLeavesNothingToDecide() async throws {
+        defer { phone.close() }
+        try await openVault()
+        let d = try #require(m.session?.device)
+        let versions = seen("credential.version")
+        let service = service
+        d.setFlushGate { service.requestsSeen.filter { $0 == "credential.version" }.count <= versions }
+        let renews = seen("vault.secret.renew")
+        do {
+            try await m.renewPhoneSecret(pin: pin, password: "correct horse battery")
+            Issue.record("not held")
+        } catch let f as VaultFailure {
+            #expect(f.code == VaultManager.codeLockPending)
+        }
+        #expect(seen("vault.secret.renew") == renews, "nothing sent")
+        #expect(try m.phoneSecrets.records().candidates.allSatisfy { $0.sent == nil }, "nothing left to decide")
+    }
+}
+
+/// A flag a gate closure sets, read by the test.
+private final class SeenFlag: @unchecked Sendable {
+    private let lock = NSLock()
+    private var seen = false
+    var value: Bool {
+        get { lock.withLock { seen } }
+        set { lock.withLock { seen = newValue } }
     }
 }

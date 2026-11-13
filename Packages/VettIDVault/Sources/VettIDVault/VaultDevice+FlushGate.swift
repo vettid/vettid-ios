@@ -37,7 +37,7 @@ extension VaultDevice {
 
     /// (ANDROID-PLAN "While pending") Marks a call made for the lock itself, "Lock it now"'s one `vault.status`
     /// (``VaultApi/statusUnlockID()``): its sends, a re-send included, are not held by the lock gate.
-    @TaskLocal public static var lockTimeSend = false
+    @TaskLocal static var lockTimeSend = false
 
     /// The requests the lock gate never holds: the lock itself (a `call.end`, an outbox entry, passes ``flushMayGo(_:since:)``).
     static let ungatedRequests: Set<String> = ["vault.lock"]
@@ -46,7 +46,12 @@ extension VaultDevice {
     /// (``request(_:body:timeout:innerID:exp:retries:)``, its first and its re-sends), of ``requestOnce(_:body:timeout:exp:)``
     /// (the `credential.ack`, the settle probe, `call.start`) and of a kept change (``requestKept(_:sends:timeout:)``). A
     /// first send it holds throws ``OutboxHeld``; a re-send it holds is not sent. The lock and a lock-time call
-    /// (``lockTimeSend``) always go.
+    /// (``lockTimeSend``) always go. Also asked before a single send (``sendOnce(_:body:exp:)``: the call's answer, ringing
+    /// and ICE), a blob upload and a renewal of the standing token.
+    ///
+    /// Accepted residual (chosen; vettid-android asks it under the device lock): it is asked before the device lock and the
+    /// sealing, so a lock that goes pending while a send waits for that lock (a save, another seal) lets that one send go,
+    /// as a request already on its way when a lock begins does.
     func requestMayGo(_ type: String) async -> Bool {
         if Self.lockTimeSend || Self.ungatedRequests.contains(type) { return true }
         guard let gate = mem.withLock({ flushGate }) else { return true }

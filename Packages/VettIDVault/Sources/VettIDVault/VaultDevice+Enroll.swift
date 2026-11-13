@@ -462,6 +462,8 @@ extension VaultDevice {
             try? await ackSettled(pending)
             return
         }
+        // Asked before the retry's time is taken: a held one does not count as tried (``requestMayGo(_:)``).
+        guard await requestMayGo("credential.ack") else { return }
         let go: Bool = mem.withLock {
             let t = cfg.uptime()
             if let last = lastAckTry, t - last < Self.ackRetryEvery { return false }

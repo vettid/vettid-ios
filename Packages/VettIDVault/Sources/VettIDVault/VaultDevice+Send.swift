@@ -22,7 +22,9 @@ extension VaultDevice {
     /// `vault.lock`, call signalling). Returns the inner id.
     @discardableResult
     public func sendOnce(_ type: String, body: [UInt8] = VaultJSON.empty, exp: Date? = nil) async throws -> String {
-        try await sendOnceUnlocked(id: Ulid.new(now()), type: type, body: body, exp: exp)
+        // (ANDROID-PLAN "While pending") Held by the lock gate: nothing is sent (`call.answer`, `call.ringing`, `call.ice`).
+        guard await requestMayGo(type) else { throw OutboxHeld() }
+        return try await sendOnceUnlocked(id: Ulid.new(now()), type: type, body: body, exp: exp)
     }
 
     /// Seals and persists under the device lock, then deposits outside it: a deposit that stalls holds up its own caller
