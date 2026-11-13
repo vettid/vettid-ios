@@ -70,6 +70,7 @@
 		87ED7C9081CC9E7EE5314F6F /* LockedPhoneDeviceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E07961C2D265B2A813664FD6 /* LockedPhoneDeviceTests.swift */; };
 		88AF4E861941438E01BE51AE /* OnboardingCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = F75EB86F0AEDA6ABA253BBC1 /* OnboardingCatalog.swift */; };
 		8A1371DFC969D905FB2C31BA /* SettingsFlowsCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93AFC9E49CAEEB5D0ABC86DF /* SettingsFlowsCatalog.swift */; };
+		8B8F2AA1918860F59C8A5EAF /* SecretFieldsCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5CD49E03766207BEA08874AC /* SecretFieldsCatalog.swift */; };
 		8CC360517FEF53D1466BF68E /* InstalledFromBuild.swift in Sources */ = {isa = PBXBuildFile; fileRef = E19B16C3C80D7D44FEA75D72 /* InstalledFromBuild.swift */; };
 		8D3B44667E8E29EB3A60E1F7 /* VettIDCrypto in Frameworks */ = {isa = PBXBuildFile; productRef = 468822D31A2BF6DFFEEBB639 /* VettIDCrypto */; };
 		8DE9FB6A910FE31FA3721F66 /* vettid_urgent.caf in Resources */ = {isa = PBXBuildFile; fileRef = 7D7EDC35DFC7C75093301E1B /* vettid_urgent.caf */; };
@@ -116,6 +117,7 @@
 		C6FDE6FB207680D30A950256 /* NoSecureHardware.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4DAFB636C365A57D892BA212 /* NoSecureHardware.swift */; };
 		CA07610D628893FD4E928A2C /* VettIDVotes in Frameworks */ = {isa = PBXBuildFile; productRef = 068D755D987154249EB496D1 /* VettIDVotes */; };
 		CAA0E28A24397037F4AD5CB6 /* ItemsCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = EDD69AF1283FBA35B9C2E65B /* ItemsCatalog.swift */; };
+		CAF876EB1323DED3CF2DA236 /* SecretFieldsCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5CD49E03766207BEA08874AC /* SecretFieldsCatalog.swift */; };
 		CC9EEF03E7D81A1EEBAA10C2 /* VettIDApprovals in Frameworks */ = {isa = PBXBuildFile; productRef = 7878205240D15E4858E8CD77 /* VettIDApprovals */; };
 		CEF943BBC7A1EA02A3326719 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 5419A46086305A3A71AFECC8 /* PrivacyInfo.xcprivacy */; };
 		CFBE64FEEE60DFB5A0D4D48D /* AppEnvironment.swift in Sources */ = {isa = PBXBuildFile; fileRef = 412ACBC39A6E3761D83FDE48 /* AppEnvironment.swift */; };
@@ -192,6 +194,7 @@
 		5A09BECE73601964F78B7870 /* VettIDNotify */ = {isa = PBXFileReference; lastKnownFileType = folder; name = VettIDNotify; path = Packages/VettIDNotify; sourceTree = SOURCE_ROOT; };
 		5BC7B2415F948B243F5CAD54 /* SecureHardware.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecureHardware.swift; sourceTree = "<group>"; };
 		5CBB4C9A8E482B333CED7362 /* AppLockGate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppLockGate.swift; sourceTree = "<group>"; };
+		5CD49E03766207BEA08874AC /* SecretFieldsCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecretFieldsCatalog.swift; sourceTree = "<group>"; };
 		5EBB51B3CAEFFF548475E972 /* CompositionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompositionTests.swift; sourceTree = "<group>"; };
 		5ED10BF94762CACAFBE88704 /* VettIDAltChan */ = {isa = PBXFileReference; lastKnownFileType = folder; name = VettIDAltChan; path = Packages/VettIDAltChan; sourceTree = SOURCE_ROOT; };
 		6026316F2864710BB7DFBBCB /* CanaryManifestFilesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CanaryManifestFilesTests.swift; sourceTree = "<group>"; };
@@ -404,6 +407,7 @@
 				F75EB86F0AEDA6ABA253BBC1 /* OnboardingCatalog.swift */,
 				FA04E2F7EF12B3C666A4CDC7 /* OnboardingCatalogScreen.swift */,
 				ABB2FC11CCF6AAD6F6399524 /* OwnerCheckCatalog.swift */,
+				5CD49E03766207BEA08874AC /* SecretFieldsCatalog.swift */,
 				93AFC9E49CAEEB5D0ABC86DF /* SettingsFlowsCatalog.swift */,
 				E2C4EF17933B13C37D62C1ED /* ShellCatalog.swift */,
 				CA46D6F62E13C2404BDC26A2 /* UnlockCatalog.swift */,
@@ -773,6 +777,7 @@
 				BE1A5C782200D278726FE11A /* OnboardingCatalogScreen.swift in Sources */,
 				D39F8F4D752750849F93CF4F /* OpenedLinks.swift in Sources */,
 				9AFDE19700D4376ECAACFF6B /* OwnerCheckCatalog.swift in Sources */,
+				8B8F2AA1918860F59C8A5EAF /* SecretFieldsCatalog.swift in Sources */,
 				73BB80548EC5E12691B5059B /* SecureHardware.swift in Sources */,
 				2B7C58D7CD92999F58FB865D /* SettingsFlowsCatalog.swift in Sources */,
 				AA5AD3F7057CFA0BB16F4515 /* ShellCatalog.swift in Sources */,
@@ -838,6 +843,7 @@
 				0E4B145E2620EAAB01C19410 /* OnboardingCatalogScreen.swift in Sources */,
 				65086DDF33F9D356B8748B74 /* OpenedLinks.swift in Sources */,
 				24E37CE5B67EBE2441B36FFE /* OwnerCheckCatalog.swift in Sources */,
+				CAF876EB1323DED3CF2DA236 /* SecretFieldsCatalog.swift in Sources */,
 				4790B24DD7B2AF69BB6923F1 /* SecureHardware.swift in Sources */,
 				8A1371DFC969D905FB2C31BA /* SettingsFlowsCatalog.swift in Sources */,
 				C0637A00FD1447A4A4C583B6 /* ShellCatalog.swift in Sources */,

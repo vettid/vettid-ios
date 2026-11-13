@@ -1,30 +1,33 @@
 {
-  "configurations": [
+  "configurations" : [
     {
-      "id": "7C2A9E41-3B5D-4F8A-9C61-0D4E2B7A5F12",
-      "name": "Debug",
-      "options": {}
-    }
-  ],
-  "defaultOptions": {
-    "preferredScreenCaptureFormat": "screenshots",
-    "targetForVariableExpansion": {
-      "containerPath": "container:VettID.xcodeproj",
-      "identifier": "8E7B383155AA2840971E1D41",
-      "name": "VettID"
-    }
-  },
-  "testTargets": [
-    {
-      "skippedTests": [
-        "StagingTests"
-      ],
-      "target": {
-        "containerPath": "container:VettID.xcodeproj",
-        "identifier": "A425F235B5986E4656DD8A8F",
-        "name": "VettIDAppUITests"
+      "id" : "7C2A9E41-3B5D-4F8A-9C61-0D4E2B7A5F12",
+      "name" : "Debug",
+      "options" : {
+
       }
     }
   ],
-  "version": 1
+  "defaultOptions" : {
+    "codeCoverage" : false,
+    "preferredScreenCaptureFormat" : "screenshots",
+    "targetForVariableExpansion" : {
+      "containerPath" : "container:VettID.xcodeproj",
+      "identifier" : "8E7B383155AA2840971E1D41",
+      "name" : "VettID"
+    }
+  },
+  "testTargets" : [
+    {
+      "skippedTests" : [
+        "StagingTests"
+      ],
+      "target" : {
+        "containerPath" : "container:VettID.xcodeproj",
+        "identifier" : "A425F235B5986E4656DD8A8F",
+        "name" : "VettIDAppUITests"
+      }
+    }
+  ],
+  "version" : 1
 }

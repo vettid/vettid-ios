@@ -32,3 +32,17 @@ struct OwnerCheckCatalogTests {
         }
     }
 }
+
+/// The secret-field entries of the debug screen catalog: one per screen, and each renders in both themes.
+@MainActor
+struct SecretFieldsCatalogTests {
+    @Test func everyEntryRenders() {
+        #expect(Set(SecretFieldsCatalog.entries.map(\.id)).count == SecretFieldsCatalog.entries.count)
+        for mode in [ThemeMode.dark, .light] {
+            for entry in SecretFieldsCatalog.entries {
+                let host = UIHostingController(rootView: SecretFieldsCatalog.screen(entry).vettIDTheme(mode))
+                #expect(host.sizeThatFits(in: CGSize(width: 390, height: 844)).height > 0, "\(entry.id)")
+            }
+        }
+    }
+}
