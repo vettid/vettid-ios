@@ -70,6 +70,7 @@ public final class VaultDevice: @unchecked Sendable {
     #if DEBUG
     var beforeFinalSave: (@Sendable () async -> Void)? // TEST ONLY: before the write that ends a handling
     var beforeRespDeposit: (@Sendable () async -> Void)? // TEST ONLY: after a handling, before its hs.resp's deposit
+    var beforeStartResend: (@Sendable () async -> Void)? // TEST ONLY: a start's work, before its hs.resp re-send
     var flushSeen: (@Sendable (Bool) -> Void)? // TEST ONLY: a flush reached an entry (true: it left it alone)
     var flushWaits: (@Sendable () -> Void)? // TEST ONLY: a flush waits for a running one to end
     #endif
@@ -421,8 +422,13 @@ public final class VaultDevice: @unchecked Sendable {
         let task = Task { [weak self] in
             guard let self else { return }
             // An hs.resp that may not have reached the relay (ungated, as a handling's), then (0.88.1) hs.confirm again after
-            // 12 days, then the outbox through the lock gate; none of them after a stop since this start.
+            // 12 days, then the outbox through the lock gate; none of them after a stop since this start. Accepted trade-offs:
+            // the re-send can hold up the confirmation and the flush while it waits (a `rate_limited`'s retries), and a cancel
+            // between its claim and its request leaves it attempted with nothing sent, which errs towards no second answer.
             let flush = Task {
+                #if DEBUG
+                await self.beforeStartResend?()
+                #endif
                 await self.resendResps(since: mark)
                 await self.tickConfirm(since: mark)
                 await self.flushOutbox(since: mark)

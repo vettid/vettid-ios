@@ -14,27 +14,81 @@ extension VaultDeviceTests {
         for _ in 0..<500 where gate.waiting == 0 { try? await Task.sleep(nanoseconds: 10_000_000) }
     }
 
-    /// While its first deposit is on its way, a repeat `hs.init` is left for the relay's redelivery (not acked unanswered),
-    /// and a re-send makes no second request.
-    @Test func aRepeatWhileTheDepositIsInFlightIsLeftUnackedAndNoSecondRequestGoes() async throws {
-        let (d, v) = try await pairedDevice()
+    /// While its first deposit is on its way, a repeat `hs.init` is left for the relay's redelivery (not acked unanswered, not
+    /// marked seen), and a re-send makes no second request. The redelivery, the same msg_id, is then handled: accepted
+    /// meanwhile, it is dropped.
+    @Test(.timeLimit(.minutes(1)))
+    func aRepeatWhileTheDepositIsInFlightIsLeftUnackedAndNoSecondRequestGoes() async throws {
+        let store = InMemoryDeviceStateStore()
+        let (d, v) = try await pairedDevice(store: store)
         let ini = try v.rekey(d)
         let gate = FakeHTTPServer.Gate()
         relay.holdDeposits = gate
         let first = Task { try await d.handle(v.msg(ini.envelope)) }
         await waitHeld(gate)
-        #expect(gate.waiting == 1)
-        await #expect(throws: LeaveUnacked.self) { try await d.handle(v.msg(ini.envelope)) }
+        let repeated = v.msg(ini.envelope)
+        await #expect(throws: LeaveUnacked.self) { try await d.handle(repeated) }
+        #expect(try savedState(store).seen[repeated.msgID] == nil, "not taken as handled")
         let resend = Task { await d.resendResps() }
-        await resend.value
+        try await Task.sleep(nanoseconds: 200_000_000)
+        #expect(gate.waiting == 1, "one request: the re-send claims nothing while the deposit is on its way")
         gate.open()
+        await resend.value
         try await first.value
         relay.holdDeposits = nil
         _ = try ini.handleResp(try await relay.nextDeposit().payload, collectSender: d.relayAddr.pk, now: Date())
         #expect(await relay.noDeposit(within: 0.2), "one request")
-        // Accepted: its redelivery now is acked and dropped.
-        try await d.handle(v.msg(ini.envelope))
+        try await d.handle(repeated) // the relay's redelivery: handled now, and dropped (accepted)
         #expect(await relay.noDeposit(within: 0.2))
+        #expect(try savedState(store).seen[repeated.msgID] != nil)
+    }
+
+    /// The in-flight deposit fails in a way that may have reached the relay: the repeat left unacked, redelivered, sends the
+    /// same bytes.
+    @Test(.timeLimit(.minutes(1)))
+    func aRepeatLeftUnackedThenSendsTheSameBytesAfterAnUnknownOutcome() async throws {
+        let (d, v) = try await pairedDevice()
+        let ini = try v.rekey(d)
+        let gate = FakeHTTPServer.Gate()
+        relay.holdDeposits = gate
+        relay.holdRefusals = true
+        relay.refuseStatus = 503
+        relay.refuseDeposits = RelayError.internalError
+        relay.refuseOnly = 1
+        relay.recordRefused = true
+        let first = Task { try await d.handle(v.msg(ini.envelope)) }
+        await waitHeld(gate)
+        let repeated = v.msg(ini.envelope)
+        await #expect(throws: LeaveUnacked.self) { try await d.handle(repeated) }
+        gate.open()
+        try await first.value
+        let sent = try await relay.nextDeposit().payload
+        relay.holdDeposits = nil
+        relay.recordRefused = false
+        try await d.handle(repeated)
+        #expect(try await relay.nextDeposit().payload == sent)
+    }
+
+    /// The in-flight first attempt is refused for good: the repeat left unacked, redelivered, is answered afresh.
+    @Test(.timeLimit(.minutes(1)))
+    func aRepeatLeftUnackedIsAnsweredAfreshAfterAFirstRefusal() async throws {
+        let (d, v) = try await pairedDevice()
+        let ini = try v.rekey(d)
+        let gate = FakeHTTPServer.Gate()
+        relay.holdDeposits = gate
+        relay.holdRefusals = true
+        relay.refuseDeposits = RelayError.tokenInvalid
+        relay.refuseOnly = 1
+        let first = Task { try await d.handle(v.msg(ini.envelope)) }
+        await waitHeld(gate)
+        let repeated = v.msg(ini.envelope)
+        await #expect(throws: LeaveUnacked.self) { try await d.handle(repeated) }
+        gate.open()
+        try await first.value
+        relay.holdDeposits = nil
+        for _ in 0..<200 where !awaitingState(d).isEmpty { try await Task.sleep(nanoseconds: 10_000_000) }
+        try await d.handle(repeated)
+        _ = try ini.handleResp(try await relay.nextDeposit().payload, collectSender: d.relayAddr.pk, now: Date())
     }
 
     /// A stop since the start's re-send was asked for claims nothing: nothing is sent, and nothing is left attempted.
@@ -49,6 +103,52 @@ extension VaultDeviceTests {
         let mark = d.stopMark
         d.stop()
         await d.resendResps(since: mark)
+        #expect(await relay.noDeposit(within: 0.2))
+        #expect(awaitingState(d).first?.attempted == false)
+    }
+
+    /// Through ``VaultDevice/start()``: the start's re-send comes first, and a stop since that start claims nothing.
+    @Test func aStopRightAfterTheStartClaimsNoResend() async throws {
+        let (d, v) = try await pairedDevice()
+        let ini = try v.rekey(d)
+        relay.refuseStatus = 503
+        relay.refuseDeposits = RelayError.internalError
+        relay.refuseOnly = 1
+        try await d.handle(v.msg(ini.envelope))
+        d.mem.withLock { d.awaiting[0].attempted = false }
+        relay.serveMailbox = true
+        let reached = Box(false)
+        d.beforeStartResend = { [d] in
+            reached.value = true
+            d.stop()
+        }
+        d.start()
+        for _ in 0..<200 where !reached.value { try await Task.sleep(nanoseconds: 10_000_000) }
+        d.beforeStartResend = nil
+        #expect(reached.value)
+        #expect(await relay.noDeposit(within: 0.3))
+        #expect(awaitingState(d).first?.attempted == false)
+        // Started again with no stop: the re-send goes.
+        d.start()
+        _ = try ini.handleResp(try await relay.nextDeposit().payload, collectSender: d.relayAddr.pk, now: Date())
+        d.stop()
+    }
+
+    /// A cancelled task claims no re-send.
+    @Test func aCancelledTaskClaimsNoResend() async throws {
+        let (d, v) = try await pairedDevice()
+        let ini = try v.rekey(d)
+        relay.refuseStatus = 503
+        relay.refuseDeposits = RelayError.internalError
+        relay.refuseOnly = 1
+        try await d.handle(v.msg(ini.envelope))
+        d.mem.withLock { d.awaiting[0].attempted = false }
+        let t = Task {
+            while !Task.isCancelled { await Task.yield() }
+            await d.resendResps()
+        }
+        t.cancel()
+        await t.value
         #expect(await relay.noDeposit(within: 0.2))
         #expect(awaitingState(d).first?.attempted == false)
     }
