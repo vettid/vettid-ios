@@ -290,6 +290,22 @@ extension VaultDeviceTests {
         let held30 = k.device.mem.withLock { k.device.keyring.find(k.old.id, now: Date().addingTimeInterval(30 * Self.day)) != nil }
         #expect(held30, "kept to the cap (+32 days)")
     }
+
+    /// A clock jumped 17 days ahead does not stop the device's re-send of an `hs.resp` that may not have arrived: its age is
+    /// judged by the vault's time.
+    @Test func aClockAheadDoesNotStopAnHsRespResend() async throws {
+        let clock = Box(Date())
+        let up = Box<TimeInterval>(1000)
+        let (d, v) = try await pairedDevice(cfg: config(InMemoryDeviceStateStore(), now: { clock.value }, uptime: { up.value }))
+        let ini = try v.rekey(d)
+        relay.refuseStatus = 503
+        relay.refuseDeposits = RelayError.internalError
+        relay.refuseOnly = 1
+        try await d.handle(v.msg(ini.envelope))
+        clock.value = clock.value.addingTimeInterval(17 * Self.day) // the wall clock only
+        await d.resendResps()
+        _ = try ini.handleResp(try await relay.nextDeposit().payload, collectSender: d.relayAddr.pk, now: Date())
+    }
 }
 
 // swiftlint:enable line_length

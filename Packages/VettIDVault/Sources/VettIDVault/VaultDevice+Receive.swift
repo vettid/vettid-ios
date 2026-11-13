@@ -381,7 +381,8 @@ extension VaultDevice {
     /// this device never answered. [mark] (``stopMark``): a stop since then, or a cancelled task, sends nothing more.
     func resendResps(since mark: Int? = nil) async {
         let due: ([Responder], VaultRecord?) = mem.withLock {
-            let cutoff = Self.ms(now().addingTimeInterval(-Self.handshakeTTL))
+            // Past HandshakeTTL by the vault's time (``pruneTimeLocked(_:)``), not this phone's clock alone.
+            let cutoff = pruneTimeLocked(now()).map { Self.ms($0.addingTimeInterval(-Self.handshakeTTL)) } ?? Int64.min
             let up = cfg.uptime()
             let list = awaiting.filter { $0.respBytes != nil && $0.createdMs >= cutoff && up >= $0.quotaUntil }.map(\.resp)
             return (list, st.vault)
