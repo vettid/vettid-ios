@@ -303,7 +303,9 @@ extension VaultDevice {
             sas = nil // a code the old handshake's closure showed meanwhile is not the new flow's
             finFailed = false
             st.outbox.removeAll { $0.type == Self.typeHsFin }
+            pairingHeldFin = nil
         }
+        publishPairingHeld()
         return PreparedInit(
             initiator: i, vault: v, depositToken: depositToken, tokenExp: claims?.exp, tokenIsOpen: claims?.isOpen == true
         )
