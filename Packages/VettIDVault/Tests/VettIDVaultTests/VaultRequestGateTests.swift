@@ -18,7 +18,7 @@ extension VaultDeviceTests {
         let status = Task { try await d.op("vault.status") }
         let first = try v.open(try await relay.nextDeposit().payload)
         open.value = false
-        #expect(await relay.noDeposit(within: 0.5), "no re-send while a lock is pending")
+        #expect(await relay.noDeposit(within: 0.3), "no re-send while a lock is pending")
         try await d.handle(try v.seal("vault.status", #"{"vault_id":"x"}"#, re: first.id, status: Inner.statusOK))
         #expect(VaultJSON.string(VaultJSON.object(try await status.value), "vault_id") == "x")
     }
@@ -71,5 +71,31 @@ extension VaultDeviceTests {
         let body = #"{"vault_id":"x","state":"unlocked","unlock_id":"u2"}"#
         try await d.handle(try v.seal("vault.status", body, re: first.id, status: Inner.statusOK))
         #expect(try await read.value == "u2")
+    }
+
+    /// A kept change's re-send the gate holds is not deposited: the change waits for the copy already out.
+    @Test func aKeptChangesResendIsHeldByTheLockGate() async throws {
+        let (d, v) = try await pairedDevice(cfg: config(InMemoryDeviceStateStore(), timeout: 0.2))
+        let open = Box(true)
+        d.setFlushGate { open.value }
+        let held = HeldRequest(type: "pin.change", id: Ulid.new(), exp: Date().addingTimeInterval(600), body: VaultJSON.empty)
+        let change = Task { try await d.requestKept(held, sends: 3) }
+        let first = try v.open(try await relay.nextDeposit().payload)
+        #expect(first.id == held.id)
+        open.value = false
+        #expect(await relay.noDeposit(within: 0.3), "no re-send while a lock is pending")
+        try await d.handle(try v.seal("pin.change", "{}", re: held.id, status: Inner.statusOK))
+        _ = try await change.value
+    }
+
+    /// A `call.start` the gate holds left nothing: no hang-up is queued for it.
+    @Test func aHeldCallStartQueuesNoHangUp() async throws {
+        let (d, _) = try await pairedDevice(cfg: config(InMemoryDeviceStateStore(), timeout: 0.2))
+        d.setFlushGate { false }
+        await #expect(throws: OutboxHeld.self) {
+            _ = try await VaultApi(device: d).callStart("conn-1", pinnedFingerprint: "fp", sdp: Self.callSdp)
+        }
+        #expect(outboxTypes(d).isEmpty, "no call.end")
+        #expect(await relay.noDeposit(within: 0.2))
     }
 }

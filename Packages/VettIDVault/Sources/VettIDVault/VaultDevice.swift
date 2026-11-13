@@ -80,8 +80,8 @@ public final class VaultDevice: @unchecked Sendable {
     /// The ids of outbox entries being deposited now (``deliver(_:keepOnFailure:since:)``). Under ``mem``.
     var outboxInFlight: Set<String> = []
     var quotaBackoff: [String: (until: TimeInterval, last: TimeInterval)] = [:] // §8.6, VaultDevice+Quota; under ``mem``
-    /// Whether an outbox entry may be deposited now (``flushMayGo(_:since:)``): the manager's lock gate, nothing but the lock
-    /// while one is pending. Nil: always. Under ``mem``.
+    /// Whether an outbox entry may be deposited now (``flushMayGo(_:since:)``), or a request's re-send or single send go
+    /// (``requestMayGo(_:)``): the manager's lock gate, nothing but the lock while one is pending. Nil: always. Under ``mem``.
     var flushGate: (@Sendable () async -> Bool)?
     /// How the device waits out a quota backoff before its flush (TEST ONLY: replaced to run it at once).
     var quotaSleep: @Sendable (TimeInterval) async -> Void = { try? await Task.sleep(for: .seconds($0)) }
@@ -388,19 +388,23 @@ public final class VaultDevice: @unchecked Sendable {
             return (collectRound, stops)
         }
         guard let (round, mark) = begin else { return }
+        // Not a lock-time call's (``lockTimeSend``), whoever starts it (a status read's `ensureCollecting()`): the collection and
+        // its start's work ask the lock gate as any.
         let task = Task { [weak self] in
             guard let self else { return }
-            // (0.88.1) hs.confirm again after 12 days, then the outbox: both through the lock gate, and neither after a stop
-            // since this start.
-            let flush = Task { await self.tickConfirm(since: mark); await self.flushOutbox(since: mark) }
-            defer { flush.cancel() }
-            do {
-                try await collector(of: round).run { m in try await self.handle(m) }
-            } catch is CancellationError {
-                return
-            } catch {
-                // A terminal relay error, or anything else, ends the collection; the next start() collects again.
-                collectionEnded(error, of: round)
+            await Self.$lockTimeSend.withValue(false) {
+                // (0.88.1) hs.confirm again after 12 days, then the outbox: both through the lock gate, and neither after a
+                // stop since this start.
+                let flush = Task { await self.tickConfirm(since: mark); await self.flushOutbox(since: mark) }
+                defer { flush.cancel() }
+                do {
+                    try await collector(of: round).run { m in try await self.handle(m) }
+                } catch is CancellationError {
+                    return
+                } catch {
+                    // A terminal relay error, or anything else, ends the collection; the next start() collects again.
+                    collectionEnded(error, of: round)
+                }
             }
         }
         // A stop() since the start above wins: the collection it would have stopped is cancelled at once.

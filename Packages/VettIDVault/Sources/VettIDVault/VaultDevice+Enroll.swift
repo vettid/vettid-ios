@@ -432,7 +432,8 @@ extension VaultDevice {
         CredentialOps.codeStaleCredential, "credential_frozen",
     ]
 
-    /// Sends `credential.ack` for [version] once and, taken, settles it. Throws what the vault answers or the cancel.
+    /// Sends `credential.ack` for [version] once and, taken, settles it. Throws what the vault answers, the cancel, or
+    /// ``OutboxHeld`` when the lock gate holds it (it stays pending).
     func sendAck(_ version: Int64) async throws {
         let body = JsonBuilder().uint("version", UInt64(version)).bytes()
         do {

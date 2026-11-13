@@ -2,13 +2,16 @@
 // (ANDROID-PLAN "Locking", "While pending"). Every flush, whoever starts it, asks the gate before each entry, and so does
 // every reply queued while a vault message is handled (``deliverQueued(_:since:)``), and every deposit right before it is
 // made (``deliver(_:keepOnFailure:since:)``, a ``send(_:body:id:)``'s own entry included). A rekey's `hs.resp` is sent
-// ungated, as a pending `call.end` passes (``handleRekey``). Not gated here: the requests, which the manager gates.
+// ungated, as a pending `call.end` passes (``handleRekey``). A request's first send is the manager's to gate (`openApi`); its
+// re-sends, a kept change's re-sends and a single send (``requestOnce(_:body:timeout:exp:)``) ask the gate here
+// (``requestMayGo(_:)``).
 
 import VettIDCrypto
 
 /// An outbox entry not deposited because the lock gate holds it, or the device was stopped since it was asked for: it stays in
 /// the outbox for a later flush (one the gate admits), unless its deposit was one never kept for later (a renewal of the
-/// standing token during a move, ``VaultDevice/renewStandingToken()``), which is then gone, as after any failure.
+/// standing token during a move, ``VaultDevice/renewStandingToken()``), which is then gone, as after any failure. Also a
+/// single request the gate holds (``VaultDevice/requestOnce(_:body:timeout:exp:)``): nothing was sent.
 public struct OutboxHeld: Error, Equatable, Sendable, CustomStringConvertible {
     public var description: String { "held by the lock gate" }
 }
@@ -35,16 +38,16 @@ extension VaultDevice {
     /// (``VaultApi/statusUnlockID()``): its sends, a re-send included, are not held by the lock gate.
     @TaskLocal public static var lockTimeSend = false
 
-    /// The requests the lock gate never holds: the lock itself (a `call.end` passes too, ``flushMayGo(_:since:)``).
+    /// The requests the lock gate never holds: the lock itself (a `call.end`, an outbox entry, passes ``flushMayGo(_:since:)``).
     static let ungatedRequests: Set<String> = ["vault.lock"]
 
     /// Whether a request of [type] may be sent now (ANDROID-PLAN "While pending"): asked before a request's re-send
     /// (``request(_:body:timeout:innerID:exp:retries:)``) and before the one send of ``requestOnce(_:body:timeout:exp:)``
-    /// (the `credential.ack`, the settle probe, `call.start`). The lock, a `call.end` and a lock-time call
-    /// (``lockTimeSend``) always go. The first send of a ``request(_:body:timeout:innerID:exp:)`` is gated by the manager
-    /// (`openApi`).
+    /// (the `credential.ack`, the settle probe, `call.start`), and before a kept change's re-sends
+    /// (``requestKept(_:sends:timeout:)``). The lock and a lock-time call (``lockTimeSend``) always go. The first send of a
+    /// ``request(_:body:timeout:innerID:exp:)`` is gated by the manager (`openApi`).
     func requestMayGo(_ type: String) async -> Bool {
-        if Self.lockTimeSend || Self.ungatedRequests.contains(type) || type == Self.typeCallEnd { return true }
+        if Self.lockTimeSend || Self.ungatedRequests.contains(type) { return true }
         guard let gate = mem.withLock({ flushGate }) else { return true }
         return await gate()
     }
