@@ -346,6 +346,59 @@ import VettIDDataTesting
         #expect(vm.state.step == .intro && vm.state.error == .vaultUnavailable && vm.state.errorCode == "down" && vm.state.sas == nil)
     }
 
+    /// While the relay holds this phone's pairing message for a quota, the comparison step says so; it clears when the relay
+    /// takes the message, and is never set outside the comparison step.
+    @Test func theRelayBusyNoticeFollowsTheHeldMessage() async throws {
+        let vm = model()
+        vm.scan()
+        vm.scanned(try qr())
+        await clock.runCurrent()
+        #expect(await eventually { vm.state.step == .compare && !vm.state.relayBusy })
+        vault.relayBusy.send(true)
+        #expect(await eventually { vm.state.relayBusy })
+        vault.relayBusy.send(false)
+        #expect(await eventually { !vm.state.relayBusy })
+        vault.relayBusy.send(true)
+        #expect(await eventually { vm.state.relayBusy })
+        vault.transferApproval.complete()
+        await clock.advance(seconds: 2)
+        #expect(vm.state.step == .done && !vm.state.relayBusy)
+        #expect(await eventually { vault.relayBusy.subscriberCount == 0 }, "the observer ended with the wait")
+        vault.relayBusy.send(true)
+        await clock.advance(seconds: 1)
+        #expect(!vm.state.relayBusy)
+    }
+
+    /// A failure of the wait clears the notice.
+    @Test func aFailureClearsTheRelayBusyNotice() async throws {
+        let vm = model()
+        vm.scan()
+        vm.scanned(try qr())
+        await clock.runCurrent()
+        vault.relayBusy.send(true)
+        #expect(await eventually { vm.state.relayBusy })
+        vault.transferApproval.fail(FakeVaultRepository.failure(.rejected, code: "rejected"))
+        await clock.advance(seconds: 2)
+        #expect(vm.state.step == .rejected && !vm.state.relayBusy)
+    }
+
+    /// The code is replaced by the check after the deadline, and the notice with it.
+    @Test func theCheckAfterTheDeadlineClearsTheRelayBusyNotice() async throws {
+        let vm = model()
+        vm.scan()
+        vm.scanned(try qr())
+        await clock.runCurrent()
+        vault.relayBusy.send(true)
+        #expect(await eventually { vm.state.relayBusy })
+        vault.abandonClosed = true
+        await clock.advance(seconds: 660)
+        #expect(vm.state.checking && !vm.state.relayBusy)
+        vault.relayBusy.send(false)
+        vault.relayBusy.send(true) // a late hold is not shown over the check
+        await clock.advance(seconds: 1)
+        #expect(!vm.state.relayBusy)
+    }
+
     struct Odd: Error {}
 
     /// Swift cannot interrupt an await: a SAS that arrives in the same instant as `cancel()` changes nothing.

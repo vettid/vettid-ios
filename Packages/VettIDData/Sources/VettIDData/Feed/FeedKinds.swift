@@ -26,8 +26,11 @@ public enum FeedTarget: Equatable, Sendable {
     case history
     /// Settings → Security → Credential.
     case credential
-    /// Settings → Security (the daily check and the hold).
+    /// Settings → Security (the vault locked by the checks).
     case security
+    /// (ANDROID-PLAN 0.1.124 §4 "Advanced security") Settings → Security → Advanced security: the check's interval and the
+    /// hold are there.
+    case advancedSecurity
     case sheet
     /// A vote's screen in Votes (ANDROID-PLAN 0.1.102): the pair names it, never the proposal id alone.
     case vote(connectionID: String, proposalID: String)
@@ -147,7 +150,9 @@ public enum FeedKinds {
         case "credential.alarm": return .alarm
         case "credential.password_failed": return .history
         case "credential.rotated", "credential.reset": return .credential
-        case "owner_check.failed", "owner_check.locked", "owner_check.hold_changed": return .security
+        // ANDROID-PLAN 0.1.124: the check's and the hold's rows are in Advanced security; the lock is Security's.
+        case "owner_check.failed", "owner_check.hold_changed": return .advancedSecurity
+        case "owner_check.locked": return .security
         case "vote.open", "vote.closing", "vote.result", "vote.problem":
             guard let c, let ref, !ref.isEmpty else { return .voteList }
             return .vote(connectionID: c, proposalID: ref)

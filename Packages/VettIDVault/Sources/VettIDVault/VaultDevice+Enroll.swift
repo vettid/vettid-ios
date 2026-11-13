@@ -15,6 +15,7 @@ extension VaultDevice {
         keyring = Keyring()
         for a in awaiting { a.resp.abort() }
         awaiting.removeAll()
+        unsavedResps.removeAll()
     }
 
     /// vault.enrolled (§11.3), sealed to this device's KEM key: pins the vault and gives this device its first token.
@@ -137,7 +138,8 @@ extension VaultDevice {
         let mine = generation
         afterLock(keep: true) { [self] in
             do {
-                try await deliver(fin)
+                // Held by the lock gate, it waits in the outbox, as after a passing failure.
+                try await deliverQueued(fin)
             } catch let x as RelayError where Self.isTerminal(x) {
                 // Refused for good: when the flow was told (``deliver``: the fin's first attempt), it gets no code.
                 if mem.withLock({ finFailed }) { return }
@@ -302,7 +304,9 @@ extension VaultDevice {
             sas = nil // a code the old handshake's closure showed meanwhile is not the new flow's
             finFailed = false
             st.outbox.removeAll { $0.type == Self.typeHsFin }
+            pairingHeldFin = nil
         }
+        publishPairingHeld()
         return PreparedInit(
             initiator: i, vault: v, depositToken: depositToken, tokenExp: claims?.exp, tokenIsOpen: claims?.isOpen == true
         )

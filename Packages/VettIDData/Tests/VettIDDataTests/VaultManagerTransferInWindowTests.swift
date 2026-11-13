@@ -200,7 +200,7 @@ extension VaultManagerTransferInTests {
         defer { phone.close() }
         _ = try await scanned()
         phone.clockAhead = 600
-        m.session?.device.stop()
+        await suspendCollector()
         phone.windowPauses.holding = true
         let waiting = Task { try await m.awaitTransferIn() }
         #expect(await deadlineWaiting())
@@ -267,7 +267,7 @@ extension VaultManagerTransferInTests {
         defer { phone.close() }
         _ = try await scanned()
         phone.clockAhead = 600
-        m.session?.device.stop()
+        await suspendCollector()
         phone.windowPauses.holding = true
         let waiting = Task { try await m.awaitTransferIn() }
         #expect(await deadlineWaiting())
@@ -286,7 +286,7 @@ extension VaultManagerTransferInTests {
         defer { phone.close() }
         _ = try await scanned()
         phone.clockAhead = 600
-        m.session?.device.stop()
+        await suspendCollector()
         phone.windowPauses.holding = true
         let waiting = Task { try await m.awaitTransferIn() }
         #expect(await deadlineWaiting())
@@ -429,7 +429,7 @@ extension VaultManagerTransferInTests {
         defer { phone.close() }
         _ = try await scanned()
         phone.clockAhead = 600
-        m.session?.device.stop()
+        await suspendCollector()
         phone.windowPauses.holding = true
         let waiting = Task { try await m.awaitTransferIn() }
         #expect(await deadlineWaiting())

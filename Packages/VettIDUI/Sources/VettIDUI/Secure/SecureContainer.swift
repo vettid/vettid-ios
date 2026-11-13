@@ -90,11 +90,13 @@ private struct SecureHost<Content: View>: UIViewRepresentable {
     /// The content with the environment it would have had in place (a separate hosting controller does not inherit it).
     private func rooted(_ context: Context) -> AnyView { AnyView(content.environment(\.self, context.environment)) }
 
+    /// Never wider than offered: content that asks for more would push the whole screen past its edges.
     func sizeThatFits(_ proposal: ProposedViewSize, uiView: UIView, context: Context) -> CGSize? {
-        context.coordinator.hosting.sizeThatFits(in: CGSize(
+        let fit = context.coordinator.hosting.sizeThatFits(in: CGSize(
             width: proposal.width ?? UIView.layoutFittingExpandedSize.width,
             height: proposal.height ?? UIView.layoutFittingExpandedSize.height
         ))
+        return CGSize(width: proposal.width.map { min(fit.width, $0) } ?? fit.width, height: fit.height)
     }
 
     private func pin(_ v: UIView, to p: UIView) -> [NSLayoutConstraint] {

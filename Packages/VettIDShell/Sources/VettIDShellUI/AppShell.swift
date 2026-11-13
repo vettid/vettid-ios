@@ -370,6 +370,11 @@ public struct AppShell: View {
             VaultStatusRoute(vault: vault, installedFrom: installedFrom) { model.pop() }
         case .attestation:
             AttestationRoute(vault: vault, canary: canary, canaryInbox: canaryInbox) { model.pop() }
+        case .advancedSecurity:
+            AdvancedSecurityRoute(
+                account: account, vault: vault, ownerChecks: ownerChecks, appLock: appLock, promptReason: promptReason,
+                host: settingsHost
+            ) { model.pop() }
         case .changeName, .sharedProfile:
             profileDetail(route)
         case .changePin, .newPhoneSecret, .deleteVault, .transferOut:
@@ -530,6 +535,7 @@ public struct AppShell: View {
         h.onVaultStatus = { model.push(.vaultStatus) }
         h.onReleaseUpdate = { model.push(.releaseUpdate) }
         h.onAttestation = { model.push(.attestation) }
+        h.onAdvancedSecurity = { model.push(.advancedSecurity) }
         h.onChangePin = { model.push(.changePin(fromAttempts: false)) }
         h.onCredential = { model.push(.credential) }
         h.onNewPhoneSecret = { model.push(.newPhoneSecret) }

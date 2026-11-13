@@ -72,6 +72,8 @@ final class FakePairingOps: PairingOps {
     let held = TestDeferred<Void>()
     var holdApprove: TestDeferred<Void>?
     let approveEntered = TestDeferred<Void>()
+    var holdReject: TestDeferred<Void>?
+    let rejectEntered = TestDeferred<Void>()
 
     init(created: JsonObject) { self.created = created }
 
@@ -104,6 +106,11 @@ final class FakePairingOps: PairingOps {
 
     func reject(pairingID: String) async throws {
         calls.append("reject:\(pairingID)")
+        if let gate = holdReject {
+            holdReject = nil
+            rejectEntered.complete(())
+            try await gate.value()
+        }
         if let e = refusal("reject") { throw e }
     }
 }
@@ -588,7 +595,7 @@ extension PairingManagerTests {
         #expect(compared(m) != nil)
         #expect(m.state.error == .ownerCheckRequired)
         ops.refuse = [:]
-        m.acknowledge()
+        m.acknowledge(token: m.state.token)
         #expect(m.state.error == nil)
         await approve(m)
         #expect(paired(m) != nil)
@@ -1112,30 +1119,31 @@ extension PairingManagerTests {
     @Test func anOldScreensLateLeaveNeverReachesTheNewerPairing() async throws {
         let ops = try ops()
         let m = manager(ops)
-        await m.start()
+        // Screen A is owner 1, screen B owner 2.
+        await m.start(.agent, owner: 1)
         let a = m.state.token
         #expect(code(m) != nil)
         await m.cancel()
         // B starts: its create is held.
         let gate = TestDeferred<Void>()
         ops.holdNext = gate
-        let b = Task { await m.start(.agent) }
+        let b = Task { await m.start(.agent, owner: 2) }
         #expect(await eventually { ops.held.isCompleted })
         #expect(m.state.stage == .creating)
         #expect(m.state.token != a)
-        m.leave(token: a)
+        m.leave(token: a, owner: 1)
         await time.runCurrent()
         #expect(m.state.stage == .creating, "B's create is not cancelled")
         gate.complete(())
         await b.value
         #expect(code(m) != nil, "B's code stays")
-        m.leave(token: a)
+        m.leave(token: a, owner: 1)
         await time.runCurrent()
         #expect(code(m) != nil)
         m.onEvent(pending())
         #expect(compared(m) != nil)
-        m.leave(token: a)
-        m.acknowledge(token: a)
+        m.leave(token: a, owner: 1)
+        m.acknowledge(token: a, owner: 1)
         await time.runCurrent()
         #expect(compared(m) != nil)
         // Nothing of B's was rejected; A's own cancel rejected A's.
@@ -1143,10 +1151,59 @@ extension PairingManagerTests {
         // A final stage of B's is not acknowledged away by A either; B's own token does.
         await m.reject()
         #expect(m.state.stage == .rejected(told: true))
-        m.acknowledge(token: a)
+        m.acknowledge(token: a, owner: 1)
         #expect(m.state.stage == .rejected(told: true))
-        m.acknowledge(token: m.state.token)
+        m.acknowledge(token: m.state.token, owner: 2)
         #expect(m.state.stage == .idle)
+    }
+
+    /// (#242 follow-up) A leave is decided by its owner alone: a token gone stale in a timing gap does not skip it and strand
+    /// the code.
+    @Test func aLeaveWithAStaleTokenStillEndsItsOwnersPairing() async throws {
+        let ops = try ops()
+        let m = manager(ops)
+        await m.start()
+        let stale = m.state.token - 1
+        m.leave(token: stale)
+        await time.runCurrent()
+        #expect(m.state.stage == .idle)
+        #expect(ops.calls.filter { $0.hasPrefix("reject") } == ["reject:p1"])
+    }
+
+    /// (#242 follow-up) A screen's start clears an earlier final stage, but not a refused approval another screen kept for
+    /// another try: only its owner acknowledges that.
+    @Test func aScreensStartDoesNotClearAKeptComparisonsFailure() async throws {
+        let ops = try ops()
+        ops.refuse["approve"] = "owner_check_required"
+        let m = manager(ops)
+        await m.start()
+        m.onEvent(pending())
+        await m.approve(sessionSeconds: 3600)
+        #expect(m.state.error == .ownerCheckRequired)
+        m.acknowledge()
+        #expect(m.state.error == .ownerCheckRequired, "the unowned acknowledge leaves it")
+        m.acknowledge(token: m.state.token, owner: 1)
+        #expect(m.state.error == .ownerCheckRequired, "another owner's leaves it")
+        m.acknowledge(token: m.state.token)
+        #expect(m.state.error == nil)
+    }
+
+    /// (#242 follow-up) A leave while a rejection is in flight marks the pairing abandoned; the rejection settling clears it.
+    @Test func aSettledRejectionClearsTheAbandonedMark() async throws {
+        let ops = try ops()
+        let m = manager(ops)
+        await m.start()
+        m.onEvent(pending())
+        let gate = TestDeferred<Void>()
+        ops.holdReject = gate
+        let r = Task { await m.reject() }
+        #expect(await eventually { ops.rejectEntered.isCompleted })
+        m.leave(token: m.state.token)
+        #expect(await eventually { m.abandoned })
+        gate.complete(())
+        await r.value
+        #expect(m.state.stage == .rejected(told: true))
+        #expect(!m.abandoned)
     }
 
     // MARK: A screen that goes (leave by token)

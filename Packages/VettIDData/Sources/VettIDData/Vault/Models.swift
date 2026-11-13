@@ -1,4 +1,5 @@
 import Foundation
+import VettIDAttestation
 import VettIDCrypto
 
 // The models of the repositories (Repositories.swift): what the screens see of the account, the vault, the credential
@@ -527,6 +528,16 @@ public struct AttestationInfo: Equatable, Sendable {
     public var lastReleaseFingerprint: String?
     /// (iPhone) What the app knows of its App Attest key; nil on Android.
     public var appAttest: AppAttestInfo?
+    /// (ANDROID-PLAN 0.1.124) This app's version and build, "1.2.3 (45)"; empty when not known.
+    public var appVersion = ""
+    /// (IOS-PLAN §4.17) The iOS version, "26.1"; empty when not known.
+    public var osVersion = ""
+    /// (ANDROID-PLAN 0.1.124, VAULT-RELEASES §5.2) The signed tag's prefix of this build's channel, `release/prod/` or
+    /// `release/staging/`; nil where no tag names the vault's releases (the dev stack).
+    public var releaseTagPrefix: String?
+    /// (ANDROID-PLAN 0.1.124) SHA-256 of the Nitro root this build checks the chain against, lower-case hex: built in,
+    /// never from the network (the AWS root in production and staging).
+    public var rootFingerprint = NitroRoot.sha256Hex
 
     public init(
         environment: String,

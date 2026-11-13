@@ -93,7 +93,7 @@ extension VaultManagerTransferInTests {
         defer { phone.close() }
         _ = try await scanned()
         phone.clockAhead = 600
-        m.session?.device.stop()
+        await suspendCollector()
         service.approveTransferIn()
         service.refusesCollect = true
         let waiting = Task { try await m.awaitTransferIn() }

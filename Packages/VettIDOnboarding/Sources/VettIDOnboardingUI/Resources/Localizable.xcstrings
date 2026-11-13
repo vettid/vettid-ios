@@ -2213,6 +2213,17 @@
         }
       }
     },
+    "ios_transfer_in_relay_busy": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "VettID's message relay is busy. This phone will finish pairing as soon as the relay takes its message."
+          }
+        }
+      }
+    },
     "ios_app_lock_body": {
       "extractionState": "manual",
       "localizations": {

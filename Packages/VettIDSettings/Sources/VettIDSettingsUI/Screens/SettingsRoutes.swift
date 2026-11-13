@@ -21,6 +21,8 @@ public struct SettingsHost {
     /// Settings → Vault → "Update available": the update screen.
     public var onReleaseUpdate: @MainActor () -> Void = {}
     public var onAttestation: @MainActor () -> Void = {}
+    /// Settings → Security → Advanced security.
+    public var onAdvancedSecurity: @MainActor () -> Void = {}
     public var onChangePin: @MainActor () -> Void = {}
     /// Settings → Security → Credential.
     public var onCredential: @MainActor () -> Void = {}
@@ -89,8 +91,8 @@ public struct SettingsRoute: View {
         Group {
             if let model, let ownerCheck {
                 SettingsContent(
-                    state: model.state, ownerCheck: ownerCheck.state, actions: actions(model),
-                    ownerCheckActions: ownerCheckActions(ownerCheck), accountPhoto: accountPhoto,
+                    state: model.state, ownerCheck: ownerCheck.state, actions: Self.actions(model, host: host),
+                    ownerCheckActions: Self.ownerCheckActions(ownerCheck, host: host), accountPhoto: accountPhoto,
                     accountDeletionURL: accountDeletionURL
                 )
             } else {
@@ -119,13 +121,14 @@ public struct SettingsRoute: View {
         }
     }
 
-    private func actions(_ m: SettingsViewModel) -> SettingsActions {
+    static func actions(_ m: SettingsViewModel, host: SettingsHost) -> SettingsActions {
         var a = SettingsActions()
         a.back = host.onBack
         a.account = host.onAccount
         a.vaultStatus = host.onVaultStatus
         a.releaseUpdate = host.onReleaseUpdate
         a.attestation = host.onAttestation
+        a.advancedSecurity = host.onAdvancedSecurity
         a.changePin = host.onChangePin
         a.credential = host.onCredential
         a.newPhoneSecret = host.onNewPhoneSecret
@@ -146,9 +149,8 @@ public struct SettingsRoute: View {
         return a
     }
 
-    private func ownerCheckActions(_ m: OwnerCheckSettingsViewModel) -> OwnerCheckSettingsActions {
+    static func ownerCheckActions(_ m: OwnerCheckSettingsViewModel, host: SettingsHost) -> OwnerCheckSettingsActions {
         var a = OwnerCheckSettingsActions()
-        let host = host
         a.setIntervalHours = { m.setIntervalHours($0) }
         // Off is a check with the hold change (VAULT-MESSAGING §3.6.7); on is a plain setting.
         a.setHold = { on in if on { m.turnHoldOn() } else { host.onOwnerCheck(true) } }
@@ -157,6 +159,80 @@ public struct SettingsRoute: View {
         a.dismissError = { m.dismissError() }
         a.setIdleLock = { m.setIdleLock($0) }
         a.dismissIdleNote = { m.dismissIdleNote() }
+        return a
+    }
+}
+
+/// Settings → Security → Advanced security with its own view models (the same repositories as Settings; each screen's
+/// errors and offers its own), made when it first appears and released when it goes. [onBack]: back to Settings.
+/// Mirrors vettid-android's `AdvancedSecurityRoute` destination.
+public struct AdvancedSecurityRoute: View {
+    private let account: any AccountRepository
+    private let vault: any VaultRepository
+    private let ownerChecks: any OwnerCheckRepository
+    private let appLock: any AppLockSettings
+    private let promptReason: String
+    private let host: SettingsHost
+    private let onBack: @MainActor () -> Void
+    @Environment(ScreenshotAllowance.self) private var screenshots: ScreenshotAllowance?
+    @Environment(ThemeSetting.self) private var theme: ThemeSetting?
+    @Environment(NotificationPreviewsSetting.self) private var previews: NotificationPreviewsSetting?
+    @Environment(\.vettIDUserPresence) private var presence
+    @State private var model: SettingsViewModel?
+    @State private var ownerCheck: OwnerCheckSettingsViewModel?
+
+    public init(
+        account: any AccountRepository,
+        vault: any VaultRepository,
+        ownerChecks: any OwnerCheckRepository,
+        appLock: any AppLockSettings,
+        promptReason: String,
+        host: SettingsHost,
+        onBack: @escaping @MainActor () -> Void
+    ) {
+        self.account = account
+        self.vault = vault
+        self.ownerChecks = ownerChecks
+        self.appLock = appLock
+        self.promptReason = promptReason
+        self.host = host
+        self.onBack = onBack
+    }
+
+    public var body: some View {
+        Group {
+            if let model, let ownerCheck {
+                AdvancedSecurityContent(
+                    state: model.state, ownerCheck: ownerCheck.state, actions: withBack(SettingsRoute.actions(model, host: host)),
+                    ownerCheckActions: SettingsRoute.ownerCheckActions(ownerCheck, host: host)
+                )
+            } else {
+                // Until the view models are made: the same rows from the repositories, no blank frame.
+                AdvancedSecurityContent(
+                    state: SettingsState(
+                        account: account.account, appLockOn: appLock.state.isOn, appLockMethod: appLock.method,
+                        appLockTimeout: appLock.timeout, screenshotsAllowed: screenshots?.allowed ?? false,
+                        screenshotsStayOn: screenshots?.staysOn ?? false, phoneSecret: vault.usesPhoneSecret
+                    ),
+                    ownerCheck: OwnerCheckSettingsState(view: ownerChecks.ownerCheck), actions: withBack(SettingsActions())
+                )
+            }
+        }
+        .onAppear {
+            if model == nil {
+                model = SettingsViewModel(
+                    account: account, vault: vault, appLock: appLock, promptReason: promptReason, screenshots: screenshots,
+                    theme: theme, previews: previews, confirmPresence: { [presence] reason in await presence(reason) }
+                )
+                ownerCheck = OwnerCheckSettingsViewModel(repo: ownerChecks)
+            }
+        }
+    }
+
+    /// [actions] whose back arrow returns to Settings (Settings' own goes to the start destination).
+    private func withBack(_ actions: SettingsActions) -> SettingsActions {
+        var a = actions
+        a.back = onBack
         return a
     }
 }
@@ -234,7 +310,7 @@ public struct AttestationRoute: View {
     public var body: some View {
         AttestationContent(
             state: model?.state ?? LoadState(), onBack: onBack, canary: model?.canary, onRemoveCanary: { model?.removeCanary() },
-            onLoadCanary: canaryInbox == nil ? nil : { importing = true }
+            onLoadCanary: canaryInbox == nil ? nil : { importing = true }, record: model?.record
         )
         .onAppear { if model == nil { model = AttestationViewModel(vault: vault, canary: canary) } }
         .closesWhenCovered { importing = false }
