@@ -5,8 +5,8 @@ import VettIDKeys
 import XCTest
 
 /// The Secure Enclave keys while the iPhone is locked (IOS-PLAN §8 I1.4): the app key and the seed key sign and agree
-/// with the phone locked after its first unlock; the phone key's ECDH and lookup are refused for now (never "missing"
-/// or "invalid") while it is locked, and work again once it is unlocked. Half automated: it needs someone to lock and
+/// with the phone locked after its first unlock; the phone key's ECDH is refused for now while it is locked (its lookup
+/// is refused or, on iOS 27, returns the key; never "missing" or "invalid"), and works again once it is unlocked. Half automated: it needs someone to lock and
 /// unlock the phone, so it runs only with `VETTID_TEST_LOCK_WAIT=<seconds>` (each wait's limit) and is skipped
 /// otherwise, and skipped when the phone is not locked in time.
 final class LockedPhoneDeviceTests: XCTestCase {
@@ -61,12 +61,25 @@ final class LockedPhoneDeviceTests: XCTestCase {
         // Locked after its first unlock: the AfterFirstUnlock keys work.
         XCTAssertEqual(KeysUsableCheck.appKey(app), .usable, "the app key signs while the phone is locked")
         XCTAssertEqual(KeysUsableCheck.agreement(seed.lookup()), .usable, "the seed key agrees while the phone is locked")
-        // The WhenUnlocked phone key is refused for now: never lost.
+        // The WhenUnlocked phone key is refused for now: never lost. On iOS 27 the keychain still returns the key's
+        // reference and its name while the phone is locked; only its use is refused. Either answer is "not missing".
         let lookup = phone.lookup(keyVault: "v", keyID: p.keyID)
-        XCTAssertTrue(isUnavailable(lookup), "a locked lookup is not missing")
+        XCTAssertTrue(isUnavailable(lookup) || isFound(lookup), "a locked lookup is not missing: \(lookup)")
+        if case .found(let k) = lookup {
+            XCTAssertThrowsError(try k.agree(ePub)) { error in
+                // The refusal's domain and code (no key material), to see what a later iOS answers.
+                print("LockedPhoneDeviceTests: a locked agreement was refused: \((error as NSError).domain) \((error as NSError).code)")
+                XCTAssertEqual(KeysUsability.of(error), .unavailable, "\(error)")
+            }
+        }
         XCTAssertEqual(KeysUsableCheck.agreement(lookup), .unavailable)
         XCTAssertThrowsError(try p.key.agree(ePub)) { XCTAssertEqual(KeysUsability.of($0), .unavailable, "\($0)") }
-        XCTAssertThrowsError(try phone.keyNames()) { XCTAssertEqual(KeysUsability.of($0), .unavailable, "\($0)") }
+        do {
+            let names = try phone.keyNames()
+            XCTAssertTrue(names.contains { $0.keyID == p.keyID }, "listed while locked: the key is there")
+        } catch {
+            XCTAssertEqual(KeysUsability.of(error), .unavailable, "\(error)")
+        }
         // A stale flag that still says "available": the keychain's and the Secure Enclave's own answers keep it a refusal
         // for now, never missing or invalid.
         let stale = SecureEnclavePhoneSecretSource(tag: Self.phoneTag, protectedData: ProtectedDataFlag(available: true))
