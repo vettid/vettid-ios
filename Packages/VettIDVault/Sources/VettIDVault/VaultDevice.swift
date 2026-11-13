@@ -396,7 +396,10 @@ public final class VaultDevice: @unchecked Sendable {
         let cutoff = Self.ms(t.addingTimeInterval(-Self.handshakeTTL))
         let sorted = awaiting.sorted { $0.createdMs > $1.createdMs }
         let keep = sorted.prefix(Self.maxAwaiting).filter { $0.createdMs >= cutoff }
-        for a in awaiting where !keep.contains(where: { $0.resp === a.resp }) { a.resp.abort() }
+        for a in awaiting where !keep.contains(where: { $0.resp === a.resp }) {
+            a.resp.abort()
+            unsavedResps.remove(ObjectIdentifier(a.resp))
+        }
         awaiting = Array(keep)
     }
 
@@ -417,12 +420,12 @@ public final class VaultDevice: @unchecked Sendable {
         guard let (round, mark) = begin else { return }
         let task = Task { [weak self] in
             guard let self else { return }
-            // (0.88.1) hs.confirm again after 12 days, then the outbox: both through the lock gate, and neither after a stop
-            // since this start.
+            // An hs.resp that may not have reached the relay (ungated, as a handling's), then (0.88.1) hs.confirm again after
+            // 12 days, then the outbox through the lock gate; none of them after a stop since this start.
             let flush = Task {
+                await self.resendResps(since: mark)
                 await self.tickConfirm(since: mark)
                 await self.flushOutbox(since: mark)
-                await self.resendResps() // an hs.resp that may not have reached the relay (ungated, as a handling's)
             }
             defer { flush.cancel() }
             do {
@@ -506,6 +509,7 @@ public final class VaultDevice: @unchecked Sendable {
                 ini = nil
                 for a in awaiting { a.resp.abort() }
                 awaiting.removeAll()
+                unsavedResps.removeAll()
                 st.vault = nil
                 st.outbox.removeAll()
                 st.utks.removeAll()
@@ -531,6 +535,7 @@ public final class VaultDevice: @unchecked Sendable {
                 ini = nil
                 for a in awaiting { a.resp.abort() }
                 awaiting.removeAll()
+                unsavedResps.removeAll()
                 defer { inboxWaiters.removeAll() }
                 return (Array(pending.values), inboxWaiters)
             }

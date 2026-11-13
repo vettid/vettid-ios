@@ -15,6 +15,7 @@ extension VaultDevice {
         keyring = Keyring()
         for a in awaiting { a.resp.abort() }
         awaiting.removeAll()
+        unsavedResps.removeAll()
     }
 
     /// vault.enrolled (§11.3), sealed to this device's KEM key: pins the vault and gives this device its first token.
