@@ -114,7 +114,8 @@ struct SecretTextView: UIViewRepresentable {
 
     func makeUIView(context: Context) -> UITextView {
         let v = pasteOnly ? PasteOnlyTextView() : UITextView()
-        v.textContentType = UITextContentType(rawValue: "")
+        // As the secret fields (``SecretInput``): on the text fields, an empty type let iOS offer a saved password.
+        v.textContentType = .oneTimeCode
         v.autocorrectionType = .no
         v.spellCheckingType = .no
         v.smartQuotesType = .no

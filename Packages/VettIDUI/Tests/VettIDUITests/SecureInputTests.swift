@@ -13,8 +13,7 @@ import UIKit
         for visible in [false, true] {
             let f = UITextField()
             SecretInput.configure(f, visible: visible)
-            #expect(f.textContentType == UITextContentType(rawValue: ""))
-            #expect(f.textContentType != .password && f.textContentType != .newPassword && f.textContentType != .username)
+            #expect(f.textContentType == .oneTimeCode)
             #expect(f.autocorrectionType == .no && f.spellCheckingType == .no)
             #expect(f.smartQuotesType == .no && f.smartDashesType == .no && f.smartInsertDeleteType == .no)
             #expect(f.inlinePredictionType == .no && f.autocapitalizationType == .none)
@@ -71,6 +70,7 @@ import UIKit
         window.layoutIfNeeded()
         func editor(_ v: UIView) -> UITextView? { (v as? UITextView) ?? v.subviews.lazy.compactMap(editor).first }
         let v = try #require(editor(window))
+        #expect(v.textContentType == .oneTimeCode)
         box.text = "line one\nline two"
         for _ in 0..<50 where v.text != box.text { try await Task.sleep(for: .milliseconds(20)) }
         #expect(v.text == "line one\nline two" && v.selectedRange.location == (v.text as NSString).length)
@@ -190,7 +190,7 @@ import UIKit
         window.layoutIfNeeded()
         let fields = textFields(in: window)
         try #require(fields.count == 3)
-        for f in fields { #expect(f.adjustsFontForContentSizeCategory) }
+        for f in fields { #expect(f.adjustsFontForContentSizeCategory && f.textContentType == .oneTimeCode) }
         for f in fields[0...1] { #expect(f.font?.familyName.hasPrefix("Inter") == true, "the password and the visible field") }
         #expect(fields[2].font?.fontDescriptor.symbolicTraits.contains(.traitMonoSpace) == true, "the code")
         window.isHidden = true

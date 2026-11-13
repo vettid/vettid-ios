@@ -30,7 +30,7 @@ import VettIDUI
         let fields = textFields(in: window)
         #expect(fields.count == 1)
         let field = try #require(fields.first)
-        #expect(field.isSecureTextEntry && field.textContentType?.rawValue == "")
+        #expect(field.isSecureTextEntry && field.textContentType == .oneTimeCode)
         #expect(field.autocorrectionType == .no && field.spellCheckingType == .no && field.inlinePredictionType == .no)
         window.isHidden = true
     }

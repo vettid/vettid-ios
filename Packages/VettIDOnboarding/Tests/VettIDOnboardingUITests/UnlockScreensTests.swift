@@ -100,7 +100,7 @@ import VettIDUI
         #expect(fields.count == 1)
         let field = try #require(fields.first)
         #expect(field.isSecureTextEntry)
-        #expect(field.textContentType?.rawValue == "")
+        #expect(field.textContentType == .oneTimeCode)
         #expect(field.autocorrectionType == .no && field.spellCheckingType == .no && field.inlinePredictionType == .no)
         #expect(field.smartQuotesType == .no && field.smartDashesType == .no && field.smartInsertDeleteType == .no)
         window.isHidden = true
@@ -113,7 +113,7 @@ import VettIDUI
         s.phoneSecret = true
         let window = host(UnlockScreen(state: s, actions: NoUnlockActions()))
         let field = try #require(textFields(in: window).first)
-        #expect(field.isSecureTextEntry && field.textContentType?.rawValue == "")
+        #expect(field.isSecureTextEntry && field.textContentType == .oneTimeCode)
         window.isHidden = true
     }
 

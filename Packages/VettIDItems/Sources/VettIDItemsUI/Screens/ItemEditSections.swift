@@ -49,8 +49,9 @@ struct PlainField: View {
     var lines: ClosedRange<Int>?
     let onChange: @MainActor (String) -> Void
 
-    /// No AutoFill and no "Save Password?" (IOS-PLAN §6.5): the empty content type the secret fields use, so that iOS
-    /// guesses none (a field next to a password is taken for a username otherwise).
+    /// No AutoFill and no "Save Password?" (IOS-PLAN §6.5) on a plain (not secret) field: an empty content type, so that
+    /// iOS guesses none (a field next to a password is taken for a username otherwise). The secret fields use
+    /// `.oneTimeCode` instead (``SecretInput``).
     static let noAutofill = UITextContentType(rawValue: "")
 
     var body: some View {

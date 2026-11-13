@@ -5,18 +5,23 @@ import UIKit
 /// autocorrection, spell checking, smart quotes, dashes or inserts, no inline predictions, no capitalization.
 ///
 /// AutoFill and the save prompt: iOS offers them for a field whose `textContentType` is a credential type (`.password`,
-/// `.newPassword`, `.username`) and for a secure field next to a username-like field. These fields set the content type
-/// to an empty type (not nil, which lets iOS guess), never stand beside a username field, and are emptied when they
-/// leave the screen (the save prompt comes from a secure field that disappears with text in it). The device test of
-/// §6.5 (submit each secret screen and check that neither the AutoFill bar nor the save prompt appears) records which
-/// technique holds: this one first, then `.oneTimeCode`; `isSecureTextEntry` stays (it keeps the text out of captures
-/// and the keyboard from learning), manual masking being the last resort. Not yet run on an iPhone.
+/// `.newPassword`, `.username`) and for a secure field next to a username-like field. The secret screens of §6.5 have
+/// no username field beside these fields (the setup screen's email sits above a visible code field, not a secure one),
+/// and they are emptied when they leave the screen (the save prompt comes from a secure field that disappears with text
+/// in it). The technique: `.oneTimeCode`. An empty content type, tried first, failed on an iPhone (iOS 27.0.1) that
+/// holds a saved password for vettid.org: the enrollment's password field was offered that password in an AutoFill
+/// bubble, over the next field. The app has no `webcredentials:` association (only `applinks:`), so the offer came from
+/// iOS's own matching of the app to the domain; it is not something an entitlement change would remove. With `.oneTimeCode`, the
+/// enrollment, the unlock and the owner check pass on that iPhone; the other secret screens are not yet run there. The
+/// trade-off: iOS may suggest a verification code (from Messages, Mail or Passwords) above the keyboard; it is only
+/// typed in if the member taps it, and nothing is offered or saved from the field. `isSecureTextEntry` stays (it keeps
+/// the text out of captures and the keyboard from learning); manual masking is the last resort.
 @MainActor
 public enum SecretInput {
     /// Applies the secret-input settings to [field]. [visible]: a secret the member reads while typing it (a recovery
     /// or setup code): an ASCII-capable keyboard; otherwise a masked field.
     public static func configure(_ field: UITextField, visible: Bool) {
-        field.textContentType = UITextContentType(rawValue: "")
+        field.textContentType = .oneTimeCode
         field.passwordRules = nil
         field.autocorrectionType = .no
         field.spellCheckingType = .no
