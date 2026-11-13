@@ -104,7 +104,8 @@ public struct VaultApi: Sendable {
     /// (an unlock, an enroll, a recovery open) while the answer was on its way, as the answer may name the one before.
     public func statusUnlockID() async throws -> String? {
         let mark = device.openingMark()
-        let info = try await status()
+        // A lock-time call: its sends are not held by the lock gate, which this lock has shut (``VaultDevice/lockTimeSend``).
+        let info = try await VaultDevice.$lockTimeSend.withValue(true) { try await status() }
         return device.openingMark() == mark ? info.unlockId : nil
     }
 

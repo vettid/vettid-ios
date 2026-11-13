@@ -107,4 +107,68 @@ import VettIDDataTesting
         #expect(await eventually { d.mem.withLock { d.st.outbox.isEmpty } })
         #expect(m.lockHoldsPhone, "the phone stays locked")
     }
+
+    /// "Opened again" with an ack owed: this phone's lock was answered `stale_lock` (the vault was opened again elsewhere).
+    func openedAgain(ackOwed: Bool = false) async throws -> VaultDevice {
+        service.announcesUnlockID = true
+        if ackOwed { service.refuse("credential.ack", with: "retry", times: 1) }
+        try await openVault()
+        let d = try #require(m.session?.device)
+        // No flush may send the owed ack on its own meanwhile: the last one counts as just tried.
+        if ackOwed { d.holdBackAckRetries(true) }
+        try await m.lock()
+        #expect(try await m.unlock(pin: pin) == .success)
+        service.openedByAnotherDevice(notifying: false)
+        try await m.lock()
+        #expect(await eventually { m.lockNotice == .openedAgain })
+        #expect(!m.lockPending && m.lockHoldsPhone)
+        if ackOwed { #expect(d.credentialAckPending) }
+        return d
+    }
+
+    /// In "opened again" a handled vault message's reply (the refresh answer) and the flush's owed `credential.ack` go.
+    @Test func inOpenedAgainAHandledReplyAndTheOwedAckGo() async throws {
+        defer { phone.close() }
+        let d = try await openedAgain(ackOwed: true)
+        let refreshes = seen("relay.token.refresh")
+        service.sendTokenRefresh()
+        #expect(await eventually { seen("relay.token.refresh") > refreshes }, "the refresh answer goes")
+        let acks = seen("credential.ack")
+        d.holdBackAckRetries(false)
+        m.onForeground()
+        #expect(await eventually { seen("credential.ack") > acks && !d.credentialAckPending }, "the owed ack goes")
+        #expect(m.lockHoldsPhone)
+    }
+
+    /// "Lock it now" from "opened again" makes the lock pending at once: the gate holds the outbox again.
+    @Test func lockItNowShutsTheGateAgain() async throws {
+        defer { phone.close() }
+        _ = try await openedAgain()
+        service.relayLockAnswer = .noAnswer
+        service.memberLockAnswer = .queued
+        await m.lockAgain()
+        #expect(m.lockPending)
+        let d = try await keep("device.features")
+        let features = seen("device.features")
+        m.onForeground()
+        try await Task.sleep(nanoseconds: 300_000_000)
+        #expect(seen("device.features") == features)
+        #expect(d.mem.withLock { d.st.outbox.map(\.type) } == ["device.features"])
+    }
+
+    /// A new process that starts in "opened again" lets the outbox go too; an operation on the open vault is still refused.
+    @Test func aRestartIntoOpenedAgainLetsTheOutboxGoButNoOperation() async throws {
+        defer { phone.close() }
+        _ = try await openedAgain()
+        try await phone.restart()
+        try await m.refresh()
+        #expect(m.lockNotice == .openedAgain && m.lockHoldsPhone && !m.lockPending)
+        let d = try await keep("device.features")
+        let features = seen("device.features")
+        m.onForeground()
+        #expect(await eventually { seen("device.features") > features })
+        #expect(await eventually { d.mem.withLock { d.st.outbox.isEmpty } })
+        let s = try #require(try await m.storedSession())
+        #expect(throws: VaultFailure.self) { _ = try m.openApi(s) }
+    }
 }

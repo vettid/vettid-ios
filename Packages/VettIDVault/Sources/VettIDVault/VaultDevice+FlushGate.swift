@@ -31,6 +31,24 @@ extension VaultDevice {
         return prior
     }
 
+    /// (ANDROID-PLAN "While pending") Marks a call made for the lock itself, "Lock it now"'s one `vault.status`
+    /// (``VaultApi/statusUnlockID()``): its sends, a re-send included, are not held by the lock gate.
+    @TaskLocal public static var lockTimeSend = false
+
+    /// The requests the lock gate never holds: the lock itself (a `call.end` passes too, ``flushMayGo(_:since:)``).
+    static let ungatedRequests: Set<String> = ["vault.lock"]
+
+    /// Whether a request of [type] may be sent now (ANDROID-PLAN "While pending"): asked before a request's re-send
+    /// (``request(_:body:timeout:innerID:exp:retries:)``) and before the one send of ``requestOnce(_:body:timeout:exp:)``
+    /// (the `credential.ack`, the settle probe, `call.start`). The lock, a `call.end` and a lock-time call
+    /// (``lockTimeSend``) always go. The first send of a ``request(_:body:timeout:innerID:exp:)`` is gated by the manager
+    /// (`openApi`).
+    func requestMayGo(_ type: String) async -> Bool {
+        if Self.lockTimeSend || Self.ungatedRequests.contains(type) || type == Self.typeCallEnd { return true }
+        guard let gate = mem.withLock({ flushGate }) else { return true }
+        return await gate()
+    }
+
     /// Throws ``OutboxHeld`` unless an entry of [type] may be deposited now (``flushMayGo(_:since:)``).
     func refuseWhileGated(_ type: String, since mark: Int) async throws {
         if await flushMayGo(type, since: mark) != .go { throw OutboxHeld() }

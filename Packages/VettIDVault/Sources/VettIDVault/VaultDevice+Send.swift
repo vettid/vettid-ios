@@ -57,6 +57,8 @@ extension VaultDevice {
         let d = OneShot<Inner>()
         mem.withLock { pending[id] = d }
         defer { mem.withLock { _ = pending.removeValue(forKey: id) } }
+        // Held by the lock gate: nothing is sent (``requestMayGo(_:)``).
+        guard await requestMayGo(type) else { throw OutboxHeld() }
         _ = try await countingSend(type) { try await sendOnceUnlocked(id: id, type: type, body: body, exp: exp) }
         guard let inner = await d.wait(timeout: timeout ?? cfg.requestTimeout(for: type)) else {
             try Task.checkCancellation()
@@ -401,7 +403,9 @@ extension VaultDevice {
             try refuseSending()
             // No answer: the collection may have ended (the answer would then wait in the mailbox unread).
             ensureCollecting()
-            if attempt < retries {
+            // A re-send the lock gate holds is not sent: the request goes on waiting for the copy already out, as after a
+            // re-send the relay could not take (``requestMayGo(_:)``).
+            if attempt < retries, await requestMayGo(type) {
                 _ = try await countingSend(type) { try await sendOnceUnlocked(id: id, type: type, body: body, exp: exp) }
             }
         }

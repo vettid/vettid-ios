@@ -106,6 +106,9 @@ extension FakeVaultService {
         locked { try? reply("sync.event", #"{"kind":"vault.release","release":"\#(Self.pcr0(n))","release_number":\#(n)}"#) }
     }
 
+    /// The vault's `relay.token.refresh` (§7.2: it asks the phone for a fresh standing token), sent to this phone.
+    public func sendTokenRefresh() { locked { try? reply("relay.token.refresh", "{}") } }
+
     /// The move recorded and not yet confirmed, if any.
     public var pendingMove: UInt64? { locked { releases.pending } }
 
