@@ -87,7 +87,8 @@ import VettIDUI
     }
 
     /// IOS-PLAN §6.5: the PIN is never typed on a keyboard: the unlock screen has no text field for it. With the owner
-    /// check due, the one field is the credential password's, with no AutoFill, no save prompt and no keyboard learning.
+    /// check due, the keypad comes first (no field yet), then, after "Next", the one field is the credential password's,
+    /// with no AutoFill, no save prompt and no keyboard learning.
     @Test func thePinIsOnTheKeypadAndThePasswordFieldIsASecretOne() throws {
         let plain = host(UnlockScreen(state: ok, actions: NoUnlockActions()))
         #expect(textFields(in: plain).isEmpty, "no keyboard for the PIN")
@@ -95,7 +96,10 @@ import VettIDUI
 
         var due = ok
         due.checkDue = true
-        let window = host(UnlockScreen(state: due, actions: NoUnlockActions()))
+        let first = host(UnlockScreen(state: due, actions: NoUnlockActions()))
+        #expect(textFields(in: first).isEmpty, "the keypad first")
+        first.isHidden = true
+        let window = host(UnlockScreen(state: due, actions: NoUnlockActions(), pin: typed(6), steps: PinThenPassword(pinDone: true)))
         let fields = textFields(in: window)
         #expect(fields.count == 1)
         let field = try #require(fields.first)
@@ -104,6 +108,131 @@ import VettIDUI
         #expect(field.autocorrectionType == .no && field.spellCheckingType == .no && field.inlinePredictionType == .no)
         #expect(field.smartQuotesType == .no && field.smartDashesType == .no && field.smartInsertDeleteType == .no)
         window.isHidden = true
+    }
+
+    /// The PIN and then the password (VAULT-MESSAGING §3.6.5 on one screen): "Next" once the PIN is long enough, the
+    /// password after it, the keypad again once its digits are gone; only the password when no PIN is asked.
+    @Test func thePasswordFollowsThePin() {
+        var steps = PinThenPassword()
+        #expect(steps.asksNext(asksPin: true, digits: 6, minPin: 6))
+        #expect(!steps.passwordShown(asksPin: true, digits: 6, minPin: 6))
+        steps.pinDone = true
+        #expect(steps.passwordShown(asksPin: true, digits: 6, minPin: 6))
+        #expect(!steps.passwordShown(asksPin: true, digits: 5, minPin: 6), "a PIN made too short shows the keypad")
+        steps.digitsChanged(to: 4)
+        #expect(steps.pinDone)
+        steps.digitsChanged(to: 0)
+        #expect(!steps.pinDone, "taken or dropped: the keypad again, and \"Next\" again")
+        #expect(PinThenPassword().passwordShown(asksPin: false, digits: 0, minPin: 6), "the PIN kept: the password only")
+    }
+
+    /// The steps as the member sees them, with the check due: the keypad (no field); after "Next" the password field and
+    /// no keypad key; the digits taken by "Unlock" or dropped (backgrounding) bring the keypad back; "Edit PIN"
+    /// (``PinThenPassword/pinDone`` false) too; a wrong PIN shows the keypad.
+    @Test func theStepsFollowThePin() async throws {
+        var due = ok
+        due.checkDue = true
+        let pin = typed(6)
+        let window = host(UnlockScreen(state: due, actions: NoUnlockActions(), pin: pin, steps: PinThenPassword(pinDone: true)))
+        #expect(textFields(in: window).count == 1, "the password step")
+        pin.clear()
+        // Up to 2 s for the observation to redraw (CI simulators are slow).
+        for _ in 0..<40 where !textFields(in: window).isEmpty {
+            window.layoutIfNeeded()
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        #expect(textFields(in: window).isEmpty, "the digits gone: the keypad again")
+        window.isHidden = true
+
+        let back = host(UnlockScreen(state: due, actions: NoUnlockActions(), pin: typed(6), steps: PinThenPassword(pinDone: false)))
+        #expect(textFields(in: back).isEmpty, "Edit PIN: the keypad, the digits kept")
+        back.isHidden = true
+
+        var wrong = due
+        wrong.message = .badPin
+        let bad = host(UnlockScreen(state: wrong, actions: NoUnlockActions()))
+        #expect(textFields(in: bad).isEmpty, "a wrong PIN: the keypad")
+        bad.isHidden = true
+    }
+
+    /// While the unlock is sent (a vault that is starting can take minutes) no dimmed keypad crowds the wait's text or is
+    /// read by VoiceOver; it comes back with the answer.
+    @Test func theKeypadGoesWhileTheUnlockIsSent() {
+        var s = ok
+        s.checkDue = true
+        #expect(UnlockScreen.keypadShown(s, passwordStep: false))
+        #expect(!UnlockScreen.keypadShown(s, passwordStep: true))
+        s.busy = true
+        s.slowUnlock = true
+        #expect(!UnlockScreen.keypadShown(s, passwordStep: false))
+        #expect(height(UnlockScreen(state: s, actions: NoUnlockActions())) > 0)
+    }
+
+    /// The way back while the check gates it: the check-first text in place of "Return to release N"; the screen renders
+    /// either way.
+    @Test func theCheckFirstTextReplacesTheReturn() {
+        var s = ok
+        s.moveUnconfirmed = UnconfirmedMove(
+            from: ReleaseView(number: 3, pcr0: String(repeating: "aa", count: 48), status: "", endsAt: nil, notes: ""),
+            to: ReleaseView(number: 4, pcr0: String(repeating: "a4", count: 48), status: "", endsAt: nil, notes: ""),
+            failed: true
+        )
+        #expect(s.returnOffered && UnlockScreen.wayBack(s) == .offered(refused: false), "the link")
+        s.returnRefused = true
+        #expect(UnlockScreen.wayBack(s) == .offered(refused: true), "the link, with the refusal")
+        #expect(height(UnlockScreen(state: s, actions: NoUnlockActions())) > 0)
+        s.returnGated = true
+        s.checkDue = true
+        #expect(UnlockScreen.wayBack(s) == .checkFirst, "the check-first text, no link")
+        #expect(height(UnlockScreen(state: s, actions: NoUnlockActions())) > 0)
+    }
+
+    /// The keypad stays fixed above the buttons on an iPhone 15 or 16e at the usual text sizes; on an SE, or at an
+    /// accessibility size, it scrolls with the form so that the notices above it keep room.
+    @Test func theKeypadIsFixedOnlyWhereTheNoticesKeepRoom() {
+        #expect(PinThenPassword.keypadFixed(height: 763, typeSize: .large))
+        #expect(PinThenPassword.keypadFixed(height: 763, typeSize: .xxxLarge))
+        #expect(!PinThenPassword.keypadFixed(height: 763, typeSize: .accessibility1))
+        #expect(!PinThenPassword.keypadFixed(height: 647, typeSize: .large), "an iPhone SE")
+    }
+
+    /// VoiceOver's cursor is cleared at once and moved only after the step's view is in place, so that the same target
+    /// asked for a second time ("Next", "Edit PIN", "Next") still moves it; a newer move cancels an older one still waiting.
+    @Test @MainActor func theFocusMovesOnceTheStepIsInPlace() async {
+        let seen = FocusLog()
+        let first = PinThenPassword.moveFocus({ seen.all.append($0) }, to: .password, after: nil)
+        #expect(seen.all == [nil], "cleared at once, not yet moved")
+        await first.value
+        #expect(seen.all == [nil, .password])
+        let again = PinThenPassword.moveFocus({ seen.all.append($0) }, to: .password, after: first)
+        await again.value
+        #expect(seen.all == [nil, .password, nil, .password], "the same target again moves it again")
+
+        // "Next", then "Edit PIN" within the delay: only the keypad.
+        let late = FocusLog()
+        let next = PinThenPassword.moveFocus({ late.all.append($0) }, to: .password, after: nil)
+        let edit = PinThenPassword.moveFocus({ late.all.append($0) }, to: .keypad, after: next)
+        await next.value
+        await edit.value
+        #expect(late.all == [nil, nil, .keypad], "the older move never lands")
+    }
+
+    /// "Unlock" needs the whole PIN, and the password with a check due; a return to the previous release takes the PIN only,
+    /// check due or not (its keypad shows no password, so asking for one would leave the button off for good).
+    @Test func aReturnToThePreviousReleaseNeedsNoPassword() {
+        let whole = UnlockState.minPinLength
+        var due = ok
+        due.checkDue = true
+        #expect(!UnlockScreen.canSubmit(due, digits: whole), "the password is missing")
+        #expect(!UnlockScreen.canSubmit(due, digits: whole - 1))
+        var typed = due
+        typed.password = "pw"
+        #expect(UnlockScreen.canSubmit(typed, digits: whole))
+        var back = due
+        back.returnAsksPin = true
+        #expect(UnlockScreen.canSubmit(back, digits: whole))
+        #expect(!UnlockScreen.canSubmit(back, digits: whole - 1))
+        #expect(UnlockScreen.canSubmit(ok, digits: whole))
     }
 
     /// The release R cancel of a recovery asks for the password in the same kind of field.
@@ -223,5 +352,16 @@ import VettIDUI
     private func views(in view: UIView) -> [UIView] { [view] + view.subviews.flatMap { views(in: $0) } }
 
     private func textFields(in view: UIView) -> [UITextField] { views(in: view).compactMap { $0 as? UITextField } }
+
+    private func typed(_ digits: Int) -> PinBuffer {
+        let b = PinBuffer()
+        for d in 0..<digits { b.append(d % 10) }
+        return b
+    }
+}
+
+/// The focus targets set, in order.
+@MainActor private final class FocusLog {
+    var all: [PinThenPassword.Focus?] = []
 }
 #endif

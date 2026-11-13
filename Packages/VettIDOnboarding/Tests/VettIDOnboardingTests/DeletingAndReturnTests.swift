@@ -69,6 +69,102 @@ import VettIDDataTesting
         #expect(vault.returnPins.count == 2 && !vm.state.returnAsksPin)
     }
 
+    /// The way back waits while the owner check gates it (due, held, or locked after ten checks), as the vault's release
+    /// update refuses it then: no confirmation, nothing sent, the PIN and password dropped. Only the idle lock (release L)
+    /// does not gate it: the return then starts with the PIN alone.
+    @Test func theWayBackWaitsForTheCheck() async {
+        vault.unconfirmedMove = Self.move(failed: true)
+        let vm = await unlockModel()
+        vm.ownerCheck(due: true, lockedByChecks: false)
+        #expect(vm.state.returnGated && vm.state.checkDue)
+        vm.askReturn()
+        #expect(!vm.state.returnConfirm)
+        vm.setPin("402817")
+        vm.setPassword("pw")
+        vm.confirmReturn()
+        #expect(vault.returnPins.isEmpty && vm.state.pin.isEmpty && vm.state.password.isEmpty && !vm.state.returnAsksPin)
+        vm.ownerCheck(due: false, lockedByChecks: true)
+        #expect(vm.state.returnGated)
+
+        vm.ownerCheck(due: false, lockedByChecks: false, idleLocked: IdleLocked(afterSeconds: 3600))
+        #expect(!vm.state.returnGated && vm.state.checkDue)
+        vm.askReturn()
+        #expect(vm.state.returnConfirm)
+        vm.setPin("402817")
+        vm.setPassword("pw")
+        vm.confirmReturn()
+        #expect(vault.returnPins == ["402817"] && vm.state.password.isEmpty, "the PIN only; the password does not stay")
+
+        // The check comes due while the return's keypad is asking: the keypad closes, and its PIN is never sent.
+        vm.askReturn()
+        vm.confirmReturn()
+        #expect(vm.state.returnAsksPin)
+        vm.ownerCheck(due: true, lockedByChecks: false)
+        #expect(!vm.state.returnAsksPin && !vm.state.returnConfirm)
+        vm.setPin("402817")
+        vm.confirmReturn()
+        #expect(vault.returnPins.count == 1 && !vault.calls.contains("unlock"), "gated: nothing sent, neither the way back nor an unlock")
+        // The primary action with the keypad's PIN and no password: neither the way back nor a PIN-only unlock.
+        vm.setPin("402817")
+        vm.submit()
+        await vm.settle()
+        #expect(vault.returnPins.count == 1, "no way back while gated")
+        #expect(!vault.calls.contains("unlock"), "no unlock without the password while the check is due")
+        #expect(vm.state.pin.isEmpty, "the refused submit keeps no PIN")
+    }
+
+    /// A return the manager refuses reads the gate again: when the check came due since the last read, the notice says
+    /// the check comes first; otherwise the move's notice says it failed (kept there when the keypad closes), until the
+    /// way back is asked again.
+    @Test func aRefusedReturnReadsTheGateAgain() async {
+        vault.unconfirmedMove = Self.move(failed: true)
+        vault.returnStarts = false
+        let vm = UnlockViewModel(vault: vault, account: vault, ownerCheck: vault)
+        await vm.settle()
+        #expect(vm.state.returnOffered && !vm.state.returnGated)
+        vm.askReturn()
+        vm.setPin("402817")
+        vm.confirmReturn()
+        #expect(vault.returnPins.count == 1 && vm.state.returnRefused && vm.state.message == nil, "not gated: in the move's notice")
+        vm.askReturn()
+        #expect(!vm.state.returnRefused, "asked again: the refusal goes")
+        vm.dismissReturn()
+
+        // The check came due since the last read (every 15 s): the notice, never a failure.
+        vault.ownerCheck = OwnerCheckView(state: .ok, deadline: Date().addingTimeInterval(-60))
+        vm.askReturn()
+        vm.setPin("402817")
+        vm.confirmReturn()
+        #expect(vault.returnPins.count == 2)
+        #expect(vm.state.returnGated && vm.state.checkDue && vm.state.message == nil && !vm.state.returnAsksPin)
+        #expect(!vm.state.returnRefused, "gated: the check-first text, not a refusal")
+        #expect(!vault.calls.contains("unlock"))
+    }
+
+    /// The refusal goes when the check gates the way back, and with an unlock: an old refusal never comes back by itself.
+    @Test func aRefusalGoesWithTheGateAndTheUnlock() async {
+        vault.unconfirmedMove = Self.move(failed: true)
+        vault.returnStarts = false
+        let vm = UnlockViewModel(vault: vault, account: vault, ownerCheck: vault)
+        await vm.settle()
+        vm.askReturn()
+        vm.setPin("402817")
+        vm.confirmReturn()
+        #expect(vm.state.returnRefused)
+        vm.ownerCheck(due: true, lockedByChecks: false)
+        vm.ownerCheck(due: false, lockedByChecks: false)
+        #expect(!vm.state.returnRefused, "the gate on and off again: no old refusal")
+
+        vm.askReturn()
+        vm.setPin("402817")
+        vm.confirmReturn()
+        #expect(vm.state.returnRefused)
+        vm.setPin("402817")
+        vm.submit()
+        await vm.settle()
+        #expect(vault.calls.contains("unlock") && !vm.state.returnRefused, "unlocked: the refusal goes")
+    }
+
     /// Check again: "not finished yet" while listed, the unreachable text, nothing once gone; the bound's state followed.
     @Test func checkAgainSaysWhatItFound() async {
         vault.deletion = VaultDeletion(since: Date(), until: Date())

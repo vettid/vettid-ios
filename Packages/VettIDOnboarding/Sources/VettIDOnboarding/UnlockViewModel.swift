@@ -18,6 +18,9 @@ public final class UnlockViewModel: UnlockActions {
     @ObservationIgnored let vault: any VaultRepository
     @ObservationIgnored let account: any AccountRepository
     @ObservationIgnored private let releaseNotes: (any ReleaseNotesRepository)?
+    /// The owner check, read again when the way back is refused (the gate may have turned on since the last read).
+    @ObservationIgnored private let ownerCheckRepo: (any OwnerCheckRepository)?
+    @ObservationIgnored private let now: @Sendable () -> Date
     @ObservationIgnored private var notesTask: Task<Void, Never>?
     /// One second of a countdown (a virtual clock in the tests).
     @ObservationIgnored private let tick: @Sendable () async throws -> Void
@@ -49,6 +52,8 @@ public final class UnlockViewModel: UnlockActions {
         self.vault = vault
         self.account = account
         self.releaseNotes = releaseNotes
+        self.ownerCheckRepo = ownerCheck
+        self.now = now
         self.tick = tick
         let hint = account.account?.emailHint
         state = UnlockState(email: hint?.isEmpty == false ? hint : nil, phoneSecret: vault.usesPhoneSecret)
@@ -101,7 +106,17 @@ public final class UnlockViewModel: UnlockActions {
     func ownerCheck(due: Bool, lockedByChecks: Bool, idleLocked: IdleLocked? = nil) {
         state.checkDue = due || lockedByChecks || idleLocked != nil
         state.lockedByOwnerCheck = lockedByChecks
+        state.returnGated = due || lockedByChecks
         state.idleLocked = idleLocked
+        // Gated: an earlier refusal of the way back is no longer what stops it (and does not come back when the gate
+        // clears).
+        if state.returnGated { state.returnRefused = false }
+        // Gated while the way back was being asked for: its keypad and question close, the PIN typed for it goes.
+        if state.returnGated, state.returnAsksPin || state.returnConfirm {
+            state.returnAsksPin = false
+            state.returnConfirm = false
+            state.pin = ""
+        }
     }
 
     // MARK: - Tasks
@@ -248,7 +263,10 @@ public final class UnlockViewModel: UnlockActions {
     // MARK: - The way back to release N (IOS-PLAN §4.3)
 
     public func askReturn() {
-        if state.returnOffered && !state.busy { state.returnConfirm = true }
+        if state.returnOffered && !state.busy && !state.returnGated {
+            state.returnRefused = false
+            state.returnConfirm = true
+        }
     }
 
     public func dismissReturn() { state.returnConfirm = false }
@@ -260,8 +278,11 @@ public final class UnlockViewModel: UnlockActions {
 
     public func confirmReturn() {
         state.returnConfirm = false
-        guard state.returnOffered, !state.busy else {
+        // The way back sends the PIN only: a password typed for the check does not stay.
+        state.password = ""
+        guard state.returnOffered, !state.busy, !state.returnGated else {
             state.pin = ""
+            state.returnAsksPin = false
             return
         }
         if state.pin.count >= UnlockState.minPinLength {
@@ -277,15 +298,28 @@ public final class UnlockViewModel: UnlockActions {
     private func returnWithPin() {
         let pin = state.pin
         state.pin = ""
+        state.password = ""
         // Not now (a backoff's countdown runs, or a step is busy): the keypad keeps asking, and says why with its countdown.
+        // Gated meanwhile (the check came due): nothing is sent, and the notice says the check comes first.
+        if state.returnGated {
+            state.returnAsksPin = false
+            return
+        }
         guard pin.count >= UnlockState.minPinLength, state.pinAllowed else {
             state.returnAsksPin = true
             return
         }
         state.returnAsksPin = false
         state.message = nil
-        // Refused before anything was sent (an update running, the owner check or a change first).
-        if !vault.returnToPreviousRelease(pin: pin) { state.message = .failed(.other, code: nil) }
+        // Refused before anything was sent (an update running, the owner check or a change first). The gate is read again
+        // first: it may have turned on since the last read (every 15 s), and then the notice says the check comes first.
+        guard !vault.returnToPreviousRelease(pin: pin) else { return }
+        let at = now()
+        if let repo = ownerCheckRepo, repo.ownerCheck?.gated(at) == true || repo.lockedByChecks {
+            ownerCheck(due: repo.ownerCheck?.gated(at) == true, lockedByChecks: repo.lockedByChecks, idleLocked: repo.idleLockedNow(at))
+        } else {
+            state.returnRefused = true
+        }
     }
 
     // MARK: - The lock and the move
@@ -387,6 +421,7 @@ public final class UnlockViewModel: UnlockActions {
         case .success:
             state.pin = ""
             state.recoveryPending = false
+            state.returnRefused = false
         // §11.14.9 step 5: the vault holds the PIN change's candidate; the new PIN is asked for (nothing was counted).
         case .newPinNeeded:
             state.pin = ""

@@ -172,6 +172,85 @@ public struct PinEntry: View {
     }
 }
 
+/// A PIN on the in-app keypad and then a password, on one screen (VAULT-MESSAGING §3.6.5 asks for both together; the
+/// owner's choice for the iPhone, where the keypad is too tall to leave room for the password under it): the keypad until
+/// the PIN is long enough and "Next" is pressed, then the typed PIN as dots, a way back to the keypad, and the password.
+/// The keypad comes back by itself once its digits are gone (taken by a submit, or dropped).
+struct PinThenPassword: Equatable {
+    /// "Next" was pressed and the PIN not changed since.
+    var pinDone = false
+
+    /// Where VoiceOver's cursor goes when the step changes.
+    enum Focus: Hashable { case keypad, password }
+
+    /// How long after "Next" or "Edit PIN" VoiceOver's cursor is moved: set in the same update that inserts the field or
+    /// the keypad, the move was lost on an iPhone the second time round (the cursor stayed on "Edit PIN").
+    static let focusDelay: Duration = .milliseconds(400)
+
+    /// VoiceOver's cursor to [target] once the step's view is in place: cleared first, so that the same target set
+    /// twice still moves it, then set after ``focusDelay``. A move still waiting ([previous]) is cancelled, so that an
+    /// older step's target never lands after a newer one.
+    @MainActor
+    static func moveFocus(
+        _ set: @escaping @MainActor (Focus?) -> Void, to target: Focus, after previous: Task<Void, Never>?
+    ) -> Task<Void, Never> {
+        previous?.cancel()
+        set(nil)
+        return Task { @MainActor in
+            try? await Task.sleep(for: focusDelay)
+            guard !Task.isCancelled else { return }
+            set(target)
+        }
+    }
+
+    /// The screen height (points, inside the safe area) from which the keypad stays fixed above the buttons: an iPhone 15
+    /// or 16e (about 760) and up; an iPhone SE (about 650) keeps it in the scroll.
+    static let fixedKeypadHeight: CGFloat = 700
+
+    /// Whether the keypad stays fixed above the buttons: on a screen at least ``fixedKeypadHeight`` high and below the
+    /// accessibility text sizes; otherwise it scrolls with the form, so that the notices above it keep room.
+    static func keypadFixed(height: CGFloat, typeSize: DynamicTypeSize) -> Bool {
+        height >= fixedKeypadHeight && !typeSize.isAccessibilitySize
+    }
+
+    /// Whether the password step shows: always when no PIN is asked ([asksPin] false), else once "Next" took a PIN of at
+    /// least [minPin] digits that is still typed.
+    func passwordShown(asksPin: Bool, digits: Int, minPin: Int) -> Bool {
+        !asksPin || (pinDone && digits >= minPin)
+    }
+
+    /// Whether the primary button is "Next" (a PIN to type first) rather than the screen's own.
+    func asksNext(asksPin: Bool, digits: Int, minPin: Int) -> Bool {
+        !passwordShown(asksPin: asksPin, digits: digits, minPin: minPin)
+    }
+
+    /// The keypad's digits changed: once they are gone, the keypad is shown again.
+    mutating func digitsChanged(to digits: Int) {
+        if digits == 0 { pinDone = false }
+    }
+}
+
+/// The PIN once typed, in the password step: its label, its dots and "Edit PIN", which brings the keypad back with the
+/// digits as they are.
+struct EnteredPin: View {
+    @Environment(\.vettIDColors) private var colors
+    let label: String
+    let digits: Int
+    let identifier: String
+    let onChange: () -> Void
+
+    var body: some View {
+        VStack(spacing: Spacing.m) {
+            Text(label).vettIDFont(.labelLarge).foregroundStyle(colors.onSurfaceVariant)
+            PinDots(count: digits, length: PinPolicy.minLength)
+            TextLink(OnboardingStrings.pinStepChange, identifier: "\(identifier)_change", action: onChange)
+        }
+        .frame(maxWidth: .infinity)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("\(identifier)_entered")
+    }
+}
+
 extension ProgressState {
     var stepState: StepState {
         switch self {

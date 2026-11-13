@@ -377,7 +377,7 @@ public struct FullScreenProgress: View {
 /// body, the [content], and the primary (and optional secondary) action at the bottom, above the keyboard. The
 /// [header] (the hero glyph above the title) is centred; the title, body and [content] stay start-aligned.
 /// Mirrors vettid-android `FormScaffold`.
-public struct FormScaffold<Header: View, Content: View, TopActions: View>: View {
+public struct FormScaffold<Header: View, Content: View, TopActions: View, Bottom: View>: View {
     @Environment(\.vettIDColors) private var colors
     let title: String
     let message: String?
@@ -392,6 +392,8 @@ public struct FormScaffold<Header: View, Content: View, TopActions: View>: View 
     let header: Header
     let content: Content
     let topActions: TopActions
+    /// What stays in view above the buttons, outside the scroll (the PIN keypad: never cut off by the scroll's edge).
+    let bottom: Bottom
     let titleAccessibilityLabel: String?
 
     public init(
@@ -408,6 +410,7 @@ public struct FormScaffold<Header: View, Content: View, TopActions: View>: View 
         titleAccessibilityLabel: String? = nil,
         @ViewBuilder header: () -> Header = { EmptyView() },
         @ViewBuilder topActions: () -> TopActions = { EmptyView() },
+        @ViewBuilder bottom: () -> Bottom = { EmptyView() },
         @ViewBuilder content: () -> Content
     ) {
         self.title = title
@@ -423,6 +426,7 @@ public struct FormScaffold<Header: View, Content: View, TopActions: View>: View 
         self.header = header()
         self.content = content()
         self.topActions = topActions()
+        self.bottom = bottom()
         self.titleAccessibilityLabel = titleAccessibilityLabel
     }
 
@@ -452,6 +456,7 @@ public struct FormScaffold<Header: View, Content: View, TopActions: View>: View 
                 }
                 .padding(.horizontal, Spacing.xl)
             }
+            bottom.padding(.horizontal, Spacing.xl)
             VStack(spacing: Spacing.s) {
                 if let primaryLabel {
                     PrimaryButton(primaryLabel, busy: busy, destructive: destructive, action: onPrimary)

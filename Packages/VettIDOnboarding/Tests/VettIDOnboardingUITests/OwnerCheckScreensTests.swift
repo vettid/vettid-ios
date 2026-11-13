@@ -26,13 +26,62 @@ import VettIDUI
     /// IOS-PLAN §6.5: the PIN on the keypad, never a keyboard; the one text field is the password's, with no AutoFill, no
     /// save prompt and no keyboard learning.
     @Test func thePinIsOnTheKeypadAndThePasswordFieldIsASecretOne() throws {
-        let window = host(OwnerCheckScreen(state: held, actions: NoOwnerCheckActions(), now: now))
+        // The keypad first, with no field; the password once "Next" took the PIN.
+        let first = host(OwnerCheckScreen(state: held, actions: NoOwnerCheckActions(), now: now))
+        #expect(textFields(in: first).isEmpty)
+        first.isHidden = true
+        let pin = PinBuffer()
+        for d in [9, 7, 5, 3, 1, 0] { pin.append(d) }
+        let window = host(
+            OwnerCheckScreen(state: held, actions: NoOwnerCheckActions(), now: now, pin: pin, steps: PinThenPassword(pinDone: true))
+        )
         let fields = textFields(in: window)
         #expect(fields.count == 1)
         let field = try #require(fields.first)
         #expect(field.isSecureTextEntry && field.textContentType?.rawValue == "")
         #expect(field.autocorrectionType == .no && field.spellCheckingType == .no && field.inlinePredictionType == .no)
         window.isHidden = true
+    }
+
+    /// A wrong password takes the PIN (§3.6.5 keeps neither entry): the keypad again, no password field until "Next".
+    @Test func aWrongPasswordGoesBackToTheKeypad() async throws {
+        let pin = PinBuffer()
+        for d in 0..<6 { pin.append(d) }
+        let steps = PinThenPassword(pinDone: true)
+        let window = host(OwnerCheckScreen(state: held, actions: NoOwnerCheckActions(), now: now, pin: pin, steps: steps))
+        #expect(textFields(in: window).count == 1, "the password step")
+        // The check is sent (the PIN taken), and the vault answers that the password was wrong.
+        _ = pin.take()
+        for _ in 0..<40 where !textFields(in: window).isEmpty {
+            window.layoutIfNeeded()
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        #expect(textFields(in: window).isEmpty, "the keypad again")
+        // A whole PIN typed again: still the keypad, with "Next" (the step was reset with the digits).
+        for d in 0..<6 { pin.append(d) }
+        for _ in 0..<10 {
+            window.layoutIfNeeded()
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        #expect(textFields(in: window).isEmpty, "no password field until \"Next\"")
+        window.isHidden = true
+
+        var s = held
+        s.message = .badPassword(checksLeft: 3)
+        let answered = host(OwnerCheckScreen(state: s, actions: NoOwnerCheckActions(), now: now))
+        #expect(textFields(in: answered).isEmpty)
+        answered.isHidden = true
+    }
+
+    /// While the check or a lock is sent, no dimmed keypad is read by VoiceOver; it comes back with the answer.
+    @Test func theKeypadGoesWhileTheCheckIsSent() {
+        var s = held
+        #expect(OwnerCheckScreen.keypadShown(s, passwordStep: false))
+        s.busy = true
+        #expect(!OwnerCheckScreen.keypadShown(s, passwordStep: false))
+        s.busy = false
+        s.locking = true
+        #expect(!OwnerCheckScreen.keypadShown(s, passwordStep: false))
     }
 
     /// Release L (§3.6.8): the held and daily-check screens say when the vault locks itself, while that time is ahead.

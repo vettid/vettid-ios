@@ -57,6 +57,15 @@ public struct UnlockScreen: View {
     let onOpenAccountSite: @MainActor () -> Void
     let onContactSupport: (@MainActor (_ done: @escaping @MainActor (Bool) -> Void) -> Void)?
     @State private var pin = PinBuffer()
+    /// With a check due, the PIN on the keypad first, then the password (``PinThenPassword``).
+    @State private var steps = PinThenPassword()
+    /// The screen's height, for whether the keypad stays fixed above "Unlock" (``PinThenPassword/keypadFixed(height:typeSize:)``).
+    @State private var height: CGFloat = .infinity
+    @Environment(\.dynamicTypeSize) private var typeSize
+    /// VoiceOver's cursor: to the password on "Next", back to the keypad on "Edit PIN".
+    @AccessibilityFocusState private var focus: PinThenPassword.Focus?
+    /// The cursor's move still waiting (``PinThenPassword/moveFocus(_:to:after:)``).
+    @State private var focusMove: Task<Void, Never>?
     @Environment(\.openURL) private var openURL
     @Environment(\.scenePhase) private var scenePhase
 
@@ -72,17 +81,63 @@ public struct UnlockScreen: View {
         self.onContactSupport = onContactSupport
     }
 
+    /// Opened with [pin] typed and at [steps] (tests: the password step).
+    init(state: UnlockState, actions: any UnlockActions, pin: PinBuffer, steps: PinThenPassword) {
+        self.init(state: state, actions: actions)
+        _pin = State(initialValue: pin)
+        _steps = State(initialValue: steps)
+    }
+
     private var blocked: Bool { state.recoverOnly }
 
-    private var primaryLabel: String? {
+    /// The check is due and the keypad shows: "Next" takes the PIN on to the password, in place of "Unlock".
+    private var asksNext: Bool {
+        state.checkDue && plainUnlock && !state.busy
+            && steps.asksNext(asksPin: true, digits: pin.count, minPin: UnlockState.minPinLength)
+    }
+
+    /// The password step of a due check (the keypad has given way to it).
+    private var passwordStep: Bool {
+        state.checkDue && steps.passwordShown(asksPin: true, digits: pin.count, minPin: UnlockState.minPinLength)
+    }
+
+    /// The primary button is the plain "Unlock" (not a retry, a return or nothing).
+    private var plainUnlock: Bool { basePrimaryLabel == OnboardingStrings.unlockSubmit }
+
+    private var primaryLabel: String? { asksNext ? OnboardingStrings.pinStepNext : basePrimaryLabel }
+
+    private var basePrimaryLabel: String? {
         if state.returnAsksPin, let m = state.moveUnconfirmed { return OnboardingStrings.releaseUpdateReturn(Int(m.from.number)) }
         if state.preflightError != nil && !blocked { return OnboardingStrings.unlockRetry }
         if blocked || state.recoveryPending { return nil }
         return OnboardingStrings.unlockSubmit
     }
 
-    private var canSubmit: Bool {
-        state.pinAllowed && pin.count >= UnlockState.minPinLength && (!state.checkDue || !state.password.isEmpty)
+    private var canSubmit: Bool { Self.canSubmit(state, digits: pin.count) }
+
+    /// The way back's notice says the check comes first instead of offering "Return to release N" (the vault refuses it
+    /// while the check gates it).
+    static func returnWaitsForCheck(_ state: UnlockState) -> Bool { state.returnOffered && state.returnGated }
+
+    /// What the move's notice offers: the check-first text instead of the link while the check gates the way back; the
+    /// link otherwise, with the refusal when the last return was refused before anything was sent.
+    enum WayBack: Equatable { case checkFirst, offered(refused: Bool) }
+
+    static func wayBack(_ state: UnlockState) -> WayBack {
+        returnWaitsForCheck(state) ? .checkFirst : .offered(refused: state.returnRefused)
+    }
+
+    /// The PIN typed whole, and the password with a check due; a return to the previous release takes the PIN only (its
+    /// keypad shows no password, even with a check due).
+    static func canSubmit(_ state: UnlockState, digits: Int) -> Bool {
+        state.pinAllowed && digits >= UnlockState.minPinLength
+            && (!state.checkDue || state.returnAsksPin || !state.password.isEmpty)
+    }
+
+    private func moveFocus(to target: PinThenPassword.Focus) {
+        // Only the focus's binding is captured, not the screen and its state (the typed password among it).
+        let cursor = $focus
+        focusMove = PinThenPassword.moveFocus({ cursor.wrappedValue = $0 }, to: target, after: focusMove)
     }
 
     private func submit() {
@@ -96,12 +151,23 @@ public struct UnlockScreen: View {
             title: OnboardingStrings.unlockTitle,
             message: state.email.map(OnboardingStrings.unlockBodyAccount) ?? OnboardingStrings.unlockBody,
             primaryLabel: primaryLabel,
-            primaryEnabled: state.preflightError != nil && !state.returnAsksPin ? state.retryAllowed : canSubmit,
+            primaryEnabled: asksNext ? state.pinAllowed && pin.count >= UnlockState.minPinLength
+                : state.preflightError != nil && !state.returnAsksPin ? state.retryAllowed : canSubmit,
             busy: state.busy || state.loading || state.erasing,
-            onPrimary: { state.preflightError != nil && !state.returnAsksPin ? actions.retryPreflight() : submit() },
+            onPrimary: {
+                if asksNext {
+                    steps.pinDone = true
+                    moveFocus(to: .password)
+                } else if state.preflightError != nil && !state.returnAsksPin {
+                    actions.retryPreflight()
+                } else {
+                    submit()
+                }
+            },
             header: {
                 VettIDSymbol.lock.image.font(.system(size: 36)).padding(.top, Spacing.l).accessibilityHidden(true)
-            }
+            },
+            bottom: { if keypadFixed { keypad } }
         ) {
             VStack(alignment: .leading, spacing: Spacing.m) {
                 ForEach(UnlockBlock.blocks(for: state), id: \.self) { block in
@@ -145,7 +211,15 @@ public struct UnlockScreen: View {
             if pin.count >= UnlockState.minPinLength { actions.setPin(pin.take()) }
             actions.confirmReturn()
         }
-        .onDisappear { pin.clear() }
+        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height = $0 }
+        .onDisappear { forgetSecrets() }
+        // Digits taken by "Unlock" or dropped: the keypad again.
+        .onChange(of: pin.count) { _, digits in steps.digitsChanged(to: digits) }
+        // The way back's keypad opens empty (fewer digits than a PIN typed for the unlock are not its start), and when it
+        // closes ("Not now", or the check came due) its digits do not stay for the unlock.
+        .onChange(of: state.returnAsksPin) { _, _ in pin.clear() }
+        // The password typed goes with its step (back to the keypad, the PIN taken or dropped).
+        .onChange(of: passwordStep) { _, shown in if !shown, !state.password.isEmpty { actions.setPassword("") } }
         .onChange(of: scenePhase) { _, now in
             // IOS-PLAN §6.3: typed secrets are dropped when the app leaves the foreground, and when the iPhone locks.
             if now == .background { forgetSecrets() }
@@ -159,7 +233,35 @@ public struct UnlockScreen: View {
     private var returnFrom: Int { Int(state.moveUnconfirmed?.from.number ?? 0) }
     private var returnTo: Int { Int(state.moveUnconfirmed?.to.number ?? 0) }
 
-    /// The keypad, the countdown and, with a check due, the password (§3.6.5: one screen for both).
+    /// The keypad stays above "Unlock", out of the scroll, so that no notice above it pushes its keys past the screen's
+    /// edge; on a short screen or at an accessibility text size it scrolls with the rest instead (fixed, it would leave
+    /// the notices no room).
+    private var keypadFixed: Bool { PinThenPassword.keypadFixed(height: height, typeSize: typeSize) }
+
+    /// The keypad; gone in the password step, wherever the screen asks for no PIN, and while the unlock is sent (its
+    /// dimmed keys would crowd out the wait's text and be read by VoiceOver; it comes back with the answer).
+    @ViewBuilder private var keypad: some View {
+        if Self.keypadShown(state, passwordStep: passwordStep) {
+            PinEntry(
+                label: OnboardingStrings.unlockPinLabel,
+                buffer: pin,
+                error: state.message == .badPin && pin.count == 0 ? OnboardingStrings.unlockBadPin : nil,
+                failure: state.message == .badPin ? OnboardingStrings.unlockBadPin : nil,
+                identifier: "unlock_pin"
+            )
+            .disabled(!state.pinAllowed)
+            .padding(.top, Spacing.s)
+            .accessibilityFocused($focus, equals: .keypad)
+        }
+    }
+
+    static func keypadShown(_ state: UnlockState, passwordStep: Bool) -> Bool {
+        UnlockBlock.blocks(for: state).contains(.pin) && !passwordStep && !state.busy
+    }
+
+    /// The PIN's notices, the countdown and, with a check due, the password step (§3.6.5: one screen for both): the keypad
+    /// first (``keypad``: above "Unlock", or here when ``keypadFixed`` is false), then in its place the PIN as dots and the
+    /// password (``PinThenPassword``).
     @ViewBuilder private var pinEntry: some View {
         // VAULT-MESSAGING §11.14.9 "A lost answer" step 5: the previous PIN first, the new one after `device_secret`.
         switch state.pinStep {
@@ -171,15 +273,15 @@ public struct UnlockScreen: View {
             NoticeCard(.success, title: OnboardingStrings.unlockNewPinTitle, message: OnboardingStrings.unlockNewPinBody, announce: .polite)
                 .accessibilityIdentifier("unlock_new_pin")
         }
-        PinEntry(
-            label: OnboardingStrings.unlockPinLabel,
-            buffer: pin,
-            error: state.message == .badPin && pin.count == 0 ? OnboardingStrings.unlockBadPin : nil,
-            failure: state.message == .badPin ? OnboardingStrings.unlockBadPin : nil,
-            identifier: "unlock_pin"
-        )
-        .disabled(!state.pinAllowed)
-        .padding(.top, Spacing.s)
+        if passwordStep {
+            EnteredPin(label: OnboardingStrings.unlockPinLabel, digits: pin.count, identifier: "unlock_pin") {
+                steps.pinDone = false
+                moveFocus(to: .keypad)
+            }
+                .disabled(!state.pinAllowed)
+                .padding(.top, Spacing.s)
+        }
+        if !keypadFixed { keypad }
         if state.waitSeconds > 0 {
             Text(OnboardingStrings.unlockWait(formatWait(state.waitSeconds)))
                 .vettIDFont(.bodySmall)
@@ -189,13 +291,15 @@ public struct UnlockScreen: View {
                 .announcedOnce(OnboardingStrings.unlockWait(spokenDuration(state.waitSeconds)))
                 .accessibilityIdentifier("unlock_wait")
         }
-        if state.checkDue {
+        if passwordStep {
             SecretField(
                 OnboardingStrings.unlockPasswordLabel,
                 text: Binding(get: { state.password }, set: { actions.setPassword($0) }),
+                focus: true,
                 onSubmit: submit
             )
             .disabled(!state.pinAllowed)
+            .accessibilityFocused($focus, equals: .password)
             .accessibilityIdentifier("unlock_password")
         }
     }
@@ -220,6 +324,7 @@ public struct UnlockScreen: View {
 
     private func forgetSecrets() {
         pin.clear()
+        focusMove?.cancel()
         actions.forgetSecrets()
     }
 
@@ -229,9 +334,10 @@ public struct UnlockScreen: View {
     }
 }
 
-/// The unlock screen's blocks in the order they are shown, and read by VoiceOver: the PIN keypad first, the results of the
-/// unlock under it, the release offer (RELEASE-UPDATES §2 step 2) last, a compact notice. "Unlock" is the pinned button
-/// under all of them.
+/// The unlock screen's blocks in the order they are shown, and read by VoiceOver: the PIN first, the results of the unlock
+/// under it, the release offer (RELEASE-UPDATES §2 step 2) last, a compact notice. "Unlock" is the pinned button under all
+/// of them. On a tall enough screen the keypad itself stays above "Unlock" (read after the blocks, the PIN's own notices
+/// keeping their place); on a short one or at an accessibility text size it is in the PIN's place.
 enum UnlockBlock: Hashable {
     case notices, pin, offer, signerRefused, returnCancel, wayForward
 
@@ -342,8 +448,27 @@ struct UnlockNotices: View {
                 .warning, title: OnboardingStrings.releaseUpdateNewFailedTitle(to),
                 message: OnboardingStrings.unlockMoveUnconfirmed(to, from)
             ) {
-                TextLink(OnboardingStrings.releaseUpdateReturn(from)) { actions.askReturn() }
+                switch UnlockScreen.wayBack(state) {
+                case .checkFirst:
+                    // The vault refuses the way back while the check gates it (as the update screen says): no PIN-only
+                    // return. Said when it shows, also when it replaces the way back's keypad.
+                    Text(OnboardingStrings.releaseUpdateCheckFirstBody)
+                        .vettIDFont(.bodyMedium)
+                        .announcedOnce(OnboardingStrings.releaseUpdateCheckFirstBody)
+                        .accessibilityIdentifier("unlock_return_check_first")
+                case .offered(let refused):
+                    if refused {
+                        // Here rather than under the keypad, which may close with the refusal.
+                        Text(FailureKind.other.message(timeScale: state.timeScale))
+                            .vettIDFont(.bodyMedium)
+                            .announcedOnce(FailureKind.other.message(timeScale: state.timeScale), .assertive)
+                            .accessibilityIdentifier("unlock_return_refused")
+                    }
+                    TextLink(OnboardingStrings.releaseUpdateReturn(from)) { actions.askReturn() }
+                }
             }
+            // A container: its own identifier no longer overrides the refusal's, the check-first text's and the link's.
+            .accessibilityElement(children: .contain)
             .accessibilityIdentifier("unlock_move_unconfirmed")
         }
         if state.stateRollback {

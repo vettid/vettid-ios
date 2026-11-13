@@ -67,7 +67,18 @@ public struct OwnerCheckScreen: View {
     let onCancel: @MainActor () -> Void
     let now: Date
     @State private var pin = PinBuffer()
+    /// The PIN on the keypad first, then the password (``PinThenPassword``); only the password after an unlock that kept
+    /// the PIN.
+    @State private var steps = PinThenPassword()
+    /// The screen's height, for whether the keypad stays fixed above the buttons (``PinThenPassword/keypadFixed(height:typeSize:)``).
+    @State private var height: CGFloat = .infinity
+    @Environment(\.dynamicTypeSize) private var typeSize
+    /// VoiceOver's cursor: to the password on "Next", back to the keypad on "Edit PIN".
+    @AccessibilityFocusState private var focus: PinThenPassword.Focus?
+    /// The cursor's move still waiting (``PinThenPassword/moveFocus(_:to:after:)``).
+    @State private var focusMove: Task<Void, Never>?
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.vettIDColors) private var colors
 
     /// Fewer checks than this left are shown in the error colour.
     static let warnLeft = 3
@@ -79,6 +90,13 @@ public struct OwnerCheckScreen: View {
         self.actions = actions
         self.onCancel = onCancel
         self.now = now
+    }
+
+    /// Opened with [pin] typed and at [steps] (tests: the password step).
+    init(state: OwnerCheckScreenState, actions: any OwnerCheckActions, now: Date, pin: PinBuffer, steps: PinThenPassword) {
+        self.init(state: state, actions: actions, now: now)
+        _pin = State(initialValue: pin)
+        _steps = State(initialValue: steps)
     }
 
     /// The interval at the vault's time scale (STAGING-TIME-SCALE §5.2): "24 hours", on staging "1 hour".
@@ -114,6 +132,22 @@ public struct OwnerCheckScreen: View {
         return state.entriesAllowed && pin.count >= OwnerCheckScreenState.minPin && !state.password.isEmpty
     }
 
+    /// The keypad shows and the check can be answered: "Next" takes the PIN on to the password.
+    private var asksNext: Bool {
+        state.watch == .none && !state.locked && !state.busy
+            && steps.asksNext(asksPin: !state.pinKept, digits: pin.count, minPin: OwnerCheckScreenState.minPin)
+    }
+
+    private var passwordStep: Bool {
+        steps.passwordShown(asksPin: !state.pinKept, digits: pin.count, minPin: OwnerCheckScreenState.minPin)
+    }
+
+    private func moveFocus(to target: PinThenPassword.Focus) {
+        // Only the focus's binding is captured, not the screen and its state (the typed password among it).
+        let cursor = $focus
+        focusMove = PinThenPassword.moveFocus({ cursor.wrappedValue = $0 }, to: target, after: focusMove)
+    }
+
     private func submit() {
         guard canSubmit else { return }
         if !state.pinKept { actions.setPin(pin.take()) }
@@ -144,11 +178,21 @@ public struct OwnerCheckScreen: View {
         FormScaffold(
             title: title,
             message: body0,
-            primaryLabel: primaryLabel,
-            primaryEnabled: canSubmit || (state.watch == .silent && !state.locking),
+            primaryLabel: asksNext ? OnboardingStrings.pinStepNext : primaryLabel,
+            primaryEnabled: asksNext ? state.entriesAllowed && pin.count >= OwnerCheckScreenState.minPin
+                : canSubmit || (state.watch == .silent && !state.locking),
             busy: state.busy || state.locking,
             secondaryLabel: state.lockOffered ? OnboardingStrings.ownerCheckLock : OnboardingStrings.ownerCheckCancel,
-            onPrimary: { if state.watch == .silent { actions.checkAgain() } else { submit() } },
+            onPrimary: {
+                if asksNext {
+                    steps.pinDone = true
+                    moveFocus(to: .password)
+                } else if state.watch == .silent {
+                    actions.checkAgain()
+                } else {
+                    submit()
+                }
+            },
             onSecondary: {
                 pin.clear()
                 if state.lockOffered { actions.lockVault() } else { onCancel() }
@@ -164,7 +208,8 @@ public struct OwnerCheckScreen: View {
                     }
                     .accessibilityIdentifier("owner_check_cancel")
                 }
-            }
+            },
+            bottom: { if keypadFixed { keypad } }
         ) {
             VStack(alignment: .leading, spacing: Spacing.m) {
                 SmallNote(state.stagingNote)
@@ -190,7 +235,12 @@ public struct OwnerCheckScreen: View {
                 OwnerCheckMessageView(state: state, title: title)
             }
         }
+        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height = $0 }
         .onDisappear { forgetSecrets() }
+        // Digits taken by the submit or dropped: the keypad again.
+        .onChange(of: pin.count) { _, digits in steps.digitsChanged(to: digits) }
+        // The password typed goes with its step (back to the keypad, the PIN taken or dropped).
+        .onChange(of: passwordStep) { _, shown in if !shown, !state.password.isEmpty { actions.setPassword("") } }
         // Locked, or probably locked: digits typed on the hidden keypad do not wait in its buffer.
         .onChange(of: state.locked) { _, locked in
             if locked { pin.clear() }
@@ -250,39 +300,82 @@ public struct OwnerCheckScreen: View {
         }
     }
 
-    /// The keypad (not after an unlock whose PIN was kept) and the password (§3.6.5: one screen for both); neither once the
-    /// vault locked.
+    /// The keypad (not after an unlock whose PIN was kept) and the password (§3.6.5: one screen for both): the keypad first,
+    /// then in its place the PIN as dots and the password (``PinThenPassword``); neither once the vault locked.
     @ViewBuilder private var entries: some View {
+        if !keypadFixed { keypad }
         if !state.locked, state.watch == .none {
             entryFields
         }
     }
 
+    /// The keypad stays above the buttons, out of the scroll, unless the screen is short or the text an accessibility size
+    /// (then it scrolls with the rest, which a fixed keypad would leave no room).
+    private var keypadFixed: Bool { PinThenPassword.keypadFixed(height: height, typeSize: typeSize) }
+
+    /// The keypad (above the buttons, or in the form: ``keypadFixed``; no notice pushes its keys past the edge), with a wrong
+    /// password said over it: the PIN was taken, so the member is back here (§3.6.5 keeps neither entry). Not in the
+    /// password step, after an unlock that kept the PIN, once the vault locked or is probably locked, or while the check or
+    /// a lock is sent (its dimmed keys would be read by VoiceOver; it comes back with the answer).
+    static func keypadShown(_ state: OwnerCheckScreenState, passwordStep: Bool) -> Bool {
+        !state.locked && state.watch == .none && !state.pinKept && !passwordStep && !state.busy && !state.locking
+    }
+
+    @ViewBuilder private var keypad: some View {
+        if Self.keypadShown(state, passwordStep: passwordStep) {
+            VStack(spacing: Spacing.s) {
+                if badPassword {
+                    Text(OnboardingStrings.ownerCheckBadPassword)
+                        .vettIDFont(.bodySmall)
+                        .foregroundStyle(colors.error)
+                        .frame(maxWidth: .infinity)
+                        .multilineTextAlignment(.center)
+                        .announced(OnboardingStrings.ownerCheckBadPassword, .assertive)
+                        .accessibilityIdentifier("owner_check_password_error")
+                }
+                PinEntry(
+                    label: OnboardingStrings.ownerCheckPinLabel,
+                    buffer: pin,
+                    error: badPin && pin.count == 0 ? OnboardingStrings.ownerCheckBadPin : nil,
+                    failure: badPin ? OnboardingStrings.ownerCheckBadPin : nil,
+                    identifier: "owner_check_pin"
+                )
+                .disabled(!state.entriesAllowed)
+                .accessibilityFocused($focus, equals: .keypad)
+            }
+            .padding(.top, Spacing.s)
+        }
+    }
+
     @ViewBuilder private var entryFields: some View {
-        if !state.pinKept {
-            PinEntry(
-                label: OnboardingStrings.ownerCheckPinLabel,
-                buffer: pin,
-                error: badPin && pin.count == 0 ? OnboardingStrings.ownerCheckBadPin : nil,
-                failure: badPin ? OnboardingStrings.ownerCheckBadPin : nil,
-                identifier: "owner_check_pin"
-            )
+        if !state.pinKept, passwordStep {
+            EnteredPin(label: OnboardingStrings.ownerCheckPinLabel, digits: pin.count, identifier: "owner_check_pin") {
+                steps.pinDone = false
+                moveFocus(to: .keypad)
+            }
             .disabled(!state.entriesAllowed)
             .padding(.top, Spacing.s)
         }
-        SecretField(
-            OnboardingStrings.ownerCheckPasswordLabel,
-            text: Binding(get: { state.password }, set: { actions.setPassword($0) }),
-            error: badPassword ? OnboardingStrings.ownerCheckBadPassword : nil,
-            errorPriority: .assertive,
-            onSubmit: submit
-        )
-        .disabled(!state.entriesAllowed)
-        .accessibilityIdentifier("owner_check_password")
+        if passwordStep {
+            SecretField(
+                OnboardingStrings.ownerCheckPasswordLabel,
+                text: Binding(get: { state.password }, set: { actions.setPassword($0) }),
+                // After a wrong password the keypad said it (the PIN not kept); the field says it only when it is the only entry.
+                error: badPassword && state.pinKept ? OnboardingStrings.ownerCheckBadPassword : nil,
+                errorPriority: .assertive,
+                // Given the keyboard when "Next" brings it, not when the PIN was kept (the screen opens on it then).
+                focus: !state.pinKept,
+                onSubmit: submit
+            )
+            .disabled(!state.entriesAllowed)
+            .accessibilityFocused($focus, equals: .password)
+            .accessibilityIdentifier("owner_check_password")
+        }
     }
 
     private func forgetSecrets() {
         pin.clear()
+        focusMove?.cancel()
         actions.forgetSecrets()
     }
 }

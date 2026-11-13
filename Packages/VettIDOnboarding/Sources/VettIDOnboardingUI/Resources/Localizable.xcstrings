@@ -5243,6 +5243,28 @@
         }
       }
     },
+    "ios_pin_step_change": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Edit PIN"
+          }
+        }
+      }
+    },
+    "ios_pin_step_next": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Next"
+          }
+        }
+      }
+    },
     "ios_recover_guidance_already_recovered": {
       "extractionState": "manual",
       "localizations": {
