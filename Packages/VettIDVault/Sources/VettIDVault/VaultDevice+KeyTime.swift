@@ -55,4 +55,31 @@ extension VaultDevice {
         let fromKeys = keyStamp.map { $0.ts.addingTimeInterval(max(0, up - $0.at)) }
         return [fromVault, fromKeys].compactMap { $0 }.max()
     }
+
+    /// The persisted rekeys awaiting `hs.fin`; one that does not restore is dropped. None is dropped by age here: the vault's
+    /// time is not known at load, and a clock jumped ahead would end them for good; ``pruneAwaiting(_:)`` ends them once it is
+    /// (``pruneTimeLocked(_:)``), after each message handled without an error.
+    func restoreAwaiting() -> [Awaiting] {
+        (st.vault?.awaiting ?? []).compactMap { a in
+            guard let b = try? Base64s.decodeStd(a.state), let r = try? Responder.import(b) else { return nil }
+            return Awaiting(
+                resp: r, createdMs: a.createdMs, initID: a.initId, respBytes: a.resp.flatMap { try? Base64s.decodeStd($0) },
+                attempted: true
+            )
+        }
+    }
+
+    /// Ends the rekeys awaiting `hs.fin` for longer than ``handshakeTTL``, and all but the newest ``maxAwaiting``. Judged by
+    /// the vault's time too (``pruneTimeLocked(_:)``): a clock jumped ahead aborts no responder, and none ends by age before
+    /// the vault's time is known. Callers hold ``mem``.
+    func pruneAwaiting(_ t: Date) {
+        let cutoff = pruneTimeLocked(t).map { Self.ms($0.addingTimeInterval(-Self.handshakeTTL)) } ?? Int64.min
+        let sorted = awaiting.sorted { $0.createdMs > $1.createdMs }
+        let keep = sorted.prefix(Self.maxAwaiting).filter { $0.createdMs >= cutoff }
+        for a in awaiting where !keep.contains(where: { $0.resp === a.resp }) {
+            a.resp.abort()
+            unsavedResps.remove(ObjectIdentifier(a.resp))
+        }
+        awaiting = Array(keep)
+    }
 }
