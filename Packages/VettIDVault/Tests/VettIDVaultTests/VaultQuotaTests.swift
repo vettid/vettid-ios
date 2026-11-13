@@ -254,9 +254,16 @@ extension VaultDeviceTests {
                 #expect(await relay.noDeposit(within: 0.2)) // its own flush, of an empty outbox, is over
             }
             admitOnce.value = true
-            // The wait "passes" at once: the clock moves by it.
+            // The wait "passes" at once: the clock moves by it. As a real wait of a minute or more would, it ends only once the
+            // refused send is over (its entry no longer in flight), or the backoff's flush would find the entry still taken.
             let slept = Box(false)
-            d.mem.withLock { d.quotaSleep = { secs in up.value += secs + 1; slept.value = true } }
+            d.mem.withLock {
+                d.quotaSleep = { [d] secs in
+                    for _ in 0..<1000 where d.mem.withLock({ !d.outboxInFlight.isEmpty }) { try? await Task.sleep(for: .milliseconds(5)) }
+                    up.value += secs + 1
+                    slept.value = true
+                }
+            }
             relay.refuseDeposits = RelayError.quotaExceeded
             relay.refuseOnly = 1
             await #expect(throws: RelayError.self) { try await d.send("device.features") }
