@@ -177,10 +177,13 @@ import VettIDUI
             to: ReleaseView(number: 4, pcr0: String(repeating: "a4", count: 48), status: "", endsAt: nil, notes: ""),
             failed: true
         )
-        #expect(s.returnOffered && !UnlockScreen.returnWaitsForCheck(s), "the return offered")
+        #expect(s.returnOffered && UnlockScreen.wayBack(s) == .offered(refused: false), "the link")
+        s.returnRefused = true
+        #expect(UnlockScreen.wayBack(s) == .offered(refused: true), "the link, with the refusal")
+        #expect(height(UnlockScreen(state: s, actions: NoUnlockActions())) > 0)
         s.returnGated = true
         s.checkDue = true
-        #expect(UnlockScreen.returnWaitsForCheck(s), "the check first")
+        #expect(UnlockScreen.wayBack(s) == .checkFirst, "the check-first text, no link")
         #expect(height(UnlockScreen(state: s, actions: NoUnlockActions())) > 0)
     }
 

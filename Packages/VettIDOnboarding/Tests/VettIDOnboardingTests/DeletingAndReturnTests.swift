@@ -110,10 +110,12 @@ import VettIDDataTesting
         await vm.settle()
         #expect(vault.returnPins.count == 1, "no way back while gated")
         #expect(!vault.calls.contains("unlock"), "no unlock without the password while the check is due")
+        #expect(vm.state.pin.isEmpty, "the refused submit keeps no PIN")
     }
 
     /// A return the manager refuses reads the gate again: when the check came due since the last read, the notice says
-    /// the check comes first; otherwise the general failure.
+    /// the check comes first; otherwise the move's notice says it failed (kept there when the keypad closes), until the
+    /// way back is asked again.
     @Test func aRefusedReturnReadsTheGateAgain() async {
         vault.unconfirmedMove = Self.move(failed: true)
         vault.returnStarts = false
@@ -123,7 +125,10 @@ import VettIDDataTesting
         vm.askReturn()
         vm.setPin("402817")
         vm.confirmReturn()
-        #expect(vault.returnPins.count == 1 && vm.state.message == .failed(.other, code: nil), "not gated: the general failure")
+        #expect(vault.returnPins.count == 1 && vm.state.returnRefused && vm.state.message == nil, "not gated: in the move's notice")
+        vm.askReturn()
+        #expect(!vm.state.returnRefused, "asked again: the refusal goes")
+        vm.dismissReturn()
 
         // The check came due since the last read (every 15 s): the notice, never a failure.
         vault.ownerCheck = OwnerCheckView(state: .ok, deadline: Date().addingTimeInterval(-60))
@@ -132,6 +137,7 @@ import VettIDDataTesting
         vm.confirmReturn()
         #expect(vault.returnPins.count == 2)
         #expect(vm.state.returnGated && vm.state.checkDue && vm.state.message == nil && !vm.state.returnAsksPin)
+        #expect(!vm.state.returnRefused, "gated: the check-first text, not a refusal")
         #expect(!vault.calls.contains("unlock"))
     }
 

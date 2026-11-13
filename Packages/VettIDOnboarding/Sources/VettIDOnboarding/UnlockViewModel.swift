@@ -260,7 +260,10 @@ public final class UnlockViewModel: UnlockActions {
     // MARK: - The way back to release N (IOS-PLAN §4.3)
 
     public func askReturn() {
-        if state.returnOffered && !state.busy && !state.returnGated { state.returnConfirm = true }
+        if state.returnOffered && !state.busy && !state.returnGated {
+            state.returnRefused = false
+            state.returnConfirm = true
+        }
     }
 
     public func dismissReturn() { state.returnConfirm = false }
@@ -312,7 +315,7 @@ public final class UnlockViewModel: UnlockActions {
         if let repo = ownerCheckRepo, repo.ownerCheck?.gated(at) == true || repo.lockedByChecks {
             ownerCheck(due: repo.ownerCheck?.gated(at) == true, lockedByChecks: repo.lockedByChecks, idleLocked: repo.idleLockedNow(at))
         } else {
-            state.message = .failed(.other, code: nil)
+            state.returnRefused = true
         }
     }
 

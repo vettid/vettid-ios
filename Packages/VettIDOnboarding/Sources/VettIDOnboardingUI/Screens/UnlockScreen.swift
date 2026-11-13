@@ -115,19 +115,29 @@ public struct UnlockScreen: View {
 
     private var canSubmit: Bool { Self.canSubmit(state, digits: pin.count) }
 
-    /// The PIN typed whole, and the password with a check due; a return to the previous release takes the PIN only (its
-    /// keypad shows no password, even with a check due).
     /// The way back's notice says the check comes first instead of offering "Return to release N" (the vault refuses it
     /// while the check gates it).
     static func returnWaitsForCheck(_ state: UnlockState) -> Bool { state.returnOffered && state.returnGated }
 
+    /// What the move's notice offers: the check-first text instead of the link while the check gates the way back; the
+    /// link otherwise, with the refusal when the last return was refused before anything was sent.
+    enum WayBack: Equatable { case checkFirst, offered(refused: Bool) }
+
+    static func wayBack(_ state: UnlockState) -> WayBack {
+        returnWaitsForCheck(state) ? .checkFirst : .offered(refused: state.returnRefused)
+    }
+
+    /// The PIN typed whole, and the password with a check due; a return to the previous release takes the PIN only (its
+    /// keypad shows no password, even with a check due).
     static func canSubmit(_ state: UnlockState, digits: Int) -> Bool {
         state.pinAllowed && digits >= UnlockState.minPinLength
             && (!state.checkDue || state.returnAsksPin || !state.password.isEmpty)
     }
 
     private func moveFocus(to target: PinThenPassword.Focus) {
-        focusMove = PinThenPassword.moveFocus({ focus = $0 }, to: target, after: focusMove)
+        // Only the focus's binding is captured, not the screen and its state (the typed password among it).
+        let cursor = $focus
+        focusMove = PinThenPassword.moveFocus({ cursor.wrappedValue = $0 }, to: target, after: focusMove)
     }
 
     private func submit() {
@@ -202,10 +212,7 @@ public struct UnlockScreen: View {
             actions.confirmReturn()
         }
         .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height = $0 }
-        .onDisappear {
-            forgetSecrets()
-            focusMove?.cancel()
-        }
+        .onDisappear { forgetSecrets() }
         // Digits taken by "Unlock" or dropped: the keypad again.
         .onChange(of: pin.count) { _, digits in steps.digitsChanged(to: digits) }
         // The way back's keypad opens empty (fewer digits than a PIN typed for the unlock are not its start), and when it
@@ -317,6 +324,7 @@ public struct UnlockScreen: View {
 
     private func forgetSecrets() {
         pin.clear()
+        focusMove?.cancel()
         actions.forgetSecrets()
     }
 
@@ -440,12 +448,22 @@ struct UnlockNotices: View {
                 .warning, title: OnboardingStrings.releaseUpdateNewFailedTitle(to),
                 message: OnboardingStrings.unlockMoveUnconfirmed(to, from)
             ) {
-                if UnlockScreen.returnWaitsForCheck(state) {
-                    // The vault refuses the way back while the check gates it (as the update screen says): no PIN-only return.
+                switch UnlockScreen.wayBack(state) {
+                case .checkFirst:
+                    // The vault refuses the way back while the check gates it (as the update screen says): no PIN-only
+                    // return. Said when it shows, also when it replaces the way back's keypad.
                     Text(OnboardingStrings.releaseUpdateCheckFirstBody)
                         .vettIDFont(.bodyMedium)
+                        .announcedOnce(OnboardingStrings.releaseUpdateCheckFirstBody)
                         .accessibilityIdentifier("unlock_return_check_first")
-                } else {
+                case .offered(let refused):
+                    if refused {
+                        // Here rather than under the keypad, which may close with the refusal.
+                        Text(FailureKind.other.message(timeScale: state.timeScale))
+                            .vettIDFont(.bodyMedium)
+                            .announcedOnce(FailureKind.other.message(timeScale: state.timeScale), .assertive)
+                            .accessibilityIdentifier("unlock_return_refused")
+                    }
                     TextLink(OnboardingStrings.releaseUpdateReturn(from)) { actions.askReturn() }
                 }
             }

@@ -143,7 +143,9 @@ public struct OwnerCheckScreen: View {
     }
 
     private func moveFocus(to target: PinThenPassword.Focus) {
-        focusMove = PinThenPassword.moveFocus({ focus = $0 }, to: target, after: focusMove)
+        // Only the focus's binding is captured, not the screen and its state (the typed password among it).
+        let cursor = $focus
+        focusMove = PinThenPassword.moveFocus({ cursor.wrappedValue = $0 }, to: target, after: focusMove)
     }
 
     private func submit() {
@@ -234,10 +236,7 @@ public struct OwnerCheckScreen: View {
             }
         }
         .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height = $0 }
-        .onDisappear {
-            forgetSecrets()
-            focusMove?.cancel()
-        }
+        .onDisappear { forgetSecrets() }
         // Digits taken by the submit or dropped: the keypad again.
         .onChange(of: pin.count) { _, digits in steps.digitsChanged(to: digits) }
         // The password typed goes with its step (back to the keypad, the PIN taken or dropped).
@@ -376,6 +375,7 @@ public struct OwnerCheckScreen: View {
 
     private func forgetSecrets() {
         pin.clear()
+        focusMove?.cancel()
         actions.forgetSecrets()
     }
 }
