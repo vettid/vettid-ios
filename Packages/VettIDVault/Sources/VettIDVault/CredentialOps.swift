@@ -236,11 +236,22 @@ struct CredentialOps: Sendable {
         // Every credential request carries an `exp` and stays unsettled until its answer or its `exp` has passed by more
         // than a minute (VAULT-MESSAGING 0.46.0 §11.14.9 step 1).
         let exp: Date
-        if let given = options.exp { exp = given } else { exp = try await requestExp() }
+        do {
+            if let given = options.exp { exp = given } else { exp = try await requestExp() }
+        } catch let e as OutboxHeld {
+            try? await device.returnUTK(utk) // held by the lock gate: it never left the phone
+            throw e
+        }
         await device.trackCredential(id, exp: exp)
         let r: VaultMessage
         do {
             r = try await device.request(type, body: body, innerID: id, exp: exp)
+        } catch let e as OutboxHeld {
+            // (ANDROID-PLAN "While pending") Its first send held by the lock gate: nothing was sent, so it is not unsettled
+            // and its UTK goes back to the pool; thrown as it is (not "unanswered").
+            await device.settleCredential(id)
+            try? await device.returnUTK(utk)
+            throw e
         } catch {
             // From the deposit on, the request may have reached the vault (a deposit the relay did not confirm may still
             // have been stored).
@@ -328,7 +339,7 @@ struct CredentialOps: Sendable {
                 body: try build(type, utk: utk, fields: fields + more, id: change.id, CredOpOptions())
             )
             await device.trackCredential(change.id, exp: change.exp)
-            return try await sendChange(held, first: true)
+            return try await heldGivesBack(utk) { try await sendChange(held, first: true) }
         }
     }
 
@@ -350,7 +361,7 @@ struct CredentialOps: Sendable {
                 body: try build(type, utk: utk, fields: fields + more, id: change.id, CredOpOptions())
             )
             await device.trackCredential(change.id, exp: change.exp)
-            return try await sendChange(held, first: true)
+            return try await heldGivesBack(utk) { try await sendChange(held, first: true) }
         }
     }
 
@@ -380,24 +391,6 @@ struct CredentialOps: Sendable {
 
     /// What the caller stores once the request is fixed, returning the payload members that go with it.
     typealias OnMarker = @Sendable (ChangeRequest) async throws -> [SealedField]
-
-    /// The blob this device holds is still the one [change] was fixed on, right before the request is built: a blob kept
-    /// outside the credential lock (a fetch or a UTK top-up of a decision) never goes with a request fixed on another
-    /// version. Else refused with nothing sent; the caller clears the marker it stored (``VaultManager`` `changing`).
-    private func sameVersion(_ change: ChangeRequest, _ type: String) throws {
-        guard device.credentialVersion == change.version else { throw CredentialUnsettled(type: type, reason: .inFlight) }
-    }
-
-    /// [onMarker] for [change]; [utk] goes back to the pool when it fails: it never left the phone (IOS-PLAN 0.1.16 §4.5
-    /// (1)).
-    private func marked(_ change: ChangeRequest, _ utk: UtkRecord, _ onMarker: OnMarker) async throws -> [SealedField] {
-        do {
-            return try await onMarker(change)
-        } catch {
-            try? await device.returnUTK(utk)
-            throw error
-        }
-    }
 
     /// Step 1 before a change or a renew (VAULT-MESSAGING 0.47.0 §11.14.9 "Sent with the vault's current blob"): every
     /// earlier credential request of this device settled (the outbox flushed, waited for at most ``inFlightWait``), then
@@ -499,6 +492,11 @@ struct CredentialOps: Sendable {
         } catch let e as VaultOpError where e.type == held.type || e.code == Self.codeForbidden {
             // An earlier credential operation applied without its answer: never resent with the typed secrets.
             if e.code == Self.codeStaleCredential { try? await fetch() }
+            throw e
+        } catch let e as OutboxHeld where first {
+            // (ANDROID-PLAN "While pending") Its first send held by the lock gate: nothing was sent. Not unsettled; the
+            // caller returns the UTK, and the manager clears the change's marker (a failure that is not "unanswered").
+            await device.settleCredential(held.id)
             throw e
         } catch {
             // A cancellation too: a copy may have gone out, and the request is kept to be sent again.

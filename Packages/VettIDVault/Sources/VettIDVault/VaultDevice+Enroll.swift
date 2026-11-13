@@ -435,7 +435,8 @@ extension VaultDevice {
         CredentialOps.codeStaleCredential, "credential_frozen",
     ]
 
-    /// Sends `credential.ack` for [version] once and, taken, settles it. Throws what the vault answers or the cancel.
+    /// Sends `credential.ack` for [version] once and, taken, settles it. Throws what the vault answers, the cancel, or
+    /// ``OutboxHeld`` when the lock gate holds it (it stays pending).
     func sendAck(_ version: Int64) async throws {
         let body = JsonBuilder().uint("version", UInt64(version)).bytes()
         do {
@@ -462,6 +463,8 @@ extension VaultDevice {
             try? await ackSettled(pending)
             return
         }
+        // Asked before the retry's time is taken: a held one does not count as tried (``requestMayGo(_:)``).
+        guard await requestMayGo("credential.ack") else { return }
         let go: Bool = mem.withLock {
             let t = cfg.uptime()
             if let last = lastAckTry, t - last < Self.ackRetryEvery { return false }

@@ -82,8 +82,8 @@ public final class VaultDevice: @unchecked Sendable {
     /// The ids of outbox entries being deposited now (``deliver(_:keepOnFailure:since:)``). Under ``mem``.
     var outboxInFlight: Set<String> = []
     var quotaBackoff: [String: (until: TimeInterval, last: TimeInterval)] = [:] // §8.6, VaultDevice+Quota; under ``mem``
-    /// Whether an outbox entry may be deposited now (``flushMayGo(_:since:)``): the manager's lock gate, nothing but the lock
-    /// while one is pending. Nil: always. Under ``mem``.
+    /// Whether an outbox entry may be deposited now (``flushMayGo(_:since:)``), or a request be sent (``requestMayGo(_:)``):
+    /// the manager's lock gate, nothing but the lock while one is pending. Nil: always. Under ``mem``.
     var flushGate: (@Sendable () async -> Bool)?
     /// How the device waits out a quota backoff before its flush (TEST ONLY: replaced to run it at once).
     var quotaSleep: @Sendable (TimeInterval) async -> Void = { try? await Task.sleep(for: .seconds($0)) }
@@ -423,28 +423,32 @@ public final class VaultDevice: @unchecked Sendable {
             return (collectRound, stops)
         }
         guard let (round, mark) = begin else { return }
+        // Never a lock-time call's (``lockTimeSend``), whoever starts it: its work asks the lock gate as any.
         let task = Task { [weak self] in
             guard let self else { return }
-            // An hs.resp that may not have reached the relay (ungated, as a handling's), then (0.88.1) hs.confirm again after
-            // 12 days, then the outbox through the lock gate; none of them after a stop since this start. Accepted trade-offs:
-            // the re-send can hold up the confirmation and the flush while it waits (a `rate_limited`'s retries), and a cancel
-            // between its claim and its request leaves it attempted with nothing sent, which errs towards no second answer.
-            let flush = Task {
-                #if DEBUG
-                await self.beforeStartResend?()
-                #endif
-                await self.resendResps(since: mark)
-                await self.tickConfirm(since: mark)
-                await self.flushOutbox(since: mark)
-            }
-            defer { flush.cancel() }
-            do {
-                try await collector(of: round).run { m in try await self.handle(m) }
-            } catch is CancellationError {
-                return
-            } catch {
-                // A terminal relay error, or anything else, ends the collection; the next start() collects again.
-                collectionEnded(error, of: round)
+            await Self.$lockTimeSend.withValue(false) {
+                // An hs.resp that may not have reached the relay (ungated, as a handling's), then (0.88.1) hs.confirm again
+                // after 12 days, then the outbox through the lock gate; none of them after a stop since this start. Accepted
+                // trade-offs: the re-send can hold up the confirmation and the flush while it waits (a `rate_limited`'s
+                // retries), and a cancel between its claim and its request leaves it attempted with nothing sent, which errs
+                // towards no second answer.
+                let flush = Task {
+                    #if DEBUG
+                    await self.beforeStartResend?()
+                    #endif
+                    await self.resendResps(since: mark)
+                    await self.tickConfirm(since: mark)
+                    await self.flushOutbox(since: mark)
+                }
+                defer { flush.cancel() }
+                do {
+                    try await collector(of: round).run { m in try await self.handle(m) }
+                } catch is CancellationError {
+                    return
+                } catch {
+                    // A terminal relay error, or anything else, ends the collection; the next start() collects again.
+                    collectionEnded(error, of: round)
+                }
             }
         }
         // A stop() since the start above wins: the collection it would have stopped is cancelled at once.

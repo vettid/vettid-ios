@@ -241,9 +241,9 @@ extension VaultManager {
         Task {
             // No lock from before this unlock: none is ever left in the outbox (locks never go through it).
             _ = try? await s.device.dropFromOutbox(VaultManager.typeVaultLock)
-            // Nothing but the lock while one is pending: what the member wrote earlier waits for the next unlock.
+            // Nothing but the lock while one is pending: the outbox (tokens, handshake messages, features, a `call.end`) waits.
             // The device's lock gate asks again before each entry (``setFlushGate``). Here `admits()` is the same as the gate's
-            // "no lock pending": a phone still held in "opened again" is overtaken above.
+            // "no lock pending" or stricter: a phone still held in "opened again" is overtaken above.
             if !overtaken && guardRef.admits() { await s.device.flushOutbox() }
         }
         if overtaken {
