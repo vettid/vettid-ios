@@ -101,6 +101,17 @@ enum SettingsStrings {
         String(localized: "settings_security_attestation", defaultValue: "Attestation", bundle: .module)
     }
 
+    /// Settings → Security → Advanced security (ANDROID-PLAN 0.1.124 §4 "Advanced security").
+    static var securityAdvanced: String {
+        String(localized: "settings_security_advanced", defaultValue: "Advanced security", bundle: .module)
+    }
+
+    static var securityAdvancedBody: String {
+        String(
+            localized: "settings_security_advanced_body", defaultValue: "Check interval, idle lock, attestation and more", bundle: .module
+        )
+    }
+
     static var securityAppLock: String {
         String(localized: "settings_security_app_lock", defaultValue: "App lock", bundle: .module)
     }

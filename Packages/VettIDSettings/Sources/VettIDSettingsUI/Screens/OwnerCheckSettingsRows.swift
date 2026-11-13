@@ -19,9 +19,10 @@ public struct OwnerCheckSettingsActions {
     public init() {}
 }
 
-/// The owner-check rows of the Security group (VAULT-MESSAGING §3.6.2, §3.6.7): the interval with the next deadline, a
-/// check now, the hold switch; nothing for a vault that has not reported its owner check. Mirrors vettid-android
-/// `OwnerCheckSettingsRows`.
+/// The owner-check rows of Advanced security (VAULT-MESSAGING §3.6.2, §3.6.7, §3.6.8; ANDROID-PLAN 0.1.124 §4 "Advanced
+/// security"): the interval with the next deadline, the hold switch and the idle lock, with no divider above the first;
+/// nothing for a vault that has not reported its owner check ("Check now" stays in Security, ``OwnerCheckNowRow``).
+/// Mirrors vettid-android `OwnerCheckAdvancedRows`.
 struct OwnerCheckSettingsRows: View {
     let state: OwnerCheckSettingsState
     let actions: OwnerCheckSettingsActions
@@ -88,7 +89,6 @@ struct OwnerCheckSettingsRows: View {
 
     @ViewBuilder private func rows(_ v: OwnerCheckView) -> some View {
         let next = v.deadline.map { SettingsStrings.ownerCheckNext(SettingsTimes.full($0)) }
-        SettingsDivider()
         SettingsRow(
             SettingsStrings.ownerCheck, icon: .schedule,
             supporting: [everyText(state.intervalHours), next].compactMap { $0 }.joined(separator: " · ")
@@ -97,14 +97,6 @@ struct OwnerCheckSettingsRows: View {
         if let note = state.stagingNote {
             SmallNote(note).padding(.horizontal, Spacing.l).padding(.bottom, Spacing.s)
         }
-        // (Release L) Beside the interval: the idle lock, for a vault that has it.
-        if let idle = state.idleLock { idleRow(idle) }
-        SettingsDivider()
-        SettingsRow(
-            SettingsStrings.ownerCheckNow, icon: .verifiedUser, supporting: SettingsStrings.ownerCheckNowBody, showChevron: false,
-            action: actions.checkNow
-        )
-        .accessibilityIdentifier("owner_check_now")
         SettingsDivider()
         SettingsSwitchRow(
             SettingsStrings.ownerCheckHold,
@@ -113,6 +105,8 @@ struct OwnerCheckSettingsRows: View {
             supporting: Self.holdText(v, now: now)
         )
         .accessibilityIdentifier("owner_check_hold")
+        // (Release L) After the hold: the idle lock, for a vault that has it.
+        if let idle = state.idleLock { idleRow(idle) }
     }
 
     /// (Release L, VAULT-MESSAGING §3.6.8; ANDROID-PLAN §4 "Locking the vault" part 2) "Lock my vault by itself after", beside
@@ -152,6 +146,20 @@ struct OwnerCheckSettingsRows: View {
         if !v.holdOff(now) { return SettingsStrings.ownerCheckHoldOnBody }
         if let until = v.holdOffUntil { return SettingsStrings.ownerCheckHoldOffUntil(SettingsTimes.full(until)) }
         return SettingsStrings.ownerCheckHoldOffBody
+    }
+}
+
+/// Settings → Security → "Check now" (VAULT-MESSAGING §3.6.5): the owner check at once, for a vault that has reported its
+/// owner check (``SecurityRow/rows(ownerCheck:transfer:)``). Mirrors vettid-android `OwnerCheckNowRow`.
+struct OwnerCheckNowRow: View {
+    let actions: OwnerCheckSettingsActions
+
+    var body: some View {
+        SettingsRow(
+            SettingsStrings.ownerCheckNow, icon: .verifiedUser, supporting: SettingsStrings.ownerCheckNowBody, showChevron: false,
+            action: actions.checkNow
+        )
+        .accessibilityIdentifier("owner_check_now")
     }
 }
 

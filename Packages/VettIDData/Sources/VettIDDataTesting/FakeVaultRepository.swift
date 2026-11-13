@@ -1,6 +1,7 @@
 import Foundation
 import Observation
 import VettIDAltChan
+import VettIDAttestation
 import VettIDData
 
 /// TEST ONLY. An in-memory account, vault and credential for view-model tests: every call is recorded in ``calls``;
@@ -71,6 +72,8 @@ public final class FakeVaultRepository: CustomStringConvertible {
     /// When set, ``credentialKey()`` waits for it (after recording the call), to hold an ask open.
     public var credentialKeyGate: TestDeferred<Void>?
     public var credentialKeyChange: CredentialKeyChange?
+    /// The record of the last enclave verification (``EnclaveRecordSource``).
+    public var enclaveRecord: EnclaveRecord?
     /// What ``attestationInfo()`` answers: an Android phone's, by default.
     public var attestationValue = AttestationInfo(
         environment: "test",
@@ -251,6 +254,8 @@ public final class FakeVaultRepository: CustomStringConvertible {
     public var transferSas = "042817"
     /// What ``awaitTransferIn()`` answers: false as from a vault release that sends no `user_guid`.
     public var transferGaveUserGuid = true
+    /// Drives ``transferInRelayBusyUpdates()``: yield to it.
+    public let relayBusy = RelayBusyFeed()
     /// When set, the new phone's wait for the vault's `hs.resp` (and so the SAS) lasts until it completes.
     public var transferHsResp: TestDeferred<String>?
     public var lastTransferCode: String?
@@ -541,3 +546,5 @@ extension FakeVaultRepository: CredentialRepository {
         alarm?.state = CredentialAlarm.stateRotationRequired
     }
 }
+
+extension FakeVaultRepository: EnclaveRecordSource {}

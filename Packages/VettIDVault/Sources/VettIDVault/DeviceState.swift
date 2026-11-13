@@ -26,6 +26,10 @@ final class DeviceState: Codable, @unchecked Sendable {
     var utks: [UtkRecord] = []
     var recovery: RecoveryRecord?
     var outbox: [OutboxEntry] = []
+    /// (VAULT-MESSAGING 0.88.8 §8.6, "A device") The tokens to the vault whose quota refused a deposit (`quota: token`), the
+    /// newest last, at most ``VaultDevice/maxSpentTokens``: no outbox entry is sent under one again, also once the entry it
+    /// refused has gone. Optional: older states have none.
+    var quotaSpentTokens: [String]?
     /// The vault has shown this app a signer on its own `device.list` entry (VAULT-MESSAGING 0.27.0 §11.7.1).
     var signerSeen = false
     /// (VAULT-MESSAGING 0.46.0 §11.14.9 step 1) This device's credential requests that may still reach the vault: inner
@@ -79,10 +83,14 @@ struct VaultRecord: Codable, Sendable {
     var confirmAtMs: Int64?
 }
 
-/// A responder awaiting `hs.fin` (its export, base64) and when it began.
+/// A responder awaiting `hs.fin` (its export, base64) and when it began; the inner id of the `hs.init` it answers and the
+/// `hs.resp` it deposits (base64) while that may not have reached the relay, so that a redelivered `hs.init` gets the same
+/// bytes again (VAULT-MESSAGING §6.3: one `hs.resp` per `hs.init`). Both absent in a record written before.
 struct AwaitingRekey: Codable, Sendable {
     let createdMs: Int64
     let state: String
+    var initId: String?
+    var resp: String?
 }
 
 /// This app's copy of the Protean Credential (§3.5): the sealed blob, useless without the vault's CEK and the password.
@@ -159,15 +167,21 @@ struct OutboxEntry: Codable, Sendable, Equatable {
     let type: String
     let relayURL: String
     let mailbox: String
-    let token: String
+    /// The token it is deposited under: re-addressed to the vault's held token once the one it had is spent (§8.6).
+    var token: String
     let envelope: String
     var attempts = 0
+    /// (VAULT-MESSAGING 0.88.8 §8.6 `quota_exceeded`, "A device"; RELAY-PROTOCOL §7.1) The token whose quota refused this
+    /// entry (`quota: token`): it is never sent under it again, and waits for another standing token for the vault.
+    var quotaToken: String?
     /// A handshake's fin: the time (epoch ms) after which it is dropped, not sent again (nil for any other entry).
     var dropAfterMs: Int64?
     /// A handshake's fin: the ids (``Epoch/ctx``) of the epoch it was sealed under and of the epochs a rekey moved that
     /// handshake to, so that the `device.paired` that opened under any of them removes it and no other handshake's does (nil
     /// for any other entry).
     var epochIDs: [String]?
+    /// The vault request this entry answers (an answer to the vault's `relay.token.refresh`), nil for the device's own.
+    var re: String?
 }
 
 /// Where the device state is kept. [save] must be durable before it returns (ack after persist, §8.3).

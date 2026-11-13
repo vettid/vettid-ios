@@ -59,6 +59,9 @@ public struct ReleaseManifest: Sendable {
     public let releases: [Release]
     /// The exact signed bytes.
     public let bytes: [UInt8]
+    /// The id of the pinned key whose signature verified this manifest (ANDROID-PLAN 0.1.124: shown under the attestation's
+    /// line 1); nil for a manifest parsed without its signature.
+    public internal(set) var keyID: String?
 
     /// hex(SHA-256(manifest bytes)): a request's `manifest_sha256` and the bucket object name.
     public var sha256Hex: String { Bytes.hex(Bytes.sha256(bytes)) }
@@ -192,7 +195,9 @@ public struct ManifestVerifier: Sendable {
         guard let sig = try? P256.Signing.ECDSASignature(rawRepresentation: s.sig),
               key.publicKey.isValidSignature(sig, for: ReleaseManifest.signedMessage(s.manifestBytes))
         else { throw AttestationError.signature("manifest") }
-        return try ReleaseManifest.parse(s.manifestBytes)
+        var m = try ReleaseManifest.parse(s.manifestBytes)
+        m.keyID = key.keyID
+        return m
     }
 
     public func verify(_ served: [UInt8]) throws -> ReleaseManifest { try verify(try ServedManifest.parse(served)) }

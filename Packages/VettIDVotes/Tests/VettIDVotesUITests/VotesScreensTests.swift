@@ -137,7 +137,7 @@ import VettIDUI
         let window = host(CastSheet(state: st, actions: VoteActions()))
         let fields = views(in: window).compactMap { $0 as? UITextField }
         #expect(!fields.isEmpty && fields.allSatisfy { $0.isSecureTextEntry && $0.autocorrectionType == .no })
-        #expect(fields.allSatisfy { $0.textContentType?.rawValue == "" })
+        #expect(fields.allSatisfy { $0.textContentType == .oneTimeCode })
     }
 
     // MARK: The proof's temporary file

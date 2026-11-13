@@ -100,6 +100,8 @@ public struct NitroVerifier: Sendable {
         let sigStructure = CborEncoder().array(4).text("Signature1").bytes(prot).bytes([]).bytes(payload).encoded()
         guard let signature = try? P384.Signing.ECDSASignature(rawRepresentation: sig),
               key.isValidSignature(signature, for: sigStructure)
+        // The only `signature` this verifier throws, and only after the chain passed: EnclaveVerifier.verify reads it as "the
+        // chain passed, the signature failed" (ANDROID-PLAN 0.1.124, lines 2 and 3).
         else { throw AttestationError.signature("attestation") }
         return d
     }

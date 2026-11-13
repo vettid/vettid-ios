@@ -113,6 +113,29 @@ import VettIDCrypto
         #expect(d.ackPendingVersion == nil)
     }
 
+    /// A flush's pending `credential.ack` asks the lock gate as an outbox entry does: none while a lock is pending.
+    @Test func aFlushSendsNoPendingAckWhileTheLockGateIsShut() async throws {
+        let (d, v) = try await base.pairedDevice(cfg: base.config(InMemoryDeviceStateStore(), timeout: 0.3))
+        let api = VaultApi(device: d) { true }
+        let (utks, _) = try pool(2)
+        let create = Task { try await api.credentialCreate(password: "a long password", pin: "123456") }
+        try await answer(v, d, "credential.utk.get", utks)
+        try await answer(v, d, "credential.create", #"{"credential":"AQID","version":1,"key":"x"}"#)
+        _ = try await base.relay.nextDeposit() // the ack goes unanswered
+        try await create.value
+        let open = Box(false)
+        d.setFlushGate { open.value }
+        await d.flushOutbox()
+        #expect(await base.relay.noDeposit(within: 0.3))
+        #expect(d.ackPendingVersion == 1)
+        open.value = true
+        let flush = Task { await d.flushOutbox() }
+        let ack = try await answer(v, d, "credential.ack")
+        #expect(VaultJSON.int(VaultJSON.object(ack.body), "version") == 1)
+        await flush.value
+        #expect(d.ackPendingVersion == nil)
+    }
+
     /// `stale_credential` to a `credential.ack`: the vault has moved past that version, so nothing is owed for it.
     @Test func aStaleAckIsSettled() async throws {
         let (d, v) = try await base.pairedDevice()

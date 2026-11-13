@@ -252,7 +252,7 @@ extension SettingsStrings {
     }
 
     static var attestationRelease: String {
-        String(localized: "settings_attestation_release", defaultValue: "Last verified release", bundle: .module)
+        String(localized: "settings_attestation_release", defaultValue: "Release", bundle: .module)
     }
 
     static func attestationReleaseValue(_ a0: Int, _ a1: String) -> String {

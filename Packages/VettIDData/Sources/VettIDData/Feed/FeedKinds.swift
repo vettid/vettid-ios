@@ -26,8 +26,11 @@ public enum FeedTarget: Equatable, Sendable {
     case history
     /// Settings → Security → Credential.
     case credential
-    /// Settings → Security (the daily check and the hold).
+    /// Settings → Security (the vault locked by the checks).
     case security
+    /// (ANDROID-PLAN 0.1.124 §4 "Advanced security") Settings → Security → Advanced security: the check's interval and the
+    /// hold are there.
+    case advancedSecurity
     case sheet
     /// A vote's screen in Votes (ANDROID-PLAN 0.1.102): the pair names it, never the proposal id alone.
     case vote(connectionID: String, proposalID: String)
@@ -62,6 +65,8 @@ public enum FeedKinds {
     public static let known: Set<String> = [
         "connection.request", "connection.request.peer_declined", "connection.added", "connection.removed",
         "connection.stale", "connection.asks_paused", "connection.authenticate.requested",
+        // VAULT-MESSAGING 0.88.7 §10.9, §3.4.1 "Stale is not final": a stale connection the peer's rekey or reconnect made active.
+        "connection.active_again",
         "message.received", "call.missed", "message.attachment_failed", "message.attachment_refused",
         "grant.request", "grant.shared", "grant.revoked", "share.pending", "share.rate_limited",
         "critical-secret.use.request", "item.revealed",
@@ -127,7 +132,8 @@ public enum FeedKinds {
         let ref = item.ref
         switch item.kind {
         case "connection.request.peer_declined": return c.map { .connection($0) } ?? .connections
-        case "connection.added", "connection.stale", "connection.asks_paused": return c.map { .connection($0) } ?? .sheet
+        case "connection.added", "connection.stale", "connection.active_again", "connection.asks_paused":
+            return c.map { .connection($0) } ?? .sheet
         case "message.received", "call.missed", "message.attachment_failed", "message.attachment_refused":
             return c.map { .conversation($0) } ?? .sheet
         case "grant.shared", "grant.revoked": return c.map { .sharedWithYou($0) } ?? .sheet
@@ -144,7 +150,9 @@ public enum FeedKinds {
         case "credential.alarm": return .alarm
         case "credential.password_failed": return .history
         case "credential.rotated", "credential.reset": return .credential
-        case "owner_check.failed", "owner_check.locked", "owner_check.hold_changed": return .security
+        // ANDROID-PLAN 0.1.124: the check's and the hold's rows are in Advanced security; the lock is Security's.
+        case "owner_check.failed", "owner_check.hold_changed": return .advancedSecurity
+        case "owner_check.locked": return .security
         case "vote.open", "vote.closing", "vote.result", "vote.problem":
             guard let c, let ref, !ref.isEmpty else { return .voteList }
             return .vote(connectionID: c, proposalID: ref)

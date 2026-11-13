@@ -222,6 +222,13 @@ import VettIDVault
         m.push(.notifications(archived: false))
         m.openFeedTarget(.security)
         #expect(m.destination == .settings && m.path.isEmpty)
+        // (ANDROID-PLAN 0.1.124) The check and the hold: Advanced security over Settings, whose back returns to Settings.
+        m.navigate(.messages)
+        m.push(.notifications(archived: false))
+        m.openFeedTarget(.advancedSecurity)
+        #expect(m.destination == .settings && m.path == [.advancedSecurity])
+        m.pop()
+        #expect(m.destination == .settings && m.path.isEmpty)
     }
 
     /// A notification's tap opens its item's screen, or the Notifications screen for an item with only a sheet or one no
