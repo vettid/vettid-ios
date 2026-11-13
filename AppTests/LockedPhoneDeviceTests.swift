@@ -5,8 +5,8 @@ import VettIDKeys
 import XCTest
 
 /// The Secure Enclave keys while the iPhone is locked (IOS-PLAN §8 I1.4): the app key and the seed key sign and agree
-/// with the phone locked after its first unlock; the phone key's ECDH and lookup are refused for now (never "missing"
-/// or "invalid") while it is locked, and work again once it is unlocked. Half automated: it needs someone to lock and
+/// with the phone locked after its first unlock; the phone key's ECDH is refused for now while it is locked (its lookup
+/// is refused or, on iOS 27, returns the key; never "missing" or "invalid"), and works again once it is unlocked. Half automated: it needs someone to lock and
 /// unlock the phone, so it runs only with `VETTID_TEST_LOCK_WAIT=<seconds>` (each wait's limit) and is skipped
 /// otherwise, and skipped when the phone is not locked in time.
 final class LockedPhoneDeviceTests: XCTestCase {
@@ -66,7 +66,11 @@ final class LockedPhoneDeviceTests: XCTestCase {
         let lookup = phone.lookup(keyVault: "v", keyID: p.keyID)
         XCTAssertTrue(isUnavailable(lookup) || isFound(lookup), "a locked lookup is not missing: \(lookup)")
         if case .found(let k) = lookup {
-            XCTAssertThrowsError(try k.agree(ePub)) { XCTAssertEqual(KeysUsability.of($0), .unavailable, "\($0)") }
+            XCTAssertThrowsError(try k.agree(ePub)) { error in
+                // The refusal's domain and code (no key material), to see what a later iOS answers.
+                print("LockedPhoneDeviceTests: a locked agreement was refused: \((error as NSError).domain) \((error as NSError).code)")
+                XCTAssertEqual(KeysUsability.of(error), .unavailable, "\(error)")
+            }
         }
         XCTAssertEqual(KeysUsableCheck.agreement(lookup), .unavailable)
         XCTAssertThrowsError(try p.key.agree(ePub)) { XCTAssertEqual(KeysUsability.of($0), .unavailable, "\($0)") }
