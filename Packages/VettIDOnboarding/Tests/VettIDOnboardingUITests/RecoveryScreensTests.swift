@@ -220,7 +220,7 @@ import VettIDDataTesting
             let fields = textFields(in: window)
             #expect(views(in: window).compactMap { $0 as? UITextView }.isEmpty, "\(name)")
             if s.step == .enter {
-                #expect(fields.count == 1 && fields[0].isSecureTextEntry && fields[0].textContentType?.rawValue == "", "\(name)")
+                #expect(fields.count == 1 && fields[0].isSecureTextEntry && fields[0].textContentType == .oneTimeCode, "\(name)")
                 #expect(fields[0].keyboardType == .asciiCapable && fields[0].autocorrectionType == .no, "\(name)")
             } else {
                 #expect(fields.isEmpty, "\(name)")
@@ -237,7 +237,7 @@ import VettIDDataTesting
         let editors = views(in: window).compactMap { $0 as? UITextView }
         let editor = try #require(editors.first)
         #expect(editors.count == 1 && textFields(in: window).isEmpty)
-        #expect(editor.textContentType?.rawValue == "")
+        #expect(editor.textContentType == .oneTimeCode)
         #expect(editor.autocorrectionType == .no && editor.spellCheckingType == .no && editor.inlinePredictionType == .no)
         #expect(editor.smartQuotesType == .no && editor.smartDashesType == .no && editor.smartInsertDeleteType == .no)
         #expect(editor is PasteOnlyTextView && !editor.canPerformAction(#selector(UIResponderStandardEditActions.copy(_:)), withSender: nil))

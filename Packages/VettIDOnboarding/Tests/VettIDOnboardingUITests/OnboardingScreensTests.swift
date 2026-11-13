@@ -103,7 +103,7 @@ import VettIDUI
         state.codeInput = "K7QM"
         let window = host(SetupTypeScreen(state: state, actions: NoOnboardingActions(), onBack: nil))
         let field = try #require(textFields(in: window).first { $0.placeholder == SetupTypeScreen.placeholder })
-        #expect(field.textContentType?.rawValue == "")
+        #expect(field.textContentType == .oneTimeCode)
         #expect(field.autocorrectionType == .no && field.spellCheckingType == .no && field.inlinePredictionType == .no)
         #expect(field.smartQuotesType == .no && field.smartDashesType == .no && field.smartInsertDeleteType == .no)
         #expect(field.keyboardType == .asciiCapable && field.autocapitalizationType == .allCharacters)
