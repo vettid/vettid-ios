@@ -46,11 +46,12 @@ SELF_TEST=0
 TEST_MARKERS=("VettIDTesting" "VettIDDataTesting" "VettIDKeysTesting" "VettIDAltChanTesting" "TESTTEAM00" "VETTID TEST ONLY"
   "DevStackWiring" "VETTID_DEVSTACK" "TestIOSAttester" "SoftwareAppKeyStore" "SoftwarePhoneSecretSource")
 # "Scan: another environment", "Keys gone, earlier keys to try", "Held: messages and a call waiting", "Drawer open" and
-# "Sharing: rules and grants" are titles of the onboarding, unlock, owner-check, shell and Vault sharing screen catalogs (App/Debug, debug builds only); "Xcode
+# "Sharing: rules and grants" and "Control: an ordinary password field" are titles of the onboarding, unlock, owner-check,
+# shell, Vault sharing and secret-field screen catalogs (App/Debug, debug builds only); "Xcode
 # (development)" is the development builds' "Installed from" line (IOS-PLAN ID15, App/InstalledFromBuild.swift).
 DEV_ONLY=("127.0.0.1" "relay.vettid.test" "vettid.start" "vettid.theme" "Component gallery" "Screen catalog"
   "Scan: another environment" "Keys gone, earlier keys to try" "Held: messages and a call waiting" "Drawer open"
-  "Sharing: rules and grants"
+  "Sharing: rules and grants" "Control: an ordinary password field"
   "Xcode (development)")
 
 # The public votes site is part of each environment's hosts (IOS-PLAN §4.16): Release requires votes.vettid.org and Staging
