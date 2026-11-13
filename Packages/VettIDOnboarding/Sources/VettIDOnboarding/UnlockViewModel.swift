@@ -108,6 +108,9 @@ public final class UnlockViewModel: UnlockActions {
         state.lockedByOwnerCheck = lockedByChecks
         state.returnGated = due || lockedByChecks
         state.idleLocked = idleLocked
+        // Gated: an earlier refusal of the way back is no longer what stops it (and does not come back when the gate
+        // clears).
+        if state.returnGated { state.returnRefused = false }
         // Gated while the way back was being asked for: its keypad and question close, the PIN typed for it goes.
         if state.returnGated, state.returnAsksPin || state.returnConfirm {
             state.returnAsksPin = false
@@ -418,6 +421,7 @@ public final class UnlockViewModel: UnlockActions {
         case .success:
             state.pin = ""
             state.recoveryPending = false
+            state.returnRefused = false
         // §11.14.9 step 5: the vault holds the PIN change's candidate; the new PIN is asked for (nothing was counted).
         case .newPinNeeded:
             state.pin = ""

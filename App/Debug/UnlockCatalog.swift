@@ -153,6 +153,17 @@ enum UnlockCatalog {
             s.message = .moveBackFailed
         }
         add("move_failure", "Finish the move did not finish") { $0.moveFailure = .transferIncomplete }
+        let failedMove = UnconfirmedMove(from: release(3), to: release(4), failed: true)
+        add("return_offered", "The new release failed: return offered") { $0.moveUnconfirmed = failedMove }
+        add("return_refused", "Return refused before it was sent") { s in
+            s.moveUnconfirmed = failedMove
+            s.returnRefused = true
+        }
+        add("return_check_first", "Return waits for the check") { s in
+            s.moveUnconfirmed = failedMove
+            s.returnGated = true
+            s.checkDue = true
+        }
         add("no_user_guid", "Moved from an older release") { $0.message = .failed(.notSupported, code: UnlockAttempt.codeNoUserGuid) }
         all.append(Entry(id: "starting", title: "Opening VettID", screen: .starting))
         let stuck = [

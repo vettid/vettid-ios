@@ -141,6 +141,30 @@ import VettIDDataTesting
         #expect(!vault.calls.contains("unlock"))
     }
 
+    /// The refusal goes when the check gates the way back, and with an unlock: an old refusal never comes back by itself.
+    @Test func aRefusalGoesWithTheGateAndTheUnlock() async {
+        vault.unconfirmedMove = Self.move(failed: true)
+        vault.returnStarts = false
+        let vm = UnlockViewModel(vault: vault, account: vault, ownerCheck: vault)
+        await vm.settle()
+        vm.askReturn()
+        vm.setPin("402817")
+        vm.confirmReturn()
+        #expect(vm.state.returnRefused)
+        vm.ownerCheck(due: true, lockedByChecks: false)
+        vm.ownerCheck(due: false, lockedByChecks: false)
+        #expect(!vm.state.returnRefused, "the gate on and off again: no old refusal")
+
+        vm.askReturn()
+        vm.setPin("402817")
+        vm.confirmReturn()
+        #expect(vm.state.returnRefused)
+        vm.setPin("402817")
+        vm.submit()
+        await vm.settle()
+        #expect(vault.calls.contains("unlock") && !vm.state.returnRefused, "unlocked: the refusal goes")
+    }
+
     /// Check again: "not finished yet" while listed, the unreachable text, nothing once gone; the bound's state followed.
     @Test func checkAgainSaysWhatItFound() async {
         vault.deletion = VaultDeletion(since: Date(), until: Date())

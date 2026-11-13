@@ -467,6 +467,8 @@ struct UnlockNotices: View {
                     TextLink(OnboardingStrings.releaseUpdateReturn(from)) { actions.askReturn() }
                 }
             }
+            // A container: its own identifier no longer overrides the refusal's, the check-first text's and the link's.
+            .accessibilityElement(children: .contain)
             .accessibilityIdentifier("unlock_move_unconfirmed")
         }
         if state.stateRollback {
