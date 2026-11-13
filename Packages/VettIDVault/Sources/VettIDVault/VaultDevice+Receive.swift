@@ -308,7 +308,8 @@ extension VaultDevice {
     /// Deposits [r]'s `hs.resp` bytes in one attempt the client does not send again once it may have reached the relay
     /// (``RelayClient/deposit(mailboxID:token:payload:resendAfterSent:)``), so that a refusal is the relay's word on it.
     /// Claimed under ``mem``: only while the bytes are kept (not yet accepted), never before a save holds the responder
-    /// (§8.3), nor while another deposit of it runs; the first claim is its first attempt (``Awaiting/attempted``).
+    /// (§8.3), nor while another deposit of it runs; the first claim is its first attempt (``Awaiting/attempted``). Never
+    /// called with ``lock`` held: its bookkeeping takes it.
     ///
     /// Accepted: the bytes are no longer kept, saved (a later redelivery of its `hs.init` is dropped). `quota_exceeded`: not
     /// a refusal of this `hs.resp` but a full mailbox; the device's re-send waits (``noteRespQuota(_:)``), then goes again,
@@ -351,7 +352,7 @@ extension VaultDevice {
     /// Re-deposits, by itself, every `hs.resp` whose deposit may not have reached the relay (``Awaiting/respBytes`` kept: a
     /// retryable failure or a lost answer, a stop before the deposit), the same bytes, as an outbox would: at each
     /// collection start and after each handled message. Not one waiting out a `quota_exceeded`, nor one past
-    /// ``handshakeTTL``, nor one a save does not hold yet (``depositResp(_:_:_:first:)``). With no inbound traffic and no
+    /// ``handshakeTTL``, nor one a save does not hold yet (``depositResp(_:_:)``). With no inbound traffic and no
     /// collection start nothing is re-sent: the vault then sends nothing either, and its rekey ends at its bound, as one
     /// this device never answered.
     func resendResps() async {
