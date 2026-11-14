@@ -45,6 +45,29 @@ public enum MediaLogGuard {
     /// played audio): see ``offencesOutsideTests(in:)``.
     public static let forbiddenOutsideTests: [String] = ["RTCAudioDevice"]
 
+    /// [text] without the lines from each `#if DEBUG` to its matching `#endif` (nesting counted): what a Release build compiles
+    /// of a file. A `#if` of another condition counts for nesting only.
+    public static func withoutDebugBlocks(_ text: String) -> String {
+        var depth = 0
+        var debugDepth: Int?
+        var kept: [Substring] = []
+        for line in text.split(separator: "\n", omittingEmptySubsequences: false) {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if trimmed.hasPrefix("#if") {
+                depth += 1
+                if debugDepth == nil, trimmed == "#if DEBUG" { debugDepth = depth }
+                continue
+            }
+            if trimmed.hasPrefix("#endif") {
+                if debugDepth == depth { debugDepth = nil }
+                depth -= 1
+                continue
+            }
+            if debugDepth == nil { kept.append(line) }
+        }
+        return kept.joined(separator: "\n")
+    }
+
     /// The names of ``forbiddenOutsideTests`` in [text], a source file that is not a test.
     public static func offencesOutsideTests(in text: String) -> [String] { forbiddenOutsideTests.filter { text.contains($0) } }
 

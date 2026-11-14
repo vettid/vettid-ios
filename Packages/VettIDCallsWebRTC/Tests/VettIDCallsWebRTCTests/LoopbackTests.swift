@@ -145,10 +145,14 @@ struct LoopbackTests {
             let answer = try await engine.acceptOffer(sdp: withVideo, servers: [], suite: .aes128Gcm)
             let video = answer.components(separatedBy: "\r\n").filter { $0.hasPrefix("m=video") }
             #expect(video.allSatisfy { $0.hasPrefix("m=video 0 ") }, "\(video)")
-            let live = try await engine.core.onQueue { core in
-                core.connection?.transceivers.filter { !$0.isStopped }.map { $0.mediaType == .audio } ?? []
+            // Measured: the stack itself makes the video transceiver and stops it (direction `stopped`) when it applies the
+            // offer, before any code of the engine looks: the engine neither stops nor ignores it. Exactly one transceiver is
+            // live (the audio one with the cryptors, which `requireAllMediaEncrypted` checks), and nothing else sends.
+            let all = try await engine.core.onQueue { core in
+                (core.connection?.transceivers ?? []).map { ($0.mediaType == .audio, $0.isStopped, $0.direction == .stopped) }
             }
-            #expect(live == [true])
+            #expect(all.filter { !$0.1 }.map(\.0) == [true])
+            #expect(all.filter { !$0.0 }.allSatisfy { $0.1 && $0.2 })
         } catch is MediaNotEncryptedError {
             // Also a refusal.
         }
@@ -160,7 +164,7 @@ struct LoopbackTests {
     }
 
     /// An offer with one section for each of [kinds].
-    private static func offer(with kinds: [RTCRtpMediaType]) async throws -> String {
+    static func offer(with kinds: [RTCRtpMediaType]) async throws -> String {
         try await withCheckedThrowingContinuation { continuation in
             WebRtcRuntime.queue.async {
                 let config = RTCConfiguration()

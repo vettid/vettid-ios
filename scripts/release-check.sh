@@ -349,10 +349,13 @@ PY
 # Limits: a symbol looked up by a name built at run time (dlsym with a name assembled from pieces) is in no image, and the
 # source scan (MediaLogGuardTests) cannot see it either. Nothing links the media stack yet, so this passes trivially today.
 # (The RTCLog* macros other than RTCLogEx compile to calls of RTCLogEx: they have no symbol of their own.)
-STACK_LOGGING_SYMBOLS=(_RTCSetMinDebugLogLevel _RTCSetupInternalTracer _RTCStartInternalCapture _RTCEnableMetrics
-  '_OBJC_CLASS_$_RTCCallbackLogger' '_OBJC_CLASS_$_RTCFileLogger'
-  # Raw audio: the protocols a tap or a custom audio device conforms to (a protocol conformance imports its symbol).
-  '__OBJC_PROTOCOL_$_RTCAudioRenderer' '__OBJC_PROTOCOL_$_RTCAudioCustomProcessingDelegate' '__OBJC_PROTOCOL_$_RTCAudioDevice')
+STACK_LOGGING_SYMBOLS=(_RTCSetMinDebugLogLevel _RTCLogEx _RTCSetupInternalTracer _RTCStartInternalCapture
+  _RTCStopInternalCapture _RTCShutdownInternalTracer _RTCEnableMetrics _RTCGetAndResetMetrics
+  '_OBJC_CLASS_$_RTCCallbackLogger' '_OBJC_CLASS_$_RTCFileLogger')
+# Raw audio: the protocols a tap or a custom audio device adopts. An adopting class does not import the protocol's symbol
+# (each image keeps a hidden copy, which stripping removes), but its protocol list keeps the name in __objc_classname
+# (probed: a class adopting RTCAudioRenderer and one adopting RTCAudioDevice, compiled and stripped, leave exactly these).
+STACK_RAW_AUDIO_PROTOCOLS=(RTCAudioRenderer RTCAudioCustomProcessingDelegate RTCAudioDevice)
 STACK_LOGGING_SELECTORS=(startRtcEventLogWithFilePath: startAecDumpWithFilePath: addRenderer: TurnLoggingId turnLoggingId)
 # Fails closed: a tool that fails on an image is a failure, not "nothing found".
 check_no_stack_logging() {
@@ -365,6 +368,13 @@ check_no_stack_logging() {
     for symbol in "${STACK_LOGGING_SYMBOLS[@]}"; do
       if awk -v s="${symbol}" '$NF == s { found = 1 } END { exit !found }' <<<"${names}"; then
         echo "${app}: ${f#"${app}"/} names the media stack's logging symbol ${symbol}" >&2
+        return 1
+      fi
+    done
+    names=$(otool -v -s __TEXT __objc_classname "${f}" 2>&1) || { echo "${app}: otool failed on ${f#"${app}"/}" >&2; return 1; }
+    for symbol in "${STACK_RAW_AUDIO_PROTOCOLS[@]}"; do
+      if awk -v s="${symbol}" '$NF == s { found = 1 } END { exit !found }' <<<"${names}"; then
+        echo "${app}: ${f#"${app}"/} adopts the media stack's raw-audio protocol ${symbol}" >&2
         return 1
       fi
     done
@@ -682,13 +692,19 @@ if [[ ${SELF_TEST} -eq 1 ]]; then
   # The media stack's logging: a copy of each app with a dylib that carries one of the names must fail
   # check_no_stack_logging, one case for each kind of reference; and the same names in Frameworks/WebRTC.framework must pass.
   plant_logging() {
-    local config=$1 what=$2 source=$3 where=${4:-Frameworks/Planted.framework}
+    local config=$1 what=$2 source=$3 where=${4:-Frameworks/Planted.framework} language=${5:-c}
     local dir="${OUT}/planted/${config}-logging"
     rm -rf "${dir}"
     mkdir -p "${dir}/VettID.app/${where}"
     cp -R "$(app_of "${config}")/." "${dir}/VettID.app/"
-    printf '%s\n' "${source}" > "${dir}/planted.c"
-    xcrun clang -dynamiclib -undefined dynamic_lookup -o "${dir}/VettID.app/${where}/Planted" "${dir}/planted.c"
+    printf '%s\n' "${source}" > "${dir}/planted.${language}"
+    if [[ "${language}" == m ]]; then
+      xcrun clang -fobjc-arc -dynamiclib -framework Foundation -undefined dynamic_lookup -o "${dir}/VettID.app/${where}/Planted" \
+        "${dir}/planted.m"
+      strip -x "${dir}/VettID.app/${where}/Planted"
+    else
+      xcrun clang -dynamiclib -undefined dynamic_lookup -o "${dir}/VettID.app/${where}/Planted" "${dir}/planted.c"
+    fi
     if [[ "${where}" == Frameworks/WebRTC.framework ]]; then
       check_no_stack_logging "${dir}/VettID.app" >/dev/null 2>&1 || { echo "self-test FAILED: WebRTC.framework is not excepted" >&2; exit 1; }
       echo "self-test: the stack logging check excepts ${what} in WebRTC.framework"
@@ -710,10 +726,38 @@ if [[ ${SELF_TEST} -eq 1 ]]; then
       '__attribute__((section("__TEXT,__objc_methname,cstring_literals"))) const char n[] = "startAecDumpWithFilePath:maxSizeInBytes:";'
     plant_logging "${config}" "a startRtcEventLogWithFilePath: selector reference" \
       '__attribute__((section("__DATA,__objc_selrefs,literal_pointers,no_dead_strip"))) const char *s = "startRtcEventLogWithFilePath:";'
-    plant_logging "${config}" "an RTCAudioRenderer protocol import" \
-      'extern char _OBJC_PROTOCOL_$_RTCAudioRenderer; void *f(void) { return &_OBJC_PROTOCOL_$_RTCAudioRenderer; }'
-    plant_logging "${config}" "an RTCAudioDevice protocol import (a custom audio device)" \
-      'extern char _OBJC_PROTOCOL_$_RTCAudioDevice; void *f(void) { return &_OBJC_PROTOCOL_$_RTCAudioDevice; }'
+    # A real adoption of each protocol, compiled and stripped (the protocol declared in the planted file, with the name and the
+    # method the framework's header gives it: the artefacts of an adopting class are the same).
+    plant_logging "${config}" "a class adopting RTCAudioRenderer" \
+      '#import <Foundation/Foundation.h>
+@protocol RTCAudioRenderer <NSObject>
+- (void)renderPCMBuffer:(id)buffer;
+@end
+@interface Tap : NSObject <RTCAudioRenderer>
+@end
+@implementation Tap
+- (void)renderPCMBuffer:(id)buffer { (void)buffer; }
+@end' Frameworks/Planted.framework m
+    plant_logging "${config}" "a class adopting RTCAudioDevice (a custom audio device)" \
+      '#import <Foundation/Foundation.h>
+@protocol RTCAudioDevice <NSObject>
+- (BOOL)startPlayout;
+@end
+@interface Dev : NSObject <RTCAudioDevice>
+@end
+@implementation Dev
+- (BOOL)startPlayout { return NO; }
+@end' Frameworks/Planted.framework m
+    plant_logging "${config}" "a class adopting RTCAudioCustomProcessingDelegate" \
+      '#import <Foundation/Foundation.h>
+@protocol RTCAudioCustomProcessingDelegate <NSObject>
+- (void)audioProcessingRelease;
+@end
+@interface Proc : NSObject <RTCAudioCustomProcessingDelegate>
+@end
+@implementation Proc
+- (void)audioProcessingRelease {}
+@end' Frameworks/Planted.framework m
     plant_logging "${config}" "the addRenderer: method name" \
       '__attribute__((section("__TEXT,__objc_methname,cstring_literals"))) const char n[] = "addRenderer:";'
     plant_logging "${config}" "a setTurnLoggingId: selector reference" \

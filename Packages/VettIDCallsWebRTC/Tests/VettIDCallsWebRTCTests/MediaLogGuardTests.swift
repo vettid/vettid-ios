@@ -55,8 +55,10 @@ struct MediaLogGuardTests {
             // A custom audio device sees the decrypted audio: only the factory's file (Debug-only code) and tests may name it.
             let isTest = path.contains("Tests/")
             let factoryFile = "Packages/VettIDCallsWebRTC/Sources/VettIDCallsWebRTC/WebRtcRuntime.swift"
-            if !isTest, path != factoryFile {
-                for name in MediaLogGuard.offencesOutsideTests(in: text) { offenders.append("\(path): \(name)") }
+            if !isTest {
+                // The factory's file may name it only inside its `#if DEBUG` blocks, which a Release build does not compile.
+                let compiled = path == factoryFile ? MediaLogGuard.withoutDebugBlocks(text) : text
+                for name in MediaLogGuard.offencesOutsideTests(in: compiled) { offenders.append("\(path): \(name)") }
             }
         }
         #expect(offenders == [])
@@ -75,6 +77,18 @@ struct MediaLogGuardTests {
         // A custom device outside the tests' and the factory's files.
         #expect(!MediaLogGuard.offencesOutsideTests(in: "final class Mic: NSObject, RTCAudioDevice {}").isEmpty)
         #expect(MediaLogGuard.offencesOutsideTests(in: "let c = RTCConfiguration()").isEmpty)
+    }
+
+    /// The factory's file may name the audio device type only inside `#if DEBUG`.
+    @Test func theAudioDeviceTypeIsAllowedOnlyInsideADebugBlock() {
+        let inside = "let a = 1\n#if DEBUG\nvar d: (any RTCAudioDevice)?\n#if os(iOS)\nlet x = 1\n#endif\n#endif\nlet b = 2\n"
+        #expect(MediaLogGuard.offencesOutsideTests(in: MediaLogGuard.withoutDebugBlocks(inside)).isEmpty)
+        #expect(MediaLogGuard.withoutDebugBlocks(inside).contains("let b = 2"))
+        let outside = "#if DEBUG\nlet x = 1\n#endif\nvar d: (any RTCAudioDevice)?\n"
+        #expect(!MediaLogGuard.offencesOutsideTests(in: MediaLogGuard.withoutDebugBlocks(outside)).isEmpty)
+        // A block of another condition is compiled in Release: the name there is refused.
+        let release = "#if !DEBUG\nvar d: (any RTCAudioDevice)?\n#endif\n"
+        #expect(!MediaLogGuard.offencesOutsideTests(in: MediaLogGuard.withoutDebugBlocks(release)).isEmpty)
     }
 
     /// The scan reads the files that carry settings and project wiring, and does not skip another directory called "build".
