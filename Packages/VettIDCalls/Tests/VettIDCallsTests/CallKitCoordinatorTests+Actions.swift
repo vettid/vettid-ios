@@ -1,7 +1,6 @@
 import Foundation
 import Testing
 import VettIDCrypto
-import VettIDData
 import VettIDVault
 @testable import VettIDCalls
 
@@ -175,8 +174,7 @@ extension CallKitCoordinatorTests {
         let other = FakeKit()
         other.incomingResult = .filtered
         let c2 = CallKitCoordinator(
-            machine: machine(), provider: other, control: other, audio: audio, tones: tones, clock: clock,
-            party: { CallParty(name: $0) }, isForeground: { true }
+            machine: machine(), provider: other, control: other, audio: audio, tones: tones, clock: clock, isForeground: { true }
         )
         c2.apply(state(.incoming, .incoming))
         await settle()
@@ -217,7 +215,7 @@ extension CallKitCoordinatorTests {
         #expect(audio.log.suffix(2) == ["deactivate", "callEnded"])
     }
 
-    @Test func theHandleIsOpaqueAndPerCallAndTheNameIsIsolated() async throws {
+    @Test func theHandleIsOpaqueAndPerCallAndTheNameIsGeneric() async throws {
         let c = coordinator(machine())
         c.apply(state(.starting, .outgoing))
         await settle()
@@ -226,7 +224,15 @@ extension CallKitCoordinatorTests {
         c.apply(ended(.noAnswer))
         c.apply(state(.starting, .outgoing), seq: 1)
         #expect(c.trackedHandle != first)
-        #expect(AccountNames.isolate("Name of conn-1") != "Name of conn-1", "the name CallKit gets is wrapped")
+        // Owner decision: CallKit (and so the lock screen) never shows with whom.
+        let names = kit.events.compactMap { e -> String? in
+            switch e {
+            case .incoming(_, let u), .updated(_, let u): u.name
+            default: nil
+            }
+        }
+        #expect(!names.isEmpty && names.allSatisfy { $0 == CallKitName.generic })
+        #expect(CallKitName.generic == "VettID call")
     }
 
     @Test func aTimedOutActionOfAnotherCallIsIgnored() async throws {
@@ -306,8 +312,7 @@ extension CallKitCoordinatorTests {
         let m2 = CallMachine(signalling: FakeSignalling(), engines: engines, clock: clock)
         let kit2 = FakeKit()
         let c2 = CallKitCoordinator(
-            machine: m2, provider: kit2, control: kit2, audio: audio, tones: tones, clock: clock,
-            party: { CallParty(name: $0) }, isForeground: { true }
+            machine: m2, provider: kit2, control: kit2, audio: audio, tones: tones, clock: clock, isForeground: { true }
         )
         kit2.delegate = c2
         c2.start()
@@ -367,8 +372,7 @@ extension CallKitCoordinatorTests {
         let signalling = FakeSignalling()
         let m = CallMachine(signalling: signalling, engines: engines, clock: clock)
         let c = CallKitCoordinator(
-            machine: m, provider: kit, control: kit, audio: audio, tones: tones, clock: clock,
-            party: { CallParty(name: $0) }, isForeground: { false }
+            machine: m, provider: kit, control: kit, audio: audio, tones: tones, clock: clock, isForeground: { false }
         )
         c.start()
         signalling.deliver(offer())

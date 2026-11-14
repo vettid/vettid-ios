@@ -4,7 +4,6 @@ import CallKit
 import Foundation
 import Testing
 import VettIDCrypto
-import VettIDData
 import VettIDVault
 @testable import VettIDCalls
 
@@ -96,8 +95,7 @@ private final class Player {}
 
     func coordinator(_ m: CallMachine, foreground: Bool = true) -> CallKitCoordinator {
         let c = CallKitCoordinator(
-            machine: m, provider: kit, control: kit, audio: audio, tones: tones, clock: clock,
-            party: { CallParty(name: "Name of \($0)") }, isForeground: { foreground }
+            machine: m, provider: kit, control: kit, audio: audio, tones: tones, clock: clock, isForeground: { foreground }
         )
         kit.delegate = c
         return c
@@ -129,7 +127,7 @@ private final class Player {}
         c.apply(state(.incoming, .incoming))
         await settle()
         let uuid = try #require(kit.uuid)
-        let expected = CallKitUpdate(handle: c.trackedHandle ?? "", name: AccountNames.isolate("Name of conn-1"))
+        let expected = CallKitUpdate(handle: c.trackedHandle ?? "", name: CallKitName.generic)
         #expect(kit.events == [.incoming(uuid, expected)])
         #expect(!expected.hasVideo && !expected.supportsHolding && !expected.supportsGrouping && !expected.supportsUngrouping)
         #expect(!expected.supportsDTMF)
@@ -158,8 +156,7 @@ private final class Player {}
             let signalling = FakeSignalling()
             let m = CallMachine(signalling: signalling, engines: engines, clock: clock)
             let c = CallKitCoordinator(
-                machine: m, provider: kit, control: kit, audio: audio, tones: tones, clock: clock,
-                party: { CallParty(name: $0) }, isForeground: { true }
+                machine: m, provider: kit, control: kit, audio: audio, tones: tones, clock: clock, isForeground: { true }
             )
             kit.delegate = c
             c.start()
@@ -186,8 +183,7 @@ private final class Player {}
         let signalling = FakeSignalling()
         let m = CallMachine(signalling: signalling, engines: engines, clock: clock)
         let c = CallKitCoordinator(
-            machine: m, provider: kit, control: kit, audio: audio, tones: tones, clock: clock,
-            party: { CallParty(name: $0) }, isForeground: { false }
+            machine: m, provider: kit, control: kit, audio: audio, tones: tones, clock: clock, isForeground: { false }
         )
         kit.delegate = c
         c.start()
@@ -256,7 +252,7 @@ private final class Player {}
         #expect(audio.log == ["prepare"])
 
         // CallKit performed the start (the fake performs what is requested): the name and the connecting.
-        let update = CallKitUpdate(handle: c.trackedHandle ?? "", name: AccountNames.isolate("Name of conn-1"))
+        let update = CallKitUpdate(handle: c.trackedHandle ?? "", name: CallKitName.generic)
         #expect(kit.events == [.updated(uuid, update), .connecting(uuid)])
 
         c.apply(state(.calling, .outgoing))
@@ -357,8 +353,7 @@ private final class Player {}
             for memberEnded in [false, true] {
                 let kit = FakeKit()
                 let c = CallKitCoordinator(
-                    machine: machine(), provider: kit, control: kit, audio: audio, tones: tones, clock: clock,
-                    party: { CallParty(name: $0) }, isForeground: { true }
+                    machine: machine(), provider: kit, control: kit, audio: audio, tones: tones, clock: clock, isForeground: { true }
                 )
                 kit.delegate = c
                 c.apply(state(.active, .incoming))
@@ -397,8 +392,7 @@ private final class Player {}
         let signalling2 = FakeSignalling()
         let m2 = CallMachine(signalling: signalling2, engines: engines, clock: clock)
         let c2 = CallKitCoordinator(
-            machine: m2, provider: kit2, control: kit2, audio: audio, tones: tones, clock: clock,
-            party: { CallParty(name: $0) }, isForeground: { true }
+            machine: m2, provider: kit2, control: kit2, audio: audio, tones: tones, clock: clock, isForeground: { true }
         )
         kit2.delegate = c2
         c2.start()

@@ -1,6 +1,5 @@
 import Foundation
 import Observation
-import VettIDData
 
 /// Maps between the call machine and CallKit, with the app in the foreground (no PushKit yet; no call screens).
 ///
@@ -35,7 +34,6 @@ package final class CallKitCoordinator: CallKitEvents {
     @ObservationIgnored private let control: any CallKitControlling
     @ObservationIgnored private let audio: any CallAudioSession
     @ObservationIgnored private let tones: any CallTones
-    @ObservationIgnored private let party: @MainActor (String) -> CallParty
     @ObservationIgnored private let isForeground: @MainActor () -> Bool
     @ObservationIgnored private let clock: any CallClock
 
@@ -47,7 +45,6 @@ package final class CallKitCoordinator: CallKitEvents {
         var seq: Int
         var connectionId: String
         var direction: CallDirection
-        var party: CallParty
         /// CallKit carries this call: only then does it have audio.
         var kit = true
         var answerTold = false
@@ -69,7 +66,7 @@ package final class CallKitCoordinator: CallKitEvents {
 
     package init(
         machine: CallMachine, provider: any CallKitProviding, control: any CallKitControlling, audio: any CallAudioSession,
-        tones: any CallTones, clock: any CallClock = SystemCallClock(), party: @escaping @MainActor (String) -> CallParty,
+        tones: any CallTones, clock: any CallClock = SystemCallClock(),
         isForeground: @escaping @MainActor () -> Bool
     ) {
         self.machine = machine
@@ -78,7 +75,6 @@ package final class CallKitCoordinator: CallKitEvents {
         self.audio = audio
         self.tones = tones
         self.clock = clock
-        self.party = party
         self.isForeground = isForeground
         audio.onStateChange = { [weak self] s in self?.audioState = s }
     }
@@ -177,7 +173,7 @@ package final class CallKitCoordinator: CallKitEvents {
     }
 
     private func begin(_ l: CallState.Live, seq: Int) {
-        var c = Tracked(seq: seq, connectionId: l.connectionId, direction: l.direction, party: party(l.connectionId))
+        var c = Tracked(seq: seq, connectionId: l.connectionId, direction: l.direction)
         audio.prepare()
         switch l.direction {
         case .outgoing:
@@ -206,7 +202,7 @@ package final class CallKitCoordinator: CallKitEvents {
     }
 
     /// The call as CallKit is told: the member's name bidi-isolated, the call's own opaque handle.
-    private func update(_ c: Tracked) -> CallKitUpdate { CallKitUpdate(handle: c.handle, name: AccountNames.isolate(c.party.name)) }
+    private func update(_ c: Tracked) -> CallKitUpdate { CallKitUpdate(handle: c.handle, name: CallKitName.generic) }
 
     private func phaseReports(_ l: CallState.Live, _ c: Tracked) {
         switch l.phase {
