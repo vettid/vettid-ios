@@ -46,7 +46,9 @@ package final class CallsRuntime {
         )
         let coordinator = CallKitCoordinator(
             machine: controller.machine, provider: parts.kit, control: parts.kit, audio: parts.audio, tones: parts.tones,
-            clock: parts.clock, isForeground: isForeground
+            clock: parts.clock, isForeground: isForeground,
+            // CallKit's own Accept goes through the microphone gate: refused, the call keeps ringing and the controller asks.
+            mayAnswer: { controller.answerFromCallKit(seq: $0) }
         )
         slot.coordinator = coordinator
         self.controller = controller

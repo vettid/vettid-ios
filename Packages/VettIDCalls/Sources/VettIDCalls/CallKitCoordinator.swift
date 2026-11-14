@@ -58,6 +58,8 @@ package final class CallKitCoordinator: CallKitEvents {
         var endReason: CallKitEndReason?
         var ringing = false
         var refused = false
+        /// CallKit's answer was refused by the microphone gate: the call keeps ringing, unless iOS ends its screen meanwhile.
+        var answerRefused = false
     }
 
     @ObservationIgnored private var current: Tracked?
@@ -318,7 +320,10 @@ package final class CallKitCoordinator: CallKitEvents {
     package func performAnswer(uuid: UUID) -> Bool {
         guard let c = current, c.uuid == uuid, c.direction == .incoming, !c.over, c.kit else { return false }
         // The microphone gate first: refused, the call keeps ringing and nothing is sent (the controller shows its screen).
-        guard mayAnswer(c.seq) else { return false }
+        guard mayAnswer(c.seq) else {
+            current?.answerRefused = true
+            return false
+        }
         current?.answerTold = true
         machine.answer()
         return true
@@ -328,10 +333,21 @@ package final class CallKitCoordinator: CallKitEvents {
     package func performEnd(uuid: UUID) -> Bool {
         if let c = current, c.uuid == uuid, !c.over {
             current?.endedInKit = true
-            // A ringing incoming call is declined, any other call hung up (the call CallKit names, not a newer one).
-            machine.hangUp(seq: c.seq)
+            endedByKit(c)
         }
         return true
+    }
+
+    /// CallKit ended the call [c] (its end action, or a reset). A ringing incoming call is declined, any other call hung up (the call
+    /// CallKit names, not a newer one). Fail safe: a call whose answer the microphone gate refused, and that is still ringing, was not
+    /// declined by the member: iOS may end its ring screen on a failed answer, and then the call stops ringing here as missed, with
+    /// nothing sent, instead of ringing on in the app with CallKit gone.
+    private func endedByKit(_ c: Tracked) {
+        if c.answerRefused, case .live(let l) = machine.state, l.phase == .incoming {
+            machine.ringStopped(seq: c.seq)
+        } else {
+            machine.hangUp(seq: c.seq)
+        }
     }
 
     package func performMute(uuid: UUID, muted: Bool) -> Bool {
@@ -368,7 +384,7 @@ package final class CallKitCoordinator: CallKitEvents {
     package func providerDidReset() {
         if let c = current, c.kit, !c.over {
             current?.endedInKit = true
-            machine.hangUp(seq: c.seq)
+            endedByKit(c)
         }
         audioDidDeactivate()
     }

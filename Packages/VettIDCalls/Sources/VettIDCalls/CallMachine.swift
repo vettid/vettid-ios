@@ -140,6 +140,10 @@ package final class CallMachine {
     /// ``end(_:)`` for the call [seq] only.
     package func end(_ reason: CallEnd, seq: Int) { post(.hangUpIf(seq: seq, reason)) }
 
+    /// The ringing call [seq] stops ringing here as missed, with nothing sent (neither a decline nor an answer): for a call CallKit
+    /// ended after refusing its answer, which the member did not decline. Ignored once it is no longer ringing.
+    package func ringStopped(seq: Int) { post(.ringOver(seq: seq)) }
+
     /// The vault is being locked: a live call ends.
     package func vaultLocking() { post(.hangUp(.locked)) }
 
@@ -165,6 +169,7 @@ package final class CallMachine {
             }
         case .hangUp(let reason): if let s { hangUp(s, reason) }
         case .hangUpIf(let seq, let reason): if let s, s.seq == seq { hangUp(s, reason) }
+        case .ringOver(let seq): if let s, s.seq == seq, s.phase == .incoming { finish(s, .missed, nil) }
         case .mute(let muted):
             if let s {
                 s.muted = muted

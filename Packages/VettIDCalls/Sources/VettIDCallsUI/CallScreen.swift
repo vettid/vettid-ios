@@ -62,6 +62,7 @@ public struct CallScreen: View {
         .padding(.vertical, Spacing.xxl)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(colors.background.color.ignoresSafeArea())
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("call_screen")
     }
 }
