@@ -50,6 +50,13 @@ if [[ "${1:-}" == "--verify" ]]; then
       status=1
     }
   done < <(jq -r '.pins[] | "\(.identity) \(.state.version)"' "${RESOLVED}")
+  # What no Package.resolved names: the binary media stack and the libraries built into it (the calls link it in every build).
+  for id in webrtc boringssl opus libsrtp libyuv abseil libaom dav1d libvpx zlib; do
+    jq -e --arg id "${id}" 'any(.[]; .id == $id)' "${RESOURCE}" >/dev/null || {
+      echo "licences: the media stack's ${id} is missing from ${RESOURCE} (scripts/licences.sh)" >&2
+      status=1
+    }
+  done
   jq -e '.[0].id == "vettid"' "${RESOURCE}" >/dev/null || { echo "licences: the app's own licence is not first" >&2; status=1; }
   jq -e 'all(.[]; (.text | length) > 200)' "${RESOURCE}" >/dev/null || { echo "licences: an entry without a licence text" >&2; status=1; }
   [[ ${status} -eq 0 ]] && echo "licences: ${RESOURCE} lists every dependency ($(identities | tr '\n' ' '))"
@@ -94,6 +101,20 @@ add mlkem-native "mlkem-native" "v2.0.0" "Apache-2.0 OR ISC OR MIT" "https://git
 add font-inter "Inter (font)" "" "SIL OFL 1.1" "https://rsms.me/inter/" Packages/VettIDUI/Sources/VettIDUI/Resources/Fonts/Inter-LICENSE.txt
 add font-plus-jakarta-sans "Plus Jakarta Sans (font)" "" "SIL OFL 1.1" "https://github.com/tokotype/PlusJakartaSans" \
   Packages/VettIDUI/Sources/VettIDUI/Resources/Fonts/PlusJakartaSans-OFL.txt
+
+# The media stack of the calls (webrtc-sdk's WebRTC.xcframework, a binary target: it is in no Package.resolved) and the libraries
+# built into it (Packages/VettIDCallsWebRTC/Licences/SOURCE.md).
+LIC=Packages/VettIDCallsWebRTC/Licences
+add webrtc "WebRTC (webrtc-sdk)" "150.7871.04" "BSD-3-Clause" "https://github.com/webrtc-sdk/Specs" "${LIC}/WebRTC-LICENSE.txt"
+add boringssl "BoringSSL" "" "OpenSSL, SSLeay, ISC and MIT" "https://boringssl.googlesource.com/boringssl" "${LIC}/boringssl-LICENSE.txt"
+add opus "Opus" "" "BSD-3-Clause" "https://opus-codec.org" "${LIC}/opus-LICENSE.txt"
+add libsrtp "libsrtp" "" "BSD-3-Clause" "https://github.com/cisco/libsrtp" "${LIC}/libsrtp-LICENSE.txt"
+add libyuv "libyuv" "" "BSD-3-Clause" "https://chromium.googlesource.com/libyuv/libyuv" "${LIC}/libyuv-LICENSE.txt"
+add abseil "Abseil" "" "Apache-2.0" "https://github.com/abseil/abseil-cpp" "${LIC}/abseil-LICENSE.txt"
+add libaom "libaom" "" "BSD-2-Clause" "https://aomedia.googlesource.com/aom" "${LIC}/libaom-LICENSE.txt"
+add dav1d "dav1d" "" "BSD-2-Clause" "https://code.videolan.org/videolan/dav1d" "${LIC}/dav1d-LICENSE.txt"
+add libvpx "libvpx" "" "BSD-3-Clause" "https://chromium.googlesource.com/webm/libvpx" "${LIC}/libvpx-LICENSE.txt"
+add zlib "zlib" "" "Zlib" "https://zlib.net" "${LIC}/zlib-LICENSE.txt"
 
 mkdir -p "$(dirname "${RESOURCE}")"
 jq -s '.' "${entries}" >"${RESOURCE}"

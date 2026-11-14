@@ -12,6 +12,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         ProofLeftovers.remove()
         HistoryExportLeftovers.remove()
         AppComposition.shared.launch()
+        _ = CallsLink.summary()
         return true
     }
 
