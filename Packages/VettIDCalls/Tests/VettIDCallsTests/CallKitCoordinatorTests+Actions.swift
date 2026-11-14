@@ -186,6 +186,12 @@ extension CallKitCoordinatorTests {
         await clock.runCurrent()
         guard case .live = m.state else { throw WrongState(state: m.state) }
         #expect(signalling.sent == ["ringing(\(callId))"], "a ringing call is not declined for a local failure")
+        // It rings out as missed, and CallKit is told: the timeout did not end it there.
+        await clock.advance(by: 120_000)
+        await settle()
+        guard case .ended(let missed) = m.state else { throw WrongState(state: m.state) }
+        #expect(missed.reason == .missed)
+        #expect(kit.events.contains { if case .ended(_, .unanswered) = $0 { true } else { false } })
         c.stop()
 
         let m2 = CallMachine(signalling: FakeSignalling(), engines: engines, clock: clock)

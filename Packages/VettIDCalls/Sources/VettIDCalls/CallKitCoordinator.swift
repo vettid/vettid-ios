@@ -289,9 +289,16 @@ package final class CallKitCoordinator: CallKitEvents {
 
     package func actionTimedOut() {
         if let c = current, !c.over {
-            current?.endedInKit = true
+            // A call still ringing here is not ended by a failure (it rings out as missed), so CallKit is told of that end
+            // when it comes.
+            if !ringingHere { current?.endedInKit = true }
             machine.end(.failed, seq: c.seq)
         }
+    }
+
+    private var ringingHere: Bool {
+        if case .live(let l) = machine.state, l.phase == .incoming { return true }
+        return false
     }
 
     // MARK: the audio session
