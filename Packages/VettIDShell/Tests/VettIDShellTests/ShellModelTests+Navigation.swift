@@ -30,9 +30,29 @@ import VettIDVault
         let m = model
         for end in [{ m.ownerCheckDone() }, { m.shown() }, { m.reset() }] {
             m.ownerCheck(holdOff: false)
-            m.askedOut = true
+            m.askedCheck(out: true, message: nil)
             end()
             #expect(!m.askedOut && m.asked == nil)
+        }
+    }
+
+    /// The asked check's failure stays for the gated check that takes its place (its screen going says nothing), and goes
+    /// once that one passed, with a new asked check, when the asked one is closed, and after a reset.
+    @Test func anAskedChecksFailureIsKeptForTheGatedCheck() {
+        let m = model
+        let wrong = OwnerCheckMessage.badPin(checksLeft: 8)
+        m.ownerCheck(holdOff: false)
+        m.askedCheck(out: true, message: nil)
+        m.askedCheck(out: false, message: wrong)
+        m.shown()
+        m.askedCheck(out: false, message: nil)
+        #expect(m.askedFailure == wrong && !m.askedOut)
+        m.gatedCheckDone()
+        #expect(m.askedFailure == nil)
+        for end in [{ m.ownerCheck(holdOff: true) }, { m.ownerCheckDone() }, { m.reset() }, { m.askedCheck(out: true, message: nil) }] {
+            m.askedCheck(out: false, message: wrong)
+            end()
+            #expect(m.askedFailure == nil)
         }
     }
 

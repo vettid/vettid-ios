@@ -61,21 +61,24 @@ extension OwnerCheckViewModel {
         // Decided from the state as it is now: a PIN dropped while the check was on its way (the app left the front, even
         // if it is back) does not come back when the answer lands.
         let keep = state.pinKept && Self.keepsPin(r) && !repo.lockedByOwnerCheck && repo.inFront && repo.leftFront == away
+        // One change of the state, so that the shell hears the check is no longer out together with its message.
+        var s = state
         var left: Int?
         if keep, case .badPassword(let n, _) = r, let n, n > 0 { left = n }
-        state.busy = false
-        state.pin = keep ? state.pin : ""
-        state.password = ""
+        s.busy = false
+        s.pin = keep ? s.pin : ""
+        s.password = ""
         // (ANDROID-PLAN 0.1.124) A pass shows the tick first; ``tickShown()`` then closes the screen. A pass that still
         // needs presence recorded keeps today's screen, with no tick.
-        state.passedTick = passed && !unrecorded
-        state.passedUnrecorded = unrecorded
-        if passed { state.presenceUnrecorded = repo.presenceUnrecorded }
+        s.passedTick = passed && !unrecorded
+        s.passedUnrecorded = unrecorded
+        if passed { s.presenceUnrecorded = repo.presenceUnrecorded }
         // Locked by this answer: the label stays as it was, off (``enterLocked()``).
-        state.pinKept = keep || (state.pinKept && repo.lockedByOwnerCheck)
-        state.unlockedWrong = left
-        state.unlockedOpen = keep && Self.isBackoff(r)
-        state.message = left != nil ? nil : Self.message(after: r, probe)
+        s.pinKept = keep || (s.pinKept && repo.lockedByOwnerCheck)
+        s.unlockedWrong = left
+        s.unlockedOpen = keep && Self.isBackoff(r)
+        s.message = left != nil ? nil : Self.message(after: r, probe)
+        state = s
         if case .backoff(let wait) = r { startBackoff(wait) }
         if repo.lockedByOwnerCheck {
             enterLocked()

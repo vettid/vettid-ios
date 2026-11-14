@@ -556,7 +556,7 @@ extension AppShell {
         if let mode = model.asked {
             OwnerCheckFlow(
                 mode: mode, repo: ownerChecks, vault: vault, onDone: { model.ownerCheckDone() }, onCancel: { model.ownerCheckDone() },
-                onOut: { model.askedOut = $0 }
+                onOut: { model.askedCheck(out: $0, message: $1) }
             )
             // A container: the modal trait alone made the check one element, its keypad and fields unreachable.
             .accessibilityElement(children: .contain)

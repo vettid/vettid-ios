@@ -110,6 +110,74 @@ import VettIDDataTesting
         #expect(vm.state.message == nil && !vm.state.checking && vm.state.watch == .none, "the answer is dropped")
     }
 
+    /// The shell hears the check is out in the change that sends it (no update in between), stays told through the tick,
+    /// and hears it is back together with the answer's message.
+    @Test func theCheckBeingOutIsToldAtTheSendAndWithTheAnswer() async {
+        vault.checkResults = [.badPin(checksLeft: 8)]
+        let vm = await vm(.voluntary)
+        var told: [(Bool, OwnerCheckMessage?)] = []
+        vm.onOut = { out in told.append((out, vm.state.message)) }
+        let answer = answer
+        vault.onCheck = { try? await answer.value() }
+        vm.setPin("975310")
+        vm.setPassword("pw")
+        vm.submit()
+        #expect(told.map(\.0) == [true], "at once, in the send")
+        answer.complete(())
+        await vm.settle()
+        #expect(told.count == 2 && told[1].0 == false && told[1].1 == .badPin(checksLeft: 8))
+    }
+
+    @Test func thePassStaysOutThroughTheTick() async {
+        let vm = await vm(.voluntary)
+        var told: [Bool] = []
+        vm.onOut = { told.append($0) }
+        await sendHeld(vm)
+        answer.complete(())
+        await vm.settle()
+        #expect(told == [true] && vm.state.passedTick)
+        vm.tickShown()
+        vm.cancel()
+        #expect(told == [true, false])
+    }
+
+    /// A failed lock while the dropped check is out keeps "Checking with your vault…" (no silent, disabled form).
+    @Test func waitingForTheDroppedCheckSaysChecking() async {
+        vault.fail["lock"] = FakeVaultRepository.failure(.network)
+        let vm = await vm()
+        await sendHeld(vm)
+        vm.lockVault()
+        for _ in 0..<200 where vm.state.locking { await Task.yield() }
+        #expect(vm.state.awaitingDropped && vm.state.checking && vm.state.lockOffered)
+        answer.complete(())
+        await vm.settle()
+        #expect(!vm.state.checking)
+    }
+
+    /// A lock that fails after the check came back waits for nothing.
+    @Test func aFailedLockAfterTheAnswerWaitsForNothing() async {
+        vault.checkResults = [.badPin(checksLeft: 8)]
+        vault.fail["lock"] = FakeVaultRepository.failure(.network)
+        let vm = await vm()
+        await sendHeld(vm)
+        answer.complete(())
+        await vm.settle()
+        vm.lockVault()
+        await vm.settle()
+        #expect(!vm.state.locking && !vm.state.awaitingDropped && !vm.state.checking)
+        vm.setPin("975310")
+        vm.setPassword("pw")
+        #expect(vm.state.submitAllowed)
+    }
+
+    /// The gated check that took an asked one's place says what the asked one was answered.
+    @Test func aCarriedFailureIsSaid() async {
+        let vm = OwnerCheckViewModel(repo: vault, vault: vault, tick: {})
+        vm.start(.gated, carried: .badPin(checksLeft: 8))
+        await vm.settle()
+        #expect(vm.state.message == .badPin(checksLeft: 8))
+    }
+
     @Test func leavingTheScreenDropsTheAnswer() async {
         let vm = await vm(.voluntary)
         await sendHeld(vm)

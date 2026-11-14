@@ -321,7 +321,7 @@ struct AppRoot: View {
             // that nothing of it comes back for a moment afterwards.
             OwnerCheckGateView(
                 vault: vault, path: shell.path, onGated: { shell.shown() }, onCovered: { shell.checkCovers = $0 },
-                askedOut: shell.askedOut
+                askedOut: shell.askedOut, askedFailure: shell.askedFailure, onPassed: { shell.gatedCheckDone() }
             ) { gate, now in
                 AppShell(
                     account: vault, vault: vault, ownerChecks: vault.ownerChecks, credential: vault, profiles: vault.profiles,
@@ -376,6 +376,10 @@ struct OwnerCheckGateView<Content: View>: View {
     var onCovered: @MainActor (Bool) -> Void = { _ in }
     /// The check the member asked for is with the vault or shows its tick (``ShellModel/askedOut``): the due check waits.
     var askedOut = false
+    /// What the asked check was last answered, said by the gated check that took its place (``ShellModel/askedFailure``).
+    var askedFailure: OwnerCheckMessage?
+    /// The gated check passed.
+    var onPassed: @MainActor () -> Void = {}
     @ViewBuilder let content: (OwnerCheckGate, Date) -> Content
     /// The check screen was opened and is not done yet: it stays until the member goes on, so that a check that passed
     /// with the presence not recorded shows its notice (VAULT-MESSAGING §11.14.5), as vettid-android's route does until `onDone`.
@@ -413,11 +417,12 @@ struct OwnerCheckGateView<Content: View>: View {
                     .environment(\.vettIDInput, input)
                     .modifier(CoveredByCheck(covered: covered))
                 if covered {
-                    OwnerCheckFlow(mode: .gated, repo: checks, vault: vault) {
+                    OwnerCheckFlow(mode: .gated, repo: checks, vault: vault, onDone: {
+                        onPassed()
                         checking = false
                         latch.release()
                         checks.consumeCheckAfterCancel()
-                    }
+                    }, carried: askedFailure)
                     .onAppear {
                         checking = true
                         onGated()

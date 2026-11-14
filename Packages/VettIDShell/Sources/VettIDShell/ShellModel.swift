@@ -20,7 +20,10 @@ public final class ShellModel {
     public private(set) var asked: OwnerCheckMode?
     /// (ANDROID-PLAN 0.1.124) The asked check is with the vault or shows its "Check passed" tick: a check coming due waits
     /// for it (``OwnerCheckFlow``'s `onOut`), so that no second check goes alongside it.
-    public var askedOut = false
+    public private(set) var askedOut = false
+    /// The last failure the asked check was answered (a wrong PIN, say), kept for the gated check should it take the asked
+    /// one's place, which would otherwise never say it (vettid-android keeps one screen for both).
+    public private(set) var askedFailure: OwnerCheckMessage?
     /// The daily check covers the shell (``shown()``'s case): the shell is not in front for a notification's tap, and the
     /// root's own presentations close.
     public var checkCovers = false
@@ -229,6 +232,7 @@ public final class ShellModel {
     /// (VAULT-MESSAGING §3.6.7). The sheet and the drawer close.
     public func ownerCheck(holdOff: Bool) {
         asked = holdOff ? .holdOff : .voluntary
+        askedFailure = nil
         showAccount = false
         drawerOpen = false
     }
@@ -237,7 +241,18 @@ public final class ShellModel {
     public func ownerCheckDone() {
         asked = nil
         askedOut = false
+        askedFailure = nil
     }
+
+    /// The asked check's check went out ([out]) or came back, with [message] when it failed (``OwnerCheckFlow``'s
+    /// `onOut`). A screen that goes (nil) leaves the failure for the gated check that took its place.
+    public func askedCheck(out: Bool, message: OwnerCheckMessage?) {
+        askedOut = out
+        if out { askedFailure = nil } else if let message { askedFailure = message }
+    }
+
+    /// The gated check passed: nothing of an earlier asked check stays for the next one.
+    public func gatedCheckDone() { askedFailure = nil }
 
     /// The check past the deadline took the shell's place: nothing the shell had open (the drawer, the sheet, an asked
     /// check) comes back with it.
@@ -251,6 +266,7 @@ public final class ShellModel {
     /// The vault was locked or left: the next open starts afresh, as vettid-android's new shell does.
     public func reset() {
         shown()
+        askedFailure = nil
         checkCovers = false
         path = []
         destination = .start

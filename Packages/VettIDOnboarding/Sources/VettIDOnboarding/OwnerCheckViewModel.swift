@@ -159,7 +159,13 @@ public struct OwnerCheckScreenState: Equatable, Sendable, CustomStringConvertibl
 
     /// (ANDROID-PLAN 0.1.124) A check is with the vault: "Checking with your vault…" in place of the entries, no Check and no
     /// Cancel (Lock vault, where offered, stays enabled), and the back gestures are off (the request cannot be taken back).
-    public var checking: Bool { busy && !locked && watch == .none }
+    /// Also while a check whose answer is dropped is still out after a failed Lock vault (``awaitingDropped``): no second
+    /// check can go, and the screen says why rather than leaving Check off without a word.
+    public var checking: Bool { (busy || awaitingDropped) && !locked && watch == .none }
+
+    /// (ANDROID-PLAN 0.1.124) A check is out or its tick shows: a check coming due waits for this one
+    /// (``OwnerCheckViewModel/onOut``).
+    public var out: Bool { checking || passedTick }
 
     /// "Lock vault" is the secondary action when gated, and in every mode while the vault is probably locked
     /// (VAULT-MESSAGING 0.73.0 §3.6.5).
@@ -231,7 +237,13 @@ public final class NoOwnerCheckActions: OwnerCheckActions {
 @MainActor
 @Observable
 public final class OwnerCheckViewModel: OwnerCheckActions {
-    public internal(set) var state: OwnerCheckScreenState
+    public internal(set) var state: OwnerCheckScreenState {
+        // Told in the same change that sends the check, with no update in between; and on the answer, with its message.
+        didSet { if state.out != oldValue.out { onOut?(state.out) } }
+    }
+    /// (ANDROID-PLAN 0.1.124) Called when ``OwnerCheckScreenState/out`` changes: the shell holds a check coming due back
+    /// while an asked check is out.
+    @ObservationIgnored public var onOut: (@MainActor (Bool) -> Void)?
 
     @ObservationIgnored let repo: any OwnerCheckRepository
     @ObservationIgnored private let vault: any VaultRepository
@@ -358,13 +370,15 @@ public final class OwnerCheckViewModel: OwnerCheckActions {
     }
 
     /// Opens the screen for [mode], with nothing entered; a check sent right after an unlock says how it went.
-    public func start(_ mode: OwnerCheckMode) {
+    /// [carried]: the last answer of the check the member had asked for, which this gated one replaced while it was out
+    /// (said here, since the asked screen that would have said it is gone).
+    public func start(_ mode: OwnerCheckMode, carried: OwnerCheckMessage? = nil) {
         ticker?.cancel()
         stopReads()
         let after = repo.unlockCheckOutcome
         repo.consumeUnlockCheckOutcome()
         state = OwnerCheckScreenState(mode: mode, view: repo.ownerCheck, timeScale: repo.timeScale)
-        state.message = after.flatMap(Self.message)
+        state.message = after.flatMap(Self.message) ?? carried
         state.presenceUnrecorded = repo.presenceUnrecorded
         // A check that failed on the password right after the unlock: the PIN is kept, the password asked (§3.6.5).
         let retry = mode == .gated && (after.map(Self.isRetry) ?? false)
@@ -390,6 +404,7 @@ public final class OwnerCheckViewModel: OwnerCheckActions {
 
     /// Leaves the screen without a check (not while gated): forgets what was entered.
     public func cancel() {
+        // A check still out keeps ``checkOut`` until it returns: a lock that fails meanwhile still waits for it.
         checkSeq += 1
         ticker?.cancel()
         stopReads()
@@ -442,6 +457,8 @@ public final class OwnerCheckViewModel: OwnerCheckActions {
             checkOut = false
             // (ANDROID-PLAN 0.1.124) The member locked the vault (or the screen left) while the check was out: its answer is
             // dropped, and nothing that follows from it runs; a check held back for it may go now.
+            // A dropped answer takes everything that follows from it, its backoff's countdown and the probably-locked
+            // watch included: the member chose to lock, or left, and a check after it reads the vault's state afresh.
             guard seq == checkSeq else {
                 state.awaitingDropped = false
                 return
@@ -457,6 +474,7 @@ public final class OwnerCheckViewModel: OwnerCheckActions {
         // (ANDROID-PLAN 0.1.124) Lock vault stays enabled while a gated check is with the vault: that check's answer, when it
         // comes, is dropped (the member chose to lock).
         checkSeq += 1
+        // The check no longer counts as with the vault: the lock is what the screen waits for now (as vettid-android).
         state.busy = false
         state.locking = true
         // The kept PIN goes with the lock; a lock that fails leaves the screen asking for both again.

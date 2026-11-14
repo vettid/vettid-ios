@@ -14,7 +14,10 @@ public struct OwnerCheckFlow: View {
     private let vault: any VaultRepository
     private let onDone: @MainActor () -> Void
     private let onCancel: @MainActor () -> Void
-    private let onOut: @MainActor (Bool) -> Void
+    private let onOut: @MainActor (Bool, OwnerCheckMessage?) -> Void
+    private let carried: OwnerCheckMessage?
+    /// The model to use instead of one made on appear (tests).
+    private let given: OwnerCheckViewModel?
     @State private var model: OwnerCheckViewModel?
     @Environment(\.vettIDColors) private var colors
 
@@ -24,13 +27,32 @@ public struct OwnerCheckFlow: View {
         vault: any VaultRepository,
         onDone: @escaping @MainActor () -> Void = {},
         onCancel: @escaping @MainActor () -> Void = {},
-        onOut: @escaping @MainActor (Bool) -> Void = { _ in }
+        carried: OwnerCheckMessage? = nil,
+        onOut: @escaping @MainActor (Bool, OwnerCheckMessage?) -> Void = { _, _ in }
+    ) {
+        self.init(mode: mode, repo: repo, vault: vault, model: nil, onDone: onDone, onCancel: onCancel, carried: carried, onOut: onOut)
+    }
+
+    /// [carried]: the last answer of an asked check this gated one replaced (``OwnerCheckViewModel/start(_:carried:)``).
+    /// [onOut]: whether a check is out or its tick shows, as it changes, with the message once the answer came
+    /// (``OwnerCheckViewModel/onOut``); false when the screen goes.
+    init(
+        mode: OwnerCheckMode,
+        repo: any OwnerCheckRepository,
+        vault: any VaultRepository,
+        model: OwnerCheckViewModel?,
+        onDone: @escaping @MainActor () -> Void = {},
+        onCancel: @escaping @MainActor () -> Void = {},
+        carried: OwnerCheckMessage? = nil,
+        onOut: @escaping @MainActor (Bool, OwnerCheckMessage?) -> Void = { _, _ in }
     ) {
         self.mode = mode
         self.repo = repo
         self.vault = vault
+        self.given = model
         self.onDone = onDone
         self.onCancel = onCancel
+        self.carried = carried
         self.onOut = onOut
     }
 
@@ -55,18 +77,20 @@ public struct OwnerCheckFlow: View {
                     guard !Task.isCancelled else { return }
                     model.tickShown()
                 }
-                // (ANDROID-PLAN 0.1.124) [onOut] while a check is with the vault or its tick shows: a check coming due
-                // waits for it, so that no second check goes alongside the first and the tick is not cut short.
-                .onChange(of: model.state.checking || model.state.passedTick, initial: true) { _, out in onOut(out) }
-                .onDisappear { onOut(false) }
+                // (ANDROID-PLAN 0.1.124) No longer out once the screen went (``OwnerCheckViewModel/onOut`` tells the rest).
+                .onDisappear { onOut(false, nil) }
             } else {
                 colors.background.color.ignoresSafeArea()
             }
         }
         .onAppear {
             guard model == nil else { return }
-            let m = OwnerCheckViewModel(repo: repo, vault: vault)
-            m.start(mode)
+            let m = given ?? OwnerCheckViewModel(repo: repo, vault: vault)
+            // (ANDROID-PLAN 0.1.124) A check coming due waits while this one is out, so that no second check goes alongside
+            // it and its tick is not cut short; told in the change that sends it, and with its answer's message.
+            let onOut = onOut
+            m.onOut = { [weak m] out in onOut(out, out ? nil : m?.state.message) }
+            m.start(mode, carried: carried)
             model = m
         }
     }
