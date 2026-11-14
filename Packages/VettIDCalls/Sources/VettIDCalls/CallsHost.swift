@@ -194,7 +194,7 @@ public final class CallsHost {
     package var microphoneScreen: MicrophoneScreen? { runtime?.controller.microphoneScreen }
 
     /// Whether anything of calls is on the screen: a call (or an ending that stays) or the microphone gate.
-    public var screenShown: Bool { uiState.showsScreen || microphoneScreen != nil }
+    public var screenShown: Bool { vault.isOpen && (uiState.showsScreen || microphoneScreen != nil) }
 
     package func answer() { runtime?.controller.answer() }
     package func decline() { runtime?.controller.decline() }

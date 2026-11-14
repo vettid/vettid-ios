@@ -62,7 +62,7 @@ final class PrivacyShieldController {
     private init(_ scene: UIWindowScene) {
         self.scene = scene
         window = UIWindow(windowScene: scene)
-        window.windowLevel = .alert + 1
+        window.windowLevel = PrivacyShield.windowLevel
         window.rootViewController = cover
         window.isHidden = true
         window.accessibilityIdentifier = "privacy_shield"
@@ -137,4 +137,9 @@ extension View {
     /// The app-switcher cover and capture hiding (IOS-PLAN §6.4 protections 1 and 2), installed on the window scene of
     /// the app's root view.
     public func privacyShield() -> some View { background(ShieldInstaller().frame(width: 0, height: 0)) }
+}
+
+/// Where the privacy shield sits: above every window the app shows, the app lock's and the calls' included.
+public enum PrivacyShield {
+    public static let windowLevel = UIWindow.Level.alert + 1
 }

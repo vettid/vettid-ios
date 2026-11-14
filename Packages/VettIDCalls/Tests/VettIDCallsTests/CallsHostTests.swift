@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+import VettIDCrypto
 @testable import VettIDCalls
 @testable import VettIDVault
 
@@ -11,6 +12,7 @@ final class FakeAppVault: CallsAppVault {
 
     var gateway: any CallGateway { inner.gateway }
     var updateShowing: Bool { inner.updateShowing }
+    var isOpen: Bool { inner.unlocked }
     func unlockedChanges() -> AsyncStream<Bool> { inner.unlockedChanges() }
     func rechecks() -> AsyncStream<Void> { inner.rechecks() }
     func fingerprint(_ connectionId: String) async -> String? { await inner.fingerprint(connectionId) }
@@ -139,6 +141,70 @@ final class FakeAppVault: CallsAppVault {
         await settle()
         #expect(vault.holds[0]() == false, "the call ended (it could not be placed)")
         #expect(vault.holdsEnded > ended, "the vault is told: a background that waited for the call may finish")
+    }
+
+    /// An active outgoing call placed through the host, until media flows.
+    func activeCall(_ h: CallsHost) async throws {
+        let gateway = vault.inner.gatewayFake
+        gateway.startResult = { _, _ in
+            OutgoingCall(
+                callId: callId, connectionId: "conn-1", media: "audio", exp: at(45_000),
+                ice: CallWire.IceConfig(callId: callId, exp: at(600_000), servers: []), offered: [1], pinnedFingerprint: "",
+                offerKey: try CallWire.newOfferKey()
+            )
+        }
+        gateway.acceptResult = { _ in
+            let keys = CallKeys(suite: .aes128Gcm, send: filled(32, 5), receive: filled(32, 6))
+            return AcceptedCall(callId: callId, sdp: "v=0\r\ns=answer\r\n", keys: keys)
+        }
+        h.call("conn-1")
+        await settle()
+        gateway.send(.answer(VaultMessage(inner: Inner(
+            id: "01JB2Z6V9K3M4N5P6Q7R8S9T61", type: "call.answer", ts: t0, body: Array(#"{"call_id":"\#(callId)"}"#.utf8)
+        ))))
+        await settle()
+        let engine = engines.last
+        engine.emit(.connection(.connected))
+        engine.emit(.cryptor(.send, .ok))
+        engine.emit(.cryptor(.receive, .ok))
+        await settle()
+        guard case .live(let l) = h.uiState.call, l.phase == .active else { throw WrongState(state: h.uiState.call) }
+    }
+
+    /// At a lock the call screen goes with the first line (the vault counts as locked at once), before the unlock screen comes: it
+    /// does not wait for the call logic to see the lock or for the hang-up.
+    @Test func theCallScreenGoesAtTheFirstLineOfALock() async throws {
+        let h = host()
+        h.start()
+        vault.inner.setUnlocked(true)
+        await settle()
+        try await activeCall(h)
+        #expect(h.screenShown)
+        vault.inner.setUnlocked(false)
+        #expect(!h.screenShown, "gone at once, though the call logic has not run yet")
+    }
+
+    /// The lock's hook waits for a real pending hang-up: the call's end is handed to the vault and not yet with the relay.
+    @Test func theLockHookWaitsForTheHangUpOfALiveCall() async throws {
+        let h = host()
+        h.start()
+        vault.inner.setUnlocked(true)
+        await settle()
+        try await activeCall(h)
+        let gate = Gate()
+        vault.inner.gatewayFake.endGate = gate
+        var done = false
+        let waiter = Task {
+            await vault.hooks[0]()
+            done = true
+        }
+        await clock.advance(by: 1500)
+        #expect(vault.inner.gatewayFake.asked.contains("end(\(callId), hangup)"), "the hang-up was handed to the vault")
+        #expect(!done, "the end is not with the relay yet: the lock waits")
+        gate.open()
+        await settle()
+        #expect(done)
+        await waiter.value
     }
 
     @Test func aLockTellsTheVaultNoCallHoldsTheCollection() async {

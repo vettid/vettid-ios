@@ -101,6 +101,7 @@
 		A65E5E4EFA6A74AF7B884B2E /* AppAttestDeviceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9D2B5CA030BC6FA62B3EEF7D /* AppAttestDeviceTests.swift */; };
 		A6678DFF01647F791ED36333 /* AmericanSpellingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2E046F31EC24A8B89BD71C6 /* AmericanSpellingTests.swift */; };
 		A8DF3EAE2376C25D4EA3B564 /* VettIDHistory in Frameworks */ = {isa = PBXBuildFile; productRef = 357729FB7655C77D062C45E6 /* VettIDHistory */; };
+		A8F7BF4C8B3342DC23AF52B0 /* CallsWindowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7DE72A8BEA6545C60125D53 /* CallsWindowTests.swift */; };
 		AA35614CE1F4D97BC627B12F /* VettIDApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B5C81B56C71C53452A052D2A /* VettIDApp.swift */; };
 		AA5AD3F7057CFA0BB16F4515 /* ShellCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2C4EF17933B13C37D62C1ED /* ShellCatalog.swift */; };
 		ADA6D6AB984FC3CF825EA65B /* PhotoPermissionsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8DCA5F5A4698204295F4776B /* PhotoPermissionsTests.swift */; };
@@ -267,6 +268,7 @@
 		E4977836D2D29FA1872AA606 /* AutofillUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AutofillUITests.swift; sourceTree = "<group>"; };
 		E617EAA90484DE23347EBCA3 /* CallsCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CallsCatalog.swift; sourceTree = "<group>"; };
 		E6B395AB586511F6FD05BFC0 /* vettid_message.caf */ = {isa = PBXFileReference; path = vettid_message.caf; sourceTree = "<group>"; };
+		E7DE72A8BEA6545C60125D53 /* CallsWindowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CallsWindowTests.swift; sourceTree = "<group>"; };
 		EB1D13186B27047D3E39486C /* AppLockWindowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppLockWindowTests.swift; sourceTree = "<group>"; };
 		EDD69AF1283FBA35B9C2E65B /* ItemsCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ItemsCatalog.swift; sourceTree = "<group>"; };
 		EF1B951337F93E1A73F8EF1C /* CallsCatalogUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CallsCatalogUITests.swift; sourceTree = "<group>"; };
@@ -403,6 +405,7 @@
 				9D2B5CA030BC6FA62B3EEF7D /* AppAttestDeviceTests.swift */,
 				D78BD3F6C3BB2643C264466A /* AppEnvironmentTests.swift */,
 				EB1D13186B27047D3E39486C /* AppLockWindowTests.swift */,
+				E7DE72A8BEA6545C60125D53 /* CallsWindowTests.swift */,
 				0FE633DD8FFE64A6E2D63CF4 /* CallsWiringTests.swift */,
 				6026316F2864710BB7DFBBCB /* CanaryManifestFilesTests.swift */,
 				5EBB51B3CAEFFF548475E972 /* CompositionTests.swift */,
@@ -841,6 +844,7 @@
 				A65E5E4EFA6A74AF7B884B2E /* AppAttestDeviceTests.swift in Sources */,
 				926662D958BB0CF0087EB183 /* AppEnvironmentTests.swift in Sources */,
 				48C14D9734DD1B7FCF3CF6B0 /* AppLockWindowTests.swift in Sources */,
+				A8F7BF4C8B3342DC23AF52B0 /* CallsWindowTests.swift in Sources */,
 				C16277EC80296B2350B60276 /* CallsWiringTests.swift in Sources */,
 				944241F35F84B24040C3C97F /* CanaryManifestFilesTests.swift in Sources */,
 				AE50D9820C7612104F1F51CF /* CompositionTests.swift in Sources */,

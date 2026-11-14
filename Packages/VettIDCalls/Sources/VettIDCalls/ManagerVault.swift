@@ -4,6 +4,10 @@ import VettIDData
 /// What the calls' wiring needs of the app's vault beyond ``CallVault``: a hook before the member's lock.
 @MainActor
 package protocol CallsAppVault: CallVault {
+    /// Whether the vault is open on this phone now (observable): the call screens are never over a vault that is not open, so they go
+    /// with the first line of a lock, before the unlock screen comes.
+    var isOpen: Bool { get }
+
     /// Something to finish while the vault still collects, before the member's lock (a live call's hang-up).
     func onBeforeLock(_ hook: @escaping @MainActor () async -> Void)
 
@@ -40,6 +44,8 @@ package final class ManagerVault: CallsAppVault {
     package func unlockedChanges() -> AsyncStream<Bool> { observed { [manager] in manager.phase == .unlocked } }
 
     package var updateShowing: Bool { manager.releaseUpdateShowing }
+
+    package var isOpen: Bool { manager.phase == .unlocked }
 
     /// The daily check was done, or the connections were read: the vault answers now, if it did not before. (Not the current
     /// values: only a change.)

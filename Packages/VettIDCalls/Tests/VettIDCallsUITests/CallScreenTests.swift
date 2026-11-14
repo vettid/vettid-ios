@@ -64,12 +64,5 @@ import VettIDUI
         // A clock set back never shows a negative time.
         #expect(CallElapsed.text(since: Self.since, now: Self.since.addingTimeInterval(-5)) == "0:00")
     }
-
-    /// Above sheets and alerts of the app, below the app lock's window (alert + 0.5) and the privacy shield's (alert + 1): the app
-    /// lock covers a call without ending it.
-    @Test func theCallsWindowIsAboveTheAppAndBelowTheLock() {
-        #expect(CallsWindow.level == .alert)
-        #expect(CallsWindow.level > .normal && CallsWindow.level < UIWindow.Level.alert + 0.5)
-    }
 }
 #endif

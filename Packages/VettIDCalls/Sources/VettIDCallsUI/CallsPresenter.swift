@@ -62,15 +62,15 @@ struct MicrophoneDialogs: ViewModifier {
 /// the member had open under it does not hide an incoming call. The app lock is a UI gate only and ends no call (vettid-android):
 /// its window covers this one, and the call goes on.
 @MainActor
-final class CallsWindow {
+public final class CallsWindow {
     private static var installed: [ObjectIdentifier: CallsWindow] = [:]
-    static let level = UIWindow.Level.alert
+    public static let level = UIWindow.Level.alert
 
-    let window: UIWindow
+    public let window: UIWindow
     private let controller = UIHostingController(rootView: AnyView(EmptyView()))
     private var built = false
 
-    static func install(on scene: UIWindowScene) -> CallsWindow {
+    public static func install(on scene: UIWindowScene) -> CallsWindow {
         let id = ObjectIdentifier(scene)
         if let w = installed[id] { return w }
         let w = CallsWindow(scene)
@@ -83,26 +83,28 @@ final class CallsWindow {
         window.windowLevel = Self.level
         window.rootViewController = controller
         controller.view.backgroundColor = .clear
+        // Nothing of the app under the call (or the microphone dialog) is read by VoiceOver while it shows.
+        controller.view.accessibilityViewIsModal = true
         window.backgroundColor = .clear
         window.isHidden = true
         window.accessibilityIdentifier = "calls_window"
     }
 
-    var isShown: Bool { !window.isHidden }
+    public var isShown: Bool { !window.isHidden }
 
-    func show(_ view: AnyView, rebuild: Bool) {
+    public func show(_ view: AnyView, rebuild: Bool) {
         if !built || rebuild {
             controller.rootView = view
             built = true
         }
         guard window.isHidden else { return }
-        // Visible without taking the key window from the app: the keyboard stays where it was, and a text field of the app under
-        // an incoming call is not left in the middle of typing by a window change.
+        // No text field of the app keeps the keyboard: it would sit over the call screen (as the app lock's window does it).
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
         window.isHidden = false
         UIAccessibility.post(notification: .screenChanged, argument: nil)
     }
 
-    func hide() {
+    public func hide() {
         guard !window.isHidden else { return }
         window.isHidden = true
         UIAccessibility.post(notification: .screenChanged, argument: nil)
