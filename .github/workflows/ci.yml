@@ -39,6 +39,14 @@ jobs:
           unzip -q swiftlint.zip -d swiftlint && unzip -q xcodegen.zip
           echo "$RUNNER_TEMP/tools/swiftlint" >> "$GITHUB_PATH"
           echo "$RUNNER_TEMP/tools/xcodegen/bin" >> "$GITHUB_PATH"
+      # The app links the calls' media stack in every configuration, so the project resolves the webrtc-sdk binary (686 MB:
+      # about 3 to 5 minutes uncached, seconds restored). SwiftPM keeps the downloaded zip in its own cache, so that is what is
+      # cached, under the key the calls-webrtc job uses too: keyed on the checksum (Package.swift) and Package.resolved.
+      - name: the media stack's binary
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/Library/Caches/org.swift.swiftpm/artifacts
+          key: webrtc-binary-${{ hashFiles('Packages/VettIDCallsWebRTC/Package.swift', 'Packages/VettIDCallsWebRTC/Package.resolved') }}
       - name: the Xcode project matches project.yml
         run: |
           xcodegen generate --quiet
@@ -74,9 +82,10 @@ jobs:
           retention-days: 14
 
   calls-webrtc:
-    # The calls' WebRTC media engine (Packages/VettIDCallsWebRTC), on its own: no app target links it, and it is not in the
-    # Xcode project, so the `ios` job never resolves its 686 MB binary. Its tests run on macOS (swift test) and on a
-    # simulator (the iOS-only ones). The binary is cached, keyed on Package.swift (which holds its checksum) and Package.resolved.
+    # The calls' WebRTC media engine (Packages/VettIDCallsWebRTC), on its own: its tests run on macOS (swift test) and on a
+    # simulator (the iOS-only ones). The `ios` job resolves the same binary through the app, but runs only VettIDCalls's tests,
+    # not this package's, so this job is not redundant. The binary is cached, keyed on Package.swift (which holds its checksum)
+    # and Package.resolved.
     runs-on: macos-26
     timeout-minutes: 45
     steps:
@@ -84,10 +93,7 @@ jobs:
       - name: the media stack's binary
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          path: |
-            Packages/VettIDCallsWebRTC/.build/artifacts
-            Packages/VettIDCallsWebRTC/build/DerivedData/SourcePackages/artifacts
-            ~/Library/Caches/org.swift.swiftpm
+          path: ~/Library/Caches/org.swift.swiftpm/artifacts
           key: webrtc-binary-${{ hashFiles('Packages/VettIDCallsWebRTC/Package.swift', 'Packages/VettIDCallsWebRTC/Package.resolved') }}
       - name: swift test (macOS)
         run: swift test --package-path Packages/VettIDCallsWebRTC

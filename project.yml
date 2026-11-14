@@ -65,6 +65,9 @@ packages:
     path: Packages/VettIDDevices
   VettIDCalls:
     path: Packages/VettIDCalls
+  # The WebRTC media engine and the webrtc-sdk binary (about 700 MB to fetch; the app links it in every configuration).
+  VettIDCallsWebRTC:
+    path: Packages/VettIDCallsWebRTC
   # TEST ONLY: linked by test targets, never by the app (release check).
   VettIDTesting:
     path: Packages/VettIDTesting
@@ -144,6 +147,8 @@ targets:
         # permission (the system's picker). (chosen; not in the spec: vettid-android has no such texts.)
         INFOPLIST_KEY_NSCameraUsageDescription: "VettID uses the camera to scan QR codes, such as your setup code or an invitation, and to take photos you send. Nothing is recorded, and a photo stays in memory until you send it."
         INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription: "VettID adds a photo to your library only when you choose Save to phone."
+        # The microphone, for calls only (CALLS-PLAN; the text approved by the owner), in every configuration.
+        INFOPLIST_KEY_NSMicrophoneUsageDescription: "VettID uses the microphone only during calls, so the person you're talking to can hear you."
         # Face ID for the app lock (IOS-PLAN ID17; chosen; not in the spec: vettid-android has no such text).
         INFOPLIST_KEY_NSFaceIDUsageDescription: "VettID uses Face ID only to open the app when you turn on the app lock."
         MARKETING_VERSION: 2.0.0
@@ -172,6 +177,8 @@ targets:
       - package: VettIDItems
       - package: VettIDVotes
       - package: VettIDDevices
+      - package: VettIDCalls
+      - package: VettIDCallsWebRTC
 
   # TEST ONLY: the app's sources and screens against the local dev stack on the simulator (IOS-PLAN §8 exit I1 (a)),
   # with VettIDAltChanTesting's TEST App Attest attester and VettIDKeysTesting's software keys composed by
@@ -221,6 +228,7 @@ targets:
         ASSETCATALOG_COMPILER_APPICON_NAME: $(VETTID_APP_ICON)
         INFOPLIST_KEY_NSCameraUsageDescription: "VettID uses the camera to scan QR codes, such as your setup code or an invitation, and to take photos you send. Nothing is recorded, and a photo stays in memory until you send it."
         INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription: "VettID adds a photo to your library only when you choose Save to phone."
+        INFOPLIST_KEY_NSMicrophoneUsageDescription: "VettID uses the microphone only during calls, so the person you're talking to can hear you."
         MARKETING_VERSION: 2.0.0
         CURRENT_PROJECT_VERSION: 1
         SKIP_INSTALL: YES
@@ -249,6 +257,8 @@ targets:
       - package: VettIDItems
       - package: VettIDVotes
       - package: VettIDDevices
+      - package: VettIDCalls
+      - package: VettIDCallsWebRTC
       # TEST ONLY: the TEST iOS attester and the software keys.
       - package: VettIDAltChan
         product: VettIDAltChanTesting

@@ -85,7 +85,12 @@ archive() {
 bundle_text() {
   local app=$1
   find "${app}" -type f -print0 | while IFS= read -r -d '' f; do
-    if file -b "${f}" | grep -q 'Mach-O'; then
+    if [[ "${f}" == "${app}"/Frameworks/WebRTC.framework/WebRTC ]]; then
+      # The vendor's media stack (webrtc-sdk, checksum-pinned) holds the loopback address 127.0.0.1 in its strings, a line of its
+      # own: that one line is set aside, and everything else it holds is scanned like the rest of the bundle (so a dev host or
+      # a TEST marker added to it is refused).
+      strings -a "${f}" | grep -vxF '127.0.0.1' || true
+    elif file -b "${f}" | grep -q 'Mach-O'; then
       strings -a "${f}"
     elif [[ "${f}" == *.plist ]]; then
       plutil -convert xml1 -o - "${f}" 2>/dev/null || cat "${f}"
@@ -295,21 +300,17 @@ check_archive_products() {
 # The package products the VettID app links: exactly these (one per shipping package of project.yml).
 APP_PRODUCTS="VettIDCrypto VettIDAttestation VettIDRelay VettIDAltChan VettIDVault VettIDKeys VettIDData VettIDMedia
 VettIDNotify VettIDUI VettIDOnboarding VettIDSettings VettIDShell VettIDConnections VettIDMessages VettIDApprovals
-VettIDNotifications VettIDHistory VettIDItems VettIDVotes VettIDDevices"
-# Not linked by the app, in any configuration, until calls ship in Release (as on Android, whose release builds carry no
-# call code): built and tested on their own.
-APP_EXCLUDED="VettIDCalls VettIDCallsWebRTC"
+VettIDNotifications VettIDHistory VettIDItems VettIDVotes VettIDDevices VettIDCalls VettIDCallsWebRTC"
 
 # The VettID app target (whatever the scheme) links exactly APP_PRODUCTS (each product id resolved to its productName)
 # and compiles no file of AppDevStack/, read from the project file: its package products and its Sources phase.
 check_app_target() {
   local pbxproj=$1
-  python3 - "${pbxproj}" AppDevStack "${APP_PRODUCTS}" "${APP_EXCLUDED}" <<'PY'
+  python3 - "${pbxproj}" AppDevStack "${APP_PRODUCTS}" <<'PY'
 import os, re, sys
 text = open(sys.argv[1]).read()
 devstack = {f for f in os.listdir(sys.argv[2]) if f.endswith(".swift")}
 allowed = set(sys.argv[3].split())
-excluded = set(sys.argv[4].split())
 m = re.search(r"\n\t\t(\w+) /\* VettID \*/ = \{\n\t\t\tisa = PBXNativeTarget;(.*?)\n\t\t\};", text, re.S)
 if not m:
     sys.exit("no VettID target in the project file")
@@ -329,8 +330,6 @@ phase = re.search(r"\n\t\t" + phases[0] + r" /\* Sources \*/ = \{(.*?)\n\t\t\};"
 sources = [re.sub(r" in Sources$", "", name) for _, name in listed("files", phase)]
 if not sources:
     sys.exit("the VettID target's Sources phase is empty")
-if excluded & set(products):
-    sys.exit("the VettID target links " + ", ".join(sorted(excluded & set(products))) + ": calls are not in the app yet")
 if set(products) != allowed or len(products) != len(allowed):
     sys.exit("the VettID target links " + ", ".join(sorted(set(products) ^ allowed)) + " against the allowlist")
 bad = [f for f in sources if f in devstack]
@@ -347,7 +346,7 @@ PY
 #   - symbols, defined or undefined (nm -a): the C functions and the _OBJC_CLASS_$_ references (class imports);
 #   - Objective-C selectors: the method names (__objc_methname) and the selector references (__objc_selrefs).
 # Limits: a symbol looked up by a name built at run time (dlsym with a name assembled from pieces) is in no image, and the
-# source scan (MediaLogGuardTests) cannot see it either. Nothing links the media stack yet, so this passes trivially today.
+# source scan (MediaLogGuardTests) cannot see it either. The calls link the media stack in every configuration, so this runs on the real bundle (WebRTC.framework excepted).
 # (The RTCLog* macros other than RTCLogEx compile to calls of RTCLogEx: they have no symbol of their own.)
 STACK_LOGGING_SYMBOLS=(_RTCSetMinDebugLogLevel _RTCLogEx _RTCSetupInternalTracer _RTCStartInternalCapture
   _RTCStopInternalCapture _RTCShutdownInternalTracer _RTCEnableMetrics _RTCGetAndResetMetrics
@@ -391,6 +390,33 @@ check_no_stack_logging() {
   done < <(find "${app}" -type f -print0)
   [[ ${checked} -gt 0 ]] || { echo "${app}: no Mach-O file to check for the media stack's logging" >&2; return 1; }
   echo "${app}: ${checked} Mach-O files (WebRTC.framework excepted), none names the media stack's logging, tracing, recording or raw-audio taps"
+}
+
+# The calls are in every build, Release included (the owner's decision, replacing the Debug-and-Staging-only one): the app embeds
+# the media stack (Frameworks/WebRTC.framework, with its executable) and links the call code, and its Info.plist carries the
+# microphone text for calls. Required, so that a build that silently drops the calls (a lost dependency, a lost key) fails.
+MICROPHONE_TEXT="VettID uses the microphone only during calls, so the person you're talking to can hear you."
+check_calls() {
+  local app=$1 problems=() text exe names
+  [[ -x "${app}/Frameworks/WebRTC.framework/WebRTC" ]] || problems+=("no Frameworks/WebRTC.framework/WebRTC (the media stack is not embedded)")
+  text=$(/usr/libexec/PlistBuddy -c 'Print :NSMicrophoneUsageDescription' "${app}/Info.plist" 2>/dev/null || true)
+  [[ "${text}" == "${MICROPHONE_TEXT}" ]] || problems+=("NSMicrophoneUsageDescription '${text}', expected '${MICROPHONE_TEXT}'")
+  exe="${app}/$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "${app}/Info.plist" 2>/dev/null || true)"
+  if [[ -f "${exe}" ]]; then
+    # The calls' code is linked into the executable (the archives are stripped, but the names of the types the app uses stay in
+    # the Swift metadata) and the executable loads the media stack.
+    names=$(strings -a "${exe}")
+    grep -qF 'WebRtcMediaEngineFactory' <<<"${names}" || problems+=("no WebRtcMediaEngineFactory in the executable (the calls are not linked)")
+    names=$(otool -L "${exe}")
+    grep -qF '@rpath/WebRTC.framework/WebRTC' <<<"${names}" || problems+=("the executable does not load WebRTC.framework")
+  else
+    problems+=("no executable")
+  fi
+  if [[ ${#problems[@]} -gt 0 ]]; then
+    printf '%s: %s\n' "${app}" "${problems[@]}" >&2
+    return 1
+  fi
+  echo "${app}: the calls are linked (WebRTC.framework embedded, the microphone text present)"
 }
 
 # The VettIDDevStack app and its UI tests are built for the simulator only: never an iPhone, a Mac or a headset.
@@ -503,6 +529,8 @@ check_shipping_plist "$(app_of Release)" Release
 check_shipping_plist "$(app_of Staging)" Staging
 check_no_stack_logging "$(app_of Release)"
 check_no_stack_logging "$(app_of Staging)"
+check_calls "$(app_of Release)"
+check_calls "$(app_of Staging)"
 scripts/licences.sh --verify
 
 # Every object file the two archives compiled (the app's and every package's, before the linker strips unused code)
@@ -763,6 +791,65 @@ if [[ ${SELF_TEST} -eq 1 ]]; then
     plant_logging "${config}" "a setTurnLoggingId: selector reference" \
       '__attribute__((section("__DATA,__objc_selrefs,literal_pointers,no_dead_strip"))) const char *s = "setTurnLoggingId:";'
     plant_logging "${config}" "RTCSetMinDebugLogLevel" 'void RTCSetMinDebugLogLevel(long v) { (void)v; }' Frameworks/WebRTC.framework
+  done
+  # The media stack's binary is scanned: a TEST marker or a dev-stack host appended to it must fail both checks.
+  for config in Release Staging; do
+    for planted in VettIDTesting relay.vettid.test; do
+      dir="${OUT}/planted/${config}-stack"
+      rm -rf "${dir}"
+      mkdir -p "${dir}"
+      cp -R "$(app_of "${config}")" "${dir}/VettID.app"
+      # Overwritten into the start of the first long C string past the header (strings reads the loaded sections, not bytes appended to the file).
+      python3 - "${dir}/VettID.app/Frameworks/WebRTC.framework/WebRTC" "${planted}" <<'PY'
+import re, sys
+path, planted = sys.argv[1], sys.argv[2].encode()
+data = bytearray(open(path, "rb").read())
+m = next((x for x in re.finditer(rb"[ -~]{40,}\x00", bytes(data)) if x.start() > 1000000), None)
+if not m:
+    sys.exit("no long C string to overwrite")
+data[m.start():m.start() + len(planted)] = planted
+data[m.start() + len(planted)] = 0
+open(path, "wb").write(data)
+PY
+      if [[ "${config}" == Release ]]; then check=check_release; else check=check_staging; fi
+      # The plant must be where the scan reads (the loaded sections), or the case would prove nothing.
+      names=$(strings -a "${dir}/VettID.app/Frameworks/WebRTC.framework/WebRTC")
+      grep -qF -- "${planted}" <<<"${names}" || { echo "self-test FAILED: the plant missed the scanned sections (${planted})" >&2; exit 1; }
+      if errors=$("${check}" "${dir}/VettID.app" 2>&1 >/dev/null); then
+        echo "self-test FAILED: ${config} accepted '${planted}' in WebRTC.framework" >&2
+        exit 1
+      fi
+      grep -qF -- "forbidden '${planted}'" <<<"${errors}" || { echo "self-test FAILED: ${config} refused '${planted}' for another reason: ${errors}" >&2; exit 1; }
+      echo "self-test: ${config} refuses '${planted}' in the media stack's binary"
+    done
+  done
+  # The calls must not silently drop out: a copy of each app without the media stack, without the microphone text, with another
+  # text, or without the calls' code, must fail check_calls (and the unchanged one passes).
+  uncall() {
+    local config=$1 what=$2 command=$3 expected=$4 errors
+    local copy="${OUT}/planted/${config}-calls/VettID.app"
+    rm -rf "${OUT}/planted/${config}-calls"
+    mkdir -p "$(dirname "${copy}")"
+    cp -R "$(app_of "${config}")" "${copy}"
+    (cd "${copy}" && eval "${command}")
+    if errors=$(check_calls "${copy}" 2>&1 >/dev/null); then
+      echo "self-test FAILED: ${config} accepted an app ${what}" >&2
+      exit 1
+    fi
+    grep -qF -- "${expected}" <<<"${errors}" || { echo "self-test FAILED: ${config} refused an app ${what} for another reason: ${errors}" >&2; exit 1; }
+    echo "self-test: ${config} refuses an app ${what}"
+  }
+  for config in Release Staging; do
+    check_calls "$(app_of "${config}")" >/dev/null || { echo "self-test FAILED: ${config} does not pass the calls check" >&2; exit 1; }
+    uncall "${config}" "without WebRTC.framework" "rm -rf Frameworks/WebRTC.framework" "no Frameworks/WebRTC.framework/WebRTC"
+    uncall "${config}" "without the microphone text" "plutil -remove NSMicrophoneUsageDescription Info.plist" "NSMicrophoneUsageDescription ''"
+    uncall "${config}" "whose executable does not load WebRTC.framework" \
+      "install_name_tool -change @rpath/WebRTC.framework/WebRTC @rpath/Other.framework/Other \"\$(plutil -extract CFBundleExecutable raw Info.plist)\"" \
+      "the executable does not load WebRTC.framework"
+    uncall "${config}" "whose executable names no calls code" \
+      "cp /usr/bin/true \"\$(plutil -extract CFBundleExecutable raw Info.plist)\"" \
+      "no WebRtcMediaEngineFactory in the executable"
+    uncall "${config}" "with another microphone text" "plutil -replace NSMicrophoneUsageDescription -string 'VettID listens.' Info.plist" "NSMicrophoneUsageDescription 'VettID listens.'"
   done
   # The shipping Info.plist: each change below must fail check_shipping_plist (a copy of each app, changed by <command>).
   unship() {
