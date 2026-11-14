@@ -253,9 +253,18 @@ public final class ShellModel {
     /// says now, nil once the member typed again) (``OwnerCheckFlow``'s `onOut`).
     public func askedCheck(out: Bool, message: OwnerCheckMessage?, now: Date = Date()) {
         askedOut = out
-        // A backoff is not carried: its wait is the asked screen's, and the gated one would show Check on without it.
-        if case .backoff? = message { askedFailure = nil } else { askedFailure = out ? nil : message }
+        // Only the check's own answers are carried: a wrong PIN or password, a check that may have counted. Not a backoff
+        // (its wait is the asked screen's, and the gated one would show Check on without it), nor a failure, which may be the
+        // member's Lock vault's rather than the check's.
+        askedFailure = out ? nil : message.flatMap(Self.carried)
         askedFailureAt = askedFailure == nil ? nil : now
+    }
+
+    static func carried(_ m: OwnerCheckMessage) -> OwnerCheckMessage? {
+        switch m {
+        case .badPin, .badPassword, .maybeCounted: m
+        case .backoff, .failed: nil
+        }
     }
 
     /// The asked check's failure for a gated check opening at [now]: only one answered within ``carriedFailureLife``.
@@ -269,7 +278,10 @@ public final class ShellModel {
     public func askedCheckGone() { askedOut = false }
 
     /// The gated check passed or no longer covers the shell: nothing of an earlier asked check stays for the next one.
-    public func gatedCheckDone() { askedFailure = nil }
+    public func gatedCheckDone() {
+        askedFailure = nil
+        askedFailureAt = nil
+    }
 
     /// The check past the deadline took the shell's place: nothing the shell had open (the drawer, the sheet, an asked
     /// check) comes back with it.

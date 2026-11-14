@@ -489,15 +489,18 @@ public final class OwnerCheckViewModel: OwnerCheckActions {
             do {
                 try await vault.lock()
             } catch {
+                // One change of the state (the shell is told once).
+                var s = state
                 // The lines that went with the kept PIN go too: the screen asks for both, with "Check" on once they are typed.
-                state.locking = false
-                state.unlockedWrong = nil
+                s.locking = false
+                s.unlockedWrong = nil
                 // (ANDROID-PLAN 0.1.124: "A vault.lock that fails shows today's notice and retry") Never silent: the failure's
                 // notice, with Lock vault offered again.
                 let f = error as? VaultFailure
-                state.message = .failed(f?.kind ?? .other, code: f?.code)
+                s.message = .failed(f?.kind ?? .other, code: f?.code)
                 // A check still out (its answer dropped) holds back a second one until it returns.
-                state.awaitingDropped = checkOut
+                s.awaitingDropped = checkOut
+                state = s
                 // Still probably locked: the reads go on.
                 if watching, !state.locked { runReads() }
             }

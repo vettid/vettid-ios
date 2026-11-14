@@ -113,6 +113,8 @@ public struct OwnerCheckFlow: View {
     private func wire(_ m: OwnerCheckViewModel) {
         let onOut = onOut
         m.onOut = { [weak m] out in onOut(out, out ? nil : m?.state.message) }
+        // Where it stands now (a screen shown again with its check out).
+        if m.state.out { onOut(true, nil) }
     }
 }
 #endif
