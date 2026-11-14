@@ -24,7 +24,7 @@ The VettID iPhone app.
 ```
 App/                    the app target (SwiftUI); App/Debug: the debug catalog and gallery
 AppTests/               the app's unit tests
-AppUITests/             screenshots of the component gallery (VettIDScreenshots scheme)
+AppUITests/             screenshots of the component gallery and the AutoFill check (VettIDScreenshots scheme)
 Config/                 one xcconfig per build configuration; Signing.xcconfig
 Packages/               one local Swift package per Android core module
   VettIDCrypto          pure: swift test on macOS
@@ -104,6 +104,15 @@ largest accessibility text size:
 xcodebuild test -project VettID.xcodeproj -scheme VettIDScreenshots \
   -destination "$(scripts/simulator-destination.sh)" -resultBundlePath build/screens.xcresult
 xcrun xcresulttool export attachments --path build/screens.xcresult --output-path build/screens
+```
+
+The same scheme holds `AutofillUITests` (IOS-PLAN §6.5): skipped on a simulator, it runs on an iPhone set to English
+that holds a saved password, and checks that no secret field of the catalog offers AutoFill (and that an ordinary
+password field does):
+
+```bash
+xcodebuild test -project VettID.xcodeproj -scheme VettIDScreenshots -destination 'platform=iOS,id=<device id>' \
+  -allowProvisioningUpdates -only-testing:VettIDAppUITests/AutofillUITests
 ```
 
 ## License
