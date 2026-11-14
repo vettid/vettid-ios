@@ -65,10 +65,6 @@ packages:
     path: Packages/VettIDDevices
   VettIDCalls:
     path: Packages/VettIDCalls
-  # The WebRTC media engine of the calls (its own package: the media stack's binary is about 700 MB). Test target only, for now:
-  # no app target links it.
-  VettIDCallsWebRTC:
-    path: Packages/VettIDCallsWebRTC
   # TEST ONLY: linked by test targets, never by the app (release check).
   VettIDTesting:
     path: Packages/VettIDTesting
@@ -347,7 +343,6 @@ schemes:
         - package: VettIDDevices/VettIDDevicesTests
         - package: VettIDDevices/VettIDDevicesUITests
         - package: VettIDCalls/VettIDCallsTests
-        - package: VettIDCallsWebRTC/VettIDCallsWebRTCTests
         - package: VettIDTesting/VettIDTestingTests
     profile:
       config: Release

@@ -20,8 +20,9 @@ extension WebRtcMediaCore {
         provider = keys
         senderId = transceiver.sender.senderId
         installed = suite
-        let changed: @Sendable (MediaDirection, CryptorState) -> Void = { [sendState, receiveState, emit] direction, state in
+        let changed: @Sendable (MediaDirection, CryptorState) -> Void = { [sendState, receiveState, everFailed, emit] direction, state in
             if direction == .send { sendState.value = state } else { receiveState.value = state }
+            if direction == .receive, state == .decryptionFailed { everFailed.value = true }
             emit(.cryptor(direction, state))
         }
         let sendObserver = CryptorObserver(.send, changed: changed)
@@ -53,8 +54,13 @@ extension WebRtcMediaCore {
         guard suite == made else {
             throw MediaNotEncryptedError("keys for suite \(suite.id), cryptors made for suite \(made.id)")
         }
-        // A key set after a decryption failure would make the receiver try again: it plays nothing from now on instead.
-        guard receiveState.value != .decryptionFailed else { throw MediaEngineError("keys after a decryption failure") }
+        // A key set after a decryption failure would make the receiver try again: it plays nothing from now on instead. Sticky:
+        // the state may have moved on by the time of the next key.
+        guard !everFailed.value else { throw MediaEngineError("keys after a decryption failure") }
+        defer {
+            send.wipe()
+            receive.wipe()
+        }
         if faults.wrongSendKey { send.invert() }
         let index = Int32(CallFrames.keyIndex)
         keys.setKey(send.data, with: index, forParticipant: Self.sendId)

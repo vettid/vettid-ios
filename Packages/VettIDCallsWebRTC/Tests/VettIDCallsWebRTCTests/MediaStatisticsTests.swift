@@ -84,6 +84,13 @@ struct MediaStatisticsTests {
         #expect(config.iceTransportPolicy == .all)
         // Only the servers the vault signed.
         #expect(config.iceServers.map(\.urlStrings) == servers.map(\.urls))
+        // The user name and credential go with the server that has them, and only with it.
+        #expect(config.iceServers[0].username == "u" && config.iceServers[0].credential == "c")
+        #expect(config.iceServers[1].username == nil && config.iceServers[1].credential == nil)
+        // A server with a user name and no credential carries neither.
+        let named = [CallWire.IceServer(urls: ["turn:t.example.org"], username: "u")]
+        let half = WebRtcMediaCore.configuration(servers: named, relayOnly: false)
+        #expect(half.iceServers[0].username == nil && half.iceServers[0].credential == nil)
         #expect(WebRtcMediaCore.configuration(servers: [], relayOnly: false).iceServers.isEmpty)
         #expect(WebRtcMediaCore.configuration(servers: servers, relayOnly: true).iceTransportPolicy == .relay)
     }

@@ -4,9 +4,11 @@ import VettIDCrypto
 @preconcurrency import WebRTC
 @testable import VettIDCallsWebRTC
 
-/// The key provider's options (VAULT-MESSAGING §10.10 "Media suites": fixed for every platform), and the media stack's own
-/// frame cryptor checked against `CallFrames`, the repository's description of the frame format: the same check
-/// vettid-android's `FrameFormatDeviceTest` makes with the library's data packet cryptor under the engine's key provider.
+/// The key provider's options (VAULT-MESSAGING §10.10 "Media suites": fixed for every platform), and the library's data packet
+/// cryptor under the engine's key provider checked against `CallFrames` for exactly three things: the HKDF derivation of the
+/// frame key, its size (16 or 32 bytes, by suite), and the layout after the ciphertext (tag, IV, IV length, key index). Not
+/// checked here: the clear header bytes of a real audio frame, the IV's contents, or anything on the wire (the loopback
+/// tests show that real frames decrypt).
 struct FrameKeyTests {
     // VAULT-MESSAGING 0.28.0 vectors (TEST ONLY): a direction key and the frame key derived from it, for each suite.
     static let kDirSuite1 = "df07dfb74e30ab8b952a864b0214911649859b9d371d50cc04daa84d5c952c08"

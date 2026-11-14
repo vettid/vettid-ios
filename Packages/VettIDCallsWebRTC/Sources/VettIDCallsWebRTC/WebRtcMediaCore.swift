@@ -5,7 +5,10 @@ import VettIDVault
 @preconcurrency import WebRTC
 
 /// Everything of one call that touches the media stack. Every member runs on ``WebRtcRuntime/queue`` (the one serial queue of
-/// the stack) and nowhere else; ``WebRtcMediaEngine`` is the main-actor face of it. The core never sees an address it does
+/// the stack), except the stack's own callbacks (the observers, the statistics and description completions): those run on the
+/// stack's threads and only emit into the thread-safe event stream or resume a continuation. Once ``teardown()`` has run,
+/// every body run through ``onQueue`` or ``onQueueAsync`` throws, so a call that races the close opens nothing.
+/// ``WebRtcMediaEngine`` is the main-actor face of it. The core never sees an address it does
 /// not pass on and keeps no key: ``setKeys`` hands the keys to the stack's key provider and wipes them.
 final class WebRtcMediaCore: @unchecked Sendable {
     static let streamId = "vettid"
@@ -35,6 +38,10 @@ final class WebRtcMediaCore: @unchecked Sendable {
     /// wrappers at each look, so one is found again by this id.
     var senderId: String?
     var moved = false
+    /// Set by ``teardown()`` on the queue: nothing is opened after it.
+    var closed = false
+    /// Set when a receiver has reported a decryption failure: no key is set again (VAULT-MESSAGING §10.10).
+    let everFailed = Guarded(false)
     var wantMuted = false
     var held = false
 
@@ -190,6 +197,7 @@ final class WebRtcMediaCore: @unchecked Sendable {
 
     /// Each step on its own: one that fails must not keep the microphone or the keys from being let go.
     func teardown() {
+        closed = true
         connection?.close()
         senderCryptor = nil
         receiverCryptor = nil
@@ -242,6 +250,7 @@ final class WebRtcMediaCore: @unchecked Sendable {
     }
 
     func open(servers: [CallWire.IceServer]) throws -> RTCPeerConnection {
+        guard !closed else { throw MediaEngineError("the call's media is closed") }
         guard connection == nil else { throw MediaEngineError("this engine already has a call") }
         let observer = PeerObserver(emit: emit)
         let constraints = RTCMediaConstraints(mandatoryConstraints: nil, optionalConstraints: nil)
@@ -279,7 +288,10 @@ final class WebRtcMediaCore: @unchecked Sendable {
     func onQueue<Result: Sendable>(_ body: @escaping @Sendable (WebRtcMediaCore) throws -> Result) async throws -> Result {
         try await withCheckedThrowingContinuation { continuation in
             WebRtcRuntime.queue.async {
-                do { continuation.resume(returning: try body(self)) } catch { continuation.resume(throwing: error) }
+                do {
+                    guard !self.closed else { throw MediaEngineError("the call's media is closed") }
+                    continuation.resume(returning: try body(self))
+                } catch { continuation.resume(throwing: error) }
             }
         }
     }
@@ -290,7 +302,10 @@ final class WebRtcMediaCore: @unchecked Sendable {
     ) async throws -> Result {
         try await withCheckedThrowingContinuation { continuation in
             WebRtcRuntime.queue.async {
-                do { try body(self, continuation) } catch { continuation.resume(throwing: error) }
+                do {
+                    guard !self.closed else { throw MediaEngineError("the call's media is closed") }
+                    try body(self, continuation)
+                } catch { continuation.resume(throwing: error) }
             }
         }
     }

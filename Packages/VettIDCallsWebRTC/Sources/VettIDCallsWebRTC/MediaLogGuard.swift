@@ -38,6 +38,13 @@ public enum MediaLogGuard {
         "startRtcEventLog", "startAecDump", "RTCEnableMetrics", "RTCGetAndResetMetrics",
     ]
 
+    /// The forbidden names that [text] (a source file) contains. A name inside a string is a name: a lookup by name
+    /// (`dlsym`, `NSClassFromString`, `NSSelectorFromString`, `perform` with a string) cannot get around this unless it
+    /// builds the name from pieces, which no scan of text can refuse (the limit; the symbol scan of the archive in
+    /// `scripts/release-check.sh` sees the imports and the selector strings that end up in the binary, not a name built at run
+    /// time).
+    public static func offences(in text: String) -> [String] { forbidden.filter { text.contains($0) } }
+
     /// Throws unless the stack's logging is shown to be off.
     public static func check(_ switches: some MediaLoggingSwitches = LiveLoggingSwitches()) throws {
         guard switches.isOff() else { throw MediaLoggingError("debug output is on, or cannot be shown to be off") }

@@ -340,6 +340,43 @@ print(f"VettID target: the {len(products)} allowed package products, {len(source
 PY
 }
 
+# The media stack's ways to log, trace and record (VAULT-MESSAGING §10.10, CALL-MEDIA §7.1; MediaLogGuard.forbidden in
+# VettIDCallsWebRTC). Its debug-output setter switches the stack's INFO output on at any level, and the event log and the
+# echo-canceller dump write a call's metadata or its raw audio. Images read: the app executable and every Mach-O file of the
+# bundle (each embedded framework) EXCEPT Frameworks/WebRTC.framework, which defines them. In each image:
+#   - symbols, defined or undefined (nm -a): the C functions and the _OBJC_CLASS_$_ references (class imports);
+#   - Objective-C selectors: the method names (__objc_methname) and the selector references (__objc_selrefs).
+# Limits: a symbol looked up by a name built at run time (dlsym with a name assembled from pieces) is in no image, and the
+# source scan (MediaLogGuardTests) cannot see it either. Nothing links the media stack yet, so this passes trivially today.
+STACK_LOGGING_SYMBOLS=(_RTCSetMinDebugLogLevel _RTCSetupInternalTracer _RTCStartInternalCapture _RTCEnableMetrics
+  '_OBJC_CLASS_$_RTCCallbackLogger' '_OBJC_CLASS_$_RTCFileLogger')
+STACK_LOGGING_SELECTORS=(startRtcEventLogWithFilePath: startAecDumpWithFilePath:)
+check_no_stack_logging() {
+  local app=$1 f symbol selector section checked=0
+  while IFS= read -r -d '' f; do
+    [[ "${f}" == "${app}"/Frameworks/WebRTC.framework/* ]] && continue
+    file -b "${f}" | grep -q 'Mach-O' || continue
+    checked=$((checked + 1))
+    for symbol in "${STACK_LOGGING_SYMBOLS[@]}"; do
+      if nm -a "${f}" 2>/dev/null | awk -v s="${symbol}" '$NF == s { found = 1 } END { exit !found }'; then
+        echo "${app}: ${f#"${app}"/} names the media stack's logging symbol ${symbol}" >&2
+        return 1
+      fi
+    done
+    for selector in "${STACK_LOGGING_SELECTORS[@]}"; do
+      for section in "__TEXT __objc_methname" "__DATA __objc_selrefs" "__DATA_CONST __objc_selrefs"; do
+        # shellcheck disable=SC2086
+        if otool -v -s ${section} "${f}" 2>/dev/null | grep -qF -- "${selector}"; then
+          echo "${app}: ${f#"${app}"/} names the media stack's logging method ${selector} (${section#* })" >&2
+          return 1
+        fi
+      done
+    done
+  done < <(find "${app}" -type f -print0)
+  [[ ${checked} -gt 0 ]] || { echo "${app}: no Mach-O file to check for the media stack's logging" >&2; return 1; }
+  echo "${app}: ${checked} Mach-O files (WebRTC.framework excepted), none names the media stack's logging, tracing or recording"
+}
+
 # The VettIDDevStack app and its UI tests are built for the simulator only: never an iPhone, a Mac or a headset.
 check_devstack_platforms() {
   local target settings
@@ -448,6 +485,8 @@ check_store_files "$(app_of Release)" AppIcon
 check_store_files "$(app_of Staging)" AppIcon-NonProduction
 check_shipping_plist "$(app_of Release)" Release
 check_shipping_plist "$(app_of Staging)" Staging
+check_no_stack_logging "$(app_of Release)"
+check_no_stack_logging "$(app_of Staging)"
 scripts/licences.sh --verify
 
 # Every object file the two archives compiled (the app's and every package's, before the linker strips unused code)
@@ -633,6 +672,39 @@ if [[ ${SELF_TEST} -eq 1 ]]; then
       "plutil -remove NSPrivacyCollectedDataTypes.3 PrivacyInfo.xcprivacy"
     unstore "${config}" "${icon}" "with a collected type used for tracking" \
       "plutil -replace NSPrivacyCollectedDataTypes.1.NSPrivacyCollectedDataTypeTracking -bool true PrivacyInfo.xcprivacy"
+  done
+  # The media stack's logging: a copy of each app with a dylib that carries one of the names must fail
+  # check_no_stack_logging, one case for each kind of reference; and the same names in Frameworks/WebRTC.framework must pass.
+  plant_logging() {
+    local config=$1 what=$2 source=$3 where=${4:-Frameworks/Planted.framework}
+    local dir="${OUT}/planted/${config}-logging"
+    rm -rf "${dir}"
+    mkdir -p "${dir}/VettID.app/${where}"
+    cp -R "$(app_of "${config}")/." "${dir}/VettID.app/"
+    printf '%s\n' "${source}" > "${dir}/planted.c"
+    xcrun clang -dynamiclib -undefined dynamic_lookup -o "${dir}/VettID.app/${where}/Planted" "${dir}/planted.c"
+    if [[ "${where}" == Frameworks/WebRTC.framework ]]; then
+      check_no_stack_logging "${dir}/VettID.app" >/dev/null 2>&1 || { echo "self-test FAILED: WebRTC.framework is not excepted" >&2; exit 1; }
+      echo "self-test: the stack logging check excepts ${what} in WebRTC.framework"
+      return
+    fi
+    if check_no_stack_logging "${dir}/VettID.app" 2>/dev/null; then
+      echo "self-test FAILED: the stack logging check accepted ${what}" >&2
+      exit 1
+    fi
+    echo "self-test: the stack logging check refuses an app with ${what}"
+  }
+  for config in Release Staging; do
+    plant_logging "${config}" "a defined RTCSetMinDebugLogLevel" 'void RTCSetMinDebugLogLevel(long v) { (void)v; }'
+    plant_logging "${config}" "an undefined RTCSetupInternalTracer import" \
+      'extern void RTCSetupInternalTracer(void); void f(void) { RTCSetupInternalTracer(); }'
+    plant_logging "${config}" "an RTCFileLogger class import" \
+      'extern char OBJC_CLASS_$_RTCFileLogger; void *f(void) { return &OBJC_CLASS_$_RTCFileLogger; }'
+    plant_logging "${config}" "the startAecDumpWithFilePath: method name" \
+      '__attribute__((section("__TEXT,__objc_methname,cstring_literals"))) const char n[] = "startAecDumpWithFilePath:maxSizeInBytes:";'
+    plant_logging "${config}" "a startRtcEventLogWithFilePath: selector reference" \
+      '__attribute__((section("__DATA,__objc_selrefs,literal_pointers,no_dead_strip"))) const char *s = "startRtcEventLogWithFilePath:";'
+    plant_logging "${config}" "RTCSetMinDebugLogLevel" 'void RTCSetMinDebugLogLevel(long v) { (void)v; }' Frameworks/WebRTC.framework
   done
   # The shipping Info.plist: each change below must fail check_shipping_plist (a copy of each app, changed by <command>).
   unship() {

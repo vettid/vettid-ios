@@ -70,18 +70,23 @@ public struct MediaEngineError: Error, Equatable, Sendable, CustomStringConverti
     public var description: String { "media engine: \(what)" }
 }
 
-/// Bytes that are wiped in place when they have been handed on: the copy of a key that the stack's call needs.
+/// A key copy that is wiped in place when it has been handed on. The stack gets a `Data` that wraps this very buffer (this
+/// code makes no further copy), so wiping the buffer after the call wipes what this code handed over.
 final class SecretBytes: @unchecked Sendable {
-    private var bytes: [UInt8]
+    private let buffer: NSMutableData
 
-    init(_ bytes: [UInt8]) { self.bytes = bytes }
+    init(_ bytes: [UInt8]) { buffer = NSMutableData(bytes: bytes, length: bytes.count) }
 
     /// Flips every byte (a test fault: the wrong key).
     func invert() {
-        for index in bytes.indices { bytes[index] ^= 0xFF }
+        let pointer = buffer.mutableBytes.bindMemory(to: UInt8.self, capacity: buffer.length)
+        for index in 0..<buffer.length { pointer[index] ^= 0xFF }
     }
 
-    var data: Data { Data(bytes) }
+    /// The bytes, without a copy: valid until ``wipe()``.
+    var data: Data { Data(referencing: buffer) }
 
-    func wipe() { Bytes.wipe(&bytes) }
+    var isWiped: Bool { (0..<buffer.length).allSatisfy { buffer.bytes.load(fromByteOffset: $0, as: UInt8.self) == 0 } }
+
+    func wipe() { buffer.resetBytes(in: NSRange(location: 0, length: buffer.length)) }
 }

@@ -73,6 +73,30 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
+  calls-webrtc:
+    # The calls' WebRTC media engine (Packages/VettIDCallsWebRTC), on its own: no app target links it, and it is not in the
+    # Xcode project, so the `ios` job never resolves its 686 MB binary. Its tests run on macOS (swift test) and on a
+    # simulator (the iOS-only ones). The binary is cached, keyed on Package.swift, which holds its checksum.
+    runs-on: macos-26
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: the media stack's binary
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            Packages/VettIDCallsWebRTC/.build/artifacts
+            Packages/VettIDCallsWebRTC/build/DerivedData/SourcePackages/artifacts
+          key: webrtc-binary-${{ hashFiles('Packages/VettIDCallsWebRTC/Package.swift') }}
+      - name: swift test (macOS)
+        run: swift test --package-path Packages/VettIDCallsWebRTC
+      - name: tests on a simulator (the iOS-only ones included)
+        run: |
+          cd Packages/VettIDCallsWebRTC
+          xcodebuild test -scheme VettIDCallsWebRTC \
+            -destination "$(../../scripts/simulator-destination.sh)" \
+            -derivedDataPath build/DerivedData
+
   gitleaks:
     # Pinned binary over the FULL history (the gitleaks-action fails on a
     # branch's first push, where there is no "before" commit). Reviewed findings

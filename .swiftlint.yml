@@ -9,6 +9,7 @@ included:
 excluded:
   - build
   - Packages/*/.build
+  - Packages/*/build
 disabled_rules:
   - trailing_comma
   # SwiftUI's own style passes several closures with trailing syntax (`Button {} label: {}`).
