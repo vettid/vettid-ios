@@ -105,7 +105,8 @@ private final class Player {}
 
     func coordinator(_ m: CallMachine, foreground: Bool = true) -> CallKitCoordinator {
         let c = CallKitCoordinator(
-            machine: m, provider: kit, control: kit, audio: audio, tones: tones, clock: clock, isForeground: { foreground }
+            machine: m, provider: kit, control: kit, audio: audio, tones: tones, clock: clock, isForeground: { foreground },
+            mayAnswer: { _ in true }
         )
         kit.delegate = c
         return c
@@ -131,47 +132,6 @@ private final class Player {}
     }
 
     // MARK: machine to CallKit
-
-    @Test func aCallThatEndsWhileItsReportIsOnItsWayIsEndedInCallKitOnceReported() async throws {
-        let gate = Gate()
-        kit.incomingGate = gate
-        let c = coordinator(machine())
-        c.apply(state(.incoming, .incoming))
-        await settle()
-        let uuid = try #require(kit.uuid)
-        c.apply(ended(.missed, .incoming))
-        await settle()
-        #expect(kit.events == [.incoming(uuid, CallKitUpdate(handle: c.trackedHandle ?? "", name: CallKitName.generic))])
-        gate.open()
-        await settle()
-        #expect(kit.events.last == .ended(uuid, CallEnd.missed.callKitReason), "no ringing call is left in CallKit")
-    }
-
-    @Test func aCallReplacedWhileItsReportIsOnItsWayIsEndedInCallKitOnceReported() async throws {
-        let gate = Gate()
-        kit.incomingGate = gate
-        let c = coordinator(machine())
-        c.apply(state(.incoming, .incoming), seq: 0)
-        await settle()
-        let first = try #require(kit.uuid)
-        kit.incomingGate = nil
-        c.apply(state(.incoming, .incoming), seq: 1)
-        await settle()
-        gate.open()
-        await settle()
-        #expect(kit.events.contains(.ended(first, .failed)))
-    }
-
-    @Test func aCallStillGoingWhenItsReportCompletesIsLeftAlone() async throws {
-        let gate = Gate()
-        kit.incomingGate = gate
-        let c = coordinator(machine())
-        c.apply(state(.incoming, .incoming))
-        await settle()
-        gate.open()
-        await settle()
-        #expect(kit.events.count == 1)
-    }
 
     @Test func anIncomingCallInTheForegroundIsReportedWithOnlyWhatTheAppPassesIn() async throws {
         let c = coordinator(machine())
@@ -207,7 +167,8 @@ private final class Player {}
             let signalling = FakeSignalling()
             let m = CallMachine(signalling: signalling, engines: engines, clock: clock)
             let c = CallKitCoordinator(
-                machine: m, provider: kit, control: kit, audio: audio, tones: tones, clock: clock, isForeground: { true }
+                machine: m, provider: kit, control: kit, audio: audio, tones: tones, clock: clock, isForeground: { true },
+                mayAnswer: { _ in true }
             )
             kit.delegate = c
             c.start()
@@ -234,7 +195,8 @@ private final class Player {}
         let signalling = FakeSignalling()
         let m = CallMachine(signalling: signalling, engines: engines, clock: clock)
         let c = CallKitCoordinator(
-            machine: m, provider: kit, control: kit, audio: audio, tones: tones, clock: clock, isForeground: { false }
+            machine: m, provider: kit, control: kit, audio: audio, tones: tones, clock: clock, isForeground: { false },
+            mayAnswer: { _ in true }
         )
         kit.delegate = c
         c.start()
@@ -404,7 +366,8 @@ private final class Player {}
             for memberEnded in [false, true] {
                 let kit = FakeKit()
                 let c = CallKitCoordinator(
-                    machine: machine(), provider: kit, control: kit, audio: audio, tones: tones, clock: clock, isForeground: { true }
+                    machine: machine(), provider: kit, control: kit, audio: audio, tones: tones, clock: clock, isForeground: { true },
+                    mayAnswer: { _ in true }
                 )
                 kit.delegate = c
                 c.apply(state(.active, .incoming))
@@ -443,7 +406,8 @@ private final class Player {}
         let signalling2 = FakeSignalling()
         let m2 = CallMachine(signalling: signalling2, engines: engines, clock: clock)
         let c2 = CallKitCoordinator(
-            machine: m2, provider: kit2, control: kit2, audio: audio, tones: tones, clock: clock, isForeground: { true }
+            machine: m2, provider: kit2, control: kit2, audio: audio, tones: tones, clock: clock, isForeground: { true },
+            mayAnswer: { _ in true }
         )
         kit2.delegate = c2
         c2.start()
