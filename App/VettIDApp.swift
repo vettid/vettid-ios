@@ -2,6 +2,8 @@ import Combine
 import SwiftUI
 import UIKit
 import VettIDAltChan
+import VettIDCalls
+import VettIDCallsUI
 import VettIDData
 import VettIDOnboarding
 import VettIDOnboardingUI
@@ -82,6 +84,8 @@ struct RootView: View {
             appRoot
             #endif
         }
+        // The calls' own window: the call screen and the microphone dialogs over everything but the app lock (IOS-PLAN §6.6).
+        .callsWindow(composition.calls, themeMode: themeMode)
         // The app lock's settings could not be read at launch (the iPhone not unlocked since it started): read again.
         .onChange(of: scenePhase) { _, now in if now == .active { composition.startAppLock() } }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.protectedDataDidBecomeAvailableNotification)) { _ in
@@ -98,7 +102,7 @@ struct RootView: View {
         AppRoot(
             environment: environment, vault: composition.vault, inbox: composition.inbox, canaryInbox: composition.canaryInbox,
             appLock: composition.appLock, releaseNotes: composition.releaseNotes, releaseInbox: composition.releaseInbox,
-            inviteInbox: composition.inviteInbox, notifications: composition.notifications
+            inviteInbox: composition.inviteInbox, notifications: composition.notifications, calls: composition.calls
         )
     }
 }
@@ -118,6 +122,8 @@ struct AppRoot: View {
     let inviteInbox: InviteLinkInbox
     /// The feed's notifications: the screen in front, a tap waiting for the shell, the permission.
     let notifications: AppNotifications?
+    /// Calls over the open vault: the Call button of a connection's page; nil in the debug catalog's previews.
+    let calls: CallsHost?
     /// Where the member is in the open app, kept while the check past the deadline covers it.
     @State private var shell: ShellModel
     /// The last phase shown before "Finish the move" began (``RootHold``).
@@ -132,7 +138,7 @@ struct AppRoot: View {
     init(
         environment: AppEnvironment, vault: VaultManager, inbox: SetupLinkInbox, canaryInbox: CanaryManifestInbox, appLock: AppLock,
         releaseNotes: any ReleaseNotesRepository, releaseInbox: ReleaseUpdateInbox, inviteInbox: InviteLinkInbox,
-        notifications: AppNotifications? = nil
+        notifications: AppNotifications? = nil, calls: CallsHost? = nil
     ) {
         self.environment = environment
         self.vault = vault
@@ -143,6 +149,7 @@ struct AppRoot: View {
         self.releaseInbox = releaseInbox
         self.inviteInbox = inviteInbox
         self.notifications = notifications
+        self.calls = calls
         _held = State(initialValue: vault.phase)
         _shell = State(initialValue: ShellModel(account: vault, vault: vault, ownerChecks: vault.ownerChecks))
     }
@@ -331,7 +338,8 @@ struct AppRoot: View {
                     connections: vault.connections, connectionRequests: vault.connections, inviteInbox: inviteInbox,
                     messages: vault.messages, attachments: vault.attachments, feed: vault.feed, approvals: vault.approvals,
                     history: vault.history, historyExport: vault.historyExport, items: vault.items, sharing: vault.sharing,
-                    votes: vault.votes, devices: vault.devices, pairing: vault.pairing, move: move
+                    votes: vault.votes, devices: vault.devices, pairing: vault.pairing, move: move,
+                    calls: calls.map { host in ShellCalls(canCall: { host.canCall }, call: { host.call($0) }) }
                 ) { openPortal() }
                 .environment(\.accountDeletionURL, AccountDeletion.url(origin: environment.apiOrigin))
                 .modifier(OptionalNotificationsHook(

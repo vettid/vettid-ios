@@ -40,10 +40,10 @@ final class AutofillUITests: XCTestCase {
     ]
 
     override func setUpWithError() throws {
+        continueAfterFailure = true
         #if targetEnvironment(simulator)
         throw XCTSkip("AutoFill is checked on an iPhone that holds a saved password")
         #endif
-        continueAfterFailure = true
     }
 
     @MainActor

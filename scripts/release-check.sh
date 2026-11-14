@@ -300,7 +300,7 @@ check_archive_products() {
 # The package products the VettID app links: exactly these (one per shipping package of project.yml).
 APP_PRODUCTS="VettIDCrypto VettIDAttestation VettIDRelay VettIDAltChan VettIDVault VettIDKeys VettIDData VettIDMedia
 VettIDNotify VettIDUI VettIDOnboarding VettIDSettings VettIDShell VettIDConnections VettIDMessages VettIDApprovals
-VettIDNotifications VettIDHistory VettIDItems VettIDVotes VettIDDevices VettIDCalls VettIDCallsWebRTC"
+VettIDNotifications VettIDHistory VettIDItems VettIDVotes VettIDDevices VettIDCalls VettIDCallsUI VettIDCallsWebRTC"
 
 # The VettID app target (whatever the scheme) links exactly APP_PRODUCTS (each product id resolved to its productName)
 # and compiles no file of AppDevStack/, read from the project file: its package products and its Sources phase.
@@ -397,10 +397,14 @@ check_no_stack_logging() {
 # microphone text for calls. Required, so that a build that silently drops the calls (a lost dependency, a lost key) fails.
 MICROPHONE_TEXT="VettID uses the microphone only during calls, so the person you're talking to can hear you."
 check_calls() {
-  local app=$1 problems=() text exe names
+  local app=$1 problems=() text exe names modes
   [[ -x "${app}/Frameworks/WebRTC.framework/WebRTC" ]] || problems+=("no Frameworks/WebRTC.framework/WebRTC (the media stack is not embedded)")
   text=$(/usr/libexec/PlistBuddy -c 'Print :NSMicrophoneUsageDescription' "${app}/Info.plist" 2>/dev/null || true)
   [[ "${text}" == "${MICROPHONE_TEXT}" ]] || problems+=("NSMicrophoneUsageDescription '${text}', expected '${MICROPHONE_TEXT}'")
+  # A live call keeps going when the app leaves the foreground (owner decision): the audio background mode, and nothing else
+  # (no voip: the app has no PushKit; no fetch, processing or location).
+  modes=$(plutil -extract UIBackgroundModes json -o - "${app}/Info.plist" 2>/dev/null | tr -d ' ' || true)
+  [[ "${modes}" == '["audio"]' ]] || problems+=("UIBackgroundModes ${modes:-none}, expected [\"audio\"] alone")
   exe="${app}/$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "${app}/Info.plist" 2>/dev/null || true)"
   if [[ -f "${exe}" ]]; then
     # The calls' code is linked into the executable (the archives are stripped, but the names of the types the app uses stay in
@@ -849,6 +853,9 @@ PY
     uncall "${config}" "whose executable names no calls code" \
       "cp /usr/bin/true \"\$(plutil -extract CFBundleExecutable raw Info.plist)\"" \
       "no WebRtcMediaEngineFactory in the executable"
+    uncall "${config}" "without the audio background mode" "plutil -remove UIBackgroundModes Info.plist" "UIBackgroundModes none"
+    uncall "${config}" "with the voip background mode" "plutil -replace UIBackgroundModes -json '[\"audio\",\"voip\"]' Info.plist" "UIBackgroundModes [\"audio\",\"voip\"]"
+    uncall "${config}" "with only the voip background mode" "plutil -replace UIBackgroundModes -json '[\"voip\"]' Info.plist" "UIBackgroundModes [\"voip\"]"
     uncall "${config}" "with another microphone text" "plutil -replace NSMicrophoneUsageDescription -string 'VettID listens.' Info.plist" "NSMicrophoneUsageDescription 'VettID listens.'"
   done
   # The shipping Info.plist: each change below must fail check_shipping_plist (a copy of each app, changed by <command>).

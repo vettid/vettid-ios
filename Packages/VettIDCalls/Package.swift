@@ -10,12 +10,15 @@ let package = Package(
     platforms: [.iOS(.v17), .macOS(.v14)],
     products: [
         .library(name: "VettIDCalls", targets: ["VettIDCalls"]),
+        // The call screens and the window that presents them (iOS only; empty on macOS).
+        .library(name: "VettIDCallsUI", targets: ["VettIDCallsUI"]),
     ],
     dependencies: [
         .package(path: "../VettIDCrypto"),
         .package(path: "../VettIDVault"),
         // AccountNames.isolateOrNull: a name with bidi controls cannot reorder the microphone sentence.
         .package(path: "../VettIDData"),
+        .package(path: "../VettIDUI"),
     ],
     targets: [
         .target(
@@ -26,6 +29,24 @@ let package = Package(
                 .product(name: "VettIDData", package: "VettIDData"),
             ],
             resources: [.process("Resources/Localizable.xcstrings")]
+        ),
+        // The call screens, the microphone dialogs and the window over the app (iOS only: VettIDUI is UIKit-based).
+        .target(
+            name: "VettIDCallsUI",
+            dependencies: [
+                "VettIDCalls",
+                .product(name: "VettIDData", package: "VettIDData"),
+                .product(name: "VettIDUI", package: "VettIDUI", condition: .when(platforms: [.iOS])),
+            ]
+        ),
+        .testTarget(
+            name: "VettIDCallsUITests",
+            dependencies: [
+                "VettIDCalls",
+                "VettIDCallsUI",
+                .product(name: "VettIDData", package: "VettIDData"),
+                .product(name: "VettIDUI", package: "VettIDUI", condition: .when(platforms: [.iOS])),
+            ]
         ),
         .testTarget(
             name: "VettIDCallsTests",

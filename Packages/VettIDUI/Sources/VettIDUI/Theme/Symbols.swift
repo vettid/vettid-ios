@@ -12,6 +12,12 @@ public enum VettIDSymbol: String, CaseIterable, Sendable {
     case chevronForward = "chevron.forward" // KeyboardArrowRight
     case moreHoriz = "ellipsis" // MoreHoriz
 
+    // Calls (the call screen and a connection's Call button)
+    case call = "phone" // Call
+    case callEnd = "phone.down" // CallEnd
+    case micOff = "mic.slash" // MicOff
+    case volumeUp = "speaker.wave.2" // VolumeUp
+
     // Destinations
     case messages = "bubble.left" // ChatBubbleOutline
     case connections = "person.2" // People

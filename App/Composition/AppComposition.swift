@@ -1,6 +1,8 @@
 import Foundation
 import UIKit
 import VettIDAltChan
+import VettIDCalls
+import VettIDCallsWebRTC
 import VettIDData
 import VettIDKeys
 import VettIDRelay
@@ -42,6 +44,9 @@ final class AppComposition {
     let releaseInbox = ReleaseUpdateInbox()
     /// The feed's notifications (IOS-PLAN §6.7): the notifier, the taps, "Show in notifications".
     let notifications = AppNotifications()
+    /// Calls over the open vault (CALLS-PLAN C1), in every configuration: the call logic is built when the vault opens and
+    /// stopped when it does not, with the WebRTC media engine, CallKit and the microphone gate.
+    let calls: CallsHost
     /// What the phone's network path says (IOS-PLAN §6.6); nil where a build wires its own transport.
     let network: NetworkMonitor?
 
@@ -111,6 +116,7 @@ final class AppComposition {
         config.networkMeter = PathNetworkMeter()
         config.backgroundTasks = SystemBackgroundTasks()
         vault = VaultManager(config: config)
+        calls = CallsHost(vault: vault, audio: { RtcCallAudioSession() }, engines: { WebRtcMediaEngineFactory(audioSession: $0) })
         releaseNotes = ReleaseNotesClient(manifestURL: environment.manifestURL)
         appLock = AppLock(
             store: FileAppLockStore(
@@ -153,6 +159,8 @@ final class AppComposition {
         // Covered too while the return's check has not run: a tap decided from UIKit's "became active" can come before it.
         notifications.appCovered = { lock.state == .locked || lock.state == .pending || lock.foregroundCheckPending }
         notifications.start(vault: vault)
+        // The calls follow the vault: built at an open, stopped at a lock or a sign-out; a lock waits for a live call's hang-up.
+        calls.start()
     }
 
     /// Reads the app lock's preferences once the first-run cleanup ran (before it, nothing is read); tried again when the

@@ -8,6 +8,9 @@ extension ConnectStrings {
         String(localized: "connections_detail_message", defaultValue: "Message \(name)", bundle: .module)
     }
 
+    /// The Call button of a connection's page (vettid-android `connections_detail_call`).
+    static var detailCall: String { String(localized: "connections_detail_call", defaultValue: "Call", bundle: .module) }
+
     static var detailHistory: String { String(localized: "connections_detail_history", defaultValue: "History", bundle: .module) }
 
     static var detailProfile: String {
