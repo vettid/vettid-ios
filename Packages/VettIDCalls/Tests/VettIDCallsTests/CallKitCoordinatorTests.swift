@@ -105,7 +105,8 @@ private final class Player {}
 
     func coordinator(_ m: CallMachine, foreground: Bool = true) -> CallKitCoordinator {
         let c = CallKitCoordinator(
-            machine: m, provider: kit, control: kit, audio: audio, tones: tones, clock: clock, isForeground: { foreground }
+            machine: m, provider: kit, control: kit, audio: audio, tones: tones, clock: clock, isForeground: { foreground },
+            mayAnswer: { _ in true }
         )
         kit.delegate = c
         return c
@@ -166,7 +167,8 @@ private final class Player {}
             let signalling = FakeSignalling()
             let m = CallMachine(signalling: signalling, engines: engines, clock: clock)
             let c = CallKitCoordinator(
-                machine: m, provider: kit, control: kit, audio: audio, tones: tones, clock: clock, isForeground: { true }
+                machine: m, provider: kit, control: kit, audio: audio, tones: tones, clock: clock, isForeground: { true },
+                mayAnswer: { _ in true }
             )
             kit.delegate = c
             c.start()
@@ -193,7 +195,8 @@ private final class Player {}
         let signalling = FakeSignalling()
         let m = CallMachine(signalling: signalling, engines: engines, clock: clock)
         let c = CallKitCoordinator(
-            machine: m, provider: kit, control: kit, audio: audio, tones: tones, clock: clock, isForeground: { false }
+            machine: m, provider: kit, control: kit, audio: audio, tones: tones, clock: clock, isForeground: { false },
+            mayAnswer: { _ in true }
         )
         kit.delegate = c
         c.start()
@@ -363,7 +366,8 @@ private final class Player {}
             for memberEnded in [false, true] {
                 let kit = FakeKit()
                 let c = CallKitCoordinator(
-                    machine: machine(), provider: kit, control: kit, audio: audio, tones: tones, clock: clock, isForeground: { true }
+                    machine: machine(), provider: kit, control: kit, audio: audio, tones: tones, clock: clock, isForeground: { true },
+                    mayAnswer: { _ in true }
                 )
                 kit.delegate = c
                 c.apply(state(.active, .incoming))
@@ -402,7 +406,8 @@ private final class Player {}
         let signalling2 = FakeSignalling()
         let m2 = CallMachine(signalling: signalling2, engines: engines, clock: clock)
         let c2 = CallKitCoordinator(
-            machine: m2, provider: kit2, control: kit2, audio: audio, tones: tones, clock: clock, isForeground: { true }
+            machine: m2, provider: kit2, control: kit2, audio: audio, tones: tones, clock: clock, isForeground: { true },
+            mayAnswer: { _ in true }
         )
         kit2.delegate = c2
         c2.start()

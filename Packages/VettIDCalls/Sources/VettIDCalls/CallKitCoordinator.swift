@@ -74,7 +74,7 @@ package final class CallKitCoordinator: CallKitEvents {
     package init(
         machine: CallMachine, provider: any CallKitProviding, control: any CallKitControlling, audio: any CallAudioSession,
         tones: any CallTones, clock: any CallClock = SystemCallClock(),
-        isForeground: @escaping @MainActor () -> Bool, mayAnswer: @escaping @MainActor (_ seq: Int) -> Bool = { _ in true }
+        isForeground: @escaping @MainActor () -> Bool, mayAnswer: @escaping @MainActor (_ seq: Int) -> Bool
     ) {
         self.mayAnswer = mayAnswer
         self.machine = machine
