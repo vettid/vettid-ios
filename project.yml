@@ -63,6 +63,8 @@ packages:
     path: Packages/VettIDVotes
   VettIDDevices:
     path: Packages/VettIDDevices
+  VettIDCalls:
+    path: Packages/VettIDCalls
   # TEST ONLY: linked by test targets, never by the app (release check).
   VettIDTesting:
     path: Packages/VettIDTesting
@@ -340,6 +342,7 @@ schemes:
         - package: VettIDVotes/VettIDVotesUITests
         - package: VettIDDevices/VettIDDevicesTests
         - package: VettIDDevices/VettIDDevicesUITests
+        - package: VettIDCalls/VettIDCallsTests
         - package: VettIDTesting/VettIDTestingTests
     profile:
       config: Release

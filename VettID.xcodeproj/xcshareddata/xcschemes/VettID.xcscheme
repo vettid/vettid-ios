@@ -421,6 +421,17 @@
             parallelizable = "NO">
             <BuildableReference
                BuildableIdentifier = "primary"
+               BlueprintIdentifier = "VettIDCallsTests"
+               BuildableName = "VettIDCallsTests"
+               BlueprintName = "VettIDCallsTests"
+               ReferencedContainer = "container:Packages/VettIDCalls">
+            </BuildableReference>
+         </TestableReference>
+         <TestableReference
+            skipped = "NO"
+            parallelizable = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
                BlueprintIdentifier = "VettIDTestingTests"
                BuildableName = "VettIDTestingTests"
                BlueprintName = "VettIDTestingTests"

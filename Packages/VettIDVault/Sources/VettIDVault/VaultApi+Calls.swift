@@ -230,10 +230,18 @@ public struct CallIce: Equatable, Sendable, CustomStringConvertible, CustomDebug
     public var customMirror: Mirror { Mirror(self, children: [:]) }
 }
 
-/// `call.end` as received.
+/// `call.end` as received. ``supersededBy`` (VAULT-MESSAGING §10.10 "Glare"): this device's own outgoing call lost a glare
+/// to the connection's call with that id. Read only when it is a call id of its own and not this call's.
 public struct CallEnded: Equatable, Sendable {
     public let callId: String
     public let reason: String
+    public let supersededBy: String?
+
+    public init(callId: String, reason: String, supersededBy: String? = nil) {
+        self.callId = callId
+        self.reason = reason
+        self.supersededBy = supersededBy
+    }
 }
 
 /// The answer of `call.list`: the entries that could be read, and how many the vault sent that could not.

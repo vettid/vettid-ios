@@ -205,6 +205,7 @@
 		68A8C5609514F8561E9D7D9F /* VettID.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = VettID.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		6C6C0629F89076708C2976C6 /* NotificationsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationsTests.swift; sourceTree = "<group>"; };
 		6D75FFA4B7346B22CB1CD254 /* VettIDAttestation */ = {isa = PBXFileReference; lastKnownFileType = folder; name = VettIDAttestation; path = Packages/VettIDAttestation; sourceTree = SOURCE_ROOT; };
+		6F2F5160BC3E600CB52237D0 /* VettIDCalls */ = {isa = PBXFileReference; lastKnownFileType = folder; name = VettIDCalls; path = Packages/VettIDCalls; sourceTree = SOURCE_ROOT; };
 		6F5368FB72882F025DA4BD0A /* VettIDUI */ = {isa = PBXFileReference; lastKnownFileType = folder; name = VettIDUI; path = Packages/VettIDUI; sourceTree = SOURCE_ROOT; };
 		6F7BEE9D1A68B506BF601FEE /* OwnerCheckCoverTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OwnerCheckCoverTests.swift; sourceTree = "<group>"; };
 		6FE83D26BC9EFF256296FC7B /* NetworkMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkMonitor.swift; sourceTree = "<group>"; };
@@ -501,6 +502,7 @@
 				5ED10BF94762CACAFBE88704 /* VettIDAltChan */,
 				FFC16C342745945564579560 /* VettIDApprovals */,
 				6D75FFA4B7346B22CB1CD254 /* VettIDAttestation */,
+				6F2F5160BC3E600CB52237D0 /* VettIDCalls */,
 				F4687158FA635D6B53D6175F /* VettIDConnections */,
 				C237293096175603123FFEBC /* VettIDCrypto */,
 				FA8B7079063A15C8E2E0DB23 /* VettIDData */,
@@ -695,6 +697,7 @@
 				C86B42650DF649A108FEC998 /* XCLocalSwiftPackageReference "Packages/VettIDAltChan" */,
 				4DA79E9DC00E3A4840331DDA /* XCLocalSwiftPackageReference "Packages/VettIDApprovals" */,
 				D5EC70A110A12B5D00ADEF76 /* XCLocalSwiftPackageReference "Packages/VettIDAttestation" */,
+				C187ABAF8563FFA96B67BBEB /* XCLocalSwiftPackageReference "Packages/VettIDCalls" */,
 				5A12C5C313EEE19BC8E5D8D1 /* XCLocalSwiftPackageReference "Packages/VettIDConnections" */,
 				A09090919F60546E099D02FA /* XCLocalSwiftPackageReference "Packages/VettIDCrypto" */,
 				EA7E47C55FEB420FF2C8C592 /* XCLocalSwiftPackageReference "Packages/VettIDData" */,
@@ -1688,6 +1691,10 @@
 		BB31903F120DEE41C594E311 /* XCLocalSwiftPackageReference "Packages/VettIDItems" */ = {
 			isa = XCLocalSwiftPackageReference;
 			relativePath = Packages/VettIDItems;
+		};
+		C187ABAF8563FFA96B67BBEB /* XCLocalSwiftPackageReference "Packages/VettIDCalls" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/VettIDCalls;
 		};
 		C86B42650DF649A108FEC998 /* XCLocalSwiftPackageReference "Packages/VettIDAltChan" */ = {
 			isa = XCLocalSwiftPackageReference;
