@@ -555,7 +555,8 @@ extension AppShell {
     @ViewBuilder var askedCheck: some View {
         if let mode = model.asked {
             OwnerCheckFlow(
-                mode: mode, repo: ownerChecks, vault: vault, onDone: { model.ownerCheckDone() }, onCancel: { model.ownerCheckDone() }
+                mode: mode, repo: ownerChecks, vault: vault, onDone: { model.ownerCheckDone() }, onCancel: { model.ownerCheckDone() },
+                onOut: { model.askedOut = $0 }
             )
             // A container: the modal trait alone made the check one element, its keypad and fields unreachable.
             .accessibilityElement(children: .contain)

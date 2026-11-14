@@ -197,6 +197,21 @@ struct OwnerCheckCoverTests {
         #expect(covers(due(), input: false, at: 61))
     }
 
+    /// (ANDROID-PLAN 0.1.124) A check the member asked for that is with the vault or shows its tick: the due check waits
+    /// for it, also once armed (a return from the background, another screen) and past the limit; then it covers.
+    @Test func aDueCheckWaitsForAnAskedCheckThatIsOut() {
+        var d = due()
+        d.screenChanged(gated: true)
+        #expect(!d.covers(gated: true, input: false, deadline: deadline, now: deadline, opened: false, askedOut: true))
+        #expect(!d.covers(
+            gated: true, input: true, deadline: deadline, now: deadline.addingTimeInterval(OwnerCheckDeferral.limit + 60),
+            opened: false, askedOut: true
+        ))
+        #expect(d.covers(gated: true, input: false, deadline: deadline, now: deadline, opened: false, askedOut: false))
+        let open = d.covers(gated: true, input: false, deadline: deadline, now: deadline, opened: true, askedOut: true)
+        #expect(open, "the open check stays")
+    }
+
     @Test func theLimitIsMeasuredFromTheVaultsDeadline() {
         let d = due()
         #expect(!covers(d, input: true, at: OwnerCheckDeferral.limit - 1))

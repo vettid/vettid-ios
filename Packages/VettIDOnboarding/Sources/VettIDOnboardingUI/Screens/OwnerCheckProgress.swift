@@ -42,7 +42,7 @@ struct PassedTick: View {
             .frame(maxWidth: .infinity)
             .padding(.vertical, Spacing.xl)
         }
-        // Nothing to go back to while the tick is held: the check passed.
+        // Nothing to go back to while the tick is held (the shell's block holds it; this one, were the screen pushed).
         .blocksBackGesture(true)
         .accessibilityIdentifier("owner_check_passed")
     }

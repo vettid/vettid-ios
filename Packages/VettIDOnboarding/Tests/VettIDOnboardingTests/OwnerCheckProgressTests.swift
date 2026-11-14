@@ -91,6 +91,25 @@ import VettIDDataTesting
         #expect(vm.state.submitAllowed)
     }
 
+    /// Lock vault during the re-read after an unanswered check: that answer is dropped too.
+    @Test func lockVaultDuringTheRereadDropsTheAnswer() async {
+        vault.checkResults = [.failed(.network, code: nil, estimatedLeft: 5)]
+        vault.probeResults = [.open]
+        let read = TestDeferred<Void>()
+        vault.onProbe = { try? await read.value() }
+        let vm = await vm()
+        vm.setPin("975310")
+        vm.setPassword("pw")
+        vm.submit()
+        for _ in 0..<200 where !vault.calls.contains("probeVault") { await Task.yield() }
+        #expect(vault.calls.contains("probeVault") && vm.state.checking)
+        vm.lockVault()
+        read.complete(())
+        await vm.settle()
+        #expect(vault.calls.contains("lock"))
+        #expect(vm.state.message == nil && !vm.state.checking && vm.state.watch == .none, "the answer is dropped")
+    }
+
     @Test func leavingTheScreenDropsTheAnswer() async {
         let vm = await vm(.voluntary)
         await sendHeld(vm)

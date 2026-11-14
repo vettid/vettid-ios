@@ -34,5 +34,5 @@ custom_rules:
     regex: '\.holdsInput\('
     match_kinds:
       - identifier
-    excluded: '/(HistoryExportScreen|ItemEditScreen|ApprovalDetailScreen|RuleEditScreen|ChangeNameScreens|DeleteVaultScreen|TransferOutScreen|VoteScreen|CredentialScreen|RotateScreen|AlarmScreen|NewPhoneSecretScreen|ConversationScreen|ChangePasswordScreen|NewCredentialScreen|ChangePinScreen|InputInProgress|OwnerCheckCoverTests|OwnerCheckScreen)\.swift$'
+    excluded: '/(HistoryExportScreen|ItemEditScreen|ApprovalDetailScreen|RuleEditScreen|ChangeNameScreens|DeleteVaultScreen|TransferOutScreen|VoteScreen|CredentialScreen|RotateScreen|AlarmScreen|NewPhoneSecretScreen|ConversationScreen|ChangePasswordScreen|NewCredentialScreen|ChangePinScreen|InputInProgress|OwnerCheckCoverTests)\.swift$'
     severity: error

@@ -14,6 +14,7 @@ public struct OwnerCheckFlow: View {
     private let vault: any VaultRepository
     private let onDone: @MainActor () -> Void
     private let onCancel: @MainActor () -> Void
+    private let onOut: @MainActor (Bool) -> Void
     @State private var model: OwnerCheckViewModel?
     @Environment(\.vettIDColors) private var colors
 
@@ -22,13 +23,15 @@ public struct OwnerCheckFlow: View {
         repo: any OwnerCheckRepository,
         vault: any VaultRepository,
         onDone: @escaping @MainActor () -> Void = {},
-        onCancel: @escaping @MainActor () -> Void = {}
+        onCancel: @escaping @MainActor () -> Void = {},
+        onOut: @escaping @MainActor (Bool) -> Void = { _ in }
     ) {
         self.mode = mode
         self.repo = repo
         self.vault = vault
         self.onDone = onDone
         self.onCancel = onCancel
+        self.onOut = onOut
     }
 
     public var body: some View {
@@ -52,9 +55,10 @@ public struct OwnerCheckFlow: View {
                     guard !Task.isCancelled else { return }
                     model.tickShown()
                 }
-                // (ANDROID-PLAN 0.1.124) While a check is with the vault or its tick shows, a check coming due waits for it
-                // (``View/holdsInput(_:)``): no second check goes alongside the first, and the tick is not cut short.
-                .holdsInput(model.state.checking || model.state.passedTick)
+                // (ANDROID-PLAN 0.1.124) [onOut] while a check is with the vault or its tick shows: a check coming due
+                // waits for it, so that no second check goes alongside the first and the tick is not cut short.
+                .onChange(of: model.state.checking || model.state.passedTick, initial: true) { _, out in onOut(out) }
+                .onDisappear { onOut(false) }
             } else {
                 colors.background.color.ignoresSafeArea()
             }
@@ -234,8 +238,8 @@ public struct OwnerCheckScreen: View {
             }
         }
         .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height = $0 }
-        // A check with the vault cannot be taken back: the back gestures are off (with Lock vault enabled, the scaffold's own
-        // block does not cover it).
+        // A check with the vault cannot be taken back: no back gesture. The check is drawn over the shell, not pushed, so
+        // the shell's block holds it (``AppShell``); this one would, were the screen ever pushed onto a stack.
         .blocksBackGesture(state.checking)
         .onDisappear { forgetSecrets() }
         // Digits taken by the submit or dropped: the keypad again.

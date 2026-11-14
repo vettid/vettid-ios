@@ -18,6 +18,9 @@ public final class ShellModel {
     public var showAccount = false
     /// The voluntary check or the hold-off check, shown over the shell; nil: none.
     public private(set) var asked: OwnerCheckMode?
+    /// (ANDROID-PLAN 0.1.124) The asked check is with the vault or shows its "Check passed" tick: a check coming due waits
+    /// for it (``OwnerCheckFlow``'s `onOut`), so that no second check goes alongside it.
+    public var askedOut = false
     /// The daily check covers the shell (``shown()``'s case): the shell is not in front for a notification's tap, and the
     /// root's own presentations close.
     public var checkCovers = false
@@ -231,12 +234,16 @@ public final class ShellModel {
     }
 
     /// The asked check passed or was cancelled.
-    public func ownerCheckDone() { asked = nil }
+    public func ownerCheckDone() {
+        asked = nil
+        askedOut = false
+    }
 
     /// The check past the deadline took the shell's place: nothing the shell had open (the drawer, the sheet, an asked
     /// check) comes back with it.
     public func shown() {
         asked = nil
+        askedOut = false
         showAccount = false
         drawerOpen = false
     }
