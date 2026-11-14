@@ -14,6 +14,8 @@ let package = Package(
     dependencies: [
         .package(path: "../VettIDCrypto"),
         .package(path: "../VettIDVault"),
+        // AccountNames.isolateOrNull: a name with bidi controls cannot reorder the microphone sentence.
+        .package(path: "../VettIDData"),
     ],
     targets: [
         .target(
@@ -21,6 +23,7 @@ let package = Package(
             dependencies: [
                 .product(name: "VettIDCrypto", package: "VettIDCrypto"),
                 .product(name: "VettIDVault", package: "VettIDVault"),
+                .product(name: "VettIDData", package: "VettIDData"),
             ],
             resources: [.process("Resources/Localizable.xcstrings")]
         ),
@@ -30,6 +33,7 @@ let package = Package(
                 "VettIDCalls",
                 .product(name: "VettIDCrypto", package: "VettIDCrypto"),
                 .product(name: "VettIDVault", package: "VettIDVault"),
+                .product(name: "VettIDData", package: "VettIDData"),
             ]
         ),
     ]

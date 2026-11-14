@@ -27,6 +27,11 @@ public enum CallStrings {
         )
     }
 
+    /// Where a text names the other member and no name is known.
+    public static var nameUnknown: String {
+        String(localized: "calls_name_unknown", defaultValue: "Your connection", bundle: .module)
+    }
+
     public static var microphoneAllow: String {
         String(localized: "calls_microphone_allow", defaultValue: "Allow", bundle: .module)
     }

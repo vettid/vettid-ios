@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 import VettIDCrypto
+import VettIDData
 @testable import VettIDCalls
 @testable import VettIDVault
 
@@ -30,7 +31,7 @@ extension CallsControllerTests {
         #expect(mic.requests == 0 && vault.gatewayFake.asked.isEmpty, "the system is not asked, no call is placed")
         let screen = try #require(c.microphoneScreen)
         #expect(screen.title == "Allow the microphone")
-        #expect(screen.body == "VettID needs the microphone so Sam can hear you. It is used only during calls.")
+        #expect(screen.body == "VettID needs the microphone so \(AccountNames.isolate("Sam")) can hear you. It is used only during calls.")
         #expect(screen.primaryButton == "Allow" && screen.secondaryButton == "Not now")
 
         c.allowMicrophone()
@@ -88,14 +89,24 @@ extension CallsControllerTests {
         #expect(c.microphonePrompt == nil)
     }
 
-    @Test func aScreenWithoutAFirstNameSaysTheOtherPerson() async throws {
+    @Test func aScreenWithoutAFirstNameSaysYourConnection() async throws {
         vault.firstNames = [:]
         let c = controller(FakeMicrophone(.undetermined))
         await unlock()
         c.call("conn-1")
         await settle()
         let screen = try #require(c.microphoneScreen)
-        #expect(screen.body == "VettID needs the microphone so the other person can hear you. It is used only during calls.")
+        #expect(screen.body == "VettID needs the microphone so Your connection can hear you. It is used only during calls.")
+    }
+
+    @Test func aNameWithBidiControlsIsCleanedAndIsolated() async throws {
+        vault.firstNames = ["conn-1": "Sam\u{202E}"]
+        let c = controller(FakeMicrophone(.undetermined))
+        await unlock()
+        c.call("conn-1")
+        await settle()
+        let body = try #require(c.microphoneScreen).body
+        #expect(!body.contains("\u{202E}") && body.contains(AccountNames.isolate("Sam")))
     }
 
     @Test func theAnswerIsHeldBackForTheMicrophoneToo() async throws {

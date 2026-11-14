@@ -22,6 +22,7 @@ import Testing
     static let table: [Row] = [
         Row("calls_microphone_title", CallStrings.microphoneTitle, "Allow the microphone"),
         Row("calls_microphone_body", CallStrings.microphoneBody("Example"), "VettID needs the microphone so Example can hear you. It is used only during calls."),
+        Row("calls_name_unknown", CallStrings.nameUnknown, "Your connection"),
         Row("calls_microphone_allow", CallStrings.microphoneAllow, "Allow"),
         Row("calls_microphone_not_now", CallStrings.microphoneNotNow, "Not now"),
         Row("calls_microphone_blocked_title", CallStrings.microphoneBlockedTitle, "The microphone is turned off for VettID"),
@@ -31,7 +32,7 @@ import Testing
     ]
 
     @Test func everyTextIsWordForWord() {
-        #expect(Self.table.count == 8)
+        #expect(Self.table.count == 9)
         for row in Self.table { #expect(row.got == row.want, "\(row.key)") }
     }
 

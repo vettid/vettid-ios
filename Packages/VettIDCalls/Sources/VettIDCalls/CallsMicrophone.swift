@@ -1,4 +1,5 @@
 import Foundation
+import VettIDData
 #if canImport(AVFAudio)
 import AVFAudio
 #endif
@@ -65,13 +66,14 @@ public struct MicrophoneScreen: Equatable, Sendable {
     public let primaryButton: String
     public let secondaryButton: String
 
-    /// [firstName]: the other member's first name; "the other person" when it is not known (chosen; not in the spec).
+    /// [firstName]: the other member's first name, isolated against bidi controls (`AccountNames.isolateOrNull`, as Android's call
+    /// screen does); "Your connection" (`calls_name_unknown`) when it is not known.
     init(_ prompt: MicrophonePrompt, firstName: String?) {
         self.prompt = prompt
         switch prompt {
         case .explain:
             title = CallStrings.microphoneTitle
-            body = CallStrings.microphoneBody(firstName ?? Self.unnamed)
+            body = CallStrings.microphoneBody(AccountNames.isolateOrNull(firstName) ?? CallStrings.nameUnknown)
             primaryButton = CallStrings.microphoneAllow
             secondaryButton = CallStrings.microphoneNotNow
         case .blocked:
@@ -81,6 +83,4 @@ public struct MicrophoneScreen: Equatable, Sendable {
             secondaryButton = CallStrings.microphoneClose
         }
     }
-
-    static let unnamed = "the other person"
 }

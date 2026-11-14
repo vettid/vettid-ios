@@ -1,6 +1,17 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "calls_name_unknown": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your connection"
+          }
+        }
+      }
+    },
     "calls_microphone_allow": {
       "extractionState": "manual",
       "localizations": {
