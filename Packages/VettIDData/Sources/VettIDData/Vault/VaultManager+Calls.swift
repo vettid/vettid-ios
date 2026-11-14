@@ -12,6 +12,15 @@ extension VaultManager {
         return try openApi(s)
     }
 
+    /// A `call.end` through the session in use, also while the member's lock is pending and the phone is already locked: the hang-up
+    /// of the call the lock ends goes before the vault is told to lock, so that the other member is not left listening to silence
+    /// (``LockTimeUse/callEnd``; vettid-android `sendCallEnd`). Nothing else is sent this way, the client is not handed out, and
+    /// there is no check of the phase: only a phone with no session at all refuses (`session_dropped`).
+    public func sendCallEnd(callId: String, reason: String) async throws {
+        guard let s = session, lockGuard.admits(.callEnd) else { throw VaultFailure(.other, code: "session_dropped") }
+        try await s.api.callEnd(callId, reason: reason)
+    }
+
     /// True while the release update's progress or outcome is shown over the app: no screen could answer a call, so none rings.
     public var releaseUpdateShowing: Bool { releaseUpdate.progress != nil }
 }

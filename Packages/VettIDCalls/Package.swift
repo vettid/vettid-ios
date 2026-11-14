@@ -52,6 +52,8 @@ let package = Package(
             name: "VettIDCallsTests",
             dependencies: [
                 "VettIDCalls",
+                // TEST ONLY: a real vault manager over the fake vault service (the hang-up before a lock).
+                .product(name: "VettIDDataTesting", package: "VettIDData"),
                 .product(name: "VettIDCrypto", package: "VettIDCrypto"),
                 .product(name: "VettIDVault", package: "VettIDVault"),
                 .product(name: "VettIDData", package: "VettIDData"),

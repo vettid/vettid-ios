@@ -23,7 +23,11 @@ package final class ManagerVault: CallsAppVault {
     package init(_ manager: VaultManager) {
         self.manager = manager
         // The client is asked each time: it is refused while the vault is not open on this phone or a lock is pending.
-        gateway = VaultCallGateway(api: { [unowned manager] in try manager.callApi() })
+        // The hang-up goes also while a lock is pending (the phone is locked from the lock's first line, before the hook runs).
+        gateway = VaultCallGateway(
+            api: { [unowned manager] in try manager.callApi() },
+            end: { [unowned manager] in try await manager.sendCallEnd(callId: $0, reason: $1) }
+        )
     }
 
     /// A lock pending counts as locked: the manager's phase is `locked` from the first line of the member's lock.
