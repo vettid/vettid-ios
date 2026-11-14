@@ -7,7 +7,7 @@ import VettIDCallsWebRTC
 enum CallsLink {
     /// The media suites the engine offers, and the call logic's diagnostics type: names only, nothing is started.
     @MainActor static func summary() -> String {
-        let factory = WebRtcMediaEngineFactory()
-        return "\(factory.suites.count) media suites, \(CallsDiagnostics.self)"
+        // Names only: making a factory needs the call's audio session, which belongs to the wiring.
+        "\(WebRtcMediaEngine.supportedSuites.count) media suites, \(WebRtcMediaEngineFactory.self), \(CallsDiagnostics.self)"
     }
 }
