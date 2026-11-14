@@ -83,8 +83,12 @@ final class SecretBytes: @unchecked Sendable {
         for index in 0..<buffer.length { pointer[index] ^= 0xFF }
     }
 
-    /// The bytes, without a copy: valid until ``wipe()``.
-    var data: Data { Data(referencing: buffer) }
+    /// The bytes, without a copy (the stack reads this very buffer, so ``wipe()`` wipes what it was given): valid until then.
+    /// (`Data(referencing:)` would copy a mutable buffer.)
+    var data: Data { Data(bytesNoCopy: buffer.mutableBytes, count: buffer.length, deallocator: .none) }
+
+    /// Where the bytes are (a test that ``data`` shares them).
+    var address: UnsafeRawPointer { buffer.bytes }
 
     var isWiped: Bool { (0..<buffer.length).allSatisfy { buffer.bytes.load(fromByteOffset: $0, as: UInt8.self) == 0 } }
 

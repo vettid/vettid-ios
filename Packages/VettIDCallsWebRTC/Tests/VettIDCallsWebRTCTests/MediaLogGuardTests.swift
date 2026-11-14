@@ -123,7 +123,8 @@ struct MediaLogGuardTests {
     }
 
     static func sourceFiles(under root: URL, extensions: Set<String>) -> [URL] {
-        let skip: Set = [".build", ".git", "build", "DerivedData", ".swiftpm"]
+        // `.claude` holds local working copies of the repository (their copies of the guard's own files are not exempt).
+        let skip: Set = [".build", ".git", "build", "DerivedData", ".swiftpm", ".claude"]
         guard let walker = FileManager.default.enumerator(at: root, includingPropertiesForKeys: [.isDirectoryKey]) else { return [] }
         var found: [URL] = []
         for case let url as URL in walker {

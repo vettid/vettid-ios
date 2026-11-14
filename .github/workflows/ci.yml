@@ -87,6 +87,7 @@ jobs:
           path: |
             Packages/VettIDCallsWebRTC/.build/artifacts
             Packages/VettIDCallsWebRTC/build/DerivedData/SourcePackages/artifacts
+            ~/Library/Caches/org.swift.swiftpm
           key: webrtc-binary-${{ hashFiles('Packages/VettIDCallsWebRTC/Package.swift') }}
       - name: swift test (macOS)
         run: swift test --package-path Packages/VettIDCallsWebRTC
@@ -95,7 +96,7 @@ jobs:
           cd Packages/VettIDCallsWebRTC
           xcodebuild test -scheme VettIDCallsWebRTC \
             -destination "$(../../scripts/simulator-destination.sh)" \
-            -derivedDataPath build/DerivedData
+            -derivedDataPath build/DerivedData -parallel-testing-worker-count 2
 
   gitleaks:
     # Pinned binary over the FULL history (the gitleaks-action fails on a

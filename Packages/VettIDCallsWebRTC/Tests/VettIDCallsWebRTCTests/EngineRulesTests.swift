@@ -52,6 +52,17 @@ struct EngineRulesTests {
 
     // MARK: key copies and the no-rekey rule
 
+    /// What the stack is given is the buffer itself, not a copy: wiping it wipes what the stack was handed (and its bridge).
+    @Test func theKeyHandedToTheStackIsTheBufferThatIsWiped() {
+        let key = SecretBytes(randomKey())
+        let data = key.data
+        data.withUnsafeBytes { #expect($0.baseAddress == key.address) }
+        let bridged = data as NSData
+        #expect(bridged.bytes == key.address)
+        key.wipe()
+        #expect(data.allSatisfy { $0 == 0 } && (bridged as Data).allSatisfy { $0 == 0 })
+    }
+
     @Test func theKeyCopiesAreWipedAfterTheKeysAreSet() async throws {
         let engine = try engine()
         _ = try await engine.createOffer(suite: .aes256Gcm)

@@ -348,7 +348,9 @@ PY
 #   - Objective-C selectors: the method names (__objc_methname) and the selector references (__objc_selrefs).
 # Limits: a symbol looked up by a name built at run time (dlsym with a name assembled from pieces) is in no image, and the
 # source scan (MediaLogGuardTests) cannot see it either. Nothing links the media stack yet, so this passes trivially today.
-STACK_LOGGING_SYMBOLS=(_RTCSetMinDebugLogLevel _RTCSetupInternalTracer _RTCStartInternalCapture _RTCEnableMetrics
+# (The RTCLog* macros other than RTCLogEx compile to calls of RTCLogEx: they have no symbol of their own.)
+STACK_LOGGING_SYMBOLS=(_RTCSetMinDebugLogLevel _RTCLogEx _RTCSetupInternalTracer _RTCStartInternalCapture
+  _RTCStopInternalCapture _RTCShutdownInternalTracer _RTCEnableMetrics _RTCGetAndResetMetrics
   '_OBJC_CLASS_$_RTCCallbackLogger' '_OBJC_CLASS_$_RTCFileLogger')
 STACK_LOGGING_SELECTORS=(startRtcEventLogWithFilePath: startAecDumpWithFilePath:)
 check_no_stack_logging() {
