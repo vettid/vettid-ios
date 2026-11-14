@@ -812,37 +812,44 @@ data[m.start() + len(planted)] = 0
 open(path, "wb").write(data)
 PY
       if [[ "${config}" == Release ]]; then check=check_release; else check=check_staging; fi
-      if "${check}" "${dir}/VettID.app" >/dev/null 2>&1; then
+      # The plant must be where the scan reads (the loaded sections), or the case would prove nothing.
+      names=$(strings -a "${dir}/VettID.app/Frameworks/WebRTC.framework/WebRTC")
+      grep -qF -- "${planted}" <<<"${names}" || { echo "self-test FAILED: the plant missed the scanned sections (${planted})" >&2; exit 1; }
+      if errors=$("${check}" "${dir}/VettID.app" 2>&1 >/dev/null); then
         echo "self-test FAILED: ${config} accepted '${planted}' in WebRTC.framework" >&2
         exit 1
       fi
+      grep -qF -- "forbidden '${planted}'" <<<"${errors}" || { echo "self-test FAILED: ${config} refused '${planted}' for another reason: ${errors}" >&2; exit 1; }
       echo "self-test: ${config} refuses '${planted}' in the media stack's binary"
     done
   done
   # The calls must not silently drop out: a copy of each app without the media stack, without the microphone text, with another
   # text, or without the calls' code, must fail check_calls (and the unchanged one passes).
   uncall() {
-    local config=$1 what=$2 command=$3
+    local config=$1 what=$2 command=$3 expected=$4 errors
     local copy="${OUT}/planted/${config}-calls/VettID.app"
     rm -rf "${OUT}/planted/${config}-calls"
     mkdir -p "$(dirname "${copy}")"
     cp -R "$(app_of "${config}")" "${copy}"
     (cd "${copy}" && eval "${command}")
-    if check_calls "${copy}" 2>/dev/null; then
+    if errors=$(check_calls "${copy}" 2>&1 >/dev/null); then
       echo "self-test FAILED: ${config} accepted an app ${what}" >&2
       exit 1
     fi
+    grep -qF -- "${expected}" <<<"${errors}" || { echo "self-test FAILED: ${config} refused an app ${what} for another reason: ${errors}" >&2; exit 1; }
     echo "self-test: ${config} refuses an app ${what}"
   }
   for config in Release Staging; do
     check_calls "$(app_of "${config}")" >/dev/null || { echo "self-test FAILED: ${config} does not pass the calls check" >&2; exit 1; }
-    uncall "${config}" "without WebRTC.framework" "rm -rf Frameworks/WebRTC.framework"
-    uncall "${config}" "without the microphone text" "plutil -remove NSMicrophoneUsageDescription Info.plist"
+    uncall "${config}" "without WebRTC.framework" "rm -rf Frameworks/WebRTC.framework" "no Frameworks/WebRTC.framework/WebRTC"
+    uncall "${config}" "without the microphone text" "plutil -remove NSMicrophoneUsageDescription Info.plist" "NSMicrophoneUsageDescription ''"
     uncall "${config}" "whose executable does not load WebRTC.framework" \
-      "install_name_tool -change @rpath/WebRTC.framework/WebRTC @rpath/Other.framework/Other \"\$(plutil -extract CFBundleExecutable raw Info.plist)\""
+      "install_name_tool -change @rpath/WebRTC.framework/WebRTC @rpath/Other.framework/Other \"\$(plutil -extract CFBundleExecutable raw Info.plist)\"" \
+      "the executable does not load WebRTC.framework"
     uncall "${config}" "whose executable names no calls code" \
-      "cp /usr/bin/true \"\$(plutil -extract CFBundleExecutable raw Info.plist)\""
-    uncall "${config}" "with another microphone text" "plutil -replace NSMicrophoneUsageDescription -string 'VettID listens.' Info.plist"
+      "cp /usr/bin/true \"\$(plutil -extract CFBundleExecutable raw Info.plist)\"" \
+      "no WebRtcMediaEngineFactory in the executable"
+    uncall "${config}" "with another microphone text" "plutil -replace NSMicrophoneUsageDescription -string 'VettID listens.' Info.plist" "NSMicrophoneUsageDescription 'VettID listens.'"
   done
   # The shipping Info.plist: each change below must fail check_shipping_plist (a copy of each app, changed by <command>).
   unship() {
