@@ -61,6 +61,11 @@ package final class CallKitCoordinator: CallKitEvents {
     }
 
     @ObservationIgnored private var current: Tracked?
+    /// How each call the machine ended was ended, until CallKit has taken its report (a call replaced before that is told it).
+    @ObservationIgnored private var endReasons: [UUID: CallKitEndReason] = [:]
+    /// Whether the member may answer the call [seq] now: the microphone gate (the controller's). False: CallKit's answer is
+    /// refused, and the call keeps ringing.
+    @ObservationIgnored private let mayAnswer: @MainActor (_ seq: Int) -> Bool
     @ObservationIgnored private var audioActive = false
     @ObservationIgnored private var consumer: Task<Void, Never>?
     @ObservationIgnored private var tasks: [Int: Task<Void, Never>] = [:]
@@ -69,8 +74,9 @@ package final class CallKitCoordinator: CallKitEvents {
     package init(
         machine: CallMachine, provider: any CallKitProviding, control: any CallKitControlling, audio: any CallAudioSession,
         tones: any CallTones, clock: any CallClock = SystemCallClock(),
-        isForeground: @escaping @MainActor () -> Bool
+        isForeground: @escaping @MainActor () -> Bool, mayAnswer: @escaping @MainActor (_ seq: Int) -> Bool = { _ in true }
     ) {
+        self.mayAnswer = mayAnswer
         self.machine = machine
         self.provider = provider
         self.control = control
@@ -209,7 +215,7 @@ package final class CallKitCoordinator: CallKitEvents {
                 guard let c = current, c.over, !c.endedInKit else { return }
                 provider.reportCall(uuid: uuid, endedAt: clock.now(), reason: c.endReason ?? .failed)
             } else {
-                provider.reportCall(uuid: uuid, endedAt: clock.now(), reason: .failed)
+                provider.reportCall(uuid: uuid, endedAt: clock.now(), reason: endReasons.removeValue(forKey: uuid) ?? .failed)
             }
         }
     }
@@ -253,6 +259,8 @@ package final class CallKitCoordinator: CallKitEvents {
         guard var c = current, c.seq == seq, !c.over else { return }
         c.over = true
         c.endReason = e.reason.callKitReason
+        endReasons[c.uuid] = c.endReason
+        if endReasons.count > 8, let drop = endReasons.keys.first(where: { $0 != c.uuid }) { endReasons[drop] = nil }
         current = c
         updateTones()
         audio.callEnded()
@@ -309,6 +317,8 @@ package final class CallKitCoordinator: CallKitEvents {
 
     package func performAnswer(uuid: UUID) -> Bool {
         guard let c = current, c.uuid == uuid, c.direction == .incoming, !c.over, c.kit else { return false }
+        // The microphone gate first: refused, the call keeps ringing and nothing is sent (the controller shows its screen).
+        guard mayAnswer(c.seq) else { return false }
         current?.answerTold = true
         machine.answer()
         return true
