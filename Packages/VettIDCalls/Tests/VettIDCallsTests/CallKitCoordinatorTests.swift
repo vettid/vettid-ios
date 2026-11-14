@@ -21,12 +21,19 @@ final class FakeKit: CallKitProviding, CallKitControlling {
     var events: [KitEvent] = []
     var actions: [CallKitAction] = []
     var incomingResult: CallKitReport = .reported
+    /// Held until the test opens it: CallKit has not finished taking the incoming call.
+    var incomingGate: Gate?
+    /// Calls whose report is on its way: CallKit does not know them yet, and ignores an end told meanwhile.
+    private var unknown: Set<UUID> = []
     var refuseActions = false
     /// The coordinator, as CallKit's delegate: a requested action is performed, and refused when the coordinator refuses it.
     weak var delegate: (any CallKitEvents)?
 
     func reportNewIncomingCall(uuid: UUID, update: CallKitUpdate) async -> CallKitReport {
         events.append(.incoming(uuid, update))
+        unknown.insert(uuid)
+        await incomingGate?.wait()
+        unknown.remove(uuid)
         return incomingResult
     }
 
@@ -36,7 +43,10 @@ final class FakeKit: CallKitProviding, CallKitControlling {
 
     func reportOutgoingCall(uuid: UUID, connectedAt: Date) { events.append(.connected(uuid)) }
 
-    func reportCall(uuid: UUID, endedAt: Date, reason: CallKitEndReason) { events.append(.ended(uuid, reason)) }
+    func reportCall(uuid: UUID, endedAt: Date, reason: CallKitEndReason) {
+        if unknown.contains(uuid) { return }
+        events.append(.ended(uuid, reason))
+    }
 
     func request(_ action: CallKitAction) async throws {
         actions.append(action)
@@ -121,6 +131,47 @@ private final class Player {}
     }
 
     // MARK: machine to CallKit
+
+    @Test func aCallThatEndsWhileItsReportIsOnItsWayIsEndedInCallKitOnceReported() async throws {
+        let gate = Gate()
+        kit.incomingGate = gate
+        let c = coordinator(machine())
+        c.apply(state(.incoming, .incoming))
+        await settle()
+        let uuid = try #require(kit.uuid)
+        c.apply(ended(.missed, .incoming))
+        await settle()
+        #expect(kit.events == [.incoming(uuid, CallKitUpdate(handle: c.trackedHandle ?? "", name: CallKitName.generic))])
+        gate.open()
+        await settle()
+        #expect(kit.events.last == .ended(uuid, CallEnd.missed.callKitReason), "no ringing call is left in CallKit")
+    }
+
+    @Test func aCallReplacedWhileItsReportIsOnItsWayIsEndedInCallKitOnceReported() async throws {
+        let gate = Gate()
+        kit.incomingGate = gate
+        let c = coordinator(machine())
+        c.apply(state(.incoming, .incoming), seq: 0)
+        await settle()
+        let first = try #require(kit.uuid)
+        kit.incomingGate = nil
+        c.apply(state(.incoming, .incoming), seq: 1)
+        await settle()
+        gate.open()
+        await settle()
+        #expect(kit.events.contains(.ended(first, .failed)))
+    }
+
+    @Test func aCallStillGoingWhenItsReportCompletesIsLeftAlone() async throws {
+        let gate = Gate()
+        kit.incomingGate = gate
+        let c = coordinator(machine())
+        c.apply(state(.incoming, .incoming))
+        await settle()
+        gate.open()
+        await settle()
+        #expect(kit.events.count == 1)
+    }
 
     @Test func anIncomingCallInTheForegroundIsReportedWithOnlyWhatTheAppPassesIn() async throws {
         let c = coordinator(machine())

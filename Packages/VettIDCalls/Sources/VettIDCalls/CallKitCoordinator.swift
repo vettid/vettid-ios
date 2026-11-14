@@ -54,6 +54,8 @@ package final class CallKitCoordinator: CallKitEvents {
         var kitMuted = false
         var over = false
         var endedInKit = false
+        /// How the machine ended it, for an end CallKit could not take because its report was still on the way.
+        var endReason: CallKitEndReason?
         var ringing = false
         var refused = false
     }
@@ -197,11 +199,23 @@ package final class CallKitCoordinator: CallKitEvents {
             guard let self else { return }
             let result = await provider.reportNewIncomingCall(uuid: uuid, update: update)
             // Refused (Do Not Disturb, a block list, an error): respected. The call carries no audio and rings out as missed.
-            if result != .reported, current?.uuid == uuid, current?.over == false { current?.kit = false }
+            if result != .reported {
+                if current?.uuid == uuid, current?.over == false { current?.kit = false }
+                return
+            }
+            // Reported, but the call ended or was replaced while the report was on its way: CallKit dropped the end it was told
+            // meanwhile (it did not know the call yet), so it is told again, or the phone rings with nothing to answer.
+            if current?.uuid == uuid {
+                guard let c = current, c.over, !c.endedInKit else { return }
+                provider.reportCall(uuid: uuid, endedAt: clock.now(), reason: c.endReason ?? .failed)
+            } else {
+                provider.reportCall(uuid: uuid, endedAt: clock.now(), reason: .failed)
+            }
         }
     }
 
-    /// The call as CallKit is told: the member's name bidi-isolated, the call's own opaque handle.
+    /// The call as CallKit is told: the generic name (``CallKitName/generic``; the member's name is shown only in the app's own
+    /// screens) and the call's own opaque handle.
     private func update(_ c: Tracked) -> CallKitUpdate { CallKitUpdate(handle: c.handle, name: CallKitName.generic) }
 
     private func phaseReports(_ l: CallState.Live, _ c: Tracked) {
@@ -238,6 +252,7 @@ package final class CallKitCoordinator: CallKitEvents {
     private func ended(_ e: CallState.Ended, seq: Int, memberEnded: Bool) {
         guard var c = current, c.seq == seq, !c.over else { return }
         c.over = true
+        c.endReason = e.reason.callKitReason
         current = c
         updateTones()
         audio.callEnded()

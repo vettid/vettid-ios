@@ -81,8 +81,12 @@ public final class RtcCallAudioSession: CallAudioSession {
     private func applySpeaker() {
         rtc.lockForConfiguration()
         defer { rtc.unlockForConfiguration() }
-        try? rtc.overrideOutputAudioPort(speakerWanted ? .speaker : .none)
-        speakerApplied = speakerWanted
+        do {
+            try rtc.overrideOutputAudioPort(speakerWanted ? .speaker : .none)
+            speakerApplied = speakerWanted
+        } catch {
+            // Not applied: what the session has stays what ``speakerApplied`` says.
+        }
     }
 
     private func observeRoutes() {
