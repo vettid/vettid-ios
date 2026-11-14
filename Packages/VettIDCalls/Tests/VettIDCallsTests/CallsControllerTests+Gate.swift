@@ -303,4 +303,78 @@ extension CallsControllerTests {
         #expect(c.state == .idle)
         #expect(vault.gatewayFake.ended == ["\(callId) hangup"], "one hang-up only: the member's")
     }
+
+    // MARK: answering in CallKit's own screen
+
+    struct RingingCall {
+        let controller: CallsController
+        let coordinator: CallKitCoordinator
+        let kit: FakeKit
+    }
+
+    final class Holder {
+        var coordinator: CallKitCoordinator?
+    }
+
+    /// A controller wired to a coordinator as the app will: CallKit's answer asks the controller's gate, and the controller answers
+    /// through the coordinator. A ringing call is up.
+    func ringing(_ mic: FakeMicrophone) async throws -> RingingCall {
+        vault.gatewayFake.incomingResult = { _ in try self.incoming() }
+        vault.gatewayFake.answerKeys = CallKeys(suite: .aes128Gcm, send: filled(32, 5), receive: filled(32, 6))
+        let holder = Holder()
+        let c = controller(mic, answering: { holder.coordinator?.answer() })
+        let kit = FakeKit()
+        let coordinator = CallKitCoordinator(
+            machine: c.machine, provider: kit, control: kit, audio: FakeAudio(), tones: FakeTones(), clock: clock,
+            isForeground: { true }, mayAnswer: { c.answerFromCallKit(seq: $0) }
+        )
+        kit.delegate = coordinator
+        coordinator.start()
+        holder.coordinator = coordinator
+        await unlock()
+        vault.gatewayFake.send(offerEvent())
+        await settle()
+        guard case .live(let l) = c.state, l.phase == .incoming else { throw WrongState(state: c.state) }
+        return RingingCall(controller: c, coordinator: coordinator, kit: kit)
+    }
+
+    func answered() -> Bool { vault.gatewayFake.asked.contains { $0.hasPrefix("answer(") } }
+
+    @Test func acceptingInCallKitWithTheMicrophoneAllowedAnswers() async throws {
+        let r = try await ringing(FakeMicrophone(.granted))
+        let (coordinator, kit) = (r.coordinator, r.kit)
+        #expect(coordinator.performAnswer(uuid: try #require(kit.uuid)))
+        await settle()
+        #expect(answered())
+    }
+
+    @Test func acceptingInCallKitBeforeTheMicrophoneIsAskedShowsOurScreenAndDoesNotAnswer() async throws {
+        let r = try await ringing(FakeMicrophone(.undetermined))
+        let (c, coordinator, kit) = (r.controller, r.coordinator, r.kit)
+        #expect(!coordinator.performAnswer(uuid: try #require(kit.uuid)), "the action is failed: the call keeps ringing")
+        await settle()
+        let seq = try #require(c.machine.session?.seq)
+        #expect(c.microphonePrompt == .explain(.answer(seq: seq)))
+        #expect(!answered())
+        guard case .live(let l) = c.state, l.phase == .incoming else { throw WrongState(state: c.state) }
+    }
+
+    @Test func acceptingInCallKitWithTheMicrophoneDeniedShowsTheBlockedScreen() async throws {
+        let r = try await ringing(FakeMicrophone(.denied))
+        let (c, coordinator, kit) = (r.controller, r.coordinator, r.kit)
+        #expect(!coordinator.performAnswer(uuid: try #require(kit.uuid)))
+        let seq = try #require(c.machine.session?.seq)
+        #expect(c.microphonePrompt == .blocked(.answer(seq: seq)))
+        #expect(!answered())
+    }
+
+    @Test func allowAfterCallKitsAcceptAnswersThatCall() async throws {
+        let r = try await ringing(FakeMicrophone(.undetermined))
+        let (c, coordinator, kit) = (r.controller, r.coordinator, r.kit)
+        _ = coordinator.performAnswer(uuid: try #require(kit.uuid))
+        c.allowMicrophone()
+        await settle()
+        #expect(answered(), "answered through CallKit once the microphone is allowed")
+        #expect(c.microphonePrompt == nil)
+    }
 }

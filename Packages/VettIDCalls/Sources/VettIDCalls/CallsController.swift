@@ -86,7 +86,7 @@ package final class CallsController {
     @ObservationIgnored private let openFlag: OpenFlag
     @ObservationIgnored private var tasks: [Task<Void, Never>] = []
     @ObservationIgnored private var probeTask: Task<Void, Never>?
-    @ObservationIgnored private var probing = false { didSet { openFlag.probing = probing } }
+    @ObservationIgnored private var probing = false
     @ObservationIgnored private var recheckPending = false
     @ObservationIgnored private var microphoneAsking: MicrophoneAction?
     @ObservationIgnored private var probeGeneration = 0
@@ -202,6 +202,19 @@ package final class CallsController {
         guard case .live(let l) = machine.state, l.phase == .incoming else { return }
         guard let seq = machine.session?.seq else { return }
         gate(.answer(seq: seq))
+    }
+
+    /// CallKit's Accept on the system's own screen (``CallKitCoordinator``'s `mayAnswer`): true when the microphone is allowed.
+    /// Otherwise the answer is refused, the call keeps ringing, and our screen asks (``microphonePrompt``): "Allow" then answers
+    /// this call (``allowMicrophone()``).
+    package func answerFromCallKit(seq: Int) -> Bool {
+        guard machine.session?.seq == seq, case .live(let l) = machine.state, l.phase == .incoming else { return false }
+        switch microphone.status {
+        case .granted: return true
+        case .undetermined: microphonePrompt = .explain(.answer(seq: seq))
+        case .denied: microphonePrompt = .blocked(.answer(seq: seq))
+        }
+        return false
     }
 
     package func decline() { machine.decline() }
@@ -341,7 +354,7 @@ package final class CallsController {
             } catch is CancellationError {
                 return
             } catch let e as VaultOpError {
-                guard !Task.isCancelled, generation == probeGeneration else { return }
+                guard !Task.isCancelled, generation == probeGeneration, openFlag.isOpen else { return }
                 if e.code == Self.unsupported { supported = false }
                 return
             } catch {
@@ -433,16 +446,15 @@ package final class CallsController {
     @MainActor
     private final class OpenFlag {
         var isOpen = false
-        /// Mirrors of the controller's: whether the vault has calls (nil: not known) and whether a probe is out.
+        /// Mirror of the controller's: whether the vault has calls (nil: not known).
         var supported: Bool?
-        var probing = false
     }
 
     /// Whether the vault has calls, waiting up to ``unlockWait`` (the clock's, so virtual in the tests) for the vault to open and
-    /// then for the probe to answer.
+    /// then for the probe to answer: also a recheck probe that answers inside the window (after the daily check) lets it ring.
     private static func waitForCalls(_ flag: OpenFlag, _ clock: any CallClock) async -> Bool {
         let deadline = clock.elapsedMs() + unlockWait.wholeMilliseconds
-        while !flag.isOpen || (flag.supported == nil && flag.probing) {
+        while !flag.isOpen || flag.supported == nil {
             if clock.elapsedMs() >= deadline { return false }
             do { try await clock.sleep(for: pollEvery) } catch { return false }
         }

@@ -366,6 +366,54 @@ import VettIDCrypto
         #expect(vault.gatewayFake.asked.isEmpty)
     }
 
+    @Test func anOfferDoesNotRingWhileTheVaultIsNotKnownToHaveCalls() async {
+        vault.gatewayFake.incomingResult = { _ in try self.incoming() }
+        vault.gatewayFake.listResult = { throw self.refusal("owner_check_required") }
+        let c = controller(FakeMicrophone(.granted))
+        await unlock()
+        vault.gatewayFake.send(offerEvent())
+        await clock.advance(by: 11_000)
+        #expect(c.state == .idle && vault.gatewayFake.asked.isEmpty, "a refusal other than unsupported_type: not known")
+    }
+
+    @Test func anOfferDoesNotRingWhenTheProbeFailedOnTheNetwork() async {
+        vault.gatewayFake.incomingResult = { _ in try self.incoming() }
+        vault.gatewayFake.listResult = { throw StartFailure() }
+        let c = controller(FakeMicrophone(.granted))
+        await unlock()
+        vault.gatewayFake.send(offerEvent())
+        await clock.advance(by: 11_000)
+        #expect(c.state == .idle && vault.gatewayFake.asked.isEmpty)
+    }
+
+    @Test func aProbeThatAnswersAfterTheWaitDoesNotRingTheOffer() async {
+        let gate = Gate()
+        vault.gatewayFake.listGate = gate
+        vault.gatewayFake.incomingResult = { _ in try self.incoming() }
+        let c = controller(FakeMicrophone(.granted))
+        await unlock()
+        vault.gatewayFake.send(offerEvent())
+        await clock.advance(by: 11_000)
+        gate.open()
+        await clock.advance(by: 1000)
+        #expect(c.availability == .ready)
+        #expect(c.state == .idle, "the offer was refused at the deadline")
+    }
+
+    @Test func aRecheckProbeThatAnswersInsideTheWaitLetsTheOfferRing() async throws {
+        vault.gatewayFake.incomingResult = { _ in try self.incoming() }
+        vault.gatewayFake.listResult = { throw self.refusal("owner_check_required") }
+        let c = controller(FakeMicrophone(.granted))
+        await unlock()
+        vault.gatewayFake.send(offerEvent())
+        await clock.advance(by: 3000)
+        #expect(c.state == .idle)
+        vault.gatewayFake.listResult = { CallList(calls: [], skipped: 0) }
+        vault.recheck()
+        await clock.advance(by: 200)
+        guard case .live(let l) = c.state, l.phase == .incoming else { throw WrongState(state: c.state) }
+    }
+
     @Test func anOfferWhoseUnlockDoesNotComeDoesNotRing() async {
         vault.gatewayFake.incomingResult = { _ in try self.incoming() }
         let c = controller(FakeMicrophone(.granted))
