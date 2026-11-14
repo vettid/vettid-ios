@@ -36,6 +36,17 @@ import VettIDVault
         }
     }
 
+    /// A failure is carried only shortly after its answer, and never a backoff (its wait is the asked screen's).
+    @Test func aCarriedFailureIsRecentAndNeverABackoff() {
+        let m = model
+        let at = Date(timeIntervalSince1970: 1_000_000)
+        m.askedCheck(out: false, message: .badPin(checksLeft: 8), now: at)
+        #expect(m.carriedFailure(now: at.addingTimeInterval(ShellModel.carriedFailureLife)) == .badPin(checksLeft: 8))
+        #expect(m.carriedFailure(now: at.addingTimeInterval(ShellModel.carriedFailureLife + 1)) == nil)
+        m.askedCheck(out: false, message: .backoff, now: at)
+        #expect(m.carriedFailure(now: at) == nil)
+    }
+
     /// The asked check's failure stays for the gated check that takes its place (its screen going says nothing), and goes
     /// once that one passed, with a new asked check, when the asked one is closed, and after a reset.
     @Test func anAskedChecksFailureIsKeptForTheGatedCheck() {

@@ -156,6 +156,10 @@ import VettIDDataTesting
             n += 1
         }
         #expect(vm.state.awaitingDropped && vm.state.checking && vm.state.lockOffered)
+        // Never silent: the lock's failure is said, with Lock vault offered again.
+        if case .failed(.network, _)? = vm.state.message {} else {
+            Issue.record("the lock's failure: \(String(describing: vm.state.message))")
+        }
         answer.complete(())
         await vm.settle()
         #expect(!vm.state.checking)

@@ -24,6 +24,11 @@ public final class ShellModel {
     /// The last failure the asked check was answered (a wrong PIN, say), kept for the gated check should it take the asked
     /// one's place, which would otherwise never say it (vettid-android keeps one screen for both).
     public private(set) var askedFailure: OwnerCheckMessage?
+    /// When ``askedFailure`` was answered: it is carried only for ``carriedFailureLife`` (``carriedFailure(now:)``).
+    private var askedFailureAt: Date?
+    /// How long an asked check's failure is carried to a gated check: the gate takes the asked check's place at once once
+    /// its check is back, so an older one is not this answer's.
+    public static let carriedFailureLife: TimeInterval = 60
     /// The daily check covers the shell (``shown()``'s case): the shell is not in front for a notification's tap, and the
     /// root's own presentations close.
     public var checkCovers = false
@@ -246,16 +251,24 @@ public final class ShellModel {
 
     /// The asked check's check went out ([out]) or came back, or its message changed while none is out ([message]: what it
     /// says now, nil once the member typed again) (``OwnerCheckFlow``'s `onOut`).
-    public func askedCheck(out: Bool, message: OwnerCheckMessage?) {
+    public func askedCheck(out: Bool, message: OwnerCheckMessage?, now: Date = Date()) {
         askedOut = out
-        askedFailure = out ? nil : message
+        // A backoff is not carried: its wait is the asked screen's, and the gated one would show Check on without it.
+        if case .backoff? = message { askedFailure = nil } else { askedFailure = out ? nil : message }
+        askedFailureAt = askedFailure == nil ? nil : now
+    }
+
+    /// The asked check's failure for a gated check opening at [now]: only one answered within ``carriedFailureLife``.
+    public func carriedFailure(now: Date) -> OwnerCheckMessage? {
+        guard let at = askedFailureAt, now.timeIntervalSince(at) <= Self.carriedFailureLife else { return nil }
+        return askedFailure
     }
 
     /// The asked check's screen went: its check no longer holds a due one back. Its failure stays for the gated check that
     /// took its place.
     public func askedCheckGone() { askedOut = false }
 
-    /// The gated check passed: nothing of an earlier asked check stays for the next one.
+    /// The gated check passed or no longer covers the shell: nothing of an earlier asked check stays for the next one.
     public func gatedCheckDone() { askedFailure = nil }
 
     /// The check past the deadline took the shell's place: nothing the shell had open (the drawer, the sheet, an asked
