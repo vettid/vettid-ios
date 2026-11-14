@@ -92,7 +92,7 @@ bundle_text() {
       # own: that one line is set aside, and everything else it holds is scanned like the rest of the bundle (so a dev host or
       # a TEST marker added to it is refused).
       out=$(strings -a "${f}") || { echo "${app}: strings failed on ${f#"${app}"/}" >&2; return 1; }
-      { grep -vxF '127.0.0.1' <<<"${out}" || [[ $? -eq 1 ]]; }
+      { grep -vxF '127.0.0.1' <<<"${out}" || [[ $? -eq 1 ]]; } || return 1
     elif file -b "${f}" | grep -q 'Mach-O'; then
       strings -a "${f}" || { echo "${app}: strings failed on ${f#"${app}"/}" >&2; return 1; }
     elif [[ "${f}" == *.plist ]]; then

@@ -4,7 +4,7 @@
 # units' names and the source files and directories of the line tables, so a component whose headers alone were compiled in, such
 # as llvm-libc, is listed too), reduced to its chain of third_party directories: `libaom/third_party/vector`, `ooura`, `perfetto`.
 #
-# The list is checked in as Packages/VettIDCallsWebRTC/Licences/components.txt with the licence each maps to (SOURCE.md,
+# The list is checked in as Packages/VettIDCallsWebRTC/Licences/components.list with the licence each maps to (SOURCE.md,
 # scripts/licences.sh). A WebRTC upgrade that adds or drops a component changes this output, and `--check` (run by the
 # calls-webrtc CI job, where the binary is available) fails until the list and the notices are updated.
 #
@@ -41,7 +41,7 @@ print("\n".join(sorted(found)))
 components=$(derive)
 
 if [[ ${check} -eq 1 ]]; then
-  expected=$(grep -v '^#' "${CHECKED_IN}" | awk 'NF { print $1 }' | sort -u)
+  expected=$(grep -v '^#' "${CHECKED_IN}" | awk 'NF { print $1 }' | LC_ALL=C sort -u)
   if [[ "${components}" != "${expected}" ]]; then
     echo "webrtc-components: the binary's components differ from ${CHECKED_IN}:" >&2
     diff <(echo "${expected}") <(echo "${components}") >&2 || true
