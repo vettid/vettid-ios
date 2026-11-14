@@ -166,6 +166,8 @@ public struct OwnerCheckScreen: View {
         ) {
             if state.checking {
                 CheckingWithVault()
+                // A failed Lock vault while the dropped check is still out: its notice under the line, never silent.
+                if state.awaitingDropped { OwnerCheckMessageView(state: state, title: title) }
             } else {
                 fields
             }

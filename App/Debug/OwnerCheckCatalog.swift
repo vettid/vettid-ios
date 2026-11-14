@@ -88,6 +88,10 @@ enum OwnerCheckCatalog {
             s.view?.state = .ok
             s.busy = true
         }
+        add("checking_lock_failed", "Checking with your vault: Lock vault failed") { s in
+            s.awaitingDropped = true
+            s.message = .failed(.network, code: nil)
+        }
         add("passed", "Check passed") { $0.passedTick = true }
         add("presence", "Presence not recorded") { $0.presenceUnrecorded = true }
         add("passed_unrecorded", "Passed, presence not recorded") { $0.passedUnrecorded = true }

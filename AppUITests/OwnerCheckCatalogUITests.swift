@@ -24,6 +24,12 @@ final class OwnerCheckCatalogUITests: XCTestCase {
         XCTAssertFalse(voluntary.buttons["form_secondary"].exists, "no Cancel")
         XCTAssertFalse(voluntary.buttons["owner_check_cancel"].exists)
 
+        // A failed Lock vault while the dropped check is out: its notice shows under the line, with Lock vault.
+        let lockFailed = open("checking_lock_failed", until: "owner_check_checking", screen: "owner_check")
+        XCTAssertTrue(lockFailed.descendants(matching: .any)["owner_check_failed"].exists, "the lock's failure is shown")
+        XCTAssertTrue(lockFailed.buttons["form_secondary"].isEnabled, "Lock vault, again")
+        XCTAssertFalse(lockFailed.buttons["form_primary"].exists, "no Check")
+
         let passed = open("passed", until: "owner_check_passed_text", screen: "owner_check_passed")
         XCTAssertTrue(passed.staticTexts["Check passed"].exists)
         XCTAssertFalse(passed.buttons["form_primary"].exists)
