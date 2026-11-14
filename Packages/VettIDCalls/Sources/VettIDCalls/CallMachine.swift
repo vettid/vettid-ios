@@ -45,6 +45,8 @@ package final class CallMachine {
     /// (late, or delivered again) is not rung or answered. A few ids, memory only.
     @ObservationIgnored var endedWinners: [String] = []
     @ObservationIgnored private var loops: [Task<Void, Never>] = []
+    @ObservationIgnored private var watchers: [Int: AsyncStream<CallTransition>.Continuation] = [:]
+    @ObservationIgnored private var nextWatcher = 0
 
     static let maxPendingCandidates = 256
     static let maxAbandoned = 8
@@ -75,6 +77,8 @@ package final class CallMachine {
     /// its way is not ended either (a C2 vault ends unanswered calls itself; at S10 the callee's ring timer bounds it). The listening loop holds the machine until this is called.
     package func stop() {
         inbox.finish()
+        for w in watchers.values { w.finish() }
+        watchers.removeAll()
         for t in loops { t.cancel() }
         loops.removeAll()
         if let s = session { release(s) }
@@ -95,6 +99,27 @@ package final class CallMachine {
         }
     }
 
+    // MARK: transitions
+
+    /// Every state the machine publishes, in order, none merged (``state`` itself may skip one: `ended` and the next call's
+    /// `live` can be published in one turn). A call that is live at the time of the call is the first element; an ended or idle
+    /// state is not repeated to a late watcher. The stream ends when the machine is stopped.
+    package func transitions() -> AsyncStream<CallTransition> {
+        let (stream, continuation) = AsyncStream.makeStream(of: CallTransition.self)
+        let id = nextWatcher
+        nextWatcher += 1
+        watchers[id] = continuation
+        if let s = session, case .live = state { continuation.yield(CallTransition(seq: s.seq, state: state)) }
+        continuation.onTermination = { [weak self] _ in Task { @MainActor in self?.watchers[id] = nil } }
+        return stream
+    }
+
+    /// Sets ``state`` and tells every watcher.
+    func setState(_ s: CallState, seq: Int, memberEnded: Bool = false) {
+        state = s
+        for w in watchers.values { w.yield(CallTransition(seq: seq, state: s, memberEnded: memberEnded)) }
+    }
+
     // MARK: the member
 
     /// Calls [connectionId]. Ignored while a call is live.
@@ -108,6 +133,12 @@ package final class CallMachine {
 
     /// Ends the call in any phase (a ringing incoming call is declined).
     package func hangUp() { post(.hangUp(.hungUp)) }
+
+    /// ``hangUp()`` for the call [seq] only: nothing if that call is over and another is the machine's now.
+    package func hangUp(seq: Int) { post(.hangUpIf(seq: seq, .hungUp)) }
+
+    /// ``end(_:)`` for the call [seq] only.
+    package func end(_ reason: CallEnd, seq: Int) { post(.hangUpIf(seq: seq, reason)) }
 
     /// The vault is being locked: a live call ends.
     package func vaultLocking() { post(.hangUp(.locked)) }
@@ -133,13 +164,14 @@ package final class CallMachine {
                 finish(s, .declinedHere, CallReason.decline)
             }
         case .hangUp(let reason): if let s { hangUp(s, reason) }
+        case .hangUpIf(let seq, let reason): if let s, s.seq == seq { hangUp(s, reason) }
         case .mute(let muted):
             if let s {
                 s.muted = muted
                 s.engine?.setMuted(muted)
                 publish(s)
             }
-        case .dismiss: if s == nil { state = .idle }
+        case .dismiss: if s == nil { setState(.idle, seq: -1) }
         case .signal(let e): if !heldEarly(s, e) { onSignal(s, e) }
         case .placed(let seq, let call, let atMs): onPlaced(s, seq: seq, call: call, atMs: atMs)
         // A call that lost a glare has let its media go: what its engine still reports is of no use.

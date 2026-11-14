@@ -122,10 +122,16 @@ public final class WebRtcMediaEngine: MediaEngine {
 @MainActor
 public final class WebRtcMediaEngineFactory: MediaEngineFactory {
     private let testBuild: Bool
+    private let audioSession: any CallAudioSession
 
     /// [testBuild]: true only in the builds made for the two-phone tests, which may ask for a ``MediaConfig`` that breaks a
-    /// rule on purpose or uses the experimental DTLS trial.
-    public init(testBuild: Bool = false) { self.testBuild = testBuild }
+    /// rule on purpose or uses the experimental DTLS trial. [audioSession] is prepared (category and mode set, manual audio on,
+    /// nothing activated) before each engine is made. It is required: an engine made without one would let the stack open the
+    /// microphone outside CallKit.
+    public init(testBuild: Bool = false, audioSession: any CallAudioSession) {
+        self.testBuild = testBuild
+        self.audioSession = audioSession
+    }
 
     public var suites: [MediaSuite] { WebRtcMediaEngine.supportedSuites }
 
@@ -133,6 +139,7 @@ public final class WebRtcMediaEngineFactory: MediaEngineFactory {
         // The check next to the dangerous code: whatever asked, a build that was not made for the phone tests makes no engine
         // that breaks a rule on purpose or uses the experimental DTLS trial.
         guard testBuild || config.plain else { throw MediaEngineError("a test configuration in a build that is not a test build") }
+        audioSession.prepare()
         _ = try WebRtcRuntime.start(config)
         return WebRtcMediaEngine(config: config)
     }

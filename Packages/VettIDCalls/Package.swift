@@ -13,6 +13,7 @@ let package = Package(
     dependencies: [
         .package(path: "../VettIDCrypto"),
         .package(path: "../VettIDVault"),
+        .package(path: "../VettIDData"),
     ],
     targets: [
         .target(
@@ -20,6 +21,7 @@ let package = Package(
             dependencies: [
                 .product(name: "VettIDCrypto", package: "VettIDCrypto"),
                 .product(name: "VettIDVault", package: "VettIDVault"),
+                .product(name: "VettIDData", package: "VettIDData"),
             ]
         ),
         .testTarget(
