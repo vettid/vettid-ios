@@ -24,6 +24,18 @@ import VettIDVault
         #expect(m.inFront(appLocked: false))
     }
 
+    /// (ANDROID-PLAN 0.1.124) An asked check that is out holds a due check back only while it is up: it is no longer out
+    /// once done or cancelled, once the gated check took the shell's place, and after a reset.
+    @Test func anAskedCheckIsNoLongerOutOnceItEnds() {
+        let m = model
+        for end in [{ m.ownerCheckDone() }, { m.shown() }, { m.reset() }] {
+            m.ownerCheck(holdOff: false)
+            m.askedOut = true
+            end()
+            #expect(!m.askedOut && m.asked == nil)
+        }
+    }
+
     /// A vote opens by the pair, once, over the Votes list; a service's votes over its page.
     @Test func aVoteOpensByThePairOnce() {
         let m = model
