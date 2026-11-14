@@ -12,6 +12,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         ProofLeftovers.remove()
         HistoryExportLeftovers.remove()
         AppComposition.shared.launch()
+        // Only for the linker: it keeps the calls in the app until their wiring comes (App/CallsLink.swift).
         _ = CallsLink.summary()
         return true
     }

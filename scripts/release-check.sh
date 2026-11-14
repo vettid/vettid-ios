@@ -86,10 +86,10 @@ bundle_text() {
   local app=$1
   find "${app}" -type f -print0 | while IFS= read -r -d '' f; do
     if [[ "${f}" == "${app}"/Frameworks/WebRTC.framework/WebRTC ]]; then
-      # The vendor's media stack (webrtc-sdk, checksum-pinned): its strings hold loopback addresses and test names of its own
-      # (127.0.0.1 among them) and say nothing about this app's configuration. Its logging symbols are checked apart
-      # (check_no_stack_logging excepts it; the planted-logging self-tests cover everything else in the bundle).
-      continue
+      # The vendor's media stack (webrtc-sdk, checksum-pinned) holds the loopback address 127.0.0.1 in its strings, a line of its
+      # own: that one line is set aside, and everything else it holds is scanned like the rest of the bundle (so a dev host or
+      # a TEST marker added to it is refused).
+      strings -a "${f}" | grep -vxF '127.0.0.1' || true
     elif file -b "${f}" | grep -q 'Mach-O'; then
       strings -a "${f}"
     elif [[ "${f}" == *.plist ]]; then
@@ -792,6 +792,33 @@ if [[ ${SELF_TEST} -eq 1 ]]; then
       '__attribute__((section("__DATA,__objc_selrefs,literal_pointers,no_dead_strip"))) const char *s = "setTurnLoggingId:";'
     plant_logging "${config}" "RTCSetMinDebugLogLevel" 'void RTCSetMinDebugLogLevel(long v) { (void)v; }' Frameworks/WebRTC.framework
   done
+  # The media stack's binary is scanned: a TEST marker or a dev-stack host appended to it must fail both checks.
+  for config in Release Staging; do
+    for planted in VettIDTesting relay.vettid.test; do
+      dir="${OUT}/planted/${config}-stack"
+      rm -rf "${dir}"
+      mkdir -p "${dir}"
+      cp -R "$(app_of "${config}")" "${dir}/VettID.app"
+      # Overwritten into the start of the first long C string past the header (strings reads the loaded sections, not bytes appended to the file).
+      python3 - "${dir}/VettID.app/Frameworks/WebRTC.framework/WebRTC" "${planted}" <<'PY'
+import re, sys
+path, planted = sys.argv[1], sys.argv[2].encode()
+data = bytearray(open(path, "rb").read())
+m = next((x for x in re.finditer(rb"[ -~]{40,}\x00", bytes(data)) if x.start() > 1000000), None)
+if not m:
+    sys.exit("no long C string to overwrite")
+data[m.start():m.start() + len(planted)] = planted
+data[m.start() + len(planted)] = 0
+open(path, "wb").write(data)
+PY
+      if [[ "${config}" == Release ]]; then check=check_release; else check=check_staging; fi
+      if "${check}" "${dir}/VettID.app" >/dev/null 2>&1; then
+        echo "self-test FAILED: ${config} accepted '${planted}' in WebRTC.framework" >&2
+        exit 1
+      fi
+      echo "self-test: ${config} refuses '${planted}' in the media stack's binary"
+    done
+  done
   # The calls must not silently drop out: a copy of each app without the media stack, without the microphone text, with another
   # text, or without the calls' code, must fail check_calls (and the unchanged one passes).
   uncall() {
@@ -811,6 +838,10 @@ if [[ ${SELF_TEST} -eq 1 ]]; then
     check_calls "$(app_of "${config}")" >/dev/null || { echo "self-test FAILED: ${config} does not pass the calls check" >&2; exit 1; }
     uncall "${config}" "without WebRTC.framework" "rm -rf Frameworks/WebRTC.framework"
     uncall "${config}" "without the microphone text" "plutil -remove NSMicrophoneUsageDescription Info.plist"
+    uncall "${config}" "whose executable does not load WebRTC.framework" \
+      "install_name_tool -change @rpath/WebRTC.framework/WebRTC @rpath/Other.framework/Other \"\$(plutil -extract CFBundleExecutable raw Info.plist)\""
+    uncall "${config}" "whose executable names no calls code" \
+      "cp /usr/bin/true \"\$(plutil -extract CFBundleExecutable raw Info.plist)\""
     uncall "${config}" "with another microphone text" "plutil -replace NSMicrophoneUsageDescription -string 'VettID listens.' Info.plist"
   done
   # The shipping Info.plist: each change below must fail check_shipping_plist (a copy of each app, changed by <command>).

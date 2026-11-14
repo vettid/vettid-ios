@@ -40,16 +40,13 @@ jobs:
           echo "$RUNNER_TEMP/tools/swiftlint" >> "$GITHUB_PATH"
           echo "$RUNNER_TEMP/tools/xcodegen/bin" >> "$GITHUB_PATH"
       # The app links the calls' media stack in every configuration, so the project resolves the webrtc-sdk binary (686 MB:
-      # about 3 to 5 minutes uncached on the hosted runner, a restore of a few seconds cached, and once for the test build and
-      # once for the release check's own derived data). Keyed on the binary's checksum (Package.swift) and Package.resolved.
+      # about 3 to 5 minutes uncached, seconds restored). SwiftPM keeps the downloaded zip in its own cache, so that is what is
+      # cached, under the key the calls-webrtc job uses too: keyed on the checksum (Package.swift) and Package.resolved.
       - name: the media stack's binary
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          path: |
-            build/DerivedData/SourcePackages/artifacts
-            build/release-check/DerivedData/SourcePackages/artifacts
-            ~/Library/Caches/org.swift.swiftpm
-          key: webrtc-binary-ios-${{ hashFiles('Packages/VettIDCallsWebRTC/Package.swift', 'Packages/VettIDCallsWebRTC/Package.resolved') }}
+          path: ~/Library/Caches/org.swift.swiftpm/artifacts
+          key: webrtc-binary-${{ hashFiles('Packages/VettIDCallsWebRTC/Package.swift', 'Packages/VettIDCallsWebRTC/Package.resolved') }}
       - name: the Xcode project matches project.yml
         run: |
           xcodegen generate --quiet
@@ -96,10 +93,7 @@ jobs:
       - name: the media stack's binary
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          path: |
-            Packages/VettIDCallsWebRTC/.build/artifacts
-            Packages/VettIDCallsWebRTC/build/DerivedData/SourcePackages/artifacts
-            ~/Library/Caches/org.swift.swiftpm
+          path: ~/Library/Caches/org.swift.swiftpm/artifacts
           key: webrtc-binary-${{ hashFiles('Packages/VettIDCallsWebRTC/Package.swift', 'Packages/VettIDCallsWebRTC/Package.resolved') }}
       - name: swift test (macOS)
         run: swift test --package-path Packages/VettIDCallsWebRTC
