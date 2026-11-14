@@ -6,9 +6,9 @@ import Observation
 /// **The rule (C1, foreground only): a call that CallKit does not carry never has audio.** It is never placed and never answered:
 /// - a refused `CXStartCallAction` ends the call as ``CallEnd/failed``;
 /// - a refused `CXAnswerCallAction`, and an answer of a call CallKit did not take (an offer that came while the app was not in
-///   front, or one CallKit refused: Do Not Disturb, a block list) are declined (an answer in the app goes through ``answer()``,
-///   and a machine that is answered anyway is declined at once). A refused offer that nobody answers rings out as missed; the
-///   app plays no ringtone of its own for it.
+///   front, or one CallKit refused: Do Not Disturb, a block list) is refused: ``answer()`` does nothing, no decline is sent, and
+///   the call rings out as missed in VettID's history. A machine answered anyway is ended here at once without a `call.end`.
+///   The app plays no ringtone of its own for such a call.
 ///
 /// - The member's actions in CallKit's screen (answer, end, mute) go to the machine.
 /// - Every state the machine publishes (``CallMachine/transitions()``, none merged) goes to CallKit: an incoming call is reported
@@ -105,9 +105,8 @@ package final class CallKitCoordinator: CallKitEvents {
         if c.kit {
             current?.answerTold = true
             send(.answer(c.uuid)) { [weak self] in self?.machine.end(.failed) }
-        } else {
-            machine.hangUp()
         }
+        // A call CallKit does not carry cannot be answered: nothing else happens, and it rings out as missed.
     }
 
     // MARK: the machine's states to CallKit
@@ -139,11 +138,12 @@ package final class CallKitCoordinator: CallKitEvents {
         updateTones()
     }
 
-    /// An answered call CallKit does not carry has no audio: it is declined, once.
+    /// A machine answered anyway (no screen should) for a call CallKit does not carry has no audio: it is ended here, once, and
+    /// no `call.end` is sent (the answer, already sent, stays sent).
     private func refuse() {
         guard current?.refused == false else { return }
         current?.refused = true
-        machine.hangUp()
+        machine.endQuietly(.failed)
     }
 
     /// The tracked call was replaced by another before its end was seen: it is let go in CallKit first.

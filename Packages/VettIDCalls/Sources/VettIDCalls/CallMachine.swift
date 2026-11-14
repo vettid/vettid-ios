@@ -133,6 +133,10 @@ package final class CallMachine {
     /// Ends the call in any phase (a ringing incoming call is declined).
     package func hangUp() { post(.hangUp(.hungUp)) }
 
+    /// Ends the call here and tells the vault nothing: no `call.end` (so no decline reaches the caller). An answer already sent
+    /// stays sent.
+    package func endQuietly(_ reason: CallEnd) { post(.endQuietly(reason)) }
+
     /// Ends the call in any phase with [reason] (CallKit refused it, for one).
     package func end(_ reason: CallEnd) { post(.hangUp(reason)) }
 
@@ -160,6 +164,11 @@ package final class CallMachine {
                 finish(s, .declinedHere, CallReason.decline)
             }
         case .hangUp(let reason): if let s { hangUp(s, reason) }
+        case .endQuietly(let reason):
+            if let s {
+                s.memberEnded = true
+                finish(s, reason, nil)
+            }
         case .mute(let muted):
             if let s {
                 s.muted = muted

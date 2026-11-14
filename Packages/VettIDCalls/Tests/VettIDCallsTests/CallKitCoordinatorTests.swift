@@ -145,8 +145,8 @@ private final class Player {}
     }
 
     /// A call CallKit does not carry (refused: Do Not Disturb, a block list, an error; or offered in the background) never has
-    /// audio: answering it declines it, and no ringtone of the app's own plays.
-    @Test func anAnswerOfACallCallKitDoesNotCarryDeclinesItAndOpensNoAudio() async throws {
+    /// audio: answering it does nothing (no decline is sent), and it rings out as missed.
+    @Test func anAnswerOfACallCallKitDoesNotCarryIsRefusedAndTheCallIsMissed() async throws {
         for result in [CallKitReport.failed, .filtered] {
             let kit = FakeKit()
             kit.incomingResult = result
@@ -164,16 +164,20 @@ private final class Player {}
             #expect(kit.events.count == 1)
             c.answer()
             await clock.runCurrent()
+            guard case .live(let l) = m.state else { throw WrongState(state: m.state) }
+            #expect(l.phase == .incoming, "\(result)")
+            #expect(signalling.sent == ["ringing(\(callId))"], "no decline")
+            await clock.advance(by: 48_001)
             guard case .ended(let e) = m.state else { throw WrongState(state: m.state) }
-            #expect(e.reason == .declinedHere, "\(result)")
-            #expect(signalling.sent.last == "end(\(callId), decline)")
+            #expect(e.reason == .missed)
+            #expect(signalling.sent == ["ringing(\(callId))"], "and no call.end for the missed call")
             #expect(engines.created.isEmpty, "no engine, no audio")
             #expect(kit.actions.isEmpty && !audio.log.contains("activate"))
             c.stop()
         }
     }
 
-    @Test func aBackgroundOfferIsNeverAnsweredAndAMachineAnsweredAnywayIsDeclined() async throws {
+    @Test func aBackgroundOfferIsNeverAnsweredAndAMachineAnsweredAnywayIsEndedWithoutADecline() async throws {
         let signalling = FakeSignalling()
         let m = CallMachine(signalling: signalling, engines: engines, clock: clock)
         let c = CallKitCoordinator(
@@ -186,12 +190,13 @@ private final class Player {}
         await clock.runCurrent()
         await settle()
         #expect(kit.events.isEmpty)
-        // The app's screen calls the machine directly: the answer goes through, then the coordinator declines.
+        // The app's screen calls the machine directly: the answer goes through, then the coordinator ends the call quietly.
         m.answer()
         await clock.runCurrent()
         await settle()
         await clock.runCurrent()
         guard case .ended = m.state else { throw WrongState(state: m.state) }
+        #expect(!signalling.sent.contains { $0.hasPrefix("end(") }, "no call.end, no decline")
         #expect(!audio.log.contains("activate"))
         c.stop()
     }

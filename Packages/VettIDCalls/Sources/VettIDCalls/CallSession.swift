@@ -7,6 +7,7 @@ enum CallMessage: Sendable {
     case answer
     case decline
     case hangUp(CallEnd)
+    case endQuietly(CallEnd)
     case mute(Bool)
     case dismiss
     case signal(SignalEvent)
