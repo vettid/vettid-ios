@@ -296,16 +296,20 @@ check_archive_products() {
 APP_PRODUCTS="VettIDCrypto VettIDAttestation VettIDRelay VettIDAltChan VettIDVault VettIDKeys VettIDData VettIDMedia
 VettIDNotify VettIDUI VettIDOnboarding VettIDSettings VettIDShell VettIDConnections VettIDMessages VettIDApprovals
 VettIDNotifications VettIDHistory VettIDItems VettIDVotes VettIDDevices"
+# Not linked by the app, in any configuration, until calls ship in Release (as on Android, whose release builds carry no
+# call code): built and tested on their own.
+APP_EXCLUDED="VettIDCalls VettIDCallsWebRTC"
 
 # The VettID app target (whatever the scheme) links exactly APP_PRODUCTS (each product id resolved to its productName)
 # and compiles no file of AppDevStack/, read from the project file: its package products and its Sources phase.
 check_app_target() {
   local pbxproj=$1
-  python3 - "${pbxproj}" AppDevStack "${APP_PRODUCTS}" <<'PY'
+  python3 - "${pbxproj}" AppDevStack "${APP_PRODUCTS}" "${APP_EXCLUDED}" <<'PY'
 import os, re, sys
 text = open(sys.argv[1]).read()
 devstack = {f for f in os.listdir(sys.argv[2]) if f.endswith(".swift")}
 allowed = set(sys.argv[3].split())
+excluded = set(sys.argv[4].split())
 m = re.search(r"\n\t\t(\w+) /\* VettID \*/ = \{\n\t\t\tisa = PBXNativeTarget;(.*?)\n\t\t\};", text, re.S)
 if not m:
     sys.exit("no VettID target in the project file")
@@ -325,6 +329,8 @@ phase = re.search(r"\n\t\t" + phases[0] + r" /\* Sources \*/ = \{(.*?)\n\t\t\};"
 sources = [re.sub(r" in Sources$", "", name) for _, name in listed("files", phase)]
 if not sources:
     sys.exit("the VettID target's Sources phase is empty")
+if excluded & set(products):
+    sys.exit("the VettID target links " + ", ".join(sorted(excluded & set(products))) + ": calls are not in the app yet")
 if set(products) != allowed or len(products) != len(allowed):
     sys.exit("the VettID target links " + ", ".join(sorted(set(products) ^ allowed)) + " against the allowlist")
 bad = [f for f in sources if f in devstack]
@@ -570,6 +576,7 @@ if [[ ${SELF_TEST} -eq 1 ]]; then
   # A VettID target that links a product off the allowlist (a TEST one), or compiles the dev stack wiring, must be refused.
   planted_pbx="${OUT}/planted/project.pbxproj"
   for swap in "s|productName = VettIDKeys;|productName = VettIDKeysTesting;|" \
+    "s|productName = VettIDDevices;|productName = VettIDCalls;|" \
     "s|/\* AppDelegate.swift in Sources \*/|/* DevStackWiring.swift in Sources */|"; do
     sed "${swap}" VettID.xcodeproj/project.pbxproj >"${planted_pbx}"
     if cmp -s "${planted_pbx}" VettID.xcodeproj/project.pbxproj; then
@@ -581,7 +588,7 @@ if [[ ${SELF_TEST} -eq 1 ]]; then
       exit 1
     fi
   done
-  echo "self-test: the target check refuses a VettID target with a TEST product or the dev stack wiring"
+  echo "self-test: the target check refuses a VettID target with a TEST product, the call code or the dev stack wiring"
   # A required string removed (renamed in place, same length) from a copy of each app must fail the check.
   unplant() {
     local config=$1 checker=$2 required=$3
