@@ -156,6 +156,14 @@ extension OnboardingStrings {
     static var ownerCheckCancel: String {
         String(localized: "ownercheck_cancel", defaultValue: "Cancel", bundle: .module)
     }
+    /// (ANDROID-PLAN 0.1.124 §4 "The owner check's progress") While the vault verifies.
+    static var ownerCheckChecking: String {
+        String(localized: "ownercheck_checking", defaultValue: "Checking with your vault…", bundle: .module)
+    }
+    /// (ANDROID-PLAN 0.1.124) Beside the green tick, on a pass.
+    static var ownerCheckPassed: String {
+        String(localized: "ownercheck_passed", defaultValue: "Check passed", bundle: .module)
+    }
     /// (VAULT-MESSAGING 0.73.0 §3.6.5) The estimate of tries left is 0: the vault has probably locked and the app checks
     /// (approved by the owner 2026-10-28; IOS-PLAN 0.1.49, ANDROID-PLAN 0.1.95), under vettid-android's keys.
     static var ownerCheckProbablyLockedChecking: String {

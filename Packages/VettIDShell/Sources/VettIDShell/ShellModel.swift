@@ -18,6 +18,17 @@ public final class ShellModel {
     public var showAccount = false
     /// The voluntary check or the hold-off check, shown over the shell; nil: none.
     public private(set) var asked: OwnerCheckMode?
+    /// (ANDROID-PLAN 0.1.124) The asked check is with the vault or shows its "Check passed" tick: a check coming due waits
+    /// for it (``OwnerCheckFlow``'s `onOut`), so that no second check goes alongside it.
+    public private(set) var askedOut = false
+    /// The last failure the asked check was answered (a wrong PIN, say), kept for the gated check should it take the asked
+    /// one's place, which would otherwise never say it (vettid-android keeps one screen for both).
+    public private(set) var askedFailure: OwnerCheckMessage?
+    /// When ``askedFailure`` was answered: it is carried only for ``carriedFailureLife`` (``carriedFailure(now:)``).
+    private var askedFailureAt: Date?
+    /// How long an asked check's failure is carried to a gated check: the gate takes the asked check's place at once once
+    /// its check is back, so an older one is not this answer's.
+    public static let carriedFailureLife: TimeInterval = 60
     /// The daily check covers the shell (``shown()``'s case): the shell is not in front for a notification's tap, and the
     /// root's own presentations close.
     public var checkCovers = false
@@ -226,17 +237,57 @@ public final class ShellModel {
     /// (VAULT-MESSAGING §3.6.7). The sheet and the drawer close.
     public func ownerCheck(holdOff: Bool) {
         asked = holdOff ? .holdOff : .voluntary
+        askedFailure = nil
         showAccount = false
         drawerOpen = false
     }
 
     /// The asked check passed or was cancelled.
-    public func ownerCheckDone() { asked = nil }
+    public func ownerCheckDone() {
+        asked = nil
+        askedOut = false
+        askedFailure = nil
+    }
+
+    /// The asked check's check went out ([out]) or came back, or its message changed while none is out ([message]: what it
+    /// says now, nil once the member typed again) (``OwnerCheckFlow``'s `onOut`).
+    public func askedCheck(out: Bool, message: OwnerCheckMessage?, now: Date = Date()) {
+        askedOut = out
+        // Only the check's own answers are carried: a wrong PIN or password, a check that may have counted. Not a backoff
+        // (its wait is the asked screen's, and the gated one would show Check on without it), nor a failure, which may be the
+        // member's Lock vault's rather than the check's.
+        askedFailure = out ? nil : message.flatMap(Self.carried)
+        askedFailureAt = askedFailure == nil ? nil : now
+    }
+
+    static func carried(_ m: OwnerCheckMessage) -> OwnerCheckMessage? {
+        switch m {
+        case .badPin, .badPassword, .maybeCounted: m
+        case .backoff, .failed: nil
+        }
+    }
+
+    /// The asked check's failure for a gated check opening at [now]: only one answered within ``carriedFailureLife``.
+    public func carriedFailure(now: Date) -> OwnerCheckMessage? {
+        guard let at = askedFailureAt, now.timeIntervalSince(at) <= Self.carriedFailureLife else { return nil }
+        return askedFailure
+    }
+
+    /// The asked check's screen went: its check no longer holds a due one back. Its failure stays for the gated check that
+    /// took its place.
+    public func askedCheckGone() { askedOut = false }
+
+    /// The gated check passed or no longer covers the shell: nothing of an earlier asked check stays for the next one.
+    public func gatedCheckDone() {
+        askedFailure = nil
+        askedFailureAt = nil
+    }
 
     /// The check past the deadline took the shell's place: nothing the shell had open (the drawer, the sheet, an asked
     /// check) comes back with it.
     public func shown() {
         asked = nil
+        askedOut = false
         showAccount = false
         drawerOpen = false
     }
@@ -244,6 +295,7 @@ public final class ShellModel {
     /// The vault was locked or left: the next open starts afresh, as vettid-android's new shell does.
     public func reset() {
         shown()
+        askedFailure = nil
         checkCovers = false
         path = []
         destination = .start

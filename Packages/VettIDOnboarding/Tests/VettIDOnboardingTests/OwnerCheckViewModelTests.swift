@@ -40,7 +40,10 @@ import VettIDDataTesting
         await vm.settle()
         #expect(vault.calls.filter { $0 == "check" } == ["check"])
         #expect(vault.lastPin == "975310" && vault.lastPassword == "pw" && vault.lastHoldOff == nil)
-        #expect(vm.state.passed && vm.state.pin.isEmpty && vm.state.password.isEmpty)
+        // (ANDROID-PLAN 0.1.124) The tick first; the screen closes once it was held.
+        #expect(vm.state.passedTick && !vm.state.passed && vm.state.pin.isEmpty && vm.state.password.isEmpty)
+        vm.tickShown()
+        #expect(vm.state.passed)
     }
 
     @Test func wrongEntriesSayWhichAndHowManyAreLeft() async {
@@ -121,17 +124,21 @@ import VettIDDataTesting
         enter(vm)
         vm.submit()
         await vm.settle()
-        #expect(vm.state.passedUnrecorded && !vm.state.passed && vm.state.pin.isEmpty)
+        #expect(vm.state.passedUnrecorded && !vm.state.passed && !vm.state.passedTick && vm.state.pin.isEmpty)
+        vm.tickShown()
+        #expect(!vm.state.passed, "no tick: today's screen, until the member goes on")
         vm.acknowledgePresence()
         #expect(vm.state.passed)
     }
 
-    @Test func aPassedCheckWithThePresenceRecordedCloses() async {
+    @Test func aPassedCheckWithThePresenceRecordedClosesAfterTheTick() async {
         let vm = await vm(.voluntary)
         enter(vm)
         vm.submit()
         await vm.settle()
-        #expect(vm.state.passed && !vm.state.passedUnrecorded)
+        #expect(vm.state.passedTick && !vm.state.passedUnrecorded)
+        vm.tickShown()
+        #expect(vm.state.passed)
     }
 
     /// (iPhone, IOS-PLAN §6.3) Leaving the foreground drops what was typed; a submit the model refuses keeps no PIN.

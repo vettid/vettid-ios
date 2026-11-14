@@ -104,6 +104,13 @@ public struct OwnerCheckScreenState: Equatable, Sendable, CustomStringConvertibl
     public var waitSeconds: Int64 = 0
     /// The check passed: the screen closes.
     public var passed = false
+    /// (ANDROID-PLAN 0.1.124 §4 "The owner check's progress"; IOS-PLAN §4.17) The check passed with the presence recorded:
+    /// the green tick and "Check passed" are held (``passedTickHold(voiceOver:)``), then ``OwnerCheckActions/tickShown()``
+    /// closes the screen.
+    public var passedTick = false
+    /// (ANDROID-PLAN 0.1.124) The member's Lock vault failed while a check whose answer is dropped was still out: no second
+    /// check goes alongside it until that one has returned.
+    public var awaitingDropped = false
     public var locking = false
     /// (Release R, §11.14.5) The vault could not record that the member was here: the presence notice.
     public var presenceUnrecorded = false
@@ -146,7 +153,19 @@ public struct OwnerCheckScreenState: Equatable, Sendable, CustomStringConvertibl
     public var stagingNote: String? { TimeScales.stagingNote(timeScale) }
 
     /// Whether the check may be sent now (the PIN's length is the keypad's, checked by the screen).
-    public var entriesAllowed: Bool { !busy && !locking && !locked && watch == .none && waitSeconds == 0 }
+    public var entriesAllowed: Bool {
+        !busy && !locking && !locked && watch == .none && waitSeconds == 0 && !passedTick && !awaitingDropped
+    }
+
+    /// (ANDROID-PLAN 0.1.124) A check is with the vault: "Checking with your vault…" in place of the entries, no Check and no
+    /// Cancel (Lock vault, where offered, stays enabled), and the back gestures are off (the request cannot be taken back).
+    /// Also while a check whose answer is dropped is still out after a failed Lock vault (``awaitingDropped``): no second
+    /// check can go, and the screen says why rather than leaving Check off without a word.
+    public var checking: Bool { (busy || awaitingDropped) && !locked && watch == .none }
+
+    /// (ANDROID-PLAN 0.1.124) A check is out or its tick shows: a check coming due waits for this one
+    /// (``OwnerCheckViewModel/onOut``).
+    public var out: Bool { checking || passedTick }
 
     /// "Lock vault" is the secondary action when gated, and in every mode while the vault is probably locked
     /// (VAULT-MESSAGING 0.73.0 §3.6.5).
@@ -168,7 +187,7 @@ public struct OwnerCheckScreenState: Equatable, Sendable, CustomStringConvertibl
 
     public var description: String {
         "OwnerCheckScreenState(mode: \(mode), busy: \(busy), message: \(message.map { "\($0)" } ?? "nil"), "
-            + "wait: \(waitSeconds), passed: \(passed))"
+            + "wait: \(waitSeconds), passed: \(passed), tick: \(passedTick))"
     }
     public var debugDescription: String { description }
     public var customMirror: Mirror { Mirror(self, children: [:]) }
@@ -186,6 +205,8 @@ public protocol OwnerCheckActions: AnyObject, Sendable {
     func lockVault()
     /// After a check that passed with the presence notice: the member read it; the screen closes.
     func acknowledgePresence()
+    /// (ANDROID-PLAN 0.1.124) The "Check passed" tick was held for its time: the screen closes.
+    func tickShown()
     /// The app left the foreground or the iPhone is locking: typed secrets are dropped.
     func forgetSecrets()
     /// (VAULT-MESSAGING 0.73.0 §3.6.5) "Check again" after "isn't answering": the same reads, no check sent.
@@ -203,6 +224,7 @@ public final class NoOwnerCheckActions: OwnerCheckActions {
     public func submit() {}
     public func lockVault() {}
     public func acknowledgePresence() {}
+    public func tickShown() {}
     public func forgetSecrets() {}
     public func checkAgain() {}
 }
@@ -215,7 +237,16 @@ public final class NoOwnerCheckActions: OwnerCheckActions {
 @MainActor
 @Observable
 public final class OwnerCheckViewModel: OwnerCheckActions {
-    public internal(set) var state: OwnerCheckScreenState
+    public internal(set) var state: OwnerCheckScreenState {
+        // Told in the same change that sends the check, with no update in between; on the answer, with its message; and
+        // when the message changes while no check is out (the member typing again clears it).
+        didSet {
+            if state.out != oldValue.out || (!state.out && state.message != oldValue.message) { onOut?(state.out) }
+        }
+    }
+    /// (ANDROID-PLAN 0.1.124) Called when ``OwnerCheckScreenState/out`` changes, and when the message changes while no check
+    /// is out: the shell holds a check coming due back while an asked check is out, and keeps its last failure.
+    @ObservationIgnored public var onOut: (@MainActor (Bool) -> Void)?
 
     @ObservationIgnored let repo: any OwnerCheckRepository
     @ObservationIgnored private let vault: any VaultRepository
@@ -236,6 +267,11 @@ public final class OwnerCheckViewModel: OwnerCheckActions {
     @ObservationIgnored var followUpTask: Task<Void, Never>?
     /// The read running or last started: the next waits for it (one read at a time).
     @ObservationIgnored var lastRead: Task<Void, Never>?
+    /// (ANDROID-PLAN 0.1.124) Counts what ends the screen's interest in a check sent: the member's Lock vault and the screen
+    /// leaving (``cancel()``). A check's answer is applied only while the count is the one taken when it was sent.
+    @ObservationIgnored var checkSeq = 0
+    /// A check was sent and has not returned (its answer used or dropped).
+    @ObservationIgnored var checkOut = false
     /// Counts the trigger reads started (``readNowIfWatching()``).
     @ObservationIgnored var triggers = 0
     /// The reconnects seen (``OwnerCheckRepository/relayReconnects``).
@@ -289,7 +325,7 @@ public final class OwnerCheckViewModel: OwnerCheckActions {
 
     /// Locked by failed checks: only the lock text shows, never "Your vault is unlocked" beside it, and no check is sent.
     /// The entries go; "Check in" stays, off (§3.6.5).
-    private func enterLocked() {
+    func enterLocked() {
         stopReads()
         state.watch = .none
         state.locked = true
@@ -337,13 +373,15 @@ public final class OwnerCheckViewModel: OwnerCheckActions {
     }
 
     /// Opens the screen for [mode], with nothing entered; a check sent right after an unlock says how it went.
-    public func start(_ mode: OwnerCheckMode) {
+    /// [carried]: the last answer of the check the member had asked for, which this gated one replaced while it was out
+    /// (said here, since the asked screen that would have said it is gone).
+    public func start(_ mode: OwnerCheckMode, carried: OwnerCheckMessage? = nil) {
         ticker?.cancel()
         stopReads()
         let after = repo.unlockCheckOutcome
         repo.consumeUnlockCheckOutcome()
         state = OwnerCheckScreenState(mode: mode, view: repo.ownerCheck, timeScale: repo.timeScale)
-        state.message = after.flatMap(Self.message)
+        state.message = after.flatMap(Self.message) ?? carried
         state.presenceUnrecorded = repo.presenceUnrecorded
         // A check that failed on the password right after the unlock: the PIN is kept, the password asked (§3.6.5).
         let retry = mode == .gated && (after.map(Self.isRetry) ?? false)
@@ -369,6 +407,8 @@ public final class OwnerCheckViewModel: OwnerCheckActions {
 
     /// Leaves the screen without a check (not while gated): forgets what was entered.
     public func cancel() {
+        // A check still out keeps ``checkOut`` until it returns: a lock that fails meanwhile still waits for it.
+        checkSeq += 1
         ticker?.cancel()
         stopReads()
         let s = state
@@ -378,6 +418,10 @@ public final class OwnerCheckViewModel: OwnerCheckActions {
 
     public func acknowledgePresence() {
         if state.passedUnrecorded { state.passed = true }
+    }
+
+    public func tickShown() {
+        if state.passedTick { state.passed = true }
     }
 
     public func setPin(_ v: String) {
@@ -405,50 +449,36 @@ public final class OwnerCheckViewModel: OwnerCheckActions {
             ? HoldOff(until: s.holdOff.days.map { now().addingTimeInterval(Double($0) * 86_400) }) : nil
         state.busy = true
         state.message = nil
+        // §3.6.5: the entries are not kept past the send (the unlock's kept PIN stays for another password-only try).
+        state.password = ""
+        if !s.pinKept { state.pin = "" }
         let away = repo.leftFront
+        let seq = checkSeq
+        checkOut = true
         launch { [self] in
-            let r: OwnerCheckOutcome
-            do {
-                r = try await repo.check(pin: s.pin, password: s.password, holdOff: holdOff)
-            } catch let e as VaultFailure {
-                r = .failed(e.kind, code: e.code)
-            } catch {
-                r = .failed(.other, code: nil)
+            let r = await checkOutcome(pin: s.pin, password: s.password, holdOff: holdOff)
+            checkOut = false
+            // (ANDROID-PLAN 0.1.124) The member locked the vault (or the screen left) while the check was out: its answer is
+            // dropped, and nothing that follows from it runs; a check held back for it may go now.
+            // A dropped answer takes everything that follows from it, its backoff's countdown and the probably-locked
+            // watch included: the member chose to lock, or left, and a check after it reads the vault's state afresh.
+            guard seq == checkSeq else {
+                state.awaitingDropped = false
+                return
             }
             let probe = await rereadIfUnanswered(r)
-            // §3.6.5: neither entry is kept beyond the answer. §11.14.5: a check that passed without the presence recorded
-            // keeps the screen, with the notice, until the member goes on.
-            let passed = r == .passed
-            let unrecorded = passed && repo.presenceUnrecorded
-            // The unlock's PIN stays for another try of the password only after a wrong password (a try left), a backoff or
-            // a failure that never reached the vault's verdict; it is not kept once the vault locked.
-            // Decided from the state as it is now: a PIN dropped while the check was on its way (the app left the front, even
-            // if it is back) does not come back when the answer lands.
-            let keep = state.pinKept && Self.keepsPin(r) && !repo.lockedByOwnerCheck && repo.inFront && repo.leftFront == away
-            var left: Int?
-            if keep, case .badPassword(let n, _) = r, let n, n > 0 { left = n }
-            state.busy = false
-            state.pin = keep ? state.pin : ""
-            state.password = ""
-            state.passed = passed && !unrecorded
-            state.passedUnrecorded = unrecorded
-            if passed { state.presenceUnrecorded = repo.presenceUnrecorded }
-            // Locked by this answer: the label stays as it was, off (``enterLocked()``).
-            state.pinKept = keep || (state.pinKept && repo.lockedByOwnerCheck)
-            state.unlockedWrong = left
-            state.unlockedOpen = keep && Self.isBackoff(r)
-            state.message = left != nil ? nil : Self.message(after: r, probe)
-            if case .backoff(let wait) = r { startBackoff(wait) }
-            if repo.lockedByOwnerCheck {
-                enterLocked()
-            } else if Self.needsWatch(r) {
-                beginWatch()
-            }
+            guard seq == checkSeq else { return }
+            answered(r, probe, away: away)
         }
     }
 
     public func lockVault() {
-        guard !state.locking else { return }
+        guard !state.locking, !state.passedTick else { return }
+        // (ANDROID-PLAN 0.1.124) Lock vault stays enabled while a gated check is with the vault: that check's answer, when it
+        // comes, is dropped (the member chose to lock).
+        checkSeq += 1
+        // The check no longer counts as with the vault: the lock is what the screen waits for now (as vettid-android).
+        state.busy = false
         state.locking = true
         // The kept PIN goes with the lock; a lock that fails leaves the screen asking for both again.
         dropKeptPin()
@@ -459,52 +489,25 @@ public final class OwnerCheckViewModel: OwnerCheckActions {
             do {
                 try await vault.lock()
             } catch {
+                // One change of the state (the shell is told once).
+                var s = state
                 // The lines that went with the kept PIN go too: the screen asks for both, with "Check" on once they are typed.
-                state.locking = false
-                state.unlockedWrong = nil
+                s.locking = false
+                s.unlockedWrong = nil
+                // (ANDROID-PLAN 0.1.124: "A vault.lock that fails shows today's notice and retry") Never silent: the failure's
+                // notice, with Lock vault offered again.
+                let f = error as? VaultFailure
+                s.message = .failed(f?.kind ?? .other, code: f?.code)
+                // A check still out (its answer dropped) holds back a second one until it returns.
+                s.awaitingDropped = checkOut
+                state = s
                 // Still probably locked: the reads go on.
                 if watching, !state.locked { runReads() }
             }
         }
     }
 
-    /// A check that failed on the password or backed off, right after the unlock.
-    static func isRetry(_ r: OwnerCheckOutcome) -> Bool {
-        switch r {
-        case .badPassword, .backoff: true
-        default: false
-        }
-    }
-
-    static func isBackoff(_ r: OwnerCheckOutcome) -> Bool {
-        if case .backoff = r { return true }
-        return false
-    }
-
-    /// Whether the kept PIN stays after the answer [r] to a retry, only where trying again can help (VAULT-MESSAGING 0.73.1
-    /// §3.6.5): a wrong password with a try left (an unknown count counts as none: the vault may have locked, §3.6.4), a
-    /// backoff, or a check the vault did not answer (``OwnerCheckOutcome/isUnanswered``) unless the tries are then estimated
-    /// at 0 (the vault has probably locked). Any other answer drops it. As vettid-android `OwnerCheckViewModel`.
-    static func keepsPin(_ r: OwnerCheckOutcome) -> Bool {
-        switch r {
-        case .badPassword(let left, _): (left ?? 0) > 0
-        case .backoff: true
-        case .failed(_, _, let left): r.isUnanswered && (left ?? 1) > 0
-        default: false
-        }
-    }
-
-    static func message(_ r: OwnerCheckOutcome) -> OwnerCheckMessage? {
-        switch r {
-        case .passed: nil
-        case .badPin(let left, _): .badPin(checksLeft: left)
-        case .badPassword(let left, _): .badPassword(checksLeft: left)
-        case .backoff: .backoff
-        case .failed(let kind, let code, _): .failed(kind, code: code)
-        }
-    }
-
-    private func startBackoff(_ seconds: Int64) {
+    func startBackoff(_ seconds: Int64) {
         guard seconds > 0 else { return }
         ticker?.cancel()
         state.waitSeconds = seconds

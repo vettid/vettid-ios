@@ -24,6 +24,60 @@ import VettIDVault
         #expect(m.inFront(appLocked: false))
     }
 
+    /// (ANDROID-PLAN 0.1.124) An asked check that is out holds a due check back only while it is up: it is no longer out
+    /// once done or cancelled, once the gated check took the shell's place, and after a reset.
+    @Test func anAskedCheckIsNoLongerOutOnceItEnds() {
+        let m = model
+        for end in [{ m.ownerCheckDone() }, { m.shown() }, { m.reset() }] {
+            m.ownerCheck(holdOff: false)
+            m.askedCheck(out: true, message: nil)
+            end()
+            #expect(!m.askedOut && m.asked == nil)
+        }
+    }
+
+    /// A failure is carried only shortly after its answer, and only the check's own answers: never a backoff (its wait is
+    /// the asked screen's) nor a failure (it may be the member's Lock vault's).
+    @Test func aCarriedFailureIsRecentAndNeverABackoff() {
+        let m = model
+        let at = Date(timeIntervalSince1970: 1_000_000)
+        m.askedCheck(out: false, message: .badPin(checksLeft: 8), now: at)
+        #expect(m.carriedFailure(now: at.addingTimeInterval(ShellModel.carriedFailureLife)) == .badPin(checksLeft: 8))
+        #expect(m.carriedFailure(now: at.addingTimeInterval(ShellModel.carriedFailureLife + 1)) == nil)
+        m.askedCheck(out: false, message: .backoff, now: at)
+        #expect(m.carriedFailure(now: at) == nil)
+        // A failure may be the member's Lock vault's: not carried.
+        m.askedCheck(out: false, message: .failed(.network, code: nil), now: at)
+        #expect(m.carriedFailure(now: at) == nil)
+        m.askedCheck(out: false, message: .maybeCounted(atLeast: 3), now: at)
+        #expect(m.carriedFailure(now: at) == .maybeCounted(atLeast: 3))
+    }
+
+    /// The asked check's failure stays for the gated check that takes its place (its screen going says nothing), and goes
+    /// once that one passed, with a new asked check, when the asked one is closed, and after a reset.
+    @Test func anAskedChecksFailureIsKeptForTheGatedCheck() {
+        let m = model
+        let wrong = OwnerCheckMessage.badPin(checksLeft: 8)
+        m.ownerCheck(holdOff: false)
+        m.askedCheck(out: true, message: nil)
+        m.askedCheck(out: false, message: wrong)
+        m.shown()
+        m.askedCheckGone()
+        #expect(m.askedFailure == wrong && !m.askedOut)
+        m.gatedCheckDone()
+        #expect(m.askedFailure == nil)
+        let ends: [() -> Void] = [
+            { m.ownerCheck(holdOff: true) }, { m.ownerCheckDone() }, { m.reset() }, { m.askedCheck(out: true, message: nil) },
+            // The member typed again: the line went.
+            { m.askedCheck(out: false, message: nil) },
+        ]
+        for end in ends {
+            m.askedCheck(out: false, message: wrong)
+            end()
+            #expect(m.askedFailure == nil)
+        }
+    }
+
     /// A vote opens by the pair, once, over the Votes list; a service's votes over its page.
     @Test func aVoteOpensByThePairOnce() {
         let m = model

@@ -41,7 +41,8 @@ import VettIDDataTesting
         vm.submit()
         await vm.settle()
         #expect(vault.lastPin == pin && vault.lastPassword == "correct horse")
-        #expect(vm.state.passed && vm.state.pin.isEmpty && !vm.state.pinKept)
+        // (ANDROID-PLAN 0.1.124) The password-only retry after an unlock is an owner check: it shows the tick.
+        #expect(vm.state.passedTick && vm.state.pin.isEmpty && !vm.state.pinKept)
     }
 
     @Test func anotherWrongPasswordCountsDownAndKeepsThePin() async throws {
@@ -192,7 +193,7 @@ import VettIDDataTesting
         #expect(vm.state.submitAllowed)
         vm.submit()
         await vm.settle()
-        #expect(vault.lastPin == "135790" && vm.state.passed)
+        #expect(vault.lastPin == "135790" && vm.state.passedTick)
     }
 
     /// A failure that passes by itself keeps it (`utk_invalid` and `stale_credential` read as no answer), and so does a

@@ -236,6 +236,9 @@ public struct AppShell: View {
                         root
                             .toolbar(.hidden, for: .navigationBar)
                             .systemBackGesture()
+                            // (IOS-PLAN §4.17) The asked check over the stack: no back gesture under it, above all while
+                            // its check is with the vault (Check now, the hold-off), which cannot be taken back.
+                            .blocksBackGesture(model.asked != nil)
                             .navigationDestination(for: ShellRoute.self) { route in
                                 detail(route).toolbar(.hidden, for: .navigationBar)
                             }
@@ -552,7 +555,8 @@ extension AppShell {
     @ViewBuilder var askedCheck: some View {
         if let mode = model.asked {
             OwnerCheckFlow(
-                mode: mode, repo: ownerChecks, vault: vault, onDone: { model.ownerCheckDone() }, onCancel: { model.ownerCheckDone() }
+                mode: mode, repo: ownerChecks, vault: vault, onDone: { model.ownerCheckDone() }, onCancel: { model.ownerCheckDone() },
+                onOut: { model.askedCheck(out: $0, message: $1) }, onGone: { model.askedCheckGone() }
             )
             // A container: the modal trait alone made the check one element, its keypad and fields unreachable.
             .accessibilityElement(children: .contain)

@@ -320,7 +320,13 @@ struct AppRoot: View {
             // The check past the deadline closes whatever the shell had open (the drawer, the sheet, an asked check), so
             // that nothing of it comes back for a moment afterwards.
             OwnerCheckGateView(
-                vault: vault, path: shell.path, onGated: { shell.shown() }, onCovered: { shell.checkCovers = $0 }
+                vault: vault, path: shell.path, onGated: { shell.shown() },
+                onCovered: {
+                    shell.checkCovers = $0
+                    // The gated check passed or went: an earlier asked check's failure is not carried to a later one.
+                    if !$0 { shell.gatedCheckDone() }
+                },
+                askedOut: shell.askedOut, askedFailure: { shell.carriedFailure(now: $0) }
             ) { gate, now in
                 AppShell(
                     account: vault, vault: vault, ownerChecks: vault.ownerChecks, credential: vault, profiles: vault.profiles,
@@ -373,6 +379,11 @@ struct OwnerCheckGateView<Content: View>: View {
     var onGated: @MainActor () -> Void = {}
     /// Whether the check covers the shell now (for the root's own presentations, which sit beside the gate).
     var onCovered: @MainActor (Bool) -> Void = { _ in }
+    /// The check the member asked for is with the vault or shows its tick (``ShellModel/askedOut``): the due check waits.
+    var askedOut = false
+    /// What the asked check was last answered, said by the gated check that took its place, at a moment
+    /// (``ShellModel/carriedFailure(now:)``).
+    var askedFailure: @MainActor (Date) -> OwnerCheckMessage? = { _ in nil }
     @ViewBuilder let content: (OwnerCheckGate, Date) -> Content
     /// The check screen was opened and is not done yet: it stays until the member goes on, so that a check that passed
     /// with the presence not recorded shows its notice (VAULT-MESSAGING §11.14.5), as vettid-android's route does until `onDone`.
@@ -400,7 +411,7 @@ struct OwnerCheckGateView<Content: View>: View {
             )
             let raw = deferral.covers(
                 gated: gate.gated, input: input.active, deadline: gate.deadline, now: Date(),
-                opened: checking || checks.checkAfterCancel
+                opened: checking || checks.checkAfterCancel, askedOut: askedOut
             )
             let covered = latch.covered(raw)
             // The shell stays in the tree under the check, so that its navigation and the view models of its screens (an
@@ -410,11 +421,11 @@ struct OwnerCheckGateView<Content: View>: View {
                     .environment(\.vettIDInput, input)
                     .modifier(CoveredByCheck(covered: covered))
                 if covered {
-                    OwnerCheckFlow(mode: .gated, repo: checks, vault: vault) {
+                    OwnerCheckFlow(mode: .gated, repo: checks, vault: vault, onDone: {
                         checking = false
                         latch.release()
                         checks.consumeCheckAfterCancel()
-                    }
+                    }, carried: askedFailure(Date()))
                     .onAppear {
                         checking = true
                         onGated()
@@ -468,8 +479,11 @@ struct OwnerCheckDeferral: Equatable {
     /// unlock that cancelled a recovery: at once), or due and not waiting on [input]. Waiting ends when the member leaves
     /// the screen or returns from the background (``armed``), or at the limit after the check came due. Pure: the gate
     /// latches the answer (a check that covered stays until it is passed).
-    func covers(gated: Bool, input: Bool, deadline: Date?, now: Date, opened: Bool) -> Bool {
+    /// (ANDROID-PLAN 0.1.124) [askedOut]: a check the member asked for is with the vault or shows its tick; the due check
+    /// waits for it whatever the rest (two checks never go together, and the tick is not cut short).
+    func covers(gated: Bool, input: Bool, deadline: Date?, now: Date, opened: Bool, askedOut: Bool = false) -> Bool {
         if opened { return true }
+        if askedOut { return false }
         guard gated else { return false }
         if !input || armed { return true }
         let since = [deadline, dueSince].compactMap { $0 }.min()

@@ -5,58 +5,6 @@ import VettIDData
 import VettIDOnboarding
 import VettIDUI
 
-/// The owner-check screen for [mode], driven by an ``OwnerCheckViewModel`` made when it first appears. [onDone] after a
-/// passed check; [onCancel] for a voluntary check and the hold-off only (a gated check is never dismissible, §3.6.5).
-/// Mirrors vettid-android `OwnerCheckRoute`.
-public struct OwnerCheckFlow: View {
-    private let mode: OwnerCheckMode
-    private let repo: any OwnerCheckRepository
-    private let vault: any VaultRepository
-    private let onDone: @MainActor () -> Void
-    private let onCancel: @MainActor () -> Void
-    @State private var model: OwnerCheckViewModel?
-    @Environment(\.vettIDColors) private var colors
-
-    public init(
-        mode: OwnerCheckMode,
-        repo: any OwnerCheckRepository,
-        vault: any VaultRepository,
-        onDone: @escaping @MainActor () -> Void = {},
-        onCancel: @escaping @MainActor () -> Void = {}
-    ) {
-        self.mode = mode
-        self.repo = repo
-        self.vault = vault
-        self.onDone = onDone
-        self.onCancel = onCancel
-    }
-
-    public var body: some View {
-        Group {
-            if let model {
-                OwnerCheckScreen(state: model.state, actions: model, onCancel: {
-                    model.cancel()
-                    onCancel()
-                })
-                .onChange(of: model.state.passed) { _, passed in
-                    guard passed else { return }
-                    // Nothing of this check stays for the next one.
-                    model.cancel()
-                    onDone()
-                }
-            } else {
-                colors.background.color.ignoresSafeArea()
-            }
-        }
-        .onAppear {
-            guard model == nil else { return }
-            let m = OwnerCheckViewModel(repo: repo, vault: vault)
-            m.start(mode)
-            model = m
-        }
-    }
-}
-
 /// The owner-check screen for [state] (stateless): the PIN on the in-app keypad (IOS-PLAN §6.5) and the credential
 /// password, sent together; which entry was wrong, the checks left, a running backoff; while gated, what waits in the
 /// vault and the lock action (the held screen); for the hold-off, its warning and how long. Mirrors vettid-android
@@ -155,7 +103,9 @@ public struct OwnerCheckScreen: View {
     }
 
     public var body: some View {
-        if state.passedUnrecorded {
+        if state.passedTick {
+            PassedTick(title: title)
+        } else if state.passedUnrecorded {
             FormScaffold(title: title, primaryLabel: OnboardingStrings.continueLabel, onPrimary: { actions.acknowledgePresence() }) {
                 PresenceNotice(scaledQuiet: state.scaledQuietText)
                 SmallNote(state.stagingNote)
@@ -178,11 +128,14 @@ public struct OwnerCheckScreen: View {
         FormScaffold(
             title: title,
             message: body0,
-            primaryLabel: asksNext ? OnboardingStrings.pinStepNext : primaryLabel,
+            // (ANDROID-PLAN 0.1.124) While the vault verifies: no Check and no Cancel; Lock vault, where it is offered (a gated
+            // check), stays enabled throughout.
+            primaryLabel: state.checking ? nil : asksNext ? OnboardingStrings.pinStepNext : primaryLabel,
             primaryEnabled: asksNext ? state.entriesAllowed && pin.count >= OwnerCheckScreenState.minPin
                 : canSubmit || (state.watch == .silent && !state.locking),
-            busy: state.busy || state.locking,
-            secondaryLabel: state.lockOffered ? OnboardingStrings.ownerCheckLock : OnboardingStrings.ownerCheckCancel,
+            busy: state.checking ? state.locking : state.busy || state.locking,
+            secondaryLabel: state.lockOffered ? OnboardingStrings.ownerCheckLock
+                : state.checking ? nil : OnboardingStrings.ownerCheckCancel,
             onPrimary: {
                 if asksNext {
                     steps.pinDone = true
@@ -211,31 +164,18 @@ public struct OwnerCheckScreen: View {
             },
             bottom: { if keypadFixed { keypad } }
         ) {
-            VStack(alignment: .leading, spacing: Spacing.m) {
-                SmallNote(state.stagingNote)
-                if state.presenceUnrecorded { PresenceNotice(scaledQuiet: state.scaledQuietText) }
-                if let card = WaitingCardModel.of(state.mode, state.view, now: now) { WaitingCard(model: card) }
-                unlockLines
-                // (Release L, §3.6.8) The held and daily-check screens say when the vault locks itself.
-                if let at = idleLockAtOf(state.mode, state.view, now: now) {
-                    Text(OnboardingStrings.ownerCheckIdleLockAt(at.formatted(date: .abbreviated, time: .shortened)))
-                        .vettIDFont(.bodyMedium)
-                        .accessibilityIdentifier("owner_check_idle_lock_at")
-                }
-                if state.mode == .holdOff {
-                    NoticeCard(
-                        .warning,
-                        title: OnboardingStrings.ownerCheckHoldOffWarningTitle,
-                        message: OnboardingStrings.ownerCheckHoldOffWarning
-                    )
-                    .accessibilityIdentifier("hold_off_warning")
-                    HoldOffChoices(selected: state.holdOff) { actions.setHoldOff($0) }
-                }
-                entries
-                OwnerCheckMessageView(state: state, title: title)
+            if state.checking {
+                CheckingWithVault()
+                // A failed Lock vault while the dropped check is still out: its notice under the line, never silent.
+                if state.awaitingDropped { OwnerCheckMessageView(state: state, title: title) }
+            } else {
+                fields
             }
         }
         .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height = $0 }
+        // A check with the vault cannot be taken back: no back gesture. The check is drawn over the shell, not pushed, so
+        // the shell's block holds it (``AppShell``); this one would, were the screen ever pushed onto a stack.
+        .blocksBackGesture(state.checking)
         .onDisappear { forgetSecrets() }
         // Digits taken by the submit or dropped: the keypad again.
         .onChange(of: pin.count) { _, digits in steps.digitsChanged(to: digits) }
@@ -256,6 +196,33 @@ public struct OwnerCheckScreen: View {
             forgetSecrets()
         }
         .accessibilityIdentifier("owner_check")
+    }
+
+    /// The form's content: the notices, the entries and the last answer.
+    private var fields: some View {
+        VStack(alignment: .leading, spacing: Spacing.m) {
+            SmallNote(state.stagingNote)
+            if state.presenceUnrecorded { PresenceNotice(scaledQuiet: state.scaledQuietText) }
+            if let card = WaitingCardModel.of(state.mode, state.view, now: now) { WaitingCard(model: card) }
+            unlockLines
+            // (Release L, §3.6.8) The held and daily-check screens say when the vault locks itself.
+            if let at = idleLockAtOf(state.mode, state.view, now: now) {
+                Text(OnboardingStrings.ownerCheckIdleLockAt(at.formatted(date: .abbreviated, time: .shortened)))
+                    .vettIDFont(.bodyMedium)
+                    .accessibilityIdentifier("owner_check_idle_lock_at")
+            }
+            if state.mode == .holdOff {
+                NoticeCard(
+                    .warning,
+                    title: OnboardingStrings.ownerCheckHoldOffWarningTitle,
+                    message: OnboardingStrings.ownerCheckHoldOffWarning
+                )
+                .accessibilityIdentifier("hold_off_warning")
+                HoldOffChoices(selected: state.holdOff) { actions.setHoldOff($0) }
+            }
+            entries
+            OwnerCheckMessageView(state: state, title: title)
+        }
     }
 
     /// (IOS-PLAN §6.6; VAULT-MESSAGING §3.6.5 "Ask only for what is used") After an unlock whose check failed: directly under

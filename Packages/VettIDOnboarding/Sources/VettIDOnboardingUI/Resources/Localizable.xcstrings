@@ -2356,6 +2356,17 @@
         }
       }
     },
+    "ownercheck_checking": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Checking with your vault…"
+          }
+        }
+      }
+    },
     "ownercheck_checks_left": {
       "extractionState": "manual",
       "localizations": {
@@ -2507,6 +2518,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Credential password"
+          }
+        }
+      }
+    },
+    "ownercheck_passed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Check passed"
           }
         }
       }
