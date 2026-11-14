@@ -111,11 +111,14 @@ final class FakeMicrophone: MicrophonePermission {
     /// What the member does at the system's prompt.
     var allows = true
     private(set) var requests = 0
+    /// Held until the test opens it: the member is still at the system's prompt.
+    var requestGate: Gate?
 
     init(_ status: MicrophoneStatus) { self.status = status }
 
     func request() async -> Bool {
         requests += 1
+        await requestGate?.wait()
         status = allows ? .granted : .denied
         return allows
     }

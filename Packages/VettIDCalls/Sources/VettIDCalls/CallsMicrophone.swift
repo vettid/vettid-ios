@@ -46,7 +46,8 @@ package final class SystemMicrophonePermission: MicrophonePermission {
 /// What was held back for the microphone: a call to [connectionId], or the answer to the ringing call.
 public enum MicrophoneAction: Equatable, Sendable {
     case call(connectionId: String)
-    case answer
+    /// The answer to the call with this sequence number (``CallMachine``): never another call.
+    case answer(seq: Int)
 }
 
 /// The gate's state, for the screen: ``explain`` (never asked: our screen, then the system's prompt) or ``blocked`` (denied:

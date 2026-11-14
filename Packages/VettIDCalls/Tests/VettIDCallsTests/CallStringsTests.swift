@@ -43,10 +43,15 @@ import Testing
         #expect(keys == Set(Self.table.map(\.key)))
         // The catalog's own values, not only the defaults in the code.
         let strings = try #require(doc["strings"] as? [String: [String: Any]])
-        for row in Self.table where row.key != "calls_microphone_body" {
+        for row in Self.table {
             let en = (((strings[row.key]?["localizations"] as? [String: Any])?["en"] as? [String: Any])?["stringUnit"] as? [String: Any])
-            #expect(en?["value"] as? String == row.want, "\(row.key)")
+            #expect(en?["value"] as? String == Self.catalogValue(row), "\(row.key)")
         }
+    }
+
+    /// The catalog's value: the same text, with `%@` where the code has the name.
+    static func catalogValue(_ row: Row) -> String {
+        row.key == "calls_microphone_body" ? row.want.replacingOccurrences(of: "Example", with: "%@") : row.want
     }
 
     static var catalog: URL {

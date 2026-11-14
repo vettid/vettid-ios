@@ -87,6 +87,8 @@ package final class CallsController {
     @ObservationIgnored private var tasks: [Task<Void, Never>] = []
     @ObservationIgnored private var probeTask: Task<Void, Never>?
     @ObservationIgnored private var probing = false
+    @ObservationIgnored private var recheckPending = false
+    @ObservationIgnored private var microphoneAsking: MicrophoneAction?
     @ObservationIgnored private var probeGeneration = 0
     @ObservationIgnored private var longCall: Task<Void, Never>?
     @ObservationIgnored private var microphoneAsk: Task<Void, Never>?
@@ -146,7 +148,9 @@ package final class CallsController {
         tasks.append(Task { [weak self] in
             for await _ in rechecks {
                 guard let self else { return }
-                if openFlag.isOpen, supported == nil, !probing { startProbe() }
+                guard openFlag.isOpen, supported == nil else { continue }
+                // One probe at a time: a recheck that comes during one is held and asked again when it ends, if still not known.
+                if probing { recheckPending = true } else { startProbe() }
             }
         })
     }
@@ -195,7 +199,8 @@ package final class CallsController {
     /// Answers the ringing call, behind the same gate.
     package func answer() {
         guard case .live(let l) = machine.state, l.phase == .incoming else { return }
-        gate(.answer)
+        guard let seq = machine.session?.seq else { return }
+        gate(.answer(seq: seq))
     }
 
     package func decline() { machine.decline() }
@@ -241,7 +246,9 @@ package final class CallsController {
     private func perform(_ action: MicrophoneAction) {
         switch action {
         case .call(let id): if availability == .ready { machine.call(id) }
-        case .answer: performAnswer()
+        case .answer(let seq):
+            guard let s = machine.session, s.seq == seq, case .live(let l) = machine.state, l.phase == .incoming else { return }
+            performAnswer()
         }
     }
 
@@ -252,6 +259,7 @@ package final class CallsController {
         guard case .explain(let action)? = microphonePrompt else { return }
         microphonePrompt = nil
         microphoneAsk?.cancel()
+        microphoneAsking = action
         microphoneAsk = Task { [weak self] in
             guard let self else { return }
             let allowed = await microphone.request()
@@ -270,6 +278,7 @@ package final class CallsController {
         probeTask?.cancel()
         probeTask = nil
         probing = false
+        recheckPending = false
         if isOpen { startProbe() } else { locked() }
     }
 
@@ -307,7 +316,12 @@ package final class CallsController {
         probing = true
         probeTask = Task { [weak self] in
             await self?.probe(generation)
-            if let self, probeGeneration == generation { probing = false }
+            guard let self, probeGeneration == generation else { return }
+            probing = false
+            if supported == nil, openFlag.isOpen, recheckPending {
+                recheckPending = false
+                startProbe()
+            }
         }
     }
 
@@ -368,7 +382,24 @@ package final class CallsController {
 
     // MARK: around a call
 
+    /// The screen for an answer goes with its call: when the caller gives up (or another call rings), nothing is left to answer.
+    private func dropStaleAnswerPrompt(_ t: CallTransition) {
+        var held: MicrophoneAction?
+        switch microphonePrompt {
+        case .explain(let a)?, .blocked(let a)?: held = a
+        case nil: break
+        }
+        guard case .answer(let seq)? = held ?? microphoneAsking else { return }
+        if case .live(let l) = t.state, l.phase == .incoming, t.seq == seq { return }
+        if held != nil { microphonePrompt = nil }
+        if case .answer = microphoneAsking {
+            microphoneAsk?.cancel()
+            microphoneAsking = nil
+        }
+    }
+
     private func around(_ t: CallTransition) {
+        dropStaleAnswerPrompt(t)
         guard case .live(let l) = t.state, l.phase == .active else {
             longCall?.cancel()
             longCall = nil
@@ -391,7 +422,7 @@ package final class CallsController {
         if supported == true {
             list = try? await vault.gateway.list(limit: Self.historyLimit)
         }
-        if let list { listSkipped = list.skipped }
+        if let list, openFlag.isOpen { listSkipped = list.skipped }
         return CallHistoryRows.history(list, connectionId: connectionId, now: clock.now())
     }
 

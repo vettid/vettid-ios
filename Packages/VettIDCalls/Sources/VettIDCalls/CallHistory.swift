@@ -53,7 +53,7 @@ enum CallHistoryRows {
     /// for a hang-up on its way. Erring long only shows a finished call as going on for a moment; erring short would end a call
     /// that is still ringing.
     static let ringStale: Duration = .seconds(120)
-    static let ringStaleSeconds: TimeInterval = 120
+    static var ringStaleSeconds: TimeInterval { Double(ringStale.components.seconds) }
 
     static func time(_ s: String?) -> Date? {
         guard let s else { return nil }
@@ -61,18 +61,14 @@ enum CallHistoryRows {
     }
 
     /// The conversation's calls of [list]. The vault's own count of entries it could not read ([CallList.skipped], which does not
-    /// say whose they are) shows for every conversation, as vettid-android does for an entry without a connection.
+    /// say whose they are) shows "Some calls couldn't be shown." in every conversation: the owner's decision (Ground Control
+    /// #10659, answer a). A record always has a readable start (`CallRecord` rejects one without), so none is dropped here.
     static func history(_ list: CallList?, connectionId: String, now: Date) -> CallHistory {
         guard let list else { return CallHistory() }
         let mine = list.calls.filter { $0.connectionId == connectionId }
         var entries: [CallHistoryEntry] = []
-        var unreadable = false
         for r in mine {
-            guard let started = time(r.startedAt) else {
-                unreadable = true
-                continue
-            }
-            guard let outcome = outcome(r, now: now) else { continue }
+            guard let started = time(r.startedAt), let outcome = outcome(r, now: now) else { continue }
             var duration: Duration?
             if let answered = time(r.answeredAt), let ended = time(r.endedAt) {
                 duration = Duration.rounded(seconds: ended.timeIntervalSince(answered))
@@ -82,7 +78,7 @@ enum CallHistoryRows {
                 duration: duration
             ))
         }
-        return CallHistory(entries: entries, someNotShown: list.skipped > 0 || unreadable)
+        return CallHistory(entries: entries, someNotShown: list.skipped > 0)
     }
 
     /// How [r] ended, or nil when it has no row: answered on another device, or going on (answered and not over, or ringing

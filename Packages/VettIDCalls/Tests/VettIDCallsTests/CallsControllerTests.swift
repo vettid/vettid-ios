@@ -168,6 +168,41 @@ import VettIDCrypto
         #expect(c.diagnostics.listSkipped == 0)
     }
 
+    @Test func aRecheckDuringTheProbeIsAskedAgainWhenStillNotKnown() async {
+        let gate = Gate()
+        vault.gatewayFake.listGate = gate
+        var reads = 0
+        vault.gatewayFake.listResult = {
+            reads += 1
+            if reads == 1 { throw self.refusal("owner_check_required") }
+            return CallList(calls: [], skipped: 0)
+        }
+        let c = controller(FakeMicrophone(.granted))
+        await unlock()
+        // The first read is still out when the daily check is done.
+        vault.gatewayFake.listGate = nil
+        vault.recheck()
+        await settle()
+        #expect(vault.gatewayFake.listCalls == 1)
+        gate.open()
+        await settle()
+        #expect(vault.gatewayFake.listCalls == 2, "the recheck was held, not dropped")
+        #expect(c.availability == .ready)
+    }
+
+    @Test func aHeldRecheckIsDroppedOnceTheVaultIsKnownOrLocked() async {
+        let gate = Gate()
+        vault.gatewayFake.listGate = gate
+        let c = controller(FakeMicrophone(.granted))
+        await unlock()
+        vault.gatewayFake.listGate = nil
+        vault.recheck()
+        await settle()
+        gate.open()
+        await settle()
+        #expect(c.availability == .ready && vault.gatewayFake.listCalls == 1, "known: nothing to ask again")
+    }
+
     @Test func theButtonIsDisabledDuringACall() async throws {
         let c = controller(FakeMicrophone(.granted))
         await unlock()
@@ -196,6 +231,35 @@ import VettIDCrypto
         await unlock()
         #expect(vault.gatewayFake.ended == ["A failed", "B timeout", "C failed"])
         #expect(c.diagnostics.staleEnded == 3)
+    }
+
+    @Test func aRingingRecordIsStaleOnlyPastTwoMinutes() async {
+        vault.gatewayFake.listResult = {
+            CallList(calls: [
+                record("A", direction: "out", state: "ringing", startedAtMs: -120_000),
+                record("B", direction: "out", state: "ringing", startedAtMs: -120_001),
+            ], skipped: 0)
+        }
+        _ = controller(FakeMicrophone(.granted))
+        await unlock()
+        #expect(vault.gatewayFake.ended == ["B timeout"], "exactly 120 s is still ringing")
+    }
+
+    @Test func aLockInTheMiddleOfTheSweepStopsItAfterTheCurrentEnd() async {
+        vault.gatewayFake.listResult = {
+            CallList(calls: [record("A", state: "active"), record("B", state: "active")], skipped: 0)
+        }
+        let gate = Gate()
+        vault.gatewayFake.endGate = gate
+        let c = controller(FakeMicrophone(.granted))
+        await unlock()
+        #expect(vault.gatewayFake.asked == ["end(A, failed)"], "the first end is out")
+        vault.setUnlocked(false)
+        await settle()
+        gate.open()
+        await settle()
+        #expect(vault.gatewayFake.ended == ["A failed"] && vault.gatewayFake.asked == ["end(A, failed)"], "B is not ended")
+        #expect(c.availability == .unknown)
     }
 
     @Test func aFailedSweepEndIsNotCountedAndTheOthersGoOn() async {

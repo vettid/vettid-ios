@@ -120,8 +120,9 @@ extension CallsControllerTests {
         vault.gatewayFake.send(offerEvent())
         await settle()
         guard case .live(let l) = c.state, l.phase == .incoming else { throw WrongState(state: c.state) }
+        let seq = try #require(c.machine.session?.seq)
         c.answer()
-        #expect(c.microphonePrompt == .explain(.answer))
+        #expect(c.microphonePrompt == .explain(.answer(seq: seq)))
         #expect(try #require(c.microphoneScreen).body.contains("Sam"), "the caller's first name")
         #expect(answered == 0)
         c.allowMicrophone()
@@ -131,7 +132,7 @@ extension CallsControllerTests {
         // Denied: blocked, and the call keeps ringing.
         mic.status = .denied
         c.answer()
-        #expect(c.microphonePrompt == .blocked(.answer))
+        #expect(c.microphonePrompt == .blocked(.answer(seq: seq)))
         #expect(answered == 1)
         c.closeMicrophonePrompt()
         guard case .live(let still) = c.state, still.phase == .incoming else { throw WrongState(state: c.state) }
@@ -139,6 +140,46 @@ extension CallsControllerTests {
         mic.status = .granted
         c.answer()
         #expect(answered == 2 && c.microphonePrompt == nil)
+    }
+
+    @Test func theAnswerScreenGoesWhenTheCallerGivesUp() async throws {
+        vault.gatewayFake.incomingResult = { _ in try self.incoming() }
+        let c = controller(FakeMicrophone(.undetermined))
+        await unlock()
+        vault.gatewayFake.send(offerEvent())
+        await settle()
+        c.answer()
+        #expect(c.microphonePrompt != nil)
+        vault.gatewayFake.send(.ended(CallEnded(callId: callId, reason: "hangup")))
+        await settle()
+        #expect(c.microphonePrompt == nil && c.microphoneScreen == nil, "nothing is left to answer")
+    }
+
+    @Test func allowAfterTheCallerGaveUpAnswersNoOtherCall() async throws {
+        vault.gatewayFake.incomingResult = { _ in try self.incoming() }
+        var answered = 0
+        let mic = FakeMicrophone(.undetermined)
+        mic.requestGate = Gate()
+        let c = controller(mic, answering: { answered += 1 })
+        await unlock()
+        vault.gatewayFake.send(offerEvent())
+        await settle()
+        c.answer()
+        c.allowMicrophone()
+        await settle()
+        #expect(mic.requests == 1, "the member is at the system's prompt")
+        // The caller gives up and the connection calls again while the prompt is up.
+        vault.gatewayFake.send(.ended(CallEnded(callId: callId, reason: "hangup")))
+        await settle()
+        c.dismiss()
+        await settle()
+        vault.gatewayFake.send(offerEvent())
+        await settle()
+        guard case .live(let l) = c.state, l.phase == .incoming else { throw WrongState(state: c.state) }
+        mic.requestGate?.open()
+        await settle()
+        #expect(answered == 0, "Allow answers the call it was asked for, not this one")
+        guard case .live = c.state else { throw WrongState(state: c.state) }
     }
 
     @Test func aLockTakesTheScreenAway() async {
