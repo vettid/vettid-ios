@@ -87,7 +87,8 @@ extension CallMachine {
         guard let engine = s.engine else { return }
         // (C2, VAULT-MESSAGING "Key confirmation") A device answering a form 2 offer (it answers in form 2, whatever the vault
         // probe has found yet) sends no media, microphone or camera, until its receiver first decrypts a frame: that proves the
-        // caller holds the same keys.
+        // caller holds the same keys. In C1 ``VaultCallSignalling`` offers only form 1 (`formTwo` is always false), so this path
+        // runs only in tests until the C2 members arrive.
         if offer.formTwo {
             s.formTwo = true
             s.heldForDecrypt = true
