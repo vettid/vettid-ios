@@ -144,6 +144,9 @@ extension CallMachine {
     }
 
     func hangUp(_ s: CallSession, _ reason: CallEnd) {
+        // A local failure of a call that still rings (CallKit refused the answer, or timed out) is not the member's end and not a
+        // decline: nothing is sent, and the call rings out as missed.
+        if s.phase == .incoming, reason == .failed { return }
         s.memberEnded = true
         if s.phase == .incoming {
             finish(s, reason == .hungUp ? .declinedHere : reason, CallReason.decline)

@@ -104,7 +104,7 @@ package final class CallKitCoordinator: CallKitEvents {
         guard let c = current, !c.over, c.direction == .incoming else { return }
         if c.kit {
             current?.answerTold = true
-            send(.answer(c.uuid)) { [weak self] in self?.machine.end(.failed) }
+            send(.answer(c.uuid)) { [weak self] in self?.machine.end(.failed, seq: c.seq) }
         }
         // A call CallKit does not carry cannot be answered: nothing else happens, and it rings out as missed.
     }
@@ -143,7 +143,7 @@ package final class CallKitCoordinator: CallKitEvents {
     private func refuse() {
         guard current?.refused == false else { return }
         current?.refused = true
-        machine.end(.failed)
+        machine.end(.failed, seq: current?.seq ?? -1)
     }
 
     /// The tracked call was replaced by another before its end was seen: it is let go in CallKit first.
@@ -163,7 +163,7 @@ package final class CallKitCoordinator: CallKitEvents {
                 // CallKit refused the call: it has no audio, so it is not placed.
                 guard self?.current?.uuid == uuid else { return }
                 self?.current?.kit = false
-                self?.machine.end(.failed)
+                self?.machine.end(.failed, seq: seq)
             }
         case .incoming:
             if isForeground() { report(c) } else { c.kit = false }
@@ -207,7 +207,7 @@ package final class CallKitCoordinator: CallKitEvents {
     private func toldAnswered() {
         guard let c = current, c.direction == .incoming, !c.answerTold else { return }
         current?.answerTold = true
-        send(.answer(c.uuid)) { [weak self] in self?.machine.end(.failed) }
+        send(.answer(c.uuid)) { [weak self] in self?.machine.end(.failed, seq: c.seq) }
     }
 
     private func ended(_ e: CallState.Ended, seq: Int, memberEnded: Bool) {
@@ -274,8 +274,8 @@ package final class CallKitCoordinator: CallKitEvents {
     package func performEnd(uuid: UUID) -> Bool {
         if let c = current, c.uuid == uuid, !c.over {
             current?.endedInKit = true
-            // A ringing incoming call is declined, any other call hung up.
-            machine.hangUp()
+            // A ringing incoming call is declined, any other call hung up (the call CallKit names, not a newer one).
+            machine.hangUp(seq: c.seq)
         }
         return true
     }
@@ -288,9 +288,9 @@ package final class CallKitCoordinator: CallKitEvents {
     }
 
     package func actionTimedOut() {
-        if current?.over == false {
+        if let c = current, !c.over {
             current?.endedInKit = true
-            machine.end(.failed)
+            machine.end(.failed, seq: c.seq)
         }
     }
 
@@ -311,7 +311,7 @@ package final class CallKitCoordinator: CallKitEvents {
     package func providerDidReset() {
         if let c = current, c.kit, !c.over {
             current?.endedInKit = true
-            machine.hangUp()
+            machine.hangUp(seq: c.seq)
         }
         audioDidDeactivate()
     }

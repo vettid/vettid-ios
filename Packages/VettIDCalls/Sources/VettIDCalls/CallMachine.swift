@@ -133,6 +133,12 @@ package final class CallMachine {
     /// Ends the call in any phase (a ringing incoming call is declined).
     package func hangUp() { post(.hangUp(.hungUp)) }
 
+    /// ``hangUp()`` for the call [seq] only: nothing if that call is over and another is the machine's now.
+    package func hangUp(seq: Int) { post(.hangUpIf(seq: seq, .hungUp)) }
+
+    /// ``end(_:)`` for the call [seq] only.
+    package func end(_ reason: CallEnd, seq: Int) { post(.hangUpIf(seq: seq, reason)) }
+
     /// Ends the call in any phase with [reason] (CallKit refused it, for one).
     package func end(_ reason: CallEnd) { post(.hangUp(reason)) }
 
@@ -160,6 +166,7 @@ package final class CallMachine {
                 finish(s, .declinedHere, CallReason.decline)
             }
         case .hangUp(let reason): if let s { hangUp(s, reason) }
+        case .hangUpIf(let seq, let reason): if let s, s.seq == seq { hangUp(s, reason) }
         case .mute(let muted):
             if let s {
                 s.muted = muted

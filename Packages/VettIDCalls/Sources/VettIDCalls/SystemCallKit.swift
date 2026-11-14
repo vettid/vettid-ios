@@ -67,6 +67,11 @@ package final class SystemCallKit: CallKitProviding, CallKitControlling {
         provider.setDelegate(events, queue: .main)
     }
 
+    /// An action that timed out ends the call only if it is a start, an answer or an end (not a mute, or another action).
+    nonisolated static func endsCallOnTimeout(_ action: CXAction) -> Bool {
+        action is CXStartCallAction || action is CXAnswerCallAction || action is CXEndCallAction
+    }
+
     /// The coordinator that answers CallKit's actions (the provider is made first, the coordinator needs it).
     package func attach(_ target: any CallKitEvents) { events.target = target }
 
@@ -104,6 +109,7 @@ package final class SystemCallKit: CallKitProviding, CallKitControlling {
         }
 
         func provider(_ provider: CXProvider, timedOutPerforming action: CXAction) {
+            guard SystemCallKit.endsCallOnTimeout(action) else { return }
             MainActor.assumeIsolated { target?.actionTimedOut() }
         }
 

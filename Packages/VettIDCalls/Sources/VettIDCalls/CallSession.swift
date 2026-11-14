@@ -7,6 +7,8 @@ enum CallMessage: Sendable {
     case answer
     case decline
     case hangUp(CallEnd)
+    /// Only if the session [seq] is still the machine's current one.
+    case hangUpIf(seq: Int, CallEnd)
     case mute(Bool)
     case dismiss
     case signal(SignalEvent)

@@ -1,3 +1,6 @@
+#if os(iOS)
+import CallKit
+#endif
 import Foundation
 import Testing
 import VettIDCrypto
@@ -201,7 +204,9 @@ private final class Player {}
         c.stop()
     }
 
-    @Test func aRefusedAnswerEndsTheCallAsFailed() async throws {
+    /// The member tapped Answer and CallKit refused it, before the machine had answered: nothing is sent (no decline: the caller
+    /// is not told "declined" for a local failure), and the call rings out as missed.
+    @Test func aRefusedAnswerSendsNothingAndTheCallRingsOutAsMissed() async throws {
         let signalling = FakeSignalling()
         let m = CallMachine(signalling: signalling, engines: engines, clock: clock)
         let c = coordinator(m)
@@ -213,9 +218,14 @@ private final class Player {}
         c.answer()
         await settle()
         await clock.runCurrent()
-        guard case .ended(let e) = m.state else { throw WrongState(state: m.state) }
-        #expect(e.reason == .failed)
+        guard case .live(let l) = m.state else { throw WrongState(state: m.state) }
+        #expect(l.phase == .incoming)
+        #expect(signalling.sent == ["ringing(\(callId))"], "no decline")
         #expect(engines.created.isEmpty, "no audio ever opened")
+        await clock.advance(by: 48_001)
+        guard case .ended(let e) = m.state else { throw WrongState(state: m.state) }
+        #expect(e.reason == .missed)
+        #expect(signalling.sent == ["ringing(\(callId))"])
         c.stop()
     }
 
@@ -516,6 +526,14 @@ private final class Player {}
         // `ringtoneSound` reads back nil while the sound is not in the test bundle: only the settings' value is asserted (above).
         #expect(c.iconTemplateImageData == nil)
         #expect(c.localizedName == "VettID")
+        let uuid = UUID()
+        let handle = CXHandle(type: .generic, value: "h")
+        let timeouts: [CXAction] = [
+            CXStartCallAction(call: uuid, handle: handle), CXAnswerCallAction(call: uuid), CXEndCallAction(call: uuid),
+        ]
+        #expect(timeouts.allSatisfy { SystemCallKit.endsCallOnTimeout($0) })
+        #expect(!SystemCallKit.endsCallOnTimeout(CXSetMutedCallAction(call: uuid, muted: true)))
+        #expect(!SystemCallKit.endsCallOnTimeout(CXPlayDTMFCallAction(call: uuid, digits: "1", type: .singleTone)))
         #expect(CallEnd.allCases.allSatisfy { $0.callKitReason.system.rawValue >= 0 })
         #expect(CallKitEndReason.remoteEnded.system == .remoteEnded && CallKitEndReason.unanswered.system == .unanswered)
         #expect(CallKitEndReason.declinedElsewhere.system == .declinedElsewhere)

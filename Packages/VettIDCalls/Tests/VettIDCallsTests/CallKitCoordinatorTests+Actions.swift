@@ -174,7 +174,7 @@ extension CallKitCoordinatorTests {
         try await kit.request(.end(first))
     }
 
-    @Test func aTimedOutActionEndsTheCall() async throws {
+    @Test func aTimedOutActionEndsAPlacedCallAndLeavesARingingOneToRingOut() async throws {
         let signalling = FakeSignalling()
         let m = CallMachine(signalling: signalling, engines: engines, clock: clock)
         let c = coordinator(m)
@@ -184,11 +184,49 @@ extension CallKitCoordinatorTests {
         await settle()
         c.actionTimedOut()
         await clock.runCurrent()
-        guard case .ended(let e) = m.state else { throw WrongState(state: m.state) }
+        guard case .live = m.state else { throw WrongState(state: m.state) }
+        #expect(signalling.sent == ["ringing(\(callId))"], "a ringing call is not declined for a local failure")
+        c.stop()
+
+        let m2 = CallMachine(signalling: FakeSignalling(), engines: engines, clock: clock)
+        let kit2 = FakeKit()
+        let c2 = CallKitCoordinator(
+            machine: m2, provider: kit2, control: kit2, audio: audio, tones: tones, clock: clock,
+            party: { CallParty(handle: $0, name: $0) }, isForeground: { true }
+        )
+        kit2.delegate = c2
+        c2.start()
+        m2.call("conn-1")
+        await clock.runCurrent()
+        await settle()
+        c2.actionTimedOut()
+        await clock.runCurrent()
+        guard case .ended(let e) = m2.state else { throw WrongState(state: m2.state) }
         #expect(e.reason == .failed)
         await settle()
-        #expect(kit.events.allSatisfy { if case .ended = $0 { false } else { true } }, "CallKit has timed out, it is not told again")
-        c.stop()
+        #expect(kit2.events.allSatisfy { if case .ended = $0 { false } else { true } }, "CallKit timed out: it is not told again")
+        c2.stop()
+    }
+
+    /// CallKit's end of one call is not the end of a newer one: an action for the call `seq` does nothing once another is current.
+    @Test func aHangUpForAnOldCallLeavesTheNewerOneAlone() async throws {
+        let signalling = FakeSignalling()
+        let m = CallMachine(signalling: signalling, engines: engines, clock: clock)
+        signalling.deliver(offer())
+        await clock.runCurrent()
+        signalling.deliver(.end(callId: callId, reason: "hangup"))
+        signalling.deliver(offer(glareId))
+        await clock.runCurrent()
+        guard case .live(let l) = m.state else { throw WrongState(state: m.state) }
+        #expect(l.callId == glareId)
+        m.hangUp(seq: 0)
+        m.end(.failed, seq: 0)
+        await clock.runCurrent()
+        guard case .live = m.state else { throw WrongState(state: m.state) }
+        m.hangUp(seq: 1)
+        await clock.runCurrent()
+        guard case .ended(let e) = m.state else { throw WrongState(state: m.state) }
+        #expect(e.reason == .declinedHere)
     }
 
     /// Mute is compared with the last value the machine published, and CallKit's own mute is not asked of it again.
