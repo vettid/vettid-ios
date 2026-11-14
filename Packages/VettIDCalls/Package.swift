@@ -6,6 +6,7 @@ import PackageDescription
 // a later change.
 let package = Package(
     name: "VettIDCalls",
+    defaultLocalization: "en",
     platforms: [.iOS(.v17), .macOS(.v14)],
     products: [
         .library(name: "VettIDCalls", targets: ["VettIDCalls"]),
@@ -20,7 +21,8 @@ let package = Package(
             dependencies: [
                 .product(name: "VettIDCrypto", package: "VettIDCrypto"),
                 .product(name: "VettIDVault", package: "VettIDVault"),
-            ]
+            ],
+            resources: [.process("Resources/Localizable.xcstrings")]
         ),
         .testTarget(
             name: "VettIDCallsTests",
