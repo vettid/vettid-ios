@@ -1,0 +1,25 @@
+# The components of the webrtc-sdk binary and the licence entry of each (Licences.json id; scripts/licences.sh).
+# Derived by scripts/webrtc-components.sh from the binary's dSYM; checked by `scripts/webrtc-components.sh --check` (calls-webrtc CI
+# job) and by `scripts/licences.sh --verify`. `llvm-exception`: LLVM's Apache-2.0 with LLVM exceptions, no notice needed in a binary.
+# Notices kept for components that leave no trace in the iOS slice (zlib, webrtc-fft, crc32c) are not listed here.
+abseil-cpp abseil
+boringssl boringssl
+boringssl/third_party/fiat fiat
+dav1d dav1d
+g711 g711
+g722 g722
+libaom libaom
+libaom/third_party/vector vector
+libc++ llvm-exception
+libc++abi llvm-exception
+libsrtp libsrtp
+libvpx libvpx
+libyuv libyuv
+llvm-build llvm-exception
+llvm-libc llvm-exception
+ooura ooura
+opus opus
+perfetto perfetto
+pffft pffft
+rnnoise rnnoise
+spl_sqrt_floor spl-sqrt-floor

@@ -3,7 +3,7 @@ import PackageDescription
 
 // The WebRTC media engine of the calls (vettid-android `WebRtcMediaEngine`, `MediaDiagnostics`, `MediaLogGuard`;
 // VAULT-MESSAGING §10.10, CALLS-PLAN §12). It is a package of its own so that `VettIDCalls` builds and tests without the
-// media stack's binary (about 700 MB to fetch). No app target links this package yet.
+// media stack's binary (about 700 MB to fetch). The VettID app links it in every configuration.
 //
 // The stack is webrtc-sdk's iOS and macOS build, release 150.7871.04 of `webrtc-sdk/Specs`, from libwebrtc commit
 // a545de45 (the same libwebrtc as vettid-android's `io.github.webrtc-sdk:android:150.7871.04`). BSD-3-Clause.

@@ -138,15 +138,18 @@ public struct MediaFaults: Equatable, Sendable {
 
 /// How an engine is set up.
 public struct MediaConfig: Equatable, Sendable {
-    /// DEBUG BUILDS ONLY, for measurement: ask the stack for a post-quantum DTLS key exchange. Off everywhere else (owner
-    /// decision 2026-10-12: known-good algorithms only).
+    #if DEBUG
+    /// DEBUG BUILDS ONLY (it does not exist in any other build), for measurement: ask the stack for a post-quantum DTLS key
+    /// exchange. Off everywhere else (owner decision 2026-10-12: known-good algorithms only).
     public var dtlsPqcTrial = false
+    #endif
     /// Test builds only: ``MediaFaults``.
     public var faults = MediaFaults()
     /// Test builds only (CALLS-PLAN §3.1, C5): gather and use relayed candidates alone, so the call goes through the vault's
     /// TURN server or not at all.
     public var relayOnly = false
 
+    #if DEBUG
     public init(dtlsPqcTrial: Bool = false, faults: MediaFaults = MediaFaults(), relayOnly: Bool = false) {
         self.dtlsPqcTrial = dtlsPqcTrial
         self.faults = faults
@@ -155,6 +158,15 @@ public struct MediaConfig: Equatable, Sendable {
 
     /// No test option on: the only configuration a build members use may make.
     public var plain: Bool { !dtlsPqcTrial && !faults.any && !relayOnly }
+    #else
+    public init(faults: MediaFaults = MediaFaults(), relayOnly: Bool = false) {
+        self.faults = faults
+        self.relayOnly = relayOnly
+    }
+
+    /// No test option on: the only configuration a build members use may make.
+    public var plain: Bool { !faults.any && !relayOnly }
+    #endif
 }
 
 /// The media of one call. One engine is one call: it is created for it and ``close()``d with it.

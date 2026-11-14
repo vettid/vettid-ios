@@ -29,17 +29,27 @@ no NOTICE. BoringSSL's file at that revision is the Apache License 2.0.
 | `fft-LICENSE.txt` | webrtc-sdk/webrtc@a545de45259b47dfac5f3635863e47cb601f1bb2 `modules/third_party/fft/LICENSE` | `6fdbabd2c95c5efc6f1e46175278239afb9343120a3022ed0e0cb04267a6aeb3` |
 | `spl_sqrt_floor-LICENSE.txt` | webrtc-sdk/webrtc@a545de45259b47dfac5f3635863e47cb601f1bb2 `common_audio/third_party/spl_sqrt_floor/LICENSE` | `41d791701e3e1c1073470403de7e342442d1e6a2af72681023b13a2f45f2125c` |
 | `g711-LICENSE.txt` | webrtc-sdk/webrtc@a545de45259b47dfac5f3635863e47cb601f1bb2 `modules/third_party/g711/LICENSE` | `b29c8f13f91feb2dab7d6655444369fa9f29c0d7121a52dab90ff97e40343a85` |
+| `fiat-LICENSE.txt` | boringssl.googlesource.com/boringssl @ `f91f1447397c6719f9774dfb8e67329378e1f3d3`, `third_party/fiat/LICENSE` | `9eacbcb81be660840c714a560a9d65ba07913db98dd4baf969f78dd499fdd60f` |
+| `vector-LICENSE.txt` | aomedia.googlesource.com/aom @ `c213343c8d32bcae729fe09fcba16e1f371cb23b`, `third_party/vector/LICENSE` (MIT, Peter Goldsborough: not covered by libaom's own licence) | `ff6c857ce2708e87701323078aef115c1872a1f80a9649f86dc899b48083bc60` |
+| `perfetto-LICENSE.txt` | chromium.googlesource.com/external/github.com/google/perfetto @ `82ad4b69cbaf64e26c639061b1712756a9cc5e20` (DEPS `src/third_party/perfetto`), `LICENSE` | `9a682a56cffc9524dfa9b0b1c0dca9cb81a19e96d5bd0793aaf02c08a95ee7ca` |
 | `g722-LICENSE.txt` | webrtc-sdk/webrtc@a545de45259b47dfac5f3635863e47cb601f1bb2 `modules/third_party/g722/LICENSE` | `61862327fd00d6a4deb2c1276577782c2500f4fe103e072018fc369d8e37e876` |
+
+## The component list
+
+`components.list` lists every component the binary contains and the licence entry it maps to (`scripts/licences.sh`).
+`scripts/webrtc-components.sh` derives it from the DWARF of the xcframework's iOS dSYM: every path string of it (compile units and
+line tables), reduced to its chain of `third_party` directories. `scripts/webrtc-components.sh --check <WebRTC.xcframework>` fails
+when the binary's components differ from the list, and the calls-webrtc CI job runs it, so a WebRTC upgrade that adds a component
+fails until its notice is added. `licences.sh --verify` fails when a component of the list maps to no entry.
 
 ## What is and is not verified
 
-- Verified: every file above was fetched at the revision named; the library list is libwebrtc's own: the DEPS entries and the
-  `third_party` directories of the tree. BoringSSL, Opus, libsrtp, libyuv, abseil, libaom, dav1d and libvpx were also seen in the
-  binary's strings and symbols.
-- Not verified: `tools_webrtc/libs/generate_licenses.py` was not run (it needs the gn build of the iOS target), so the list is not
-  its output. pffft, rnnoise, crc32c, ooura, fft and spl_sqrt_floor leave no readable name in the stripped binary; they are listed
-  because libwebrtc's audio processing and dcsctp use them. `rtc_base/third_party/sigslot` and `base64` are absent from this commit's
-  tree. Whether Opus and zlib are the chromium tree's copies at that revision (as opposed to a later roll) is not proved.
-- libc++ and libc++abi are not in the binary's own licence list: they are LLVM's, under the Apache 2.0 licence with LLVM
-  exceptions (the runtime exception makes no attribution necessary for the binary form). Their `DEPS` revisions are
-  `5abc7f839700f0f17338434e1c1c6a8c87c00c11` and `8f11bb1d4438d0239d0dfc1bd9456a9f31629dda`.
+- Verified: every file above was fetched at the revision named. The components are the binary's own (the DWARF), not a guess; BoringSSL,
+  Opus, libsrtp, libyuv, abseil, libaom, dav1d and libvpx were also seen in its strings.
+- Not verified: `tools_webrtc/libs/generate_licenses.py` was not run (it needs the gn build of the iOS target), so the list is not its
+  output. Whether Opus, abseil, zlib, pffft and rnnoise are the chromium tree's copies at that revision (as opposed to a later roll)
+  is not proved. zlib, fft and crc32c leave no trace in the iOS slice's DWARF; their notices are kept, which is harmless.
+- LLVM's libc++, libc++abi and llvm-libc (headers only) and the toolchain's headers (`llvm-build`) fall under the Apache 2.0 licence
+  with LLVM exceptions: the runtime exception makes no attribution necessary for the binary form, so they have no notice here. Their
+  `DEPS` revisions: libc++ `5abc7f839700f0f17338434e1c1c6a8c87c00c11`, libc++abi `8f11bb1d4438d0239d0dfc1bd9456a9f31629dda`,
+  llvm-libc `be95a36286a288c9437f5ed991720ccece1a6391`.

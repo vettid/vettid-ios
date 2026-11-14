@@ -82,22 +82,25 @@ archive() {
 
 # Everything readable in an app bundle: printable strings of each Mach-O
 # file, property lists as XML, and every other file as is.
+# Every status is checked by hand: callers run this on the left of `&&` or inside `if`, where errexit is off, so a failing
+# strings, file or cat must be returned, not ignored.
 bundle_text() {
-  local app=$1
-  find "${app}" -type f -print0 | while IFS= read -r -d '' f; do
+  local app=$1 f out
+  while IFS= read -r -d '' f; do
     if [[ "${f}" == "${app}"/Frameworks/WebRTC.framework/WebRTC ]]; then
       # The vendor's media stack (webrtc-sdk, checksum-pinned) holds the loopback address 127.0.0.1 in its strings, a line of its
       # own: that one line is set aside, and everything else it holds is scanned like the rest of the bundle (so a dev host or
       # a TEST marker added to it is refused).
-      strings -a "${f}" | grep -vxF '127.0.0.1' || true
+      out=$(strings -a "${f}") || { echo "${app}: strings failed on ${f#"${app}"/}" >&2; return 1; }
+      { grep -vxF '127.0.0.1' <<<"${out}" || [[ $? -eq 1 ]]; }
     elif file -b "${f}" | grep -q 'Mach-O'; then
-      strings -a "${f}"
+      strings -a "${f}" || { echo "${app}: strings failed on ${f#"${app}"/}" >&2; return 1; }
     elif [[ "${f}" == *.plist ]]; then
-      plutil -convert xml1 -o - "${f}" 2>/dev/null || cat "${f}"
+      plutil -convert xml1 -o - "${f}" 2>/dev/null || cat "${f}" || return 1
     else
-      cat "${f}"
+      cat "${f}" || { echo "${app}: cannot read ${f#"${app}"/}" >&2; return 1; }
     fi
-  done
+  done < <(find "${app}" -type f -print0)
 }
 
 # check_app <app> <expected bundle id> <required...> -- <forbidden...>
@@ -113,7 +116,7 @@ check_app() {
   text=$(mktemp)
   # ALLOWED_TEXTS (newline-separated, set by the caller): exact sentences of the owner-approved texts that name a host for the
   # member; each is removed, whole, before the strings are looked for. Nothing else is: a host anywhere else still counts.
-  bundle_text "${app}" >"${text}"
+  bundle_text "${app}" >"${text}" || { rm -f "${text}"; return 1; }
   if [[ -n "${ALLOWED_TEXTS:-}" ]]; then
     local sentence
     while IFS= read -r sentence; do
@@ -412,6 +415,15 @@ check_calls() {
   else
     problems+=("no executable")
   fi
+  # The test hooks of the media engine (VettIDCallsWebRTC's testAudioDevice and testFactoryOptions, under #if DEBUG) are what call
+  # the stack's factory with a custom audio device: that selector (the stack defines it, so only a caller names it) is in no app
+  # but a Debug one.
+  if [[ -n "${names:-}" ]]; then
+    local hook
+    for hook in 'initWithEncoderFactory:decoderFactory:audioDevice:'; do
+      grep -qF -- "${hook}" <<<"$(strings -a "${exe}")" && problems+=("the executable calls the media stack's test audio device hook (${hook})")
+    done
+  fi
   if [[ ${#problems[@]} -gt 0 ]]; then
     printf '%s: %s\n' "${app}" "${problems[@]}" >&2
     return 1
@@ -531,6 +543,10 @@ check_no_stack_logging "$(app_of Release)"
 check_no_stack_logging "$(app_of Staging)"
 check_calls "$(app_of Release)"
 check_calls "$(app_of Staging)"
+# The components of the media stack's binary are the ones the licence list names (a WebRTC upgrade that adds one fails here).
+webrtc_xcframework=$(find "${OUT}/DerivedData/SourcePackages/artifacts" -type d -name WebRTC.xcframework -print -quit)
+[[ -n "${webrtc_xcframework}" ]] || { echo "no WebRTC.xcframework under ${OUT}/DerivedData" >&2; exit 1; }
+scripts/webrtc-components.sh --check "${webrtc_xcframework}"
 scripts/licences.sh --verify
 
 # Every object file the two archives compiled (the app's and every package's, before the linker strips unused code)
@@ -792,15 +808,10 @@ if [[ ${SELF_TEST} -eq 1 ]]; then
       '__attribute__((section("__DATA,__objc_selrefs,literal_pointers,no_dead_strip"))) const char *s = "setTurnLoggingId:";'
     plant_logging "${config}" "RTCSetMinDebugLogLevel" 'void RTCSetMinDebugLogLevel(long v) { (void)v; }' Frameworks/WebRTC.framework
   done
-  # The media stack's binary is scanned: a TEST marker or a dev-stack host appended to it must fail both checks.
-  for config in Release Staging; do
-    for planted in VettIDTesting relay.vettid.test; do
-      dir="${OUT}/planted/${config}-stack"
-      rm -rf "${dir}"
-      mkdir -p "${dir}"
-      cp -R "$(app_of "${config}")" "${dir}/VettID.app"
-      # Overwritten into the start of the first long C string past the header (strings reads the loaded sections, not bytes appended to the file).
-      python3 - "${dir}/VettID.app/Frameworks/WebRTC.framework/WebRTC" "${planted}" <<'PY'
+  # Overwrites the start of the first long C string past the Mach-O header with <string> (strings reads the loaded sections, not bytes
+  # appended to the file), and fails when strings does not then find it: a plant that missed the scanned sections proves nothing.
+  plant_string() {
+    python3 - "$1" "$2" <<'PY'
 import re, sys
 path, planted = sys.argv[1], sys.argv[2].encode()
 data = bytearray(open(path, "rb").read())
@@ -811,6 +822,18 @@ data[m.start():m.start() + len(planted)] = planted
 data[m.start() + len(planted)] = 0
 open(path, "wb").write(data)
 PY
+    local found
+    found=$(strings -a "$1")
+    grep -qF -- "$2" <<<"${found}" || { echo "self-test FAILED: the plant missed the scanned sections ($2)" >&2; exit 1; }
+  }
+  # The media stack's binary is scanned: a TEST marker or a dev-stack host appended to it must fail both checks.
+  for config in Release Staging; do
+    for planted in VettIDTesting relay.vettid.test; do
+      dir="${OUT}/planted/${config}-stack"
+      rm -rf "${dir}"
+      mkdir -p "${dir}"
+      cp -R "$(app_of "${config}")" "${dir}/VettID.app"
+      plant_string "${dir}/VettID.app/Frameworks/WebRTC.framework/WebRTC" "${planted}"
       if [[ "${config}" == Release ]]; then check=check_release; else check=check_staging; fi
       # The plant must be where the scan reads (the loaded sections), or the case would prove nothing.
       names=$(strings -a "${dir}/VettID.app/Frameworks/WebRTC.framework/WebRTC")
@@ -851,6 +874,42 @@ PY
       "no WebRtcMediaEngineFactory in the executable"
     uncall "${config}" "with another microphone text" "plutil -replace NSMicrophoneUsageDescription -string 'VettID listens.' Info.plist" "NSMicrophoneUsageDescription 'VettID listens.'"
   done
+  # The media engine's test hook: the selector that makes the stack's factory with a custom audio device, named in an executable.
+  hookdir="${OUT}/planted/Release-hook"
+  rm -rf "${hookdir}"
+  mkdir -p "${hookdir}"
+  cp -R "$(app_of Release)" "${hookdir}/VettID.app"
+  plant_string "${hookdir}/VettID.app/$(plutil -extract CFBundleExecutable raw "${hookdir}/VettID.app/Info.plist")" \
+    'initWithEncoderFactory:decoderFactory:audioDevice:'
+  if errors=$(check_calls "${hookdir}/VettID.app" 2>&1 >/dev/null); then
+    echo "self-test FAILED: an executable naming the test audio device hook was accepted" >&2
+    exit 1
+  fi
+  grep -qF 'test audio device hook' <<<"${errors}" || { echo "self-test FAILED: the hook was refused for another reason: ${errors}" >&2; exit 1; }
+  echo "self-test: the calls check refuses an executable that names the test audio device hook"
+  # A strings that fails must fail the check (errexit is off in the checks, so each status is checked by hand).
+  shim="${OUT}/planted/strings-shim"
+  rm -rf "${shim}"
+  mkdir -p "${shim}"
+  printf '#!/bin/sh\nexit 1\n' > "${shim}/strings"
+  chmod +x "${shim}/strings"
+  for config in Release Staging; do
+    if [[ "${config}" == Release ]]; then check=check_release; else check=check_staging; fi
+    if errors=$(PATH="${shim}:${PATH}" "${check}" "$(app_of "${config}")" 2>&1 >/dev/null); then
+      echo "self-test FAILED: ${config} accepted an app whose strings failed" >&2
+      exit 1
+    fi
+    grep -qF 'strings failed' <<<"${errors}" || { echo "self-test FAILED: ${config} refused for another reason: ${errors}" >&2; exit 1; }
+    echo "self-test: ${config} refuses an app when strings fails"
+  done
+  # A component the licence list lacks (a WebRTC upgrade that adds one) must fail the components check.
+  grep -v '^perfetto ' Packages/VettIDCallsWebRTC/Licences/components.list > "${OUT}/planted/components.list"
+  if errors=$(COMPONENTS_LIST="${OUT}/planted/components.list" scripts/webrtc-components.sh --check "${webrtc_xcframework}" 2>&1 >/dev/null); then
+    echo "self-test FAILED: the components check accepted a list without perfetto" >&2
+    exit 1
+  fi
+  grep -qF 'perfetto' <<<"${errors}" || { echo "self-test FAILED: the components check refused for another reason: ${errors}" >&2; exit 1; }
+  echo "self-test: the components check refuses a list that lacks a component"
   # The shipping Info.plist: each change below must fail check_shipping_plist (a copy of each app, changed by <command>).
   unship() {
     local config=$1 what=$2 command=$3

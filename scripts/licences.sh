@@ -16,6 +16,10 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 RESOURCE=${LICENCES_RESOURCE:-Packages/VettIDSettings/Sources/VettIDSettingsUI/Resources/Licences.json}
+# The media stack's release, read from the one place it is pinned (the binaryTarget's URL), so it cannot drift from the licence entry.
+WEBRTC_VERSION=$(sed -nE 's|.*/releases/download/([0-9][0-9.]*)/WebRTC\.xcframework\.zip.*|\1|p' Packages/VettIDCallsWebRTC/Package.swift)
+[[ -n "${WEBRTC_VERSION}" ]] || { echo "licences: no WebRTC version in Packages/VettIDCallsWebRTC/Package.swift" >&2; exit 1; }
+COMPONENTS=Packages/VettIDCallsWebRTC/Licences/components.list
 RESOLVED=VettID.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
 
 # What each SwiftPM identity is called, what it is licensed under and the file that holds the text (relative to its checkout).
@@ -51,12 +55,16 @@ if [[ "${1:-}" == "--verify" ]]; then
     }
   done < <(jq -r '.pins[] | "\(.identity) \(.state.version)"' "${RESOLVED}")
   # What no Package.resolved names: the binary media stack and the libraries built into it (the calls link it in every build).
-  for id in webrtc boringssl opus libsrtp libyuv abseil libaom dav1d libvpx zlib pffft rnnoise crc32c ooura webrtc-fft spl-sqrt-floor g711 g722; do
+  for id in webrtc zlib crc32c webrtc-fft $(grep -v '^#' "${COMPONENTS}" | awk 'NF && $2 != "llvm-exception" { print $2 }'); do
     jq -e --arg id "${id}" 'any(.[]; .id == $id)' "${RESOURCE}" >/dev/null || {
       echo "licences: the media stack's ${id} is missing from ${RESOURCE} (scripts/licences.sh)" >&2
       status=1
     }
   done
+  jq -e --arg v "${WEBRTC_VERSION}" 'any(.[]; .id == "webrtc" and .version == $v)' "${RESOURCE}" >/dev/null || {
+    echo "licences: the webrtc entry's version differs from ${WEBRTC_VERSION} (Package.swift of VettIDCallsWebRTC)" >&2
+    status=1
+  }
   jq -e '.[0].id == "vettid"' "${RESOURCE}" >/dev/null || { echo "licences: the app's own licence is not first" >&2; status=1; }
   jq -e 'all(.[]; (.text | length) > 200)' "${RESOURCE}" >/dev/null || { echo "licences: an entry without a licence text" >&2; status=1; }
   [[ ${status} -eq 0 ]] && echo "licences: ${RESOURCE} lists every dependency ($(identities | tr '\n' ' '))"
@@ -105,7 +113,7 @@ add font-plus-jakarta-sans "Plus Jakarta Sans (font)" "" "SIL OFL 1.1" "https://
 # The media stack of the calls (webrtc-sdk's WebRTC.xcframework, a binary target: it is in no Package.resolved) and the libraries
 # built into it (Packages/VettIDCallsWebRTC/Licences/SOURCE.md).
 LIC=Packages/VettIDCallsWebRTC/Licences
-add webrtc "WebRTC (webrtc-sdk)" "150.7871.04" "BSD-3-Clause" "https://github.com/webrtc-sdk/Specs" "${LIC}/WebRTC-LICENSE.txt"
+add webrtc "WebRTC (webrtc-sdk)" "${WEBRTC_VERSION}" "BSD-3-Clause" "https://github.com/webrtc-sdk/Specs" "${LIC}/WebRTC-LICENSE.txt"
 add boringssl "BoringSSL" "" "Apache-2.0" "https://boringssl.googlesource.com/boringssl" "${LIC}/boringssl-LICENSE.txt"
 add opus "Opus" "" "BSD-3-Clause" "https://opus-codec.org" "${LIC}/opus-LICENSE.txt"
 add libsrtp "libsrtp" "" "BSD-3-Clause" "https://github.com/cisco/libsrtp" "${LIC}/libsrtp-LICENSE.txt"
@@ -114,6 +122,9 @@ add abseil "Abseil" "" "Apache-2.0" "https://github.com/abseil/abseil-cpp" "${LI
 add libaom "libaom" "" "BSD-2-Clause" "https://aomedia.googlesource.com/aom" "${LIC}/libaom-LICENSE.txt"
 add dav1d "dav1d" "" "BSD-2-Clause" "https://code.videolan.org/videolan/dav1d" "${LIC}/dav1d-LICENSE.txt"
 add libvpx "libvpx" "" "BSD-3-Clause" "https://chromium.googlesource.com/webm/libvpx" "${LIC}/libvpx-LICENSE.txt"
+add fiat "fiat-crypto (BoringSSL)" "" "Apache-2.0" "https://github.com/mit-plv/fiat-crypto" "${LIC}/fiat-LICENSE.txt"
+add vector "vector.c (libaom)" "" "MIT" "https://github.com/goldsborough/vector" "${LIC}/vector-LICENSE.txt"
+add perfetto "Perfetto" "" "Apache-2.0" "https://github.com/google/perfetto" "${LIC}/perfetto-LICENSE.txt"
 add zlib "zlib" "" "Zlib" "https://zlib.net" "${LIC}/zlib-LICENSE.txt"
 add pffft "pffft (FFTPACK)" "" "FFTPACK licence" "https://bitbucket.org/jpommier/pffft" "${LIC}/pffft-LICENSE.txt"
 add rnnoise "RNNoise" "" "BSD-3-Clause" "https://gitlab.xiph.org/xiph/rnnoise" "${LIC}/rnnoise-LICENSE.txt"
