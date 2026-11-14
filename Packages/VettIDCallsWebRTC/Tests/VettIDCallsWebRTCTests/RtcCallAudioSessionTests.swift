@@ -47,7 +47,61 @@ struct RtcCallAudioSessionTests {
         audio.setSpeaker(true)
         #expect(audio.speakerApplied)
         audio.didDeactivate()
-        #expect(!audio.speakerApplied, "a call's speaker request does not carry to the next call")
+        #expect(!audio.speakerApplied)
+        audio.callEnded()
+    }
+
+    /// An interruption (a cellular call) deactivates the session; the speaker the member asked for is back when it activates again,
+    /// and the end of the call ends the request.
+    @Test func theSpeakerRequestSurvivesADeactivationAndEndsWithTheCall() {
+        let audio = RtcCallAudioSession()
+        audio.prepare()
+        audio.didActivate()
+        audio.setSpeaker(true)
+        audio.didDeactivate()
+        #expect(!audio.speakerApplied)
+        audio.didActivate()
+        #expect(audio.speakerApplied, "applied again at the next activation")
+        audio.didDeactivate()
+        audio.callEnded()
+        audio.didActivate()
+        #expect(!audio.speakerApplied, "the next call starts without it")
+        audio.didDeactivate()
+    }
+
+    /// CallKit may activate the session before the engine opens (answer, fulfil, then the machine's turn): the engine must not
+    /// switch the audio off again.
+    @Test func anEngineOpenedAfterTheActivationLeavesTheAudioOn() throws {
+        _ = TestStack.ready
+        let audio = RtcCallAudioSession()
+        audio.prepare()
+        audio.didActivate()
+        #expect(rtc.isAudioEnabled)
+        let engine = try WebRtcMediaEngineFactory(audioSession: audio).create(config: MediaConfig())
+        #expect(rtc.useManualAudio && rtc.isAudioEnabled, "left as the session had it")
+        engine.close()
+        audio.didDeactivate()
+    }
+
+    @Test func aSecondDeactivationDoesNothing() {
+        let audio = RtcCallAudioSession()
+        audio.prepare()
+        audio.didActivate()
+        audio.didDeactivate()
+        rtc.isAudioEnabled = true
+        audio.didDeactivate()
+        #expect(rtc.isAudioEnabled, "the second call touched nothing")
+        rtc.isAudioEnabled = false
+    }
+
+    /// Whatever made the engine, and whatever the session object did or did not do, the stack's audio unit is kept from starting.
+    @Test func anEngineKeepsTheStackFromStartingItsAudioUnitWhateverThePathToIt() throws {
+        _ = TestStack.ready
+        rtc.useManualAudio = false
+        rtc.isAudioEnabled = true
+        let engine = try WebRtcMediaEngineFactory(audioSession: TestAudioSession()).create(config: MediaConfig())
+        #expect(rtc.useManualAudio && !rtc.isAudioEnabled)
+        engine.close()
     }
 
     @Test func theStackIsKeptFromStartingItsAudioUnitAsSoonAsTheSessionObjectExists() {
@@ -66,6 +120,7 @@ struct RtcCallAudioSessionTests {
             func didActivate() { log.append("activate") }
             func didDeactivate() { log.append("deactivate") }
             func setSpeaker(_ on: Bool) { log.append("speaker") }
+            func callEnded() { log.append("callEnded") }
         }
         _ = TestStack.ready
         let recorder = Recorder()

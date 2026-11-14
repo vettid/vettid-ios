@@ -324,6 +324,48 @@ import VettIDCrypto
         guard case .live(let l) = c.state, l.phase == .incoming else { throw WrongState(state: c.state) }
     }
 
+    @Test func anOfferDoesNotRingInAVaultWithoutCallsAndSendsNothing() async {
+        vault.gatewayFake.listResult = { throw self.refusal("unsupported_type") }
+        vault.gatewayFake.incomingResult = { _ in try self.incoming() }
+        let c = controller(FakeMicrophone(.granted))
+        await unlock()
+        #expect(c.availability == .notInVault)
+        vault.gatewayFake.send(offerEvent())
+        await settle()
+        #expect(c.state == .idle)
+        #expect(c.diagnostics.refused == 1, "refused and counted")
+        #expect(vault.gatewayFake.asked.isEmpty, "not checked, not rung, no call.ringing, no call.end")
+    }
+
+    @Test func anOfferWaitsForTheProbeAndRingsOnceTheVaultHasCalls() async throws {
+        let gate = Gate()
+        vault.gatewayFake.listGate = gate
+        vault.gatewayFake.incomingResult = { _ in try self.incoming() }
+        let c = controller(FakeMicrophone(.granted))
+        await unlock()
+        vault.gatewayFake.send(offerEvent())
+        await clock.advance(by: 1000)
+        #expect(c.state == .idle, "the probe has not answered")
+        gate.open()
+        await clock.advance(by: 100)
+        guard case .live(let l) = c.state, l.phase == .incoming else { throw WrongState(state: c.state) }
+    }
+
+    @Test func anOfferWaitingForTheProbeDoesNotRingWhenTheAnswerIsNotInVault() async {
+        let gate = Gate()
+        vault.gatewayFake.listGate = gate
+        vault.gatewayFake.listResult = { throw self.refusal("unsupported_type") }
+        vault.gatewayFake.incomingResult = { _ in try self.incoming() }
+        let c = controller(FakeMicrophone(.granted))
+        await unlock()
+        vault.gatewayFake.send(offerEvent())
+        await clock.advance(by: 1000)
+        gate.open()
+        await clock.advance(by: 100)
+        #expect(c.state == .idle)
+        #expect(vault.gatewayFake.asked.isEmpty)
+    }
+
     @Test func anOfferWhoseUnlockDoesNotComeDoesNotRing() async {
         vault.gatewayFake.incomingResult = { _ in try self.incoming() }
         let c = controller(FakeMicrophone(.granted))

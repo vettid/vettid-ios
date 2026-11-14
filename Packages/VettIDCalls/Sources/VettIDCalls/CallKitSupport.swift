@@ -4,16 +4,12 @@ import Foundation
 // small types below and runs (and is tested) anywhere; ``SystemCallKit`` (iOS only) turns them into `CXProvider` and
 // `CXCallController` calls.
 
-/// What CallKit shows of the other member: only what the app passes in. Never a phone number.
-package struct CallParty: Equatable, Sendable {
-    /// The handle (a generic CallKit handle): an opaque text, not a number.
-    package var handle: String
-    package var name: String
-
-    package init(handle: String, name: String) {
-        self.handle = handle
-        self.name = name
-    }
+/// What CallKit shows of a call (owner decision, 2026-11-14): the same generic name for every call, ringing or in progress, on
+/// the lock screen too, never with whom (as Android's "a call is going on"). The other member's name shows only in VettID's own
+/// call screen. The handle is an opaque value of the call's own, never the connection's id.
+package enum CallKitName {
+    /// Android's existing "VettID call" (its call notification's title).
+    package static let generic = "VettID call"
 }
 
 /// The call as CallKit is told about it (`CXCallUpdate`). Audio only, no holding, grouping or tones.
@@ -74,7 +70,7 @@ package protocol CallKitEvents: AnyObject {
     func audioDidDeactivate()
     func providerDidReset()
     /// CallKit gave up waiting for an action: the call ends.
-    func actionTimedOut()
+    func actionTimedOut(uuid: UUID)
 }
 
 /// The provider's settings (`CXProviderConfiguration`; spec-silent values are chosen here, see the PR text).

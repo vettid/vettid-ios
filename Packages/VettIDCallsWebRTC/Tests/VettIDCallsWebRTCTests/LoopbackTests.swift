@@ -125,7 +125,7 @@ struct LoopbackTests {
     @Test func anOfferWithASecondAudioSectionIsRefusedAsNotEncrypted() async throws {
         _ = TestStack.ready
         let two = try await Self.offerWithTwoAudioSections()
-        let engine = try #require(try WebRtcMediaEngineFactory().create(config: MediaConfig()) as? WebRtcMediaEngine)
+        let engine = try #require(try testFactory().create(config: MediaConfig()) as? WebRtcMediaEngine)
         defer { engine.close() }
         await #expect(throws: MediaNotEncryptedError.self) {
             _ = try await engine.acceptOffer(sdp: two, servers: [], suite: .aes128Gcm)
@@ -139,7 +139,7 @@ struct LoopbackTests {
         _ = TestStack.ready
         let withVideo = try await Self.offer(with: [.audio, .video])
         #expect(withVideo.contains("m=video"))
-        let engine = try #require(try WebRtcMediaEngineFactory().create(config: MediaConfig()) as? WebRtcMediaEngine)
+        let engine = try #require(try testFactory().create(config: MediaConfig()) as? WebRtcMediaEngine)
         defer { engine.close() }
         do {
             let answer = try await engine.acceptOffer(sdp: withVideo, servers: [], suite: .aes128Gcm)
@@ -189,7 +189,7 @@ struct LoopbackTests {
     }
 
     @Test func aTestConfigurationIsRefusedInABuildThatIsNotATestBuild() throws {
-        let plain = WebRtcMediaEngineFactory()
+        let plain = testFactory()
         #expect(throws: MediaEngineError.self) { try plain.create(config: MediaConfig(relayOnly: true)) }
         #expect(throws: MediaEngineError.self) { try plain.create(config: MediaConfig(faults: MediaFaults(sendUnencrypted: true))) }
         #expect(plain.suites == [.aes256Gcm, .aes128Gcm])

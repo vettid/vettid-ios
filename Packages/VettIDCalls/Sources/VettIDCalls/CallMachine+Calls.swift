@@ -147,7 +147,8 @@ extension CallMachine {
         // A local failure of a call that still rings (CallKit refused the answer, or timed out) is not the member's end and not a
         // decline: nothing is sent, and the call rings out as missed.
         if s.phase == .incoming, reason == .failed { return }
-        s.memberEnded = true
+        // A failure is not the member's own end (``CallTransition/memberEnded``): a held glare offer still rings after it.
+        s.memberEnded = reason != .failed
         if s.phase == .incoming {
             finish(s, reason == .hungUp ? .declinedHere : reason, CallReason.decline)
         } else if s.callId == nil || s.supersededBy != nil {

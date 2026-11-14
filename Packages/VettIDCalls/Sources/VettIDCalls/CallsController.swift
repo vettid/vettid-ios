@@ -70,7 +70,7 @@ package final class CallsController {
     package var state: CallState { machine.state }
 
     /// Whether the vault's release has calls; nil until it has been asked since the last unlock.
-    private var supported: Bool?
+    private var supported: Bool? { didSet { openFlag.supported = supported } }
     /// The gate's state: our own screen first, or Settings (nil when no screen is asked for).
     package private(set) var microphonePrompt: MicrophonePrompt?
     /// Calls ended at unlock because the vault still held them live.
@@ -86,7 +86,7 @@ package final class CallsController {
     @ObservationIgnored private let openFlag: OpenFlag
     @ObservationIgnored private var tasks: [Task<Void, Never>] = []
     @ObservationIgnored private var probeTask: Task<Void, Never>?
-    @ObservationIgnored private var probing = false
+    @ObservationIgnored private var probing = false { didSet { openFlag.probing = probing } }
     @ObservationIgnored private var recheckPending = false
     @ObservationIgnored private var microphoneAsking: MicrophoneAction?
     @ObservationIgnored private var probeGeneration = 0
@@ -125,8 +125,9 @@ package final class CallsController {
             // An offer waits a moment for an unlock that is completing; none comes: it does not ring.
             mayRing: { [vault, clock] in
                 guard !vault.updateShowing else { return false }
-                if flag.isOpen { return true }
-                return await Self.waitForUnlock(flag, clock)
+                // Rings only for a vault the probe has said has calls (as Android's `mayRing`): wait, bounded, for the unlock and then
+                // for the probe's answer; "not in vault", a refusal or a failed probe: no ring, no CallKit report, no `call.ringing`.
+                return await Self.waitForCalls(flag, clock)
             },
             clock: clock
         )
@@ -432,15 +433,19 @@ package final class CallsController {
     @MainActor
     private final class OpenFlag {
         var isOpen = false
+        /// Mirrors of the controller's: whether the vault has calls (nil: not known) and whether a probe is out.
+        var supported: Bool?
+        var probing = false
     }
 
-    /// Waits up to ``unlockWait`` for the vault to open (the clock's, so virtual in the tests).
-    private static func waitForUnlock(_ flag: OpenFlag, _ clock: any CallClock) async -> Bool {
+    /// Whether the vault has calls, waiting up to ``unlockWait`` (the clock's, so virtual in the tests) for the vault to open and
+    /// then for the probe to answer.
+    private static func waitForCalls(_ flag: OpenFlag, _ clock: any CallClock) async -> Bool {
         let deadline = clock.elapsedMs() + unlockWait.wholeMilliseconds
-        while !flag.isOpen {
+        while !flag.isOpen || (flag.supported == nil && flag.probing) {
             if clock.elapsedMs() >= deadline { return false }
             do { try await clock.sleep(for: pollEvery) } catch { return false }
         }
-        return true
+        return flag.supported == true
     }
 }
