@@ -349,34 +349,38 @@ PY
 # Limits: a symbol looked up by a name built at run time (dlsym with a name assembled from pieces) is in no image, and the
 # source scan (MediaLogGuardTests) cannot see it either. Nothing links the media stack yet, so this passes trivially today.
 # (The RTCLog* macros other than RTCLogEx compile to calls of RTCLogEx: they have no symbol of their own.)
-STACK_LOGGING_SYMBOLS=(_RTCSetMinDebugLogLevel _RTCLogEx _RTCSetupInternalTracer _RTCStartInternalCapture
-  _RTCStopInternalCapture _RTCShutdownInternalTracer _RTCEnableMetrics _RTCGetAndResetMetrics
-  '_OBJC_CLASS_$_RTCCallbackLogger' '_OBJC_CLASS_$_RTCFileLogger')
-STACK_LOGGING_SELECTORS=(startRtcEventLogWithFilePath: startAecDumpWithFilePath:)
+STACK_LOGGING_SYMBOLS=(_RTCSetMinDebugLogLevel _RTCSetupInternalTracer _RTCStartInternalCapture _RTCEnableMetrics
+  '_OBJC_CLASS_$_RTCCallbackLogger' '_OBJC_CLASS_$_RTCFileLogger'
+  # Raw audio: the protocols a tap or a custom audio device conforms to (a protocol conformance imports its symbol).
+  '__OBJC_PROTOCOL_$_RTCAudioRenderer' '__OBJC_PROTOCOL_$_RTCAudioCustomProcessingDelegate' '__OBJC_PROTOCOL_$_RTCAudioDevice')
+STACK_LOGGING_SELECTORS=(startRtcEventLogWithFilePath: startAecDumpWithFilePath: addRenderer: TurnLoggingId turnLoggingId)
+# Fails closed: a tool that fails on an image is a failure, not "nothing found".
 check_no_stack_logging() {
-  local app=$1 f symbol selector section checked=0
+  local app=$1 f symbol selector section names checked=0
   while IFS= read -r -d '' f; do
     [[ "${f}" == "${app}"/Frameworks/WebRTC.framework/* ]] && continue
     file -b "${f}" | grep -q 'Mach-O' || continue
     checked=$((checked + 1))
+    names=$(nm -a "${f}" 2>&1) || { echo "${app}: nm failed on ${f#"${app}"/}" >&2; return 1; }
     for symbol in "${STACK_LOGGING_SYMBOLS[@]}"; do
-      if nm -a "${f}" 2>/dev/null | awk -v s="${symbol}" '$NF == s { found = 1 } END { exit !found }'; then
+      if awk -v s="${symbol}" '$NF == s { found = 1 } END { exit !found }' <<<"${names}"; then
         echo "${app}: ${f#"${app}"/} names the media stack's logging symbol ${symbol}" >&2
         return 1
       fi
     done
-    for selector in "${STACK_LOGGING_SELECTORS[@]}"; do
-      for section in "__TEXT __objc_methname" "__DATA __objc_selrefs" "__DATA_CONST __objc_selrefs"; do
-        # shellcheck disable=SC2086
-        if otool -v -s ${section} "${f}" 2>/dev/null | grep -qF -- "${selector}"; then
-          echo "${app}: ${f#"${app}"/} names the media stack's logging method ${selector} (${section#* })" >&2
+    for section in "__TEXT __objc_methname" "__DATA __objc_selrefs" "__DATA_CONST __objc_selrefs"; do
+      # shellcheck disable=SC2086
+      names=$(otool -v -s ${section} "${f}" 2>&1) || { echo "${app}: otool failed on ${f#"${app}"/}" >&2; return 1; }
+      for selector in "${STACK_LOGGING_SELECTORS[@]}"; do
+        if grep -qF -- "${selector}" <<<"${names}"; then
+          echo "${app}: ${f#"${app}"/} names the media stack's logging or raw-audio method ${selector} (${section#* })" >&2
           return 1
         fi
       done
     done
   done < <(find "${app}" -type f -print0)
   [[ ${checked} -gt 0 ]] || { echo "${app}: no Mach-O file to check for the media stack's logging" >&2; return 1; }
-  echo "${app}: ${checked} Mach-O files (WebRTC.framework excepted), none names the media stack's logging, tracing or recording"
+  echo "${app}: ${checked} Mach-O files (WebRTC.framework excepted), none names the media stack's logging, tracing, recording or raw-audio taps"
 }
 
 # The VettIDDevStack app and its UI tests are built for the simulator only: never an iPhone, a Mac or a headset.
@@ -706,6 +710,14 @@ if [[ ${SELF_TEST} -eq 1 ]]; then
       '__attribute__((section("__TEXT,__objc_methname,cstring_literals"))) const char n[] = "startAecDumpWithFilePath:maxSizeInBytes:";'
     plant_logging "${config}" "a startRtcEventLogWithFilePath: selector reference" \
       '__attribute__((section("__DATA,__objc_selrefs,literal_pointers,no_dead_strip"))) const char *s = "startRtcEventLogWithFilePath:";'
+    plant_logging "${config}" "an RTCAudioRenderer protocol import" \
+      'extern char _OBJC_PROTOCOL_$_RTCAudioRenderer; void *f(void) { return &_OBJC_PROTOCOL_$_RTCAudioRenderer; }'
+    plant_logging "${config}" "an RTCAudioDevice protocol import (a custom audio device)" \
+      'extern char _OBJC_PROTOCOL_$_RTCAudioDevice; void *f(void) { return &_OBJC_PROTOCOL_$_RTCAudioDevice; }'
+    plant_logging "${config}" "the addRenderer: method name" \
+      '__attribute__((section("__TEXT,__objc_methname,cstring_literals"))) const char n[] = "addRenderer:";'
+    plant_logging "${config}" "a setTurnLoggingId: selector reference" \
+      '__attribute__((section("__DATA,__objc_selrefs,literal_pointers,no_dead_strip"))) const char *s = "setTurnLoggingId:";'
     plant_logging "${config}" "RTCSetMinDebugLogLevel" 'void RTCSetMinDebugLogLevel(long v) { (void)v; }' Frameworks/WebRTC.framework
   done
   # The shipping Info.plist: each change below must fail check_shipping_plist (a copy of each app, changed by <command>).

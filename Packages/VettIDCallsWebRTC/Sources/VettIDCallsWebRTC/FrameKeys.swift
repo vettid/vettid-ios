@@ -77,6 +77,10 @@ final class SecretBytes: @unchecked Sendable {
 
     init(_ bytes: [UInt8]) { buffer = NSMutableData(bytes: bytes, length: bytes.count) }
 
+    deinit { wipe() }
+
+    var count: Int { buffer.length }
+
     /// Flips every byte (a test fault: the wrong key).
     func invert() {
         let pointer = buffer.mutableBytes.bindMemory(to: UInt8.self, capacity: buffer.length)

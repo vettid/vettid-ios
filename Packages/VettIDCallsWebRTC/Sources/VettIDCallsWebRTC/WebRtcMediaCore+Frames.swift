@@ -48,7 +48,14 @@ extension WebRtcMediaCore {
 
     /// Both directions' keys at index 0. Throws ``MediaNotEncryptedError`` for keys of a suite other than the cryptors'
     /// (the cryptors are never remade; the call ends), and never sets a key after the receiver has failed to decrypt.
+    static let directionKeySize = 32
+
     func takeKeys(_ suite: MediaSuite, send: SecretBytes, receive: SecretBytes) throws {
+        // Every way out, a throw included, wipes both copies.
+        defer {
+            send.wipe()
+            receive.wipe()
+        }
         try MediaLogGuard.check(switches)
         guard let made = installed, let keys = provider else { throw MediaEngineError("no media yet") }
         guard suite == made else {
@@ -57,9 +64,9 @@ extension WebRtcMediaCore {
         // A key set after a decryption failure would make the receiver try again: it plays nothing from now on instead. Sticky:
         // the state may have moved on by the time of the next key.
         guard !everFailed.value else { throw MediaEngineError("keys after a decryption failure") }
-        defer {
-            send.wipe()
-            receive.wipe()
+        // Two direction keys of 32 bytes, and two different ones.
+        guard send.count == Self.directionKeySize, receive.count == Self.directionKeySize, send.data != receive.data else {
+            throw MediaEngineError("the call's keys are not two different 32-byte keys")
         }
         if faults.wrongSendKey { send.invert() }
         let index = Int32(CallFrames.keyIndex)

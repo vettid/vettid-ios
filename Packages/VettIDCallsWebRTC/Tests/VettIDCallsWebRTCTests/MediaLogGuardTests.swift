@@ -29,7 +29,8 @@ struct MediaLogGuardTests {
         engine.close()
     }
 
-    /// No source file of the repository calls the stack's logging, tracing or recording.
+    /// No source file of the repository calls the stack's logging, tracing or recording, or taps its raw audio; a file that
+    /// cannot be read as text is a failure, not a skip.
     @Test func noSourceFileTurnsTheMediaStacksLoggingOn() throws {
         let root = try Self.repositoryRoot()
         // Exempt by path from the repository root: another file of the same name is not exempt.
@@ -37,16 +38,57 @@ struct MediaLogGuardTests {
             "Packages/VettIDCallsWebRTC/Sources/VettIDCallsWebRTC/MediaLogGuard.swift",
             "Packages/VettIDCallsWebRTC/Tests/VettIDCallsWebRTCTests/MediaLogGuardTests.swift",
         ]
-        let sources = Self.sourceFiles(under: root, extensions: Self.scanned).filter { !allowed.contains(Self.relative($0, to: root)) }
+        let everything = Self.sourceFiles(under: root)
+        let sources = everything.filter { !allowed.contains(Self.relative($0, to: root)) }
         #expect(sources.count > 200)
         #expect(sources.contains { $0.lastPathComponent == "WebRtcMediaEngine.swift" })
-        #expect(Set(sources.map(\.pathExtension)).isSuperset(of: ["swift", "h", "c", "plist"]))
+        #expect(Set(sources.map(\.pathExtension)).isSuperset(of: ["swift", "h", "c", "plist", "xcconfig", "xcscheme"]))
+        #expect(sources.contains { $0.lastPathComponent == "project.yml" })
         var offenders: [String] = []
         for file in sources {
-            guard let text = try? String(contentsOf: file, encoding: .utf8) else { continue }
-            for name in MediaLogGuard.offences(in: text) { offenders.append("\(Self.relative(file, to: root)): \(name)") }
+            let path = Self.relative(file, to: root)
+            guard let text = try? String(contentsOf: file, encoding: .utf8) else {
+                offenders.append("\(path): not readable as UTF-8 text")
+                continue
+            }
+            for name in MediaLogGuard.offences(in: text) { offenders.append("\(path): \(name)") }
+            // A custom audio device sees the decrypted audio: only the factory's file (Debug-only code) and tests may name it.
+            let isTest = path.contains("Tests/")
+            let factoryFile = "Packages/VettIDCallsWebRTC/Sources/VettIDCallsWebRTC/WebRtcRuntime.swift"
+            if !isTest, path != factoryFile {
+                for name in MediaLogGuard.offencesOutsideTests(in: text) { offenders.append("\(path): \(name)") }
+            }
         }
         #expect(offenders == [])
+    }
+
+    /// The raw-audio taps and the other added names are in the scan, each caught in the shape it has in source.
+    @Test func theRawAudioTapsAreRefused() {
+        let lines = [
+            "track.add(renderer) // an RTCAudioRenderer",
+            "final class Tap: NSObject, RTCAudioCustomProcessingDelegate {}",
+            "[track addRenderer:self];",
+            "config.turnLoggingId = id",
+            "RTCLog(@\"x\");",
+        ]
+        for line in lines { #expect(!MediaLogGuard.offences(in: line).isEmpty, "\(line)") }
+        // A custom device outside the tests' and the factory's files.
+        #expect(!MediaLogGuard.offencesOutsideTests(in: "final class Mic: NSObject, RTCAudioDevice {}").isEmpty)
+        #expect(MediaLogGuard.offencesOutsideTests(in: "let c = RTCConfiguration()").isEmpty)
+    }
+
+    /// The scan reads the files that carry settings and project wiring, and does not skip another directory called "build".
+    @Test func theScanSkipsOnlyTheRepositorysOwnBuildOutput() throws {
+        let root = try Self.repositoryRoot()
+        let found = Self.sourceFiles(under: root).map { Self.relative($0, to: root) }
+        #expect(!found.contains { $0.hasPrefix("build/") || $0.hasPrefix(".build/") || $0.contains("/.build/") })
+        #expect(!found.contains { $0.hasPrefix("Packages/VettIDCallsWebRTC/build/") })
+        #expect(found.contains("project.yml"))
+        #expect(Self.skipped("Packages/Foo/build"))
+        #expect(Self.skipped("Packages/Foo/.build"))
+        #expect(Self.skipped("build"))
+        #expect(!Self.skipped("Packages/Foo/Sources/build"))
+        #expect(!Self.skipped("App/build"))
     }
 
     /// Not even the guard calls the stack's logging setter: its name is in the guard's list of what is forbidden, as a string.
@@ -100,7 +142,7 @@ struct MediaLogGuardTests {
     /// source an app is built from may name it.
     @Test func noSourceSwitchesTheStacksTransportEncryptionOff() throws {
         let root = try Self.repositoryRoot()
-        let sources = Self.sourceFiles(under: root, extensions: ["swift"]).filter { !$0.path.contains("/Tests/") }
+        let sources = Self.sourceFiles(under: root).filter { $0.pathExtension == "swift" }.filter { !$0.path.contains("/Tests/") }
         #expect(sources.contains { $0.lastPathComponent == "WebRtcMediaEngine.swift" })
         let offenders = try sources.filter { try String(contentsOf: $0, encoding: .utf8).contains("disableEncryption") }
         #expect(offenders.map(\.lastPathComponent) == [])
@@ -115,22 +157,30 @@ struct MediaLogGuardTests {
         throw MediaEngineError("repository root not found")
     }
 
-    /// Every kind of file that can call the stack: Swift, Objective-C and C sources and headers, and property lists.
-    static let scanned: Set = ["swift", "m", "mm", "c", "h", "plist"]
+    /// Every kind of file that can call the stack or switch it on: sources and headers of every language of the build, property
+    /// lists and build settings. (`project.yml` and `Package.swift` are read by name.)
+    static let scanned: Set = ["swift", "m", "mm", "c", "cc", "cpp", "h", "hpp", "plist", "xcconfig", "xcscheme"]
 
     static func relative(_ url: URL, to root: URL) -> String {
         String(url.standardizedFileURL.path.dropFirst(root.standardizedFileURL.path.count + 1))
     }
 
-    static func sourceFiles(under root: URL, extensions: Set<String>) -> [URL] {
-        // `.claude` holds local working copies of the repository (their copies of the guard's own files are not exempt).
-        let skip: Set = [".build", ".git", "build", "DerivedData", ".swiftpm", ".claude"]
+    /// The repository's own output directories, by path from the root: version control, the root's `build`, and a package's
+    /// `.build` and `build`. Any other directory with such a name is read.
+    static func skipped(_ relativePath: String) -> Bool {
+        let parts = relativePath.split(separator: "/").map(String.init)
+        if parts == [".git"] || parts == ["build"] || parts == [".build"] || parts == ["DerivedData"] { return true }
+        return parts.count == 3 && parts[0] == "Packages" && [".build", "build", ".swiftpm"].contains(parts[2])
+    }
+
+    static func sourceFiles(under root: URL) -> [URL] {
         guard let walker = FileManager.default.enumerator(at: root, includingPropertiesForKeys: [.isDirectoryKey]) else { return [] }
         var found: [URL] = []
         for case let url as URL in walker {
-            if skip.contains(url.lastPathComponent) {
+            let path = relative(url, to: root)
+            if skipped(path) {
                 walker.skipDescendants()
-            } else if extensions.contains(url.pathExtension) {
+            } else if scanned.contains(url.pathExtension) || url.lastPathComponent == "project.yml" {
                 found.append(url)
             }
         }
