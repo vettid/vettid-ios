@@ -10,11 +10,13 @@ import VettIDVault
 enum TestStack {
     static let device = FakeAudioDevice()
     static let ready: Bool = {
+#if DEBUG
         WebRtcRuntime.testAudioDevice = device
         // Gather on the loopback interface too (ignored by default): the loopback tests use it alone.
         let options = RTCPeerConnectionFactoryOptions()
         options.ignoreLoopbackNetworkAdapter = false
         WebRtcRuntime.testFactoryOptions = options
+#endif
         return true
     }()
 }

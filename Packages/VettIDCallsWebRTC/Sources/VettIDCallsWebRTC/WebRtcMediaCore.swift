@@ -39,7 +39,13 @@ final class WebRtcMediaCore: @unchecked Sendable {
     var senderId: String?
     var moved = false
     /// Set by ``teardown()`` on the queue: nothing is opened after it.
-    var closed = false
+    var closed: Bool {
+        get { closedFlag.value }
+        set { closedFlag.value = newValue }
+    }
+
+    /// Readable from the stack's threads: an offer that completes after the teardown is not kept.
+    let closedFlag = Guarded(false)
     /// Set when a receiver has reported a decryption failure: no key is set again (VAULT-MESSAGING §10.10).
     let everFailed = Guarded(false)
     var wantMuted = false
@@ -78,7 +84,7 @@ final class WebRtcMediaCore: @unchecked Sendable {
             guard let pc = core.connection else { throw MediaEngineError("no offer") }
             pc.offer(for: constraints) { description, error in
                 if let description, error == nil {
-                    core.pendingOffer.value = description
+                    core.storeOffer(description)
                     done.resume(returning: description.sdp)
                 } else {
                     done.resume(throwing: MediaEngineError("the description could not be made"))
@@ -86,6 +92,11 @@ final class WebRtcMediaCore: @unchecked Sendable {
             }
         }
         return box
+    }
+
+    /// Keeps the offer the stack made, unless the call has been torn down meanwhile (the callback comes on the stack's thread).
+    func storeOffer(_ description: RTCSessionDescription) {
+        pendingOffer.update { if !closed { $0 = description } }
     }
 
     func startGathering(servers: [CallWire.IceServer]) async throws {
@@ -205,7 +216,7 @@ final class WebRtcMediaCore: @unchecked Sendable {
         track = nil
         source = nil
         provider = nil
-        pendingOffer.value = nil
+        pendingOffer.update { $0 = nil }
         peerObserver = nil
         senderObserver = nil
         receiverObserver = nil
@@ -278,10 +289,13 @@ final class WebRtcMediaCore: @unchecked Sendable {
         let opus = WebRtcRuntime.factory().rtpSenderCapabilities(forKind: kRTCMediaStreamTrackKindAudio).codecs
             .filter { $0.name.lowercased() == "opus" }
         guard !opus.isEmpty else { throw MediaEngineError("Opus is not available") }
-        // Swift imports the header's error-returning variant with an unusable error argument, so the older one is called
-        // by selector, and the preferences are read back.
-        _ = transceiver.perform(NSSelectorFromString("setCodecPreferences:"), with: opus)
-        guard transceiver.codecPreferences.count == opus.count else { throw MediaEngineError("Opus is not available") }
+        // The property's setter is the one that Swift can call (the header's error-returning variant imports with an unusable
+        // error argument); it is marked deprecated, the read-back below is the check.
+        transceiver.codecPreferences = opus
+        let kept = transceiver.codecPreferences
+        guard kept.count == opus.count, kept.allSatisfy({ $0.name.lowercased() == "opus" }) else {
+            throw MediaEngineError("Opus is not available")
+        }
     }
 
     /// Runs [body] on the stack's queue.

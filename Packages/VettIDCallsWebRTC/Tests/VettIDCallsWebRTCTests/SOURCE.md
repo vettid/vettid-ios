@@ -1,7 +1,7 @@
 # Where the test values come from
 
 `FrameKeyTests.swift` holds four values inline (`kDirSuite1`, `frameKeySuite1`, `kDirSuite2`, `frameKeySuite2`). They are
-the TEST ONLY direction and frame keys of VAULT-MESSAGING §10.10, "0.28.0" changelog entry (the specification at
+the TEST ONLY direction and frame keys of VAULT-MESSAGING §10.10 and §16 (test vectors), "0.28.0" entry (the specification at
 version 0.90.10, vettid.org commit `924731f865e85eaef03fabe25de54e5c116bca7a`, `docs/VAULT-MESSAGING.md`), which took them
 from vettid-android `docs/calls/CALL-MEDIA.md` §8:
 
@@ -16,3 +16,6 @@ from vettid-android `docs/calls/CALL-MEDIA.md` §8:
 values are checked here against the media stack's own cryptor, which is a different thing to reproduce.
 
 Nothing else here is a vector: the keys of the loopback tests are random.
+
+The two frame keys are allowlisted for gitleaks in `/.gitleaks.toml`, as in vettid-android's file (public, TEST ONLY, printed in the
+specification).

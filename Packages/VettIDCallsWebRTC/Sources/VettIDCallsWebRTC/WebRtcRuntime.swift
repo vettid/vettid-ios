@@ -56,24 +56,28 @@ enum WebRtcRuntime {
     // Touched on ``queue`` only.
     nonisolated(unsafe) private static var shared: RTCPeerConnectionFactory?
 
-    /// FOR THE TESTS ONLY (`@testable`): an audio device of the test's own (one that makes and swallows sound without hardware),
+#if DEBUG
+    /// FOR THE TESTS ONLY (`@testable`, Debug builds only: a device that is set sees the decrypted audio): an audio device of the test's own (one that makes and swallows sound without hardware),
     /// set before the first engine of the process. Nothing in the app sets it; the app's engines use the platform's module.
     nonisolated(unsafe) static var testAudioDevice: (any RTCAudioDevice)?
 
     /// FOR THE TESTS ONLY (`@testable`): factory options of the test's own (a loopback test lets the stack gather on the
     /// loopback interface, which it ignores by default).
     nonisolated(unsafe) static var testFactoryOptions: RTCPeerConnectionFactoryOptions?
+#endif
 
     /// The process's factory. On ``queue`` only.
     static func factory() -> RTCPeerConnectionFactory {
         dispatchPrecondition(condition: .onQueue(queue))
         if let shared { return shared }
+#if DEBUG
         if let testAudioDevice {
             let made = RTCPeerConnectionFactory(encoderFactory: nil, decoderFactory: nil, audioDevice: testAudioDevice)
             if let testFactoryOptions { made.setOptions(testFactoryOptions) }
             shared = made
             return made
         }
+#endif
         // Audio only: no video encoder or decoder factory, the platform's default audio device module.
         let made = RTCPeerConnectionFactory(
             audioDeviceModuleType: .platformDefault, bypassVoiceProcessing: false, encoderFactory: nil, decoderFactory: nil,

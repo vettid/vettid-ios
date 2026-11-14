@@ -132,8 +132,39 @@ struct LoopbackTests {
         }
     }
 
+    /// Video next to the audio is media no cryptor covers either: it is refused as not encrypted, or (this stack has no video
+    /// codec, so it rejects the section) the answer carries the section as rejected, with port 0 and no codec, and the engine
+    /// has no live transceiver but the audio one. Never an accepted video section.
+    @Test func anOfferWithAVideoSectionGetsNoVideo() async throws {
+        _ = TestStack.ready
+        let withVideo = try await Self.offer(with: [.audio, .video])
+        #expect(withVideo.contains("m=video"))
+        let engine = try #require(try WebRtcMediaEngineFactory().create(config: MediaConfig()) as? WebRtcMediaEngine)
+        defer { engine.close() }
+        do {
+            let answer = try await engine.acceptOffer(sdp: withVideo, servers: [], suite: .aes128Gcm)
+            let video = answer.components(separatedBy: "\r\n").filter { $0.hasPrefix("m=video") }
+            #expect(video.allSatisfy { $0.hasPrefix("m=video 0 ") }, "\(video)")
+            // Measured: the stack itself makes the video transceiver and stops it (direction `stopped`) when it applies the
+            // offer, before any code of the engine looks: the engine neither stops nor ignores it. Exactly one transceiver is
+            // live (the audio one with the cryptors, which `requireAllMediaEncrypted` checks), and nothing else sends.
+            let all = try await engine.core.onQueue { core in
+                (core.connection?.transceivers ?? []).map { ($0.mediaType == .audio, $0.isStopped, $0.direction == .stopped) }
+            }
+            #expect(all.filter { !$0.1 }.map(\.0) == [true])
+            #expect(all.filter { !$0.0 }.allSatisfy { $0.1 && $0.2 })
+        } catch is MediaNotEncryptedError {
+            // Also a refusal.
+        }
+    }
+
     /// An offer as a stack that was not told the call's rules would make it.
     private static func offerWithTwoAudioSections() async throws -> String {
+        try await offer(with: [.audio, .audio])
+    }
+
+    /// An offer with one section for each of [kinds].
+    static func offer(with kinds: [RTCRtpMediaType]) async throws -> String {
         try await withCheckedThrowingContinuation { continuation in
             WebRtcRuntime.queue.async {
                 let config = RTCConfiguration()
@@ -143,8 +174,7 @@ struct LoopbackTests {
                     continuation.resume(throwing: MediaEngineError("no peer connection"))
                     return
                 }
-                _ = pc.addTransceiver(of: .audio)
-                _ = pc.addTransceiver(of: .audio)
+                for kind in kinds { _ = pc.addTransceiver(of: kind) }
                 pc.offer(for: constraints) { description, _ in
                     // Closed later, not inside the stack's own callback.
                     WebRtcRuntime.queue.asyncAfter(deadline: .now() + 0.5) { pc.close() }

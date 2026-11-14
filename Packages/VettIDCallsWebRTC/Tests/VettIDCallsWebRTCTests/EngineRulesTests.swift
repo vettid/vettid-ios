@@ -50,6 +50,19 @@ struct EngineRulesTests {
         }
     }
 
+    /// An offer that the stack completes after the teardown is not kept.
+    @Test func anOfferThatArrivesAfterTheTeardownIsNotStored() async throws {
+        let engine = try engine()
+        let late = RTCSessionDescription(type: .offer, sdp: "v=0\r\n")
+        engine.core.storeOffer(late)
+        #expect(engine.core.pendingOffer.value != nil)
+        engine.close()
+        WebRtcRuntime.queue.sync {}
+        #expect(engine.core.pendingOffer.value == nil)
+        engine.core.storeOffer(late)
+        #expect(engine.core.pendingOffer.value == nil)
+    }
+
     // MARK: key copies and the no-rekey rule
 
     /// What the stack is given is the buffer itself, not a copy: wiping it wipes what the stack was handed (and its bridge).
@@ -77,6 +90,21 @@ struct EngineRulesTests {
         await #expect(throws: MediaNotEncryptedError.self) {
             try await engine.core.onQueue { core in try core.takeKeys(.aes128Gcm, send: again, receive: other) }
         }
+        #expect(again.isWiped && other.isWiped)
+        // Wrong sizes and equal keys are refused, and wiped.
+        let short = SecretBytes([UInt8](repeating: 1, count: 16))
+        let full = SecretBytes(randomKey())
+        await #expect(throws: MediaEngineError.self) {
+            try await engine.core.onQueue { core in try core.takeKeys(.aes256Gcm, send: short, receive: full) }
+        }
+        #expect(short.isWiped && full.isWiped)
+        let same = randomKey()
+        let one = SecretBytes(same)
+        let two = SecretBytes(same)
+        await #expect(throws: MediaEngineError.self) {
+            try await engine.core.onQueue { core in try core.takeKeys(.aes256Gcm, send: one, receive: two) }
+        }
+        #expect(one.isWiped && two.isWiped)
         engine.close()
     }
 

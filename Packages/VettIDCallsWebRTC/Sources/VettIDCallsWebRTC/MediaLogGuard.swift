@@ -31,12 +31,45 @@ public enum MediaLogGuard {
     /// echo-canceller dump and the metrics.
     public static let forbidden: [String] = [
         "RTCSetMinDebugLogLevel", "RTCLogEx", "RTCLogInfo", "RTCLogVerbose", "RTCLogWarning", "RTCLogError", "RTCLogDebug",
-        "RTCLogFormat", "RTCLogString", "RTCCallbackLogger", "RTCFileLogger",
+        "RTCLogFormat", "RTCLogString", "RTCLog(", "RTCCallbackLogger", "RTCFileLogger", "turnLoggingId",
+        // Raw audio: a tap on the decoded (played) or captured sound, or on the processing of it. `addRenderer:` is `add(_:)` in
+        // Swift, so the type a renderer has to conform to is what the scan can see.
+        "addRenderer", "RTCAudioRenderer", "RTCAudioCustomProcessingDelegate",
         // Tracing.
         "RTCSetupInternalTracer", "RTCStartInternalCapture", "RTCStopInternalCapture", "RTCShutdownInternalTracer",
         // Records of a call: its packet metadata, its raw audio, its measurements.
         "startRtcEventLog", "startAecDump", "RTCEnableMetrics", "RTCGetAndResetMetrics",
     ]
+
+    /// Names that only the one file that makes the process's factory may contain (a custom audio device sees the decrypted,
+    /// played audio): see ``offencesOutsideTests(in:)``.
+    public static let forbiddenOutsideTests: [String] = ["RTCAudioDevice"]
+
+    /// [text] without the lines from each `#if DEBUG` to its matching `#endif` (nesting counted): what a Release build compiles
+    /// of a file. A `#if` of another condition counts for nesting only.
+    public static func withoutDebugBlocks(_ text: String) -> String {
+        var depth = 0
+        var debugDepth: Int?
+        var kept: [Substring] = []
+        for line in text.split(separator: "\n", omittingEmptySubsequences: false) {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if trimmed.hasPrefix("#if") {
+                depth += 1
+                if debugDepth == nil, trimmed == "#if DEBUG" { debugDepth = depth }
+                continue
+            }
+            if trimmed.hasPrefix("#endif") {
+                if debugDepth == depth { debugDepth = nil }
+                depth -= 1
+                continue
+            }
+            if debugDepth == nil { kept.append(line) }
+        }
+        return kept.joined(separator: "\n")
+    }
+
+    /// The names of ``forbiddenOutsideTests`` in [text], a source file that is not a test.
+    public static func offencesOutsideTests(in text: String) -> [String] { forbiddenOutsideTests.filter { text.contains($0) } }
 
     /// The forbidden names that [text] (a source file) contains. A name inside a string is a name: a lookup by name
     /// (`dlsym`, `NSClassFromString`, `NSSelectorFromString`, `perform` with a string) cannot get around this unless it
