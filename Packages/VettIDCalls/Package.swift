@@ -6,6 +6,7 @@ import PackageDescription
 // a later change.
 let package = Package(
     name: "VettIDCalls",
+    defaultLocalization: "en",
     platforms: [.iOS(.v17), .macOS(.v14)],
     products: [
         .library(name: "VettIDCalls", targets: ["VettIDCalls"]),
@@ -13,6 +14,7 @@ let package = Package(
     dependencies: [
         .package(path: "../VettIDCrypto"),
         .package(path: "../VettIDVault"),
+        // AccountNames.isolateOrNull: a name with bidi controls cannot reorder the microphone sentence.
         .package(path: "../VettIDData"),
     ],
     targets: [
@@ -22,7 +24,8 @@ let package = Package(
                 .product(name: "VettIDCrypto", package: "VettIDCrypto"),
                 .product(name: "VettIDVault", package: "VettIDVault"),
                 .product(name: "VettIDData", package: "VettIDData"),
-            ]
+            ],
+            resources: [.process("Resources/Localizable.xcstrings")]
         ),
         .testTarget(
             name: "VettIDCallsTests",
@@ -30,6 +33,7 @@ let package = Package(
                 "VettIDCalls",
                 .product(name: "VettIDCrypto", package: "VettIDCrypto"),
                 .product(name: "VettIDVault", package: "VettIDVault"),
+                .product(name: "VettIDData", package: "VettIDData"),
             ]
         ),
     ]

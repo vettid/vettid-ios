@@ -54,11 +54,18 @@ package final class CallKitCoordinator: CallKitEvents {
         var kitMuted = false
         var over = false
         var endedInKit = false
+        /// How the machine ended it, for an end CallKit could not take because its report was still on the way.
+        var endReason: CallKitEndReason?
         var ringing = false
         var refused = false
     }
 
     @ObservationIgnored private var current: Tracked?
+    /// How each call the machine ended was ended, until CallKit has taken its report (a call replaced before that is told it).
+    @ObservationIgnored private var endReasons: [UUID: CallKitEndReason] = [:]
+    /// Whether the member may answer the call [seq] now: the microphone gate (the controller's). False: CallKit's answer is
+    /// refused, and the call keeps ringing.
+    @ObservationIgnored private let mayAnswer: @MainActor (_ seq: Int) -> Bool
     @ObservationIgnored private var audioActive = false
     @ObservationIgnored private var consumer: Task<Void, Never>?
     @ObservationIgnored private var tasks: [Int: Task<Void, Never>] = [:]
@@ -67,8 +74,9 @@ package final class CallKitCoordinator: CallKitEvents {
     package init(
         machine: CallMachine, provider: any CallKitProviding, control: any CallKitControlling, audio: any CallAudioSession,
         tones: any CallTones, clock: any CallClock = SystemCallClock(),
-        isForeground: @escaping @MainActor () -> Bool
+        isForeground: @escaping @MainActor () -> Bool, mayAnswer: @escaping @MainActor (_ seq: Int) -> Bool
     ) {
+        self.mayAnswer = mayAnswer
         self.machine = machine
         self.provider = provider
         self.control = control
@@ -197,11 +205,23 @@ package final class CallKitCoordinator: CallKitEvents {
             guard let self else { return }
             let result = await provider.reportNewIncomingCall(uuid: uuid, update: update)
             // Refused (Do Not Disturb, a block list, an error): respected. The call carries no audio and rings out as missed.
-            if result != .reported, current?.uuid == uuid, current?.over == false { current?.kit = false }
+            if result != .reported {
+                if current?.uuid == uuid, current?.over == false { current?.kit = false }
+                return
+            }
+            // Reported, but the call ended or was replaced while the report was on its way: CallKit dropped the end it was told
+            // meanwhile (it did not know the call yet), so it is told again, or the phone rings with nothing to answer.
+            if current?.uuid == uuid {
+                guard let c = current, c.over, !c.endedInKit else { return }
+                provider.reportCall(uuid: uuid, endedAt: clock.now(), reason: c.endReason ?? .failed)
+            } else {
+                provider.reportCall(uuid: uuid, endedAt: clock.now(), reason: endReasons.removeValue(forKey: uuid) ?? .failed)
+            }
         }
     }
 
-    /// The call as CallKit is told: the member's name bidi-isolated, the call's own opaque handle.
+    /// The call as CallKit is told: the generic name (``CallKitName/generic``; the member's name is shown only in the app's own
+    /// screens) and the call's own opaque handle.
     private func update(_ c: Tracked) -> CallKitUpdate { CallKitUpdate(handle: c.handle, name: CallKitName.generic) }
 
     private func phaseReports(_ l: CallState.Live, _ c: Tracked) {
@@ -238,6 +258,9 @@ package final class CallKitCoordinator: CallKitEvents {
     private func ended(_ e: CallState.Ended, seq: Int, memberEnded: Bool) {
         guard var c = current, c.seq == seq, !c.over else { return }
         c.over = true
+        c.endReason = e.reason.callKitReason
+        endReasons[c.uuid] = c.endReason
+        if endReasons.count > 8, let drop = endReasons.keys.first(where: { $0 != c.uuid }) { endReasons[drop] = nil }
         current = c
         updateTones()
         audio.callEnded()
@@ -294,6 +317,8 @@ package final class CallKitCoordinator: CallKitEvents {
 
     package func performAnswer(uuid: UUID) -> Bool {
         guard let c = current, c.uuid == uuid, c.direction == .incoming, !c.over, c.kit else { return false }
+        // The microphone gate first: refused, the call keeps ringing and nothing is sent (the controller shows its screen).
+        guard mayAnswer(c.seq) else { return false }
         current?.answerTold = true
         machine.answer()
         return true

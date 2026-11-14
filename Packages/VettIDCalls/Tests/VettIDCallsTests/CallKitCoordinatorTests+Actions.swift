@@ -174,7 +174,8 @@ extension CallKitCoordinatorTests {
         let other = FakeKit()
         other.incomingResult = .filtered
         let c2 = CallKitCoordinator(
-            machine: machine(), provider: other, control: other, audio: audio, tones: tones, clock: clock, isForeground: { true }
+            machine: machine(), provider: other, control: other, audio: audio, tones: tones, clock: clock, isForeground: { true },
+            mayAnswer: { _ in true }
         )
         c2.apply(state(.incoming, .incoming))
         await settle()
@@ -312,7 +313,8 @@ extension CallKitCoordinatorTests {
         let m2 = CallMachine(signalling: FakeSignalling(), engines: engines, clock: clock)
         let kit2 = FakeKit()
         let c2 = CallKitCoordinator(
-            machine: m2, provider: kit2, control: kit2, audio: audio, tones: tones, clock: clock, isForeground: { true }
+            machine: m2, provider: kit2, control: kit2, audio: audio, tones: tones, clock: clock, isForeground: { true },
+            mayAnswer: { _ in true }
         )
         kit2.delegate = c2
         c2.start()
@@ -372,7 +374,8 @@ extension CallKitCoordinatorTests {
         let signalling = FakeSignalling()
         let m = CallMachine(signalling: signalling, engines: engines, clock: clock)
         let c = CallKitCoordinator(
-            machine: m, provider: kit, control: kit, audio: audio, tones: tones, clock: clock, isForeground: { false }
+            machine: m, provider: kit, control: kit, audio: audio, tones: tones, clock: clock, isForeground: { false },
+            mayAnswer: { _ in true }
         )
         c.start()
         signalling.deliver(offer())
