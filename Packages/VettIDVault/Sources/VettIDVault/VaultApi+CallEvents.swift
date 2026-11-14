@@ -73,7 +73,8 @@ private func parseIce(_ m: VaultMessage) -> CallIce? {
 
 private func parseEnd(_ m: VaultMessage) -> CallEnded? {
     guard let id = VaultJSON.string(m.object, "call_id"), let reason = VaultJSON.string(m.object, "reason") else { return nil }
-    return CallEnded(callId: id, reason: reason)
+    let by = VaultJSON.string(m.object, "superseded_by").flatMap { Ulid.isValid($0) && $0 != id ? $0 : nil }
+    return CallEnded(callId: id, reason: reason, supersededBy: by)
 }
 
 /// [events] as call events: the `call.*` ones, in the order they arrived; anything else is left out.
