@@ -45,11 +45,16 @@ import VettIDVault
         m.askedCheck(out: true, message: nil)
         m.askedCheck(out: false, message: wrong)
         m.shown()
-        m.askedCheck(out: false, message: nil)
+        m.askedCheckGone()
         #expect(m.askedFailure == wrong && !m.askedOut)
         m.gatedCheckDone()
         #expect(m.askedFailure == nil)
-        for end in [{ m.ownerCheck(holdOff: true) }, { m.ownerCheckDone() }, { m.reset() }, { m.askedCheck(out: true, message: nil) }] {
+        let ends: [() -> Void] = [
+            { m.ownerCheck(holdOff: true) }, { m.ownerCheckDone() }, { m.reset() }, { m.askedCheck(out: true, message: nil) },
+            // The member typed again: the line went.
+            { m.askedCheck(out: false, message: nil) },
+        ]
+        for end in ends {
             m.askedCheck(out: false, message: wrong)
             end()
             #expect(m.askedFailure == nil)

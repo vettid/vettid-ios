@@ -244,12 +244,16 @@ public final class ShellModel {
         askedFailure = nil
     }
 
-    /// The asked check's check went out ([out]) or came back, with [message] when it failed (``OwnerCheckFlow``'s
-    /// `onOut`). A screen that goes (nil) leaves the failure for the gated check that took its place.
+    /// The asked check's check went out ([out]) or came back, or its message changed while none is out ([message]: what it
+    /// says now, nil once the member typed again) (``OwnerCheckFlow``'s `onOut`).
     public func askedCheck(out: Bool, message: OwnerCheckMessage?) {
         askedOut = out
-        if out { askedFailure = nil } else if let message { askedFailure = message }
+        askedFailure = out ? nil : message
     }
+
+    /// The asked check's screen went: its check no longer holds a due one back. Its failure stays for the gated check that
+    /// took its place.
+    public func askedCheckGone() { askedOut = false }
 
     /// The gated check passed: nothing of an earlier asked check stays for the next one.
     public func gatedCheckDone() { askedFailure = nil }

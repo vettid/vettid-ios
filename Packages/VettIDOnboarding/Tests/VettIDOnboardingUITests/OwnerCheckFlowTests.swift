@@ -1,5 +1,6 @@
 #if os(iOS)
 import Foundation
+import Observation
 import SwiftUI
 import Testing
 import UIKit
@@ -22,6 +23,20 @@ import VettIDUI
     final class Told {
         var out: [(Bool, OwnerCheckMessage?)] = []
         var done = 0
+        var gone = 0
+    }
+
+    @Observable final class Shown {
+        var on = true
+    }
+
+    struct FlowHolder<Flow: View>: View {
+        let shown: Shown
+        @ViewBuilder let flow: () -> Flow
+
+        var body: some View {
+            if shown.on { flow() } else { Color.clear }
+        }
     }
 
     private func host(_ vm: OwnerCheckViewModel, _ told: Told) -> UIWindow {
@@ -67,6 +82,38 @@ import VettIDUI
         #expect(await eventually { told.out.count == 2 })
         #expect(told.out.last?.0 == false && told.out.last?.1 == .badPin(checksLeft: 8))
         #expect(told.done == 0)
+    }
+
+    /// The screen went while its check was out (the gated check took its place, the vault locked): it is said gone, and
+    /// the check's answer, when it comes, tells nothing more.
+    @Test func aCheckAnsweredAfterTheScreenWentTellsNothing() async {
+        vault.checkResults = [.badPin(checksLeft: 8)]
+        let gate = TestDeferred<Void>()
+        vault.onCheck = { try? await gate.value() }
+        let vm = await model()
+        let told = Told()
+        let shown = Shown()
+        let holder = FlowHolder(shown: shown) {
+            OwnerCheckFlow(
+                mode: .voluntary, repo: vault, vault: vault, model: vm, onOut: { told.out.append(($0, $1)) },
+                onGone: { told.gone += 1 }
+            )
+        }
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
+        window.rootViewController = UIHostingController(rootView: holder.vettIDTheme())
+        window.isHidden = false
+        window.layoutIfNeeded()
+        defer { window.isHidden = true }
+        #expect(await eventually { vm.onOut != nil })
+        vm.setPin("975310")
+        vm.setPassword("pw")
+        vm.submit()
+        #expect(told.out.count == 1 && told.out[0].0)
+        shown.on = false
+        #expect(await eventually { told.gone == 1 })
+        gate.complete(())
+        #expect(await eventually { vm.state.message == .badPin(checksLeft: 8) }, "the model still took its answer")
+        #expect(told.out.count == 1, "nothing told after the screen went")
     }
 
     @Test func aPassClosesAfterTheTick() async {

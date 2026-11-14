@@ -147,7 +147,11 @@ import VettIDDataTesting
         let vm = await vm()
         await sendHeld(vm)
         vm.lockVault()
-        for _ in 0..<200 where vm.state.locking { await Task.yield() }
+        var n = 0
+        while vm.state.locking, n < 200 {
+            await Task.yield()
+            n += 1
+        }
         #expect(vm.state.awaitingDropped && vm.state.checking && vm.state.lockOffered)
         answer.complete(())
         await vm.settle()

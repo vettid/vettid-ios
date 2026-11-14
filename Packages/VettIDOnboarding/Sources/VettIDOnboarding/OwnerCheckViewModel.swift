@@ -238,11 +238,14 @@ public final class NoOwnerCheckActions: OwnerCheckActions {
 @Observable
 public final class OwnerCheckViewModel: OwnerCheckActions {
     public internal(set) var state: OwnerCheckScreenState {
-        // Told in the same change that sends the check, with no update in between; and on the answer, with its message.
-        didSet { if state.out != oldValue.out { onOut?(state.out) } }
+        // Told in the same change that sends the check, with no update in between; on the answer, with its message; and
+        // when the message changes while no check is out (the member typing again clears it).
+        didSet {
+            if state.out != oldValue.out || (!state.out && state.message != oldValue.message) { onOut?(state.out) }
+        }
     }
-    /// (ANDROID-PLAN 0.1.124) Called when ``OwnerCheckScreenState/out`` changes: the shell holds a check coming due back
-    /// while an asked check is out.
+    /// (ANDROID-PLAN 0.1.124) Called when ``OwnerCheckScreenState/out`` changes, and when the message changes while no check
+    /// is out: the shell holds a check coming due back while an asked check is out, and keeps its last failure.
     @ObservationIgnored public var onOut: (@MainActor (Bool) -> Void)?
 
     @ObservationIgnored let repo: any OwnerCheckRepository

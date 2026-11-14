@@ -15,6 +15,7 @@ public struct OwnerCheckFlow: View {
     private let onDone: @MainActor () -> Void
     private let onCancel: @MainActor () -> Void
     private let onOut: @MainActor (Bool, OwnerCheckMessage?) -> Void
+    private let onGone: @MainActor () -> Void
     private let carried: OwnerCheckMessage?
     /// The model to use instead of one made on appear (tests).
     private let given: OwnerCheckViewModel?
@@ -28,14 +29,19 @@ public struct OwnerCheckFlow: View {
         onDone: @escaping @MainActor () -> Void = {},
         onCancel: @escaping @MainActor () -> Void = {},
         carried: OwnerCheckMessage? = nil,
-        onOut: @escaping @MainActor (Bool, OwnerCheckMessage?) -> Void = { _, _ in }
+        onOut: @escaping @MainActor (Bool, OwnerCheckMessage?) -> Void = { _, _ in },
+        onGone: @escaping @MainActor () -> Void = {}
     ) {
-        self.init(mode: mode, repo: repo, vault: vault, model: nil, onDone: onDone, onCancel: onCancel, carried: carried, onOut: onOut)
+        self.init(
+            mode: mode, repo: repo, vault: vault, model: nil, onDone: onDone, onCancel: onCancel, carried: carried, onOut: onOut,
+            onGone: onGone
+        )
     }
 
     /// [carried]: the last answer of an asked check this gated one replaced (``OwnerCheckViewModel/start(_:carried:)``).
-    /// [onOut]: whether a check is out or its tick shows, as it changes, with the message once the answer came
-    /// (``OwnerCheckViewModel/onOut``); false when the screen goes.
+    /// [onOut]: whether a check is out or its tick shows, as it changes, with the message when none is out
+    /// (``OwnerCheckViewModel/onOut``). [onGone]: the screen went; nothing more is told of it, a check answered after it
+    /// included.
     init(
         mode: OwnerCheckMode,
         repo: any OwnerCheckRepository,
@@ -44,7 +50,8 @@ public struct OwnerCheckFlow: View {
         onDone: @escaping @MainActor () -> Void = {},
         onCancel: @escaping @MainActor () -> Void = {},
         carried: OwnerCheckMessage? = nil,
-        onOut: @escaping @MainActor (Bool, OwnerCheckMessage?) -> Void = { _, _ in }
+        onOut: @escaping @MainActor (Bool, OwnerCheckMessage?) -> Void = { _, _ in },
+        onGone: @escaping @MainActor () -> Void = {}
     ) {
         self.mode = mode
         self.repo = repo
@@ -54,6 +61,7 @@ public struct OwnerCheckFlow: View {
         self.onCancel = onCancel
         self.carried = carried
         self.onOut = onOut
+        self.onGone = onGone
     }
 
     public var body: some View {
@@ -77,8 +85,12 @@ public struct OwnerCheckFlow: View {
                     guard !Task.isCancelled else { return }
                     model.tickShown()
                 }
-                // (ANDROID-PLAN 0.1.124) No longer out once the screen went (``OwnerCheckViewModel/onOut`` tells the rest).
-                .onDisappear { onOut(false, nil) }
+                // (ANDROID-PLAN 0.1.124) No longer out once the screen went, and nothing told of it after: a check that
+                // comes back later (the vault locked meanwhile, say) leaves no failure for a later gated check.
+                .onDisappear {
+                    model.onOut = nil
+                    onGone()
+                }
             } else {
                 colors.background.color.ignoresSafeArea()
             }
