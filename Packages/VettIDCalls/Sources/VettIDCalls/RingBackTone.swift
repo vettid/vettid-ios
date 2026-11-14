@@ -41,35 +41,19 @@ enum RingBackTone {
     }
 }
 
-/// ``CallTones`` with `AVAudioPlayer`: the ring-back from ``RingBackTone`` and, when CallKit could not show an incoming call,
-/// the app's own ringtone (`vettid_ringtone.caf` in the main bundle). The slots make a tone that plays never restart.
+/// ``CallTones`` with `AVAudioPlayer`: the ring-back from ``RingBackTone``. The slot makes a tone that plays never restart.
 @MainActor
 public final class SystemCallTones: CallTones {
-    private let ringBackSlot: ToneSlot<AVAudioPlayer>
-    private let ringtoneSlot: ToneSlot<AVAudioPlayer>
+    private let ringBackSlot = ToneSlot<AVAudioPlayer>(
+        begin: {
+            guard let p = try? AVAudioPlayer(data: RingBackTone.wav()) else { return nil }
+            p.numberOfLoops = -1
+            return p.play() ? p : nil
+        },
+        end: { $0.stop() }
+    )
 
-    public init(ringtoneName: String = "vettid_ringtone", ringtoneExtension: String = "caf", bundle: Bundle = .main) {
-        ringBackSlot = ToneSlot(
-            begin: { Self.play { try AVAudioPlayer(data: RingBackTone.wav()) } },
-            end: { $0.stop() }
-        )
-        ringtoneSlot = ToneSlot(
-            begin: {
-                guard let url = bundle.url(forResource: ringtoneName, withExtension: ringtoneExtension) else { return nil }
-                return Self.play { try AVAudioPlayer(contentsOf: url) }
-            },
-            end: { $0.stop() }
-        )
-    }
+    public init() {}
 
     public func ringBack(_ on: Bool) { ringBackSlot.set(on) }
-
-    public func ringtone(_ on: Bool) { ringtoneSlot.set(on) }
-
-    /// A started looping player, or nil if it could not start (nothing then counts as playing).
-    private static func play(_ make: () throws -> AVAudioPlayer) -> AVAudioPlayer? {
-        guard let p = try? make() else { return nil }
-        p.numberOfLoops = -1
-        return p.play() ? p : nil
-    }
 }

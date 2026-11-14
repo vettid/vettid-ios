@@ -121,6 +121,15 @@ public enum CallState: Equatable, Sendable {
     }
 }
 
+/// One published state, with the call it belongs to. `seq` is the session's number (each call has its own); `memberEnded`
+/// is true when the end is this member's own act on this phone (a hang-up, a decline here, the lock), false for the other side's
+/// end, a failure, and a decline the vault reports from the member's other device.
+package struct CallTransition: Sendable {
+    package var seq: Int
+    package var state: CallState
+    package var memberEnded = false
+}
+
 /// Measurements of a call, for the diagnostics view and the phone tests. No identifiers, nothing secret.
 public struct CallDiagnostics: Equatable, Sendable {
     /// Outgoing: from the tap on Call to the vault's answer to `call.start`.

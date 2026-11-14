@@ -4,10 +4,10 @@ import VettIDVault
 // Publishing the state and ending a call.
 extension CallMachine {
     func publish(_ s: CallSession) {
-        state = .live(CallState.Live(
+        setState(.live(CallState.Live(
             connectionId: s.connectionId, direction: s.direction, phase: s.phase, callId: s.callId, muted: s.muted,
             activeSince: s.activeSince, reconnecting: s.reconnecting, answerThrough: s.keysSet, formTwo: s.formTwo
-        ))
+        )), seq: s.seq)
     }
 
     /// Ends the call here; [tell] is the `call.end` reason for the vault, or nil when nothing is to be sent.
@@ -24,9 +24,9 @@ extension CallMachine {
         }
         let duration = s.activeSince.map { Duration.rounded(seconds: clock.now().timeIntervalSince($0)) }
         if duration != nil { countPath(s) }
-        state = .ended(CallState.Ended(
+        setState(.ended(CallState.Ended(
             connectionId: s.connectionId, direction: s.direction, reason: reason, callId: callId, duration: duration
-        ))
+        )), seq: s.seq, memberEnded: s.memberEnded)
         // The connection's own call that arrived while this one rang to it is not lost when this one ended another way (the
         // vault, the other side, a refusal of `call.start` such as `busy`, a failure): it rings. Never after this member's own
         // end, a lock's above all: a call rings only while the vault is open on this phone, and a lock would decline it unseen.

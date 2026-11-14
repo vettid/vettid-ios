@@ -37,13 +37,12 @@ public protocol CallAudioSession: AnyObject {
     func setSpeaker(_ on: Bool)
 }
 
-/// The sounds around a call.
+/// The sounds the app plays around a call: the ring-back only. CallKit plays the ringtone of an incoming call, and when it
+/// refuses one (Do Not Disturb, a block list) nothing rings.
 @MainActor
 public protocol CallTones: AnyObject {
     /// The caller's ring-back tone while the other phone rings.
     func ringBack(_ on: Bool)
-    /// VettID's ringtone, in the app: only when CallKit could not show the incoming call (CallKit plays the ringtone itself).
-    func ringtone(_ on: Bool)
 }
 
 /// One sound that is either playing or not. The call's state is reported at every change, so most reports say "on" while it

@@ -43,7 +43,7 @@ package enum CallKitAction: Equatable, Sendable {
 /// How CallKit took an incoming call.
 package enum CallKitReport: Equatable, Sendable {
     case reported
-    /// Do Not Disturb or a block list stopped it: the call is not rung (nor is the app's ringtone played).
+    /// Do Not Disturb or a block list stopped it: that is respected (no ringtone of the app's own).
     case filtered
     case failed
 }
@@ -73,6 +73,8 @@ package protocol CallKitEvents: AnyObject {
     func audioDidActivate()
     func audioDidDeactivate()
     func providerDidReset()
+    /// CallKit gave up waiting for an action: the call ends.
+    func actionTimedOut()
 }
 
 /// The provider's settings (`CXProviderConfiguration`; spec-silent values are chosen here, see the PR text).
@@ -100,15 +102,6 @@ extension CallEnd {
         case .answeredElsewhere: .answeredElsewhere
         case .unavailable, .ownVaultBusy, .callsOff, .ownerCheckRequired, .notSupported, .noAddress, .couldNotConnect,
              .connectionLost, .notEncrypted, .locked, .failed: .failed
-        }
-    }
-
-    /// The member ended it here (the app's own screen, or the vault's lock): CallKit is asked to end it, as for a hang-up in
-    /// its own screen.
-    package var endedHere: Bool {
-        switch self {
-        case .hungUp, .declinedHere, .locked: true
-        default: false
         }
     }
 }

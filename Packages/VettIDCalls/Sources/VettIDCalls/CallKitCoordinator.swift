@@ -3,16 +3,21 @@ import Observation
 
 /// Maps between the call machine and CallKit, with the app in the foreground (no PushKit yet; no call screens).
 ///
-/// - The member's actions in CallKit's screen (answer, end, mute) go to the machine.
-/// - The machine's states go to CallKit: an incoming call is reported (only while the app is in the foreground), an outgoing call
-///   is started, and its connecting and connection are reported; an end is reported with its reason, or, when the member ended
-///   the call here, asked of CallKit as a hang-up.
-/// - The audio session is the app's only between CallKit's activation and deactivation; the coordinator never activates it.
-/// - The ring-back tone plays (by the app: CallKit plays none) while the outgoing call rings, and only once CallKit has given the
-///   audio session. CallKit plays the ringtone of an incoming call; the app plays it only when CallKit could not show the call.
+/// **The rule (C1, foreground only): a call that CallKit does not carry never has audio.** It is never placed and never answered:
+/// - a refused `CXStartCallAction` ends the call as ``CallEnd/failed``;
+/// - a refused `CXAnswerCallAction`, and an answer of a call CallKit did not take (an offer that came while the app was not in
+///   front, or one CallKit refused: Do Not Disturb, a block list) are declined (an answer in the app goes through ``answer()``,
+///   and a machine that is answered anyway is declined at once). A refused offer that nobody answers rings out as missed; the
+///   app plays no ringtone of its own for it.
 ///
-/// An incoming call that arrives while the app is not in the foreground is not reported to CallKit (that needs PushKit, a later
-/// change): the machine rings it as before and the coordinator does nothing for it.
+/// - The member's actions in CallKit's screen (answer, end, mute) go to the machine.
+/// - Every state the machine publishes (``CallMachine/transitions()``, none merged) goes to CallKit: an incoming call is reported
+///   (only while the app is in the foreground), an outgoing call is started and reported connecting, and connected when media
+///   flows (`active`, not the answer); an end is reported with its reason, or, when it is the member's own act here, asked of
+///   CallKit as a hang-up.
+/// - The audio session is the app's only between CallKit's activation and deactivation; the coordinator never activates it. An
+///   interruption (a cellular call, Siri) arrives as `didDeactivate`, or as an end action.
+/// - The ring-back plays (by the app: CallKit plays none) while the outgoing call rings and the session is CallKit's.
 @MainActor
 @Observable
 package final class CallKitCoordinator: CallKitEvents {
@@ -31,24 +36,28 @@ package final class CallKitCoordinator: CallKitEvents {
     /// The call CallKit knows, from its first state until the next call.
     private struct Tracked {
         var uuid = UUID()
+        var seq: Int
         var connectionId: String
         var direction: CallDirection
-        var callId: String?
         var party: CallParty
-        /// CallKit knows this call (an incoming call reported while in front, or an outgoing call).
+        /// CallKit carries this call: only then does it have audio.
         var kit = true
         var answerTold = false
         var connectedTold = false
-        var muted = false
+        /// The last mute the machine published, and the one CallKit has.
+        var machineMuted = false
+        var kitMuted = false
         var over = false
         var endedInKit = false
         var ringing = false
+        var refused = false
     }
 
     @ObservationIgnored private var current: Tracked?
     @ObservationIgnored private var audioActive = false
-    @ObservationIgnored private var observing = true
-    @ObservationIgnored private var tasks: [Task<Void, Never>] = []
+    @ObservationIgnored private var consumer: Task<Void, Never>?
+    @ObservationIgnored private var tasks: [Int: Task<Void, Never>] = [:]
+    @ObservationIgnored private var nextTask = 0
 
     package init(
         machine: CallMachine, provider: any CallKitProviding, control: any CallKitControlling, audio: any CallAudioSession,
@@ -66,56 +75,111 @@ package final class CallKitCoordinator: CallKitEvents {
         audio.onStateChange = { [weak self] s in self?.audioState = s }
     }
 
-    /// Follows the machine's state. Call once.
-    package func start() { observe() }
+    /// Follows the machine: every state it publishes from now on (and a live call, if there is one). Call once.
+    package func start() {
+        guard consumer == nil else { return }
+        let stream = machine.transitions()
+        consumer = Task { @MainActor [weak self] in
+            for await t in stream {
+                guard let self else { return }
+                apply(t)
+            }
+        }
+    }
 
     package func stop() {
-        observing = false
-        for t in tasks { t.cancel() }
+        consumer?.cancel()
+        consumer = nil
+        for t in tasks.values { t.cancel() }
         tasks.removeAll()
         tones.ringBack(false)
-        tones.ringtone(false)
     }
 
     /// The speaker, only when the member asks; false returns to the headset or the earpiece.
     package func setSpeaker(_ on: Bool) { audio.setSpeaker(on) }
 
-    private func observe() {
-        guard observing else { return }
-        let s = withObservationTracking { machine.state } onChange: { [weak self] in
-            Task { @MainActor in self?.observe() }
+    /// The member answers the ringing call in the app's own screen. A call CallKit carries is answered through CallKit (which
+    /// opens the audio); any other is declined.
+    package func answer() {
+        guard let c = current, !c.over, c.direction == .incoming else { return }
+        if c.kit {
+            current?.answerTold = true
+            send(.answer(c.uuid)) { [weak self] in self?.machine.end(.failed) }
+        } else {
+            machine.hangUp()
         }
-        apply(s)
     }
 
-    // MARK: the machine's state to CallKit
+    // MARK: the machine's states to CallKit
 
-    func apply(_ state: CallState) {
-        switch state {
+    func apply(_ state: CallState, seq: Int = 0, memberEnded: Bool = false) {
+        apply(CallTransition(seq: seq, state: state, memberEnded: memberEnded))
+    }
+
+    func apply(_ t: CallTransition) {
+        switch t.state {
         case .idle: break
-        case .live(let l): live(l)
-        case .ended(let e): ended(e)
+        case .live(let l): live(l, seq: t.seq)
+        case .ended(let e): ended(e, seq: t.seq, memberEnded: t.memberEnded)
         }
     }
 
-    private func live(_ l: CallState.Live) {
-        // States may be merged by the observation: a different call id is a different call.
-        if current == nil || current?.over == true || (current?.callId != nil && l.callId != nil && current?.callId != l.callId) {
-            begin(l)
+    private func live(_ l: CallState.Live, seq: Int) {
+        if let c = current, !c.over, c.seq != seq { replaced(c) }
+        if current == nil || current?.over == true { begin(l, seq: seq) }
+        guard let c = current, c.seq == seq else { return }
+        if c.direction == .incoming, l.phase != .incoming, l.phase != .starting, !c.kit {
+            refuse()
+        } else if c.kit {
+            phaseReports(l, c)
+            current?.ringing = l.phase == .ringing
+            muteReports(l, c)
         }
-        guard var c = current else { return }
-        if c.callId == nil { c.callId = l.callId }
-        current = c
-        // Answered (anywhere): the app's own ringtone, if it plays, stops.
-        if c.direction == .incoming, l.phase != .incoming { tones.ringtone(false) }
-        guard c.kit else { return }
-        phaseReports(l, c)
-        current?.ringing = l.phase == .ringing
-        if l.muted != c.muted {
-            current?.muted = l.muted
-            send(.mute(c.uuid, l.muted))
-        }
+        current?.machineMuted = l.muted
         updateTones()
+    }
+
+    /// An answered call CallKit does not carry has no audio: it is declined, once.
+    private func refuse() {
+        guard current?.refused == false else { return }
+        current?.refused = true
+        machine.hangUp()
+    }
+
+    /// The tracked call was replaced by another before its end was seen: it is let go in CallKit first.
+    private func replaced(_ c: Tracked) {
+        current?.over = true
+        updateTones()
+        if c.kit, !c.endedInKit { provider.reportCall(uuid: c.uuid, endedAt: clock.now(), reason: .failed) }
+    }
+
+    private func begin(_ l: CallState.Live, seq: Int) {
+        var c = Tracked(seq: seq, connectionId: l.connectionId, direction: l.direction, party: party(l.connectionId))
+        audio.prepare()
+        switch l.direction {
+        case .outgoing:
+            let uuid = c.uuid
+            send(.start(uuid, handle: c.party.handle)) { [weak self] in
+                // CallKit refused the call: it has no audio, so it is not placed.
+                guard self?.current?.uuid == uuid else { return }
+                self?.current?.kit = false
+                self?.machine.end(.failed)
+            }
+        case .incoming:
+            if isForeground() { report(c) } else { c.kit = false }
+        }
+        current = c
+    }
+
+    private func report(_ c: Tracked) {
+        let update = CallKitUpdate(handle: c.party.handle, name: c.party.name)
+        let uuid = c.uuid
+        launch { [weak self] in
+            guard let self else { return }
+            let result = await provider.reportNewIncomingCall(uuid: uuid, update: update)
+            // Refused (Do Not Disturb, a block list, an error): respected. The call carries no audio and rings out as missed.
+            if result != .reported, current?.uuid == uuid, current?.over == false { current?.kit = false }
+        }
     }
 
     private func phaseReports(_ l: CallState.Live, _ c: Tracked) {
@@ -124,6 +188,7 @@ package final class CallKitCoordinator: CallKitEvents {
         case .connecting: toldAnswered()
         case .active:
             toldAnswered()
+            // Connected is reported when media flows (`active`), not at the answer.
             if c.direction == .outgoing, !c.connectedTold {
                 current?.connectedTold = true
                 provider.reportOutgoingCall(uuid: c.uuid, connectedAt: clock.now())
@@ -131,69 +196,62 @@ package final class CallKitCoordinator: CallKitEvents {
         }
     }
 
-    private func begin(_ l: CallState.Live) {
-        var c = Tracked(connectionId: l.connectionId, direction: l.direction, callId: l.callId, party: party(l.connectionId))
-        audio.prepare()
-        switch l.direction {
-        case .outgoing:
-            send(.start(c.uuid, handle: c.party.handle))
-        case .incoming:
-            if isForeground() {
-                report(c)
-            } else {
-                c.kit = false
-            }
-        }
-        current = c
+    /// The mute the machine published, when it differs from the last one and from what CallKit has.
+    private func muteReports(_ l: CallState.Live, _ c: Tracked) {
+        guard l.muted != c.machineMuted, l.muted != c.kitMuted else { return }
+        current?.kitMuted = l.muted
+        send(.mute(c.uuid, l.muted)) {}
     }
 
-    private func report(_ c: Tracked) {
-        let update = CallKitUpdate(handle: c.party.handle, name: c.party.name)
-        let uuid = c.uuid
-        tasks.append(Task { @MainActor [weak self] in
-            guard let self else { return }
-            let result = await provider.reportNewIncomingCall(uuid: uuid, update: update)
-            guard current?.uuid == uuid, current?.over == false, result != .reported else { return }
-            current?.kit = false
-            // CallKit rang nothing: the app does, unless the member's own settings (Do Not Disturb, a block list) stopped the call.
-            if result == .failed { tones.ringtone(true) }
-        })
-    }
-
-    /// An incoming call answered in the app's own screen: CallKit is told, so that it starts the audio.
+    /// An incoming call answered in the app's own screen without ``answer()``: CallKit is told, so that it opens the audio.
     private func toldAnswered() {
         guard let c = current, c.direction == .incoming, !c.answerTold else { return }
         current?.answerTold = true
-        send(.answer(c.uuid))
+        send(.answer(c.uuid)) { [weak self] in self?.machine.end(.failed) }
     }
 
-    private func ended(_ e: CallState.Ended) {
-        guard var c = current, !c.over, c.connectionId == e.connectionId else { return }
+    private func ended(_ e: CallState.Ended, seq: Int, memberEnded: Bool) {
+        guard var c = current, c.seq == seq, !c.over else { return }
         c.over = true
         current = c
         updateTones()
-        tones.ringtone(false)
         guard c.kit, !c.endedInKit else { return }
         let uuid = c.uuid
-        let report = { [clock, provider] in provider.reportCall(uuid: uuid, endedAt: clock.now(), reason: e.reason.callKitReason) }
-        if e.reason.endedHere {
-            tasks.append(Task { @MainActor [weak self] in
-                // If CallKit refuses the hang-up (it no longer knows the call), the end is reported as it is.
-                do { try await self?.control.request(.end(uuid)) } catch { report() }
-            })
+        let reason = e.reason.callKitReason
+        let report: @MainActor @Sendable () -> Void = { [weak self] in
+            guard let self else { return }
+            provider.reportCall(uuid: uuid, endedAt: clock.now(), reason: reason)
+        }
+        if memberEnded {
+            // The member's own act here: asked of CallKit as a hang-up (reported as it is if CallKit refuses).
+            send(.end(uuid), onRefused: report)
         } else {
             report()
         }
     }
 
-    private func send(_ action: CallKitAction) {
-        tasks.append(Task { @MainActor [weak self] in try? await self?.control.request(action) })
+    /// Asks CallKit for [action]; [onRefused] runs if it refuses.
+    private func send(_ action: CallKitAction, onRefused: @escaping @MainActor () -> Void) {
+        launch { [weak self] in
+            do { try await self?.control.request(action) } catch { onRefused() }
+        }
     }
 
-    /// The ring-back plays while the outgoing call rings and the audio session is CallKit's; CallKit plays an incoming ringtone.
+    /// Tasks still running (for the tests).
+    var pendingTasks: Int { tasks.count }
+
+    private func launch(_ body: @escaping @MainActor () async -> Void) {
+        let id = nextTask
+        nextTask += 1
+        tasks[id] = Task { @MainActor [weak self] in
+            await body()
+            self?.tasks[id] = nil
+        }
+    }
+
+    /// The ring-back plays while the outgoing call rings and the audio session is CallKit's.
     private func updateTones() {
-        let ringBack = audioActive && current?.ringing == true && current?.over == false && current?.direction == .outgoing
-        tones.ringBack(ringBack)
+        tones.ringBack(audioActive && current?.ringing == true && current?.over == false && current?.direction == .outgoing)
     }
 
     // MARK: CallKit to the machine
@@ -206,16 +264,15 @@ package final class CallKitCoordinator: CallKitEvents {
     }
 
     package func performAnswer(uuid: UUID) -> Bool {
-        guard let c = current, c.uuid == uuid, c.direction == .incoming, !c.over else { return false }
+        guard let c = current, c.uuid == uuid, c.direction == .incoming, !c.over, c.kit else { return false }
         current?.answerTold = true
-        tones.ringtone(false)
         machine.answer()
         return true
     }
 
+    /// Fulfilled for any call, tracked or not: ending a call CallKit holds that the app has let go (a replaced call) is harmless.
     package func performEnd(uuid: UUID) -> Bool {
-        guard let c = current, c.uuid == uuid else { return false }
-        if !c.over {
+        if let c = current, c.uuid == uuid, !c.over {
             current?.endedInKit = true
             // A ringing incoming call is declined, any other call hung up.
             machine.hangUp()
@@ -225,9 +282,16 @@ package final class CallKitCoordinator: CallKitEvents {
 
     package func performMute(uuid: UUID, muted: Bool) -> Bool {
         guard let c = current, c.uuid == uuid, !c.over else { return false }
-        current?.muted = muted
+        current?.kitMuted = muted
         if case .live(let l) = machine.state, l.muted != muted { machine.setMuted(muted) }
         return true
+    }
+
+    package func actionTimedOut() {
+        if current?.over == false {
+            current?.endedInKit = true
+            machine.end(.failed)
+        }
     }
 
     // MARK: the audio session
@@ -245,11 +309,10 @@ package final class CallKitCoordinator: CallKitEvents {
     }
 
     package func providerDidReset() {
-        if current?.over == false {
+        if let c = current, c.kit, !c.over {
             current?.endedInKit = true
             machine.hangUp()
         }
         audioDidDeactivate()
-        tones.ringtone(false)
     }
 }

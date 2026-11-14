@@ -19,6 +19,8 @@ final class FakeKit: CallKitProviding, CallKitControlling {
     var actions: [CallKitAction] = []
     var incomingResult: CallKitReport = .reported
     var refuseActions = false
+    /// The coordinator, as CallKit's delegate: a requested action is performed, and refused when the coordinator refuses it.
+    weak var delegate: (any CallKitEvents)?
 
     func reportNewIncomingCall(uuid: UUID, update: CallKitUpdate) async -> CallKitReport {
         events.append(.incoming(uuid, update))
@@ -36,6 +38,15 @@ final class FakeKit: CallKitProviding, CallKitControlling {
     func request(_ action: CallKitAction) async throws {
         actions.append(action)
         if refuseActions { throw StartFailure() }
+        guard let events = delegate else { return }
+        let done: Bool
+        switch action {
+        case .start(let uuid, _): done = events.performStart(uuid: uuid)
+        case .answer(let uuid): done = events.performAnswer(uuid: uuid)
+        case .end(let uuid): done = events.performEnd(uuid: uuid)
+        case .mute(let uuid, let muted): done = events.performMute(uuid: uuid, muted: muted)
+        }
+        if !done { throw StartFailure() }
     }
 
     var uuid: UUID? {
@@ -60,9 +71,7 @@ final class FakeAudio: CallAudioSession {
 @MainActor
 final class FakeTones: CallTones {
     var ringBackLog: [Bool] = []
-    var ringtoneLog: [Bool] = []
     func ringBack(_ on: Bool) { ringBackLog.append(on) }
-    func ringtone(_ on: Bool) { ringtoneLog.append(on) }
     var ringBackNow: Bool { ringBackLog.last ?? false }
 }
 
@@ -81,10 +90,12 @@ private final class Player {}
     func machine() -> CallMachine { CallMachine(signalling: signalling, engines: engines, clock: clock) }
 
     func coordinator(_ m: CallMachine, foreground: Bool = true) -> CallKitCoordinator {
-        CallKitCoordinator(
+        let c = CallKitCoordinator(
             machine: m, provider: kit, control: kit, audio: audio, tones: tones, clock: clock,
             party: { CallParty(handle: "handle-\($0)", name: "Name of \($0)") }, isForeground: { foreground }
         )
+        kit.delegate = c
+        return c
     }
 
     func settle() async { await clock.settle() }
@@ -122,7 +133,6 @@ private final class Player {}
         c.apply(state(.incoming, .incoming))
         await settle()
         #expect(kit.events.count == 1)
-        #expect(tones.ringtoneLog.isEmpty, "CallKit plays the ringtone")
     }
 
     @Test func anIncomingCallInTheBackgroundIsNotReported() async {
@@ -134,26 +144,90 @@ private final class Player {}
         #expect(kit.events.isEmpty && kit.actions.isEmpty)
     }
 
-    @Test func anIncomingCallCallKitCouldNotShowRingsInTheAppUnlessTheMemberFilteredIt() async {
-        kit.incomingResult = .failed
-        let c = coordinator(machine())
-        c.apply(state(.incoming, .incoming))
-        await settle()
-        #expect(tones.ringtoneLog == [true])
-        c.apply(state(.connecting, .incoming))
-        #expect(tones.ringtoneLog == [true, false], "answered: the app's ringtone stops")
-        #expect(kit.actions.isEmpty, "and CallKit, which does not know the call, is not told")
+    /// A call CallKit does not carry (refused: Do Not Disturb, a block list, an error; or offered in the background) never has
+    /// audio: answering it declines it, and no ringtone of the app's own plays.
+    @Test func anAnswerOfACallCallKitDoesNotCarryDeclinesItAndOpensNoAudio() async throws {
+        for result in [CallKitReport.failed, .filtered] {
+            let kit = FakeKit()
+            kit.incomingResult = result
+            let signalling = FakeSignalling()
+            let m = CallMachine(signalling: signalling, engines: engines, clock: clock)
+            let c = CallKitCoordinator(
+                machine: m, provider: kit, control: kit, audio: audio, tones: tones, clock: clock,
+                party: { CallParty(handle: $0, name: $0) }, isForeground: { true }
+            )
+            kit.delegate = c
+            c.start()
+            signalling.deliver(offer())
+            await clock.runCurrent()
+            await settle()
+            #expect(kit.events.count == 1)
+            c.answer()
+            await clock.runCurrent()
+            guard case .ended(let e) = m.state else { throw WrongState(state: m.state) }
+            #expect(e.reason == .declinedHere, "\(result)")
+            #expect(signalling.sent.last == "end(\(callId), decline)")
+            #expect(engines.created.isEmpty, "no engine, no audio")
+            #expect(kit.actions.isEmpty && !audio.log.contains("activate"))
+            c.stop()
+        }
+    }
 
-        let other = FakeKit()
-        other.incomingResult = .filtered
-        let tones2 = FakeTones()
-        let c2 = CallKitCoordinator(
-            machine: machine(), provider: other, control: other, audio: audio, tones: tones2, clock: clock,
-            party: { CallParty(handle: $0, name: $0) }, isForeground: { true }
+    @Test func aBackgroundOfferIsNeverAnsweredAndAMachineAnsweredAnywayIsDeclined() async throws {
+        let signalling = FakeSignalling()
+        let m = CallMachine(signalling: signalling, engines: engines, clock: clock)
+        let c = CallKitCoordinator(
+            machine: m, provider: kit, control: kit, audio: audio, tones: tones, clock: clock,
+            party: { CallParty(handle: $0, name: $0) }, isForeground: { false }
         )
-        c2.apply(state(.incoming, .incoming))
+        kit.delegate = c
+        c.start()
+        signalling.deliver(offer())
+        await clock.runCurrent()
         await settle()
-        #expect(tones2.ringtoneLog.isEmpty)
+        #expect(kit.events.isEmpty)
+        // The app's screen calls the machine directly: the answer goes through, then the coordinator declines.
+        m.answer()
+        await clock.runCurrent()
+        await settle()
+        await clock.runCurrent()
+        guard case .ended = m.state else { throw WrongState(state: m.state) }
+        #expect(!audio.log.contains("activate"))
+        c.stop()
+    }
+
+    @Test func aRefusedAnswerEndsTheCallAsFailed() async throws {
+        let signalling = FakeSignalling()
+        let m = CallMachine(signalling: signalling, engines: engines, clock: clock)
+        let c = coordinator(m)
+        c.start()
+        signalling.deliver(offer())
+        await clock.runCurrent()
+        await settle()
+        kit.refuseActions = true
+        c.answer()
+        await settle()
+        await clock.runCurrent()
+        guard case .ended(let e) = m.state else { throw WrongState(state: m.state) }
+        #expect(e.reason == .failed)
+        #expect(engines.created.isEmpty, "no audio ever opened")
+        c.stop()
+    }
+
+    @Test func aRefusedStartEndsTheCallAsFailed() async throws {
+        let signalling = FakeSignalling()
+        let m = CallMachine(signalling: signalling, engines: engines, clock: clock)
+        let c = coordinator(m)
+        c.start()
+        kit.refuseActions = true
+        m.call("conn-1")
+        await clock.runCurrent()
+        await settle()
+        await clock.runCurrent()
+        guard case .ended(let e) = m.state else { throw WrongState(state: m.state) }
+        #expect(e.reason == .failed)
+        #expect(kit.events.isEmpty, "CallKit does not know the call: nothing is reported")
+        c.stop()
     }
 
     @Test func everyPhaseOfAnOutgoingCallGoesToCallKit() async throws {
@@ -164,8 +238,7 @@ private final class Player {}
         #expect(kit.actions == [.start(uuid, handle: "handle-conn-1")])
         #expect(audio.log == ["prepare"])
 
-        // CallKit performs the start: the name and the connecting.
-        #expect(c.performStart(uuid: uuid))
+        // CallKit performed the start (the fake performs what is requested): the name and the connecting.
         #expect(kit.events == [.updated(uuid, CallKitUpdate(handle: "handle-conn-1", name: "Name of conn-1")), .connecting(uuid)])
 
         c.apply(state(.calling, .outgoing))
@@ -230,59 +303,96 @@ private final class Player {}
         #expect(kit.actions.last == .mute(uuid, false))
     }
 
-    /// The reasons CallKit is told, and for which the member's own end is asked of CallKit as a hang-up.
-    struct Row { let end: CallEnd, reason: CallKitEndReason, here: Bool }
+    /// The reasons CallKit is told.
+    struct Row { let end: CallEnd, reason: CallKitEndReason }
 
     static let reasons: [Row] = [
-        Row(end: .hungUp, reason: .remoteEnded, here: true),
-        Row(end: .peerHungUp, reason: .remoteEnded, here: false),
-        Row(end: .declined, reason: .remoteEnded, here: false),
-        Row(end: .declinedHere, reason: .declinedElsewhere, here: true),
-        Row(end: .busy, reason: .remoteEnded, here: false),
-        Row(end: .noAnswer, reason: .unanswered, here: false),
-        Row(end: .missed, reason: .unanswered, here: false),
-        Row(end: .answeredElsewhere, reason: .answeredElsewhere, here: false),
-        Row(end: .unavailable, reason: .failed, here: false),
-        Row(end: .ownVaultBusy, reason: .failed, here: false),
-        Row(end: .callsOff, reason: .failed, here: false),
-        Row(end: .ownerCheckRequired, reason: .failed, here: false),
-        Row(end: .notSupported, reason: .failed, here: false),
-        Row(end: .noAddress, reason: .failed, here: false),
-        Row(end: .couldNotConnect, reason: .failed, here: false),
-        Row(end: .connectionLost, reason: .failed, here: false),
-        Row(end: .notEncrypted, reason: .failed, here: false),
-        Row(end: .locked, reason: .failed, here: true),
-        Row(end: .failed, reason: .failed, here: false),
+        Row(end: .hungUp, reason: .remoteEnded),
+        Row(end: .peerHungUp, reason: .remoteEnded),
+        Row(end: .declined, reason: .remoteEnded),
+        Row(end: .declinedHere, reason: .declinedElsewhere),
+        Row(end: .busy, reason: .remoteEnded),
+        Row(end: .noAnswer, reason: .unanswered),
+        Row(end: .missed, reason: .unanswered),
+        Row(end: .answeredElsewhere, reason: .answeredElsewhere),
+        Row(end: .unavailable, reason: .failed),
+        Row(end: .ownVaultBusy, reason: .failed),
+        Row(end: .callsOff, reason: .failed),
+        Row(end: .ownerCheckRequired, reason: .failed),
+        Row(end: .notSupported, reason: .failed),
+        Row(end: .noAddress, reason: .failed),
+        Row(end: .couldNotConnect, reason: .failed),
+        Row(end: .connectionLost, reason: .failed),
+        Row(end: .notEncrypted, reason: .failed),
+        Row(end: .locked, reason: .failed),
+        Row(end: .failed, reason: .failed),
     ]
+
     @Test func everyEndReasonIsMapped() {
         #expect(Self.reasons.count == CallEnd.allCases.count)
+        for row in Self.reasons { #expect(row.end.callKitReason == row.reason, "\(row.end)") }
+    }
+
+    /// Whatever the reason, the member's own end here is asked of CallKit as a hang-up, and any other end is reported.
+    @Test func everyEndReasonReachesCallKit() async throws {
         for row in Self.reasons {
-            let (end, reason, here) = (row.end, row.reason, row.here)
-            #expect(end.callKitReason == reason, "\(end)")
-            #expect(end.endedHere == here, "\(end)")
+            for memberEnded in [false, true] {
+                let kit = FakeKit()
+                let c = CallKitCoordinator(
+                    machine: machine(), provider: kit, control: kit, audio: audio, tones: tones, clock: clock,
+                    party: { CallParty(handle: $0, name: $0) }, isForeground: { true }
+                )
+                kit.delegate = c
+                c.apply(state(.active, .incoming))
+                await settle()
+                let uuid = try #require(kit.uuid)
+                c.apply(ended(row.end, .incoming), memberEnded: memberEnded)
+                await settle()
+                if memberEnded {
+                    #expect(kit.actions.last == .end(uuid), "\(row.end): asked of CallKit as a hang-up")
+                    #expect(kit.events.allSatisfy { if case .ended = $0 { false } else { true } })
+                } else {
+                    #expect(kit.events.last == .ended(uuid, row.reason), "\(row.end)")
+                }
+            }
         }
     }
 
-    @Test func everyEndReasonReachesCallKit() async throws {
-        for row in Self.reasons {
-            let (end, reason, here) = (row.end, row.reason, row.here)
-            let kit = FakeKit()
-            let c = CallKitCoordinator(
-                machine: machine(), provider: kit, control: kit, audio: audio, tones: tones, clock: clock,
-                party: { CallParty(handle: $0, name: $0) }, isForeground: { true }
-            )
-            c.apply(state(.active, .incoming))
-            await settle()
-            let uuid = try #require(kit.uuid)
-            c.apply(ended(end, .incoming))
-            await settle()
-            if here {
-                #expect(kit.actions.last == .end(uuid), "\(end): asked of CallKit as a hang-up")
-                #expect(kit.events.allSatisfy { if case .ended = $0 { false } else { true } })
-            } else {
-                #expect(kit.events.last == .ended(uuid, reason), "\(end)")
-            }
-        }
+    /// The vault's `decline` (the member's other device declined) is not the member's decline here.
+    @Test func aDeclineElsewhereIsReportedAndADeclineHereIsAHangUp() async throws {
+        let signalling = FakeSignalling()
+        let m = CallMachine(signalling: signalling, engines: engines, clock: clock)
+        let c = coordinator(m)
+        c.start()
+        signalling.deliver(offer())
+        await clock.runCurrent()
+        await settle()
+        let uuid = try #require(kit.uuid)
+        signalling.deliver(.end(callId: callId, reason: "decline"))
+        await clock.runCurrent()
+        await settle()
+        #expect(kit.events.last == .ended(uuid, .declinedElsewhere))
+        #expect(kit.actions.isEmpty)
+        c.stop()
+
+        let kit2 = FakeKit()
+        let signalling2 = FakeSignalling()
+        let m2 = CallMachine(signalling: signalling2, engines: engines, clock: clock)
+        let c2 = CallKitCoordinator(
+            machine: m2, provider: kit2, control: kit2, audio: audio, tones: tones, clock: clock,
+            party: { CallParty(handle: $0, name: $0) }, isForeground: { true }
+        )
+        kit2.delegate = c2
+        c2.start()
+        signalling2.deliver(offer())
+        await clock.runCurrent()
+        await settle()
+        let uuid2 = try #require(kit2.uuid)
+        m2.decline()
+        await clock.runCurrent()
+        await settle()
+        #expect(kit2.actions == [.end(uuid2)])
+        c2.stop()
     }
 
     @Test func aHangUpCallKitRefusesIsReportedAsItIs() async throws {
@@ -308,89 +418,6 @@ private final class Player {}
         await settle()
         let second = kit.events.compactMap { e -> UUID? in if case .incoming(let u, _) = e { u } else { nil } }.last
         #expect(second != nil && second != first)
-    }
-
-    // MARK: CallKit to the machine
-
-    @Test func answeringInCallKitAnswersTheMachine() async throws {
-        let m = machine()
-        let c = coordinator(m)
-        c.start()
-        signalling.deliver(offer())
-        await clock.runCurrent()
-        await settle()
-        let uuid = try #require(kit.uuid)
-        #expect(!c.performAnswer(uuid: UUID()), "another call")
-        #expect(c.performAnswer(uuid: uuid))
-        await clock.runCurrent()
-        guard case .live(let l) = m.state else { throw WrongState(state: m.state) }
-        #expect(l.phase == .connecting)
-        await settle()
-        #expect(kit.actions.isEmpty, "CallKit answered: it is not told again")
-        c.stop()
-    }
-
-    @Test func endingInCallKitHangsUpOrDeclinesAndIsNotReportedBack() async throws {
-        let m = machine()
-        let c = coordinator(m)
-        c.start()
-        signalling.deliver(offer())
-        await clock.runCurrent()
-        await settle()
-        let uuid = try #require(kit.uuid)
-        #expect(c.performEnd(uuid: uuid))
-        await clock.runCurrent()
-        await settle()
-        guard case .ended(let e) = m.state else { throw WrongState(state: m.state) }
-        #expect(e.reason == .declinedHere)
-        #expect(kit.events.allSatisfy { if case .ended = $0 { false } else { true } }, "CallKit ended it: nothing is reported back")
-        #expect(kit.actions.isEmpty)
-        #expect(c.performEnd(uuid: uuid), "again: nothing to do, and fulfilled")
-        c.stop()
-    }
-
-    @Test func muteInCallKitMutesTheMachine() async throws {
-        let m = machine()
-        let c = coordinator(m)
-        c.start()
-        signalling.deliver(offer())
-        await clock.runCurrent()
-        await settle()
-        let uuid = try #require(kit.uuid)
-        #expect(c.performMute(uuid: uuid, muted: true))
-        await clock.runCurrent()
-        guard case .live(let l) = m.state else { throw WrongState(state: m.state) }
-        #expect(l.muted)
-        await settle()
-        #expect(kit.actions.isEmpty, "CallKit's own mute is not asked of it again")
-        c.stop()
-    }
-
-    @Test func aCallPlacedInTheAppIsStartedInCallKitThroughTheObservation() async throws {
-        let m = machine()
-        let c = coordinator(m)
-        c.start()
-        m.call("conn-1")
-        await clock.runCurrent()
-        await settle()
-        let uuid = try #require(kit.uuid)
-        #expect(kit.actions.first == .start(uuid, handle: "handle-conn-1"))
-        c.stop()
-    }
-
-    @Test func aResetEndsTheCall() async throws {
-        let m = machine()
-        let c = coordinator(m)
-        c.start()
-        signalling.deliver(offer())
-        await clock.runCurrent()
-        await settle()
-        c.audioDidActivate()
-        c.providerDidReset()
-        await clock.runCurrent()
-        guard case .ended = m.state else { throw WrongState(state: m.state) }
-        #expect(audio.log.suffix(1) == ["deactivate"])
-        c.stop()
     }
 
     // MARK: the audio session

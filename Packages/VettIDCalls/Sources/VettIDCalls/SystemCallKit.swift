@@ -103,6 +103,10 @@ package final class SystemCallKit: CallKitProviding, CallKitControlling {
             MainActor.assumeIsolated { target?.providerDidReset() }
         }
 
+        func provider(_ provider: CXProvider, timedOutPerforming action: CXAction) {
+            MainActor.assumeIsolated { target?.actionTimedOut() }
+        }
+
         func provider(_ provider: CXProvider, perform action: CXStartCallAction) {
             let uuid = action.callUUID
             let ok = MainActor.assumeIsolated { target?.performStart(uuid: uuid) } ?? false

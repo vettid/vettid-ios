@@ -39,10 +39,45 @@ struct RtcCallAudioSessionTests {
         let audio = RtcCallAudioSession()
         audio.prepare()
         audio.setSpeaker(true)
-        #expect(!rtc.isAudioEnabled)
+        #expect(!audio.speakerApplied, "nothing is applied to the session before CallKit activates it")
         audio.didActivate()
+        #expect(audio.speakerApplied, "the request is applied at the activation")
         audio.setSpeaker(false)
+        #expect(!audio.speakerApplied)
+        audio.setSpeaker(true)
+        #expect(audio.speakerApplied)
         audio.didDeactivate()
+        #expect(!audio.speakerApplied, "a call's speaker request does not carry to the next call")
+    }
+
+    @Test func theStackIsKeptFromStartingItsAudioUnitAsSoonAsTheSessionObjectExists() {
+        rtc.useManualAudio = false
+        rtc.isAudioEnabled = true
+        _ = RtcCallAudioSession()
+        #expect(rtc.useManualAudio && !rtc.isAudioEnabled, "set at init, before any engine, not at prepare")
+    }
+
+    @Test func theFactoryPreparesTheSessionBeforeItMakesAnEngine() throws {
+        @MainActor final class Recorder: CallAudioSession {
+            var state = AudioState()
+            var onStateChange: (@MainActor (AudioState) -> Void)?
+            var log: [String] = []
+            func prepare() { log.append("prepare") }
+            func didActivate() { log.append("activate") }
+            func didDeactivate() { log.append("deactivate") }
+            func setSpeaker(_ on: Bool) { log.append("speaker") }
+        }
+        _ = TestStack.ready
+        let recorder = Recorder()
+        let factory = WebRtcMediaEngineFactory(audioSession: recorder)
+        let engine = try factory.create(config: MediaConfig())
+        #expect(recorder.log == ["prepare"], "prepared, never activated")
+        engine.close()
+        // A configuration the build refuses makes no engine, and prepares nothing.
+        var odd = MediaConfig()
+        odd.dtlsPqcTrial = true
+        #expect(throws: (any Error).self) { try factory.create(config: odd) }
+        #expect(recorder.log == ["prepare"])
     }
 
     @Test func portsMapToRoutes() {

@@ -20,9 +20,16 @@ public final class RtcCallAudioSession: CallAudioSession {
     private let rtc = RTCAudioSession.sharedInstance()
     private var activated = false
     private var speakerWanted = false
+    /// Whether the speaker override is on the session now (false before the activation, whatever was asked).
+    private(set) var speakerApplied = false
     private var routeObserver: (any NSObjectProtocol)?
 
-    public init() {}
+    /// The stack must not start its audio unit by itself, from the first track of the first engine: so the switches are set here,
+    /// before any engine exists. (The audio unit starts only when CallKit has activated the session.)
+    public init() {
+        rtc.useManualAudio = true
+        rtc.isAudioEnabled = false
+    }
 
     /// Bluetooth hands-free (HFP). iOS 26 renamed `allowBluetooth` to `allowBluetoothHFP`, with the same value (4); the raw
     /// value serves the iOS 17 floor and the new name alike without a deprecation warning.
@@ -49,6 +56,7 @@ public final class RtcCallAudioSession: CallAudioSession {
     public func didDeactivate() {
         activated = false
         speakerWanted = false
+        speakerApplied = false
         rtc.isAudioEnabled = false
         rtc.audioSessionDidDeactivate(AVAudioSession.sharedInstance())
         if let o = routeObserver { NotificationCenter.default.removeObserver(o) }
@@ -67,6 +75,7 @@ public final class RtcCallAudioSession: CallAudioSession {
         rtc.lockForConfiguration()
         defer { rtc.unlockForConfiguration() }
         try? rtc.overrideOutputAudioPort(speakerWanted ? .speaker : .none)
+        speakerApplied = speakerWanted
     }
 
     private func observeRoutes() {
