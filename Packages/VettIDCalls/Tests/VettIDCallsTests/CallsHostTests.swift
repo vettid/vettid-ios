@@ -18,6 +18,10 @@ final class FakeAppVault: CallsAppVault {
     func firstName(_ connectionId: String) -> String? { inner.firstName(connectionId) }
     func refreshConnections() async { await inner.refreshConnections() }
     func onBeforeLock(_ hook: @escaping @MainActor () async -> Void) { hooks.append(hook) }
+    private(set) var holds: [@MainActor () -> Bool] = []
+    private(set) var holdsEnded = 0
+    func holdCollection(_ held: @escaping @MainActor () -> Bool) { holds.append(held) }
+    func collectionHoldEnded() { holdsEnded += 1 }
 }
 
 /// The wiring of the calls in the app: the call logic starts when the vault opens and stops when it does not, the hook of the
@@ -110,6 +114,42 @@ final class FakeAppVault: CallsAppVault {
         await settle()
         #expect(h.runtime == nil)
         #expect(h.uiState.call == .idle)
+    }
+
+    /// A live call keeps the vault's collection going in the background (`VaultManager.holdCollection`): the hold says so only while a
+    /// call is live, and tells the vault when it is not any more (an ending, a lock).
+    @Test func theCollectionHoldIsLiveOnlyDuringACall() async {
+        let h = host()
+        h.start()
+        #expect(vault.holds.count == 1 && vault.holdsEnded == 0)
+        #expect(vault.holds[0]() == false, "no vault open, no call")
+        vault.inner.gatewayFake.startGate = Gate()
+        vault.inner.setUnlocked(true)
+        await settle()
+        #expect(vault.holds[0]() == false, "open, no call")
+        h.call("conn-1")
+        await settle()
+        guard case .live = h.uiState.call else {
+            Issue.record("no live call: \(h.uiState.call)")
+            return
+        }
+        #expect(vault.holds[0]() == true, "a call is live")
+        let ended = vault.holdsEnded
+        vault.inner.gatewayFake.startGate?.open()
+        await settle()
+        #expect(vault.holds[0]() == false, "the call ended (it could not be placed)")
+        #expect(vault.holdsEnded > ended, "the vault is told: a background that waited for the call may finish")
+    }
+
+    @Test func aLockTellsTheVaultNoCallHoldsTheCollection() async {
+        let h = host()
+        h.start()
+        vault.inner.setUnlocked(true)
+        await settle()
+        let ended = vault.holdsEnded
+        vault.inner.setUnlocked(false)
+        await settle()
+        #expect(h.runtime == nil && vault.holdsEnded > ended)
     }
 
     @Test func theCallButtonFollowsTheProbe() async {

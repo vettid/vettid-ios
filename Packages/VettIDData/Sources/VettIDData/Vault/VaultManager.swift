@@ -75,7 +75,11 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
     public internal(set) var timeScale: UInt64 = 1
 
     // CredentialRepository.
-    public internal(set) var alarm: CredentialAlarm?
+    public internal(set) var alarm: CredentialAlarm? {
+        // Any change (an event, a resolution, a read) is newer than a read still on its way (``refreshAlarm(_:)``).
+        didSet { alarmGeneration += 1 }
+    }
+    @ObservationIgnored var alarmGeneration = 0
     public internal(set) var credentialKeyChange: CredentialKeyChange? // VaultManager+Events.followCredentialKeys
     /// Until when the unlock window is open (§3.5.3), as this app opened it.
     public internal(set) var unlockWindow: Date?
@@ -192,6 +196,31 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
     @ObservationIgnored var foregrounds = 0
     /// The app left the foreground and its background work stopped the collection.
     @ObservationIgnored var backgrounded = false // false at launch: matters once the app launches in the background (phase P)
+    /// Whether something that lives past the foreground (a live call, ``holdCollection(_:)``) needs the collection to go on.
+    @ObservationIgnored var collectionHeld: (@MainActor () -> Bool)?
+    /// The ``foregrounds`` count of a leaving of the foreground that was finished but for the collection's stop, which a hold kept
+    /// running (``onBackground(budget:)``); nil when none waits.
+    @ObservationIgnored var heldBackground: Int? {
+        didSet {
+            heldFlag.set(heldBackground != nil)
+            // The cap of held events counts afresh at the next hold.
+            if heldBackground == nil { session?.device.holdEnded() }
+        }
+    }
+    /// ``heldBackground``'s state for the device's thread: the events it holds back (``VaultDevice/holdEvents(_:)``).
+    @ObservationIgnored let heldFlag = HeldFlag()
+    /// Events that were not handled while a call held the collection in the background (``heldBackground``): the lists are read
+    /// again when the app is back in the foreground (``onForeground()``).
+    @ObservationIgnored var eventsMissedWhileHeld = false
+    /// The events a held background did not handle, in arrival order, in memory only (IOS-PLAN §6.9): replayed through
+    /// ``onEvent(_:)`` when the app is back in the foreground, and cleared with anything that ends the open vault.
+    @ObservationIgnored var heldEvents: [VaultMessage] = []
+    /// More arrived than ``VaultManager/maxHeldEvents``: the oldest were dropped, so the foreground reads the state again instead.
+    @ObservationIgnored var heldEventsOverflowed = false
+    /// The relay connection came back while held: the owner check's read waits for the foreground.
+    @ObservationIgnored var reconnectedWhileHeld = false
+    /// ``finishBackground()`` is stopping the collection: the held events are kept for the foreground.
+    @ObservationIgnored var finishingBackground = false
 
     public init(config: VaultManagerConfig) {
         self.config = config
@@ -523,6 +552,9 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
     /// Stops the mailbox collection (the app leaving the foreground, IOS-PLAN §6.6; the end of a test). The next
     /// operation that needs the vault starts it again.
     public func stopCollecting() {
+        // Anything that stops the collection but a held background's own end (a lock, a sign-out, a dropped session) ends the open
+        // vault: no event of it is replayed after.
+        if !finishingBackground { clearHeldEvents() }
         ownerChecks.forgetUnlockPin()
         session?.device.stop()
         session = nil

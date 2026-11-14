@@ -105,6 +105,7 @@ extension VaultManager {
     /// The vault is no longer open on this phone: what was read from it is dropped (the connections, the requests, the
     /// messages and their photos, the items and tags, the feed, the approvals' lists, History and the member's own profile).
     func forgetOpenLists() {
+        clearHeldEvents()
         forgetOwnProfile()
         forgetHeld()
         connections.forgetAuthentication()

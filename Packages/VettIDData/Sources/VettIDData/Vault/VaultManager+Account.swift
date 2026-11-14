@@ -133,6 +133,12 @@ extension VaultManager {
         // after a passed owner check.
         approvals.vaultOpened()
         refreshListsQuietly()
+        // The clone alarm is read after every unlock, whatever event was or was not received (a held background's, a process that
+        // ended): `credential.version` shows it (§3.5.9).
+        Task { [weak self] in
+            guard let self, let s = try? await openSession(), let api = try? openApi(s) else { return }
+            await refreshAlarm(api)
+        }
         // §10.5.1 "Compatibility": once after each unlock.
         Task { [weak self] in await self?.attachments.probe() }
         // A change whose answer was lost is decided as soon as the vault runs (§11.14.9 step 2).

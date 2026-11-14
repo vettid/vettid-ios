@@ -91,7 +91,21 @@ extension VaultManager {
     /// The alarm as `credential.version` shows it now (the `presenter` of the alert kept for the same alarm); unchanged
     /// when the vault does not answer.
     func refreshAlarm(_ api: VaultApi) async {
+        let started = beginAlarmRead()
         guard let info = try? await api.credentialVersion() else { return }
+        finishAlarmRead(info, started: started)
+    }
+
+    /// A read of the alarm begins: it makes an older read's answer stale.
+    func beginAlarmRead() -> Int {
+        alarmGeneration += 1
+        return alarmGeneration
+    }
+
+    /// The answer of a read that began at [started]: kept only if nothing newer came since (another read, or a change of the alarm:
+    /// a `credential.alarm` event, a resolution), which this older answer would set or clear.
+    func finishAlarmRead(_ info: CredentialInfo, started: Int) {
+        guard started == alarmGeneration else { return }
         keepAlarm(info)
     }
 

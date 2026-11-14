@@ -109,6 +109,14 @@ extension FakeVaultService {
     /// The vault's `relay.token.refresh` (§7.2: it asks the phone for a fresh standing token), sent to this phone.
     public func sendTokenRefresh() { locked { try? reply("relay.token.refresh", "{}") } }
 
+    /// Any event of the vault ([type] with the JSON [body]), sent to this phone.
+    public func sendEvent(_ type: String, _ body: String) { locked { try? reply(type, body) } }
+
+    /// The vault's `call.end` (the other member hung up call [callId]), sent to this phone.
+    public func sendCallEnd(_ callId: String, reason: String = "hangup") {
+        locked { try? reply("call.end", #"{"call_id":"\#(callId)","reason":"\#(reason)"}"#) }
+    }
+
     /// The move recorded and not yet confirmed, if any.
     public var pendingMove: UInt64? { locked { releases.pending } }
 

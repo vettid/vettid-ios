@@ -14,6 +14,12 @@ extension VaultManager {
     func observe(_ s: VaultSession) {
         stopObserving()
         readMoveMarker()
+        // In a background a call holds, the events that are not the calls' or the lock's are left unacked at the relay: it delivers
+        // them again once the app is back, so that a process that ends meanwhile loses none (the memory buffer below is the fast
+        // path for what the device had already handed over).
+        let flag = heldFlag
+        let passes: Set<String> = [LockNotices.type, HolderPolicy.deviceUnlinked, Self.typeHeld]
+        s.device.holdEvents { type in flag.on && !passes.contains(type) && !type.hasPrefix("call.") }
         let events = s.device.events()
         let counts = s.device.vaultRefusalCounts()
         let required = s.device.ownerCheckRequired()
@@ -28,7 +34,7 @@ extension VaultManager {
             Task { @MainActor [weak self] in
                 for await _ in reconnects {
                     guard let self else { return }
-                    ownerChecks.onRelayReconnected()
+                    relayReconnected()
                 }
             },
             Task { @MainActor [weak self] in
@@ -87,6 +93,12 @@ extension VaultManager {
     public func onForeground() {
         // A background task that began before this does not stop the collection (``onBackground(budget:)``).
         foregrounds += 1
+        // Back from a background that a call held: what was not handled meanwhile is read again below, with the lists.
+        heldBackground = nil
+        session?.device.collectsLongPoll(false)
+        let catchUp = eventsMissedWhileHeld
+        eventsMissedWhileHeld = false
+        replayHeldEvents()
         moveFlags.book.lifecycle += 1
         backgrounded = false
         ownerChecks.setForeground(true)
@@ -116,6 +128,8 @@ extension VaultManager {
             s.device.start()
             // The device's lock gate holds what may not go while a lock is pending (``setFlushGate``).
             await s.device.flushOutbox()
+            // The events a held background did not handle (no list, feed or approval was touched in the background): read again now.
+            if catchUp, phase == .unlocked, (try? await openSession()) != nil { refreshListsQuietly() }
         }
     }
 
@@ -155,10 +169,103 @@ extension VaultManager {
         watcher.cancel()
         // Back in the foreground meanwhile: the collection runs on.
         guard began == foregrounds else { return }
+        // A live call keeps the collection: its peer's `call.end` and ICE come through it, and its own go out through the session.
+        // The stop waits for the hold to end (``collectionHoldEnded()``).
+        if collectionHeld?() == true {
+            heldBackground = began
+            // The WebSocket's window of unacked messages would fill with the held events: a long poll meanwhile.
+            session?.device.collectsLongPoll(true)
+            return
+        }
+        finishBackground()
+    }
+
+    /// What a hold lets the foreground's leaving finish, once it may: the state of the background and the end of the collection.
+    private func finishBackground() {
+        heldBackground = nil
         backgrounded = true
         moveFlags.book.lifecycle += 1
         moveFlags.book.backgrounds += 1
+        // The held events stay for the foreground (a call's end in the background closes the connection, not the vault's state).
+        finishingBackground = true
+        let device = session?.device
         stopCollecting()
+        finishingBackground = false
+        // The stopped device goes back to the build's mode (it does not start again by this).
+        device?.collectsLongPoll(false)
+    }
+
+    /// How many events a held background keeps (about the most a call's length brings); more drop the oldest.
+    static let maxHeldEvents = 500
+
+    /// Whether [m] is kept for later now, in a background a call holds: nothing of it is acted on until the foreground, where
+    /// ``replayHeldEvents()`` handles it in order.
+    private func dropsInHeldBackground(_ m: VaultMessage) -> Bool {
+        // The calls take their own events from the device: they are not kept here.
+        guard heldBackground != nil, !Self.locksOrEndsSession(m.type), !m.type.hasPrefix("call.") else { return false }
+        eventsMissedWhileHeld = true
+        heldEvents.append(m)
+        if heldEvents.count > Self.maxHeldEvents {
+            heldEvents.removeFirst()
+            heldEventsOverflowed = true
+        }
+        return true
+    }
+
+    /// The held events are forgotten (the open vault ended: a lock, a sign-out, a wipe, a dropped session).
+    func clearHeldEvents() {
+        heldEvents = []
+        heldEventsOverflowed = false
+        reconnectedWhileHeld = false
+    }
+
+    /// Back in the foreground: what a held background kept is handled now, in the order it arrived, through the usual path and before
+    /// the lists are read again; a reconnect meanwhile reads the owner check again. After an overflow, where the oldest events
+    /// are gone, the state they carried is read instead: the alarm, the account and the owner check, the unlock window ended
+    /// (an alarm ends it) and the connections' authentication forgotten (its results are events, not read again).
+    private func replayHeldEvents() {
+        let events = heldEvents
+        let overflowed = heldEventsOverflowed
+        let reconnected = reconnectedWhileHeld
+        clearHeldEvents()
+        guard phase == .unlocked else { return }
+        for m in events { onEvent(m) }
+        if reconnected || overflowed { ownerChecks.onRelayReconnected() }
+        guard overflowed else { return }
+        unlockWindow = nil
+        connections.forgetAuthentication()
+        Task { [weak self] in
+            guard let self else { return }
+            if let s = try? await openSession(), let api = try? openApi(s) { await refreshAlarm(api) }
+            await refreshAccount()
+        }
+    }
+
+    /// The relay connection is back: the owner check's state is read again, except in a background a call holds, where nothing is
+    /// read (the foreground reads again, ``onForeground()``).
+    private func relayReconnected() {
+        guard heldBackground == nil else {
+            eventsMissedWhileHeld = true
+            reconnectedWhileHeld = true
+            return
+        }
+        ownerChecks.onRelayReconnected()
+    }
+
+    /// The events that are handled in a background a call holds: the lock's own signal and what ends the session.
+    static func locksOrEndsSession(_ type: String) -> Bool {
+        type == LockNotices.type || type == HolderPolicy.deviceUnlinked || type == typeHeld
+    }
+
+    /// Keeps the mailbox collection running while [held] says so, when the app leaves the foreground (a live call: the app runs on
+    /// in the background for its audio). The holder calls ``collectionHoldEnded()`` when [held] turns false.
+    public func holdCollection(_ held: @escaping @MainActor () -> Bool) { collectionHeld = held }
+
+    /// The hold of ``holdCollection(_:)`` ended. If the app left the foreground meanwhile and has not come back, the background
+    /// that was waiting finishes now: the collection stops as ``onBackground(budget:)`` would have stopped it.
+    public func collectionHoldEnded() {
+        guard let began = heldBackground, began == foregrounds, collectionHeld?() != true else { return }
+        finishBackground()
     }
 
     func stopObserving() {
@@ -166,12 +273,17 @@ extension VaultManager {
         observers = []
     }
 
+    // swiftlint:disable cyclomatic_complexity
     /// One vault event. Mirrors the part of vettid-android `VaultManager.onEvent` that the unlock, the lock and the owner
     /// check need; the lists and the feed follow theirs with their rows.
     func onEvent(_ m: VaultMessage) {
         // The lock before this phone's last unlock (the one an unlock of a running vault makes), relayed late.
         if lockNotices.stale(m) { return }
         ownerChecks.onEvent(m)
+        // In the background, kept running by a live call, only what locks or ends the session is handled here (the calls take their
+        // own events from the device); nothing else is read or acted on. The relay has the message acked once the device has handled
+        // it, so what is dropped here is read again from the vault when the app is back in the foreground (``onForeground()``).
+        if dropsInHeldBackground(m) { return }
         // Nothing the vault sends is taken into the app's lists while a lock is pending (as vettid-android).
         if lockGuard.takesEvents() {
             connections.onEvent(m)
@@ -209,6 +321,7 @@ extension VaultManager {
             break
         }
     }
+    // swiftlint:enable cyclomatic_complexity
 
     /// `vault.locking` (§12.3): the vault is locking; after this phone's last unlock, a lock of this phone that was in doubt
     /// no longer is. (One whose place in time is not known confirms nothing: the status read will.)

@@ -429,6 +429,9 @@ extension VaultDevice {
         of types: Set<String>, timeout: TimeInterval, match: @escaping @Sendable (VaultMessage) -> Bool = { _ in true }
     ) async throws -> VaultMessage {
         let deadline = Date().addingTimeInterval(timeout)
+        // While it waits, the events of these types are not held back (``holdsEvent(_:)``).
+        mem.withLock { for t in types { memory.awaited[t, default: 0] += 1 } }
+        defer { mem.withLock { for t in types { memory.awaited[t] = max(0, (memory.awaited[t] ?? 1) - 1) } } }
         while true {
             let (found, waiter): (VaultMessage?, OneShot<Bool>?) = try mem.withLock {
                 if halted { throw Self.haltedError }
@@ -565,6 +568,11 @@ final class AfterLockWork: @unchecked Sendable {
 
 /// What the device remembers of events and of a handling in hand, between calls; all under ``VaultDevice``'s `mem`.
 struct EventMemory {
+    /// Whether an event of a type is left unacked for now (``VaultDevice/holdEvents(_:)``).
+    var eventHold: (@Sendable (String) -> Bool)?
+    /// The events left unacked by the hold, by inner id; and the event types calls are waiting for, by how many.
+    var heldIDs: Set<String> = []
+    var awaited: [String: Int] = [:]
     /// Event types calls wait for (``VaultDevice/keepingEvents(_:_:)``), and the events a clear spared for them.
     var keptTypes: [String: Int] = [:]
     var sparedEvents: Set<String> = []

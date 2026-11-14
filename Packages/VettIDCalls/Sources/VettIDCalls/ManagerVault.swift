@@ -6,6 +6,12 @@ import VettIDData
 package protocol CallsAppVault: CallVault {
     /// Something to finish while the vault still collects, before the member's lock (a live call's hang-up).
     func onBeforeLock(_ hook: @escaping @MainActor () async -> Void)
+
+    /// The collection of the vault's messages goes on while [held] says so, when the app leaves the foreground (a live call).
+    func holdCollection(_ held: @escaping @MainActor () -> Bool)
+
+    /// [held] of ``holdCollection(_:)`` turned false: a background that waited for it may finish.
+    func collectionHoldEnded()
 }
 
 /// The name a call shows for a connection: the names on its VettID account, else its display name, each cleaned first
@@ -69,4 +75,8 @@ package final class ManagerVault: CallsAppVault {
     package func firstName(_ connectionId: String) -> String? { connection(connectionId).flatMap { AccountNames.cleaned($0.firstName) } }
 
     package func onBeforeLock(_ hook: @escaping @MainActor () async -> Void) { manager.onBeforeLock(hook) }
+
+    package func holdCollection(_ held: @escaping @MainActor () -> Bool) { manager.holdCollection(held) }
+
+    package func collectionHoldEnded() { manager.collectionHoldEnded() }
 }

@@ -37,7 +37,11 @@ package final class CallsRuntime {
     private var tasks: [Task<Void, Never>] = []
 
     /// [vault]: what the controller asks of the app's vault. [isForeground]: whether an incoming call may be reported to CallKit.
-    package init(vault: any CallVault, parts: CallsParts, isForeground: @escaping @MainActor () -> Bool) {
+    /// [notLive]: told whenever the call is not live any more (an ending, an idle machine).
+    package init(
+        vault: any CallVault, parts: CallsParts, isForeground: @escaping @MainActor () -> Bool,
+        notLive: @escaping @MainActor () -> Void = {}
+    ) {
         let slot = CoordinatorSlot()
         // Answering the ringing call goes through CallKit (which opens the audio), behind the microphone gate.
         let controller = CallsController(
@@ -60,6 +64,9 @@ package final class CallsRuntime {
         let transitions = controller.machine.transitions()
         tasks.append(Task { @MainActor [weak controller] in
             for await t in transitions {
+                if case .live = t.state { continue }
+                // The vault's collection no longer needs to run on in the background (``VaultManager/holdCollection(_:)``).
+                notLive()
                 guard case .ended(let e) = t.state, !CallTexts.staysOpen(e.reason) else { continue }
                 controller?.dismiss()
             }
@@ -114,6 +121,9 @@ public final class CallsHost {
         guard following == nil else { return }
         // The lock's own wait, bounded by the data layer's budget as ``CallsController/lockWait`` is.
         vault.onBeforeLock { [weak self] in await self?.runtime?.controller.endCallBeforeLock() }
+        // A live call keeps the vault's messages coming while the app is in the background (the `audio` background mode keeps the
+        // process): the peer's `call.end` and ICE come through the collection, and the hang-up goes out through the session.
+        vault.holdCollection { [weak self] in self?.callIsLive ?? false }
         let opens = vault.unlockedChanges()
         following = Task { @MainActor [weak self] in
             // One change at a time: the call logic of a closed vault is stopped (its hang-up waited for) before another is built.
@@ -128,7 +138,9 @@ public final class CallsHost {
         guard runtime == nil else { return }
         let p = parts ?? makeParts()
         parts = p
-        runtime = CallsRuntime(vault: vault, parts: p, isForeground: isForeground)
+        runtime = CallsRuntime(
+            vault: vault, parts: p, isForeground: isForeground, notLive: { [weak vault] in vault?.collectionHoldEnded() }
+        )
         started += 1
     }
 
@@ -137,6 +149,14 @@ public final class CallsHost {
         // Still the current one while its hang-up is waited for: the lock's own hook asks the same controller.
         await r.close()
         if runtime === r { runtime = nil }
+        // No call is live any more: a background that waited for it finishes (a lock in the background, say).
+        vault.collectionHoldEnded()
+    }
+
+    /// Whether a call is live: the vault's collection goes on in the background meanwhile.
+    package var callIsLive: Bool {
+        if case .live(_)? = runtime?.controller.state { return true }
+        return false
     }
 
     // MARK: for the screens
@@ -175,9 +195,6 @@ public final class CallsHost {
 
     /// Whether anything of calls is on the screen: a call (or an ending that stays) or the microphone gate.
     public var screenShown: Bool { uiState.showsScreen || microphoneScreen != nil }
-
-    /// Whether a call screen is over the app, so that the owner check's back gesture and the like stay off.
-    public var callOpen: Bool { uiState.callOpen }
 
     package func answer() { runtime?.controller.answer() }
     package func decline() { runtime?.controller.decline() }

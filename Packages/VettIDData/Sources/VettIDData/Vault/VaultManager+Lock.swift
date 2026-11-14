@@ -162,6 +162,7 @@ extension VaultManager {
     private func beginLock(unlockID: String?) -> Int {
         // A phase being computed now (a refresh, the end of an unlock) is not published after this.
         lockGeneration += 1
+        clearHeldEvents()
         // The record's writes still on their way for an operation that began before the lock are dropped.
         record.bumpGeneration()
         unlockWindow = nil
