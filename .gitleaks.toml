@@ -44,6 +44,11 @@ regexes = [
   '''417e8255ff4d7ffb33120f8b5a70d1878f728f597dd5de8c7606565f0d4895cc''',
   '''bbf1eb9f19ec263d821395609e266d906c7a8aa4a6c573003df116e241cf9e22''',
   '''0eed2888668319b2b085f09d8b94de8c65c3e5b2bfd15cb636e63bd511d1acac''',
+  # VAULT-MESSAGING 0.28.0 / vettid-android docs/calls/CALL-MEDIA.md §8 call-media vectors (TEST ONLY, printed in the
+  # specification, as in vettid-android's .gitleaks.toml): the frame keys of k_dir("caller") for suite 1 and suite 2, named as
+  # constants in VettIDCallsWebRTC's FrameKeyTests.
+  '''df487affce123283952f691628c1c2de''',
+  '''e2637ed9e4ab88d26b3f34869104e58d355e1eb7b6c5b7d3aea521bda4fd83da''',
 ]
 
 # §10.19 vote vectors (VAULT-MESSAGING 0.81.0 §16; vettid-vault testdata/vote/vectors.json, copied byte for byte to
