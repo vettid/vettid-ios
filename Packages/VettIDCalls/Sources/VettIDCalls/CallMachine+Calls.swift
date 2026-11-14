@@ -150,7 +150,8 @@ extension CallMachine {
         } else if s.callId == nil || s.supersededBy != nil {
             finish(s, reason, nil)
         } else {
-            finish(s, reason, CallReason.hangup)
+            // A failure is told to the other side as one (`call.end{failed}`), so that its call ends at once as failed.
+            finish(s, reason, reason == .failed ? CallReason.failed : CallReason.hangup)
         }
     }
 }

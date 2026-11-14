@@ -7,7 +7,7 @@ import Observation
 /// - a refused `CXStartCallAction` ends the call as ``CallEnd/failed``;
 /// - a refused `CXAnswerCallAction`, and an answer of a call CallKit did not take (an offer that came while the app was not in
 ///   front, or one CallKit refused: Do Not Disturb, a block list) is refused: ``answer()`` does nothing, no decline is sent, and
-///   the call rings out as missed in VettID's history. A machine answered anyway is ended here at once without a `call.end`.
+///   the call rings out as missed in VettID's history. A machine answered anyway is ended here at once as failed (`call.end{failed}`).
 ///   The app plays no ringtone of its own for such a call.
 ///
 /// - The member's actions in CallKit's screen (answer, end, mute) go to the machine.
@@ -138,12 +138,12 @@ package final class CallKitCoordinator: CallKitEvents {
         updateTones()
     }
 
-    /// A machine answered anyway (no screen should) for a call CallKit does not carry has no audio: it is ended here, once, and
-    /// no `call.end` is sent (the answer, already sent, stays sent).
+    /// A machine answered anyway (no screen should) for a call CallKit does not carry has no audio: it is ended here, once, with
+    /// `call.end{failed}` (the answer is out, so the caller is told at once, not after its connect timer).
     private func refuse() {
         guard current?.refused == false else { return }
         current?.refused = true
-        machine.endQuietly(.failed)
+        machine.end(.failed)
     }
 
     /// The tracked call was replaced by another before its end was seen: it is let go in CallKit first.

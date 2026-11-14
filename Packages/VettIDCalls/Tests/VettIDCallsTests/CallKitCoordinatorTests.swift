@@ -177,7 +177,7 @@ private final class Player {}
         }
     }
 
-    @Test func aBackgroundOfferIsNeverAnsweredAndAMachineAnsweredAnywayIsEndedWithoutADecline() async throws {
+    @Test func aBackgroundOfferIsNeverAnsweredAndAMachineAnsweredAnywayIsEndedAsFailed() async throws {
         let signalling = FakeSignalling()
         let m = CallMachine(signalling: signalling, engines: engines, clock: clock)
         let c = CallKitCoordinator(
@@ -190,13 +190,13 @@ private final class Player {}
         await clock.runCurrent()
         await settle()
         #expect(kit.events.isEmpty)
-        // The app's screen calls the machine directly: the answer goes through, then the coordinator ends the call quietly.
+        // The app's screen calls the machine directly: the answer goes through, then the coordinator ends the call as failed.
         m.answer()
         await clock.runCurrent()
         await settle()
         await clock.runCurrent()
         guard case .ended = m.state else { throw WrongState(state: m.state) }
-        #expect(!signalling.sent.contains { $0.hasPrefix("end(") }, "no call.end, no decline")
+        #expect(signalling.sent.suffix(2) == ["answer(\(callId))", "end(\(callId), failed)"], "answered, then failed: not a decline")
         #expect(!audio.log.contains("activate"))
         c.stop()
     }
