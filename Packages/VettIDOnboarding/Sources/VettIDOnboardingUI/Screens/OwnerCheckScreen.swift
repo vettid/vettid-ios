@@ -44,6 +44,17 @@ public struct OwnerCheckFlow: View {
                     model.cancel()
                     onDone()
                 }
+                // (IOS-PLAN §4.17) A pass: the success haptic, the tick held 1 s (3 s with VoiceOver), then the screen closes.
+                .task(id: model.state.passedTick) {
+                    guard model.state.passedTick else { return }
+                    UINotificationFeedbackGenerator().notificationOccurred(.success)
+                    try? await Task.sleep(for: passedTickHold(voiceOver: UIAccessibility.isVoiceOverRunning))
+                    guard !Task.isCancelled else { return }
+                    model.tickShown()
+                }
+                // (ANDROID-PLAN 0.1.124) While a check is with the vault or its tick shows, a check coming due waits for it
+                // (``View/holdsInput(_:)``): no second check goes alongside the first, and the tick is not cut short.
+                .holdsInput(model.state.checking || model.state.passedTick)
             } else {
                 colors.background.color.ignoresSafeArea()
             }
@@ -155,7 +166,9 @@ public struct OwnerCheckScreen: View {
     }
 
     public var body: some View {
-        if state.passedUnrecorded {
+        if state.passedTick {
+            PassedTick(title: title)
+        } else if state.passedUnrecorded {
             FormScaffold(title: title, primaryLabel: OnboardingStrings.continueLabel, onPrimary: { actions.acknowledgePresence() }) {
                 PresenceNotice(scaledQuiet: state.scaledQuietText)
                 SmallNote(state.stagingNote)
@@ -178,11 +191,14 @@ public struct OwnerCheckScreen: View {
         FormScaffold(
             title: title,
             message: body0,
-            primaryLabel: asksNext ? OnboardingStrings.pinStepNext : primaryLabel,
+            // (ANDROID-PLAN 0.1.124) While the vault verifies: no Check and no Cancel; Lock vault, where it is offered (a gated
+            // check), stays enabled throughout.
+            primaryLabel: state.checking ? nil : asksNext ? OnboardingStrings.pinStepNext : primaryLabel,
             primaryEnabled: asksNext ? state.entriesAllowed && pin.count >= OwnerCheckScreenState.minPin
                 : canSubmit || (state.watch == .silent && !state.locking),
-            busy: state.busy || state.locking,
-            secondaryLabel: state.lockOffered ? OnboardingStrings.ownerCheckLock : OnboardingStrings.ownerCheckCancel,
+            busy: state.checking ? state.locking : state.busy || state.locking,
+            secondaryLabel: state.lockOffered ? OnboardingStrings.ownerCheckLock
+                : state.checking ? nil : OnboardingStrings.ownerCheckCancel,
             onPrimary: {
                 if asksNext {
                     steps.pinDone = true
@@ -211,31 +227,16 @@ public struct OwnerCheckScreen: View {
             },
             bottom: { if keypadFixed { keypad } }
         ) {
-            VStack(alignment: .leading, spacing: Spacing.m) {
-                SmallNote(state.stagingNote)
-                if state.presenceUnrecorded { PresenceNotice(scaledQuiet: state.scaledQuietText) }
-                if let card = WaitingCardModel.of(state.mode, state.view, now: now) { WaitingCard(model: card) }
-                unlockLines
-                // (Release L, §3.6.8) The held and daily-check screens say when the vault locks itself.
-                if let at = idleLockAtOf(state.mode, state.view, now: now) {
-                    Text(OnboardingStrings.ownerCheckIdleLockAt(at.formatted(date: .abbreviated, time: .shortened)))
-                        .vettIDFont(.bodyMedium)
-                        .accessibilityIdentifier("owner_check_idle_lock_at")
-                }
-                if state.mode == .holdOff {
-                    NoticeCard(
-                        .warning,
-                        title: OnboardingStrings.ownerCheckHoldOffWarningTitle,
-                        message: OnboardingStrings.ownerCheckHoldOffWarning
-                    )
-                    .accessibilityIdentifier("hold_off_warning")
-                    HoldOffChoices(selected: state.holdOff) { actions.setHoldOff($0) }
-                }
-                entries
-                OwnerCheckMessageView(state: state, title: title)
+            if state.checking {
+                CheckingWithVault()
+            } else {
+                fields
             }
         }
         .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height = $0 }
+        // A check with the vault cannot be taken back: the back gestures are off (with Lock vault enabled, the scaffold's own
+        // block does not cover it).
+        .blocksBackGesture(state.checking)
         .onDisappear { forgetSecrets() }
         // Digits taken by the submit or dropped: the keypad again.
         .onChange(of: pin.count) { _, digits in steps.digitsChanged(to: digits) }
@@ -256,6 +257,33 @@ public struct OwnerCheckScreen: View {
             forgetSecrets()
         }
         .accessibilityIdentifier("owner_check")
+    }
+
+    /// The form's content: the notices, the entries and the last answer.
+    private var fields: some View {
+        VStack(alignment: .leading, spacing: Spacing.m) {
+            SmallNote(state.stagingNote)
+            if state.presenceUnrecorded { PresenceNotice(scaledQuiet: state.scaledQuietText) }
+            if let card = WaitingCardModel.of(state.mode, state.view, now: now) { WaitingCard(model: card) }
+            unlockLines
+            // (Release L, §3.6.8) The held and daily-check screens say when the vault locks itself.
+            if let at = idleLockAtOf(state.mode, state.view, now: now) {
+                Text(OnboardingStrings.ownerCheckIdleLockAt(at.formatted(date: .abbreviated, time: .shortened)))
+                    .vettIDFont(.bodyMedium)
+                    .accessibilityIdentifier("owner_check_idle_lock_at")
+            }
+            if state.mode == .holdOff {
+                NoticeCard(
+                    .warning,
+                    title: OnboardingStrings.ownerCheckHoldOffWarningTitle,
+                    message: OnboardingStrings.ownerCheckHoldOffWarning
+                )
+                .accessibilityIdentifier("hold_off_warning")
+                HoldOffChoices(selected: state.holdOff) { actions.setHoldOff($0) }
+            }
+            entries
+            OwnerCheckMessageView(state: state, title: title)
+        }
     }
 
     /// (IOS-PLAN §6.6; VAULT-MESSAGING §3.6.5 "Ask only for what is used") After an unlock whose check failed: directly under

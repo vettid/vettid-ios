@@ -82,6 +82,13 @@ enum OwnerCheckCatalog {
         }
         add("failed", "No connection") { $0.message = .failed(.network, code: nil) }
         add("locking", "Locking the vault") { $0.locking = true }
+        // (ANDROID-PLAN 0.1.124 §4 "The owner check's progress") While the vault verifies, and the tick on a pass.
+        add("checking", "Checking with your vault: Lock vault on") { $0.busy = true }
+        add("checking_voluntary", "Checking with your vault: Check now", mode: .voluntary) { s in
+            s.view?.state = .ok
+            s.busy = true
+        }
+        add("passed", "Check passed") { $0.passedTick = true }
         add("presence", "Presence not recorded") { $0.presenceUnrecorded = true }
         add("passed_unrecorded", "Passed, presence not recorded") { $0.passedUnrecorded = true }
         add("voluntary", "Check now", mode: .voluntary) { $0.view?.state = .ok }

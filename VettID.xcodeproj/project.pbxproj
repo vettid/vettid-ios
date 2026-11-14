@@ -22,6 +22,7 @@
 		12C9FFD09BFCEEF0B69132C9 /* vettid_message.caf in Resources */ = {isa = PBXBuildFile; fileRef = E6B395AB586511F6FD05BFC0 /* vettid_message.caf */; };
 		154378D4143FFC3C81EFB544 /* CanaryManifestFiles.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F2EA67554B107444FF813EF /* CanaryManifestFiles.swift */; };
 		16CC7F1AD834271FC0C79440 /* StagingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A34C0ED8CB57521C8F3EF6D6 /* StagingTests.swift */; };
+		18FFB0CAFA34956EF5D9D1D1 /* OwnerCheckCatalogUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 315C075B82D0070840AA3DE0 /* OwnerCheckCatalogUITests.swift */; };
 		1A8FFBAE4AB255DD0DAA926C /* ItemsCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = EDD69AF1283FBA35B9C2E65B /* ItemsCatalog.swift */; };
 		1AD4A3C73EBCF4A4AB0D09B2 /* vettid_general.caf in Resources */ = {isa = PBXBuildFile; fileRef = 1E1921FE67777CBB6E43F45E /* vettid_general.caf */; };
 		1CC08682E5472A741A8D68B7 /* VettIDApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B5C81B56C71C53452A052D2A /* VettIDApp.swift */; };
@@ -180,6 +181,7 @@
 		2B11C310596A4F2C26AACAFC /* DevStack.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = DevStack.xcconfig; sourceTree = "<group>"; };
 		2D4DA90211D97D9417FAC02C /* StagingTests+Messages.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StagingTests+Messages.swift"; sourceTree = "<group>"; };
 		2EAA1051D68BE8B6888B7634 /* VettIDVault */ = {isa = PBXFileReference; lastKnownFileType = folder; name = VettIDVault; path = Packages/VettIDVault; sourceTree = SOURCE_ROOT; };
+		315C075B82D0070840AA3DE0 /* OwnerCheckCatalogUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OwnerCheckCatalogUITests.swift; sourceTree = "<group>"; };
 		39A6F272A462838C1C0D7D29 /* VettIDHistory */ = {isa = PBXFileReference; lastKnownFileType = folder; name = VettIDHistory; path = Packages/VettIDHistory; sourceTree = SOURCE_ROOT; };
 		412ACBC39A6E3761D83FDE48 /* AppEnvironment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppEnvironment.swift; sourceTree = "<group>"; };
 		413317A388BA8F9F2776CB1B /* Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Release.xcconfig; sourceTree = "<group>"; };
@@ -353,6 +355,7 @@
 			isa = PBXGroup;
 			children = (
 				CEAFD630960C3CA7D7885DEB /* GalleryScreenshots.swift */,
+				315C075B82D0070840AA3DE0 /* OwnerCheckCatalogUITests.swift */,
 				A34C0ED8CB57521C8F3EF6D6 /* StagingTests.swift */,
 				A84B69E505CEC2E1129233E9 /* StagingTests+Connect.swift */,
 				9506AF3AA287477B16E8612D /* StagingTests+Mesh.swift */,
@@ -849,6 +852,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				91EB5DA7D60B53E6CE50FCE0 /* GalleryScreenshots.swift in Sources */,
+				18FFB0CAFA34956EF5D9D1D1 /* OwnerCheckCatalogUITests.swift in Sources */,
 				27B46D91B919FFCEA4228483 /* StagingTests+Connect.swift in Sources */,
 				EB2DE1A4E67EB0C6E529D097 /* StagingTests+Mesh.swift in Sources */,
 				0E4BA253AB8E8655B797C7F6 /* StagingTests+Messages.swift in Sources */,

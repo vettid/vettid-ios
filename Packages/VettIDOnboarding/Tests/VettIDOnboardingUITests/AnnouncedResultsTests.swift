@@ -85,6 +85,19 @@ import VettIDOnboarding
         #expect(await spoken(screen, OnboardingStrings.ownerCheckBadPassword, .assertive))
     }
 
+    /// (ANDROID-PLAN 0.1.124 §4 "The owner check's progress"; IOS-PLAN §4.17) "Checking with your vault" when the check
+    /// goes, and "Check passed" on a pass.
+    @Test func theChecksProgressIsSpoken() async {
+        var checking = check
+        checking.busy = true
+        #expect(await spoken(OwnerCheckScreen(state: checking, actions: NoOwnerCheckActions(), now: now),
+                             OnboardingStrings.ownerCheckChecking, .polite))
+        var passed = check
+        passed.passedTick = true
+        #expect(await spoken(OwnerCheckScreen(state: passed, actions: NoOwnerCheckActions(), now: now),
+                             OnboardingStrings.ownerCheckPassed, .polite))
+    }
+
     // MARK: - Helpers
 
     private static var recorded: [Announcer.Event] = []

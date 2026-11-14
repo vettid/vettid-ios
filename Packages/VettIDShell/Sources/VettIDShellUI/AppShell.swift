@@ -236,6 +236,9 @@ public struct AppShell: View {
                         root
                             .toolbar(.hidden, for: .navigationBar)
                             .systemBackGesture()
+                            // (IOS-PLAN §4.17) The asked check over the stack: no back gesture under it, above all while
+                            // its check is with the vault (Check now, the hold-off), which cannot be taken back.
+                            .blocksBackGesture(model.asked != nil)
                             .navigationDestination(for: ShellRoute.self) { route in
                                 detail(route).toolbar(.hidden, for: .navigationBar)
                             }
