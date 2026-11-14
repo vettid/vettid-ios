@@ -70,6 +70,7 @@ extension CallMachine {
         s.timers.removeValue(forKey: kind)?.cancel()
         s.timers[kind] = s.launch { [self] in
             do { try await clock.sleep(for: after) } catch { return }
+            guard !Task.isCancelled else { return }
             post(.timer(seq: s.seq, kind))
         }
     }
@@ -135,6 +136,8 @@ extension CallMachine {
             while !Task.isCancelled {
                 do { try await clock.sleep(for: timings.diagnosticsEvery) } catch { return }
                 guard let media = await engine.diagnostics() else { continue }
+                // The call may have ended (and another begun) during the reading: its readings are not the next call's.
+                guard !Task.isCancelled else { return }
                 diagnostics.media = media
                 if let r = media.relayed { post(.path(seq: s.seq, relayed: r)) }
                 // A second audio stream is RTP on an SSRC nobody announced, in the one section the call has: its frames go

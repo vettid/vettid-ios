@@ -24,8 +24,8 @@ final class Gate {
 
 @MainActor
 final class FakeGateway: CallGateway {
-    let stream: AsyncStream<CallEvent>
-    private let cont: AsyncStream<CallEvent>.Continuation
+    private(set) var stream: AsyncStream<CallEvent>
+    private var cont: AsyncStream<CallEvent>.Continuation
     var asked: [String] = []
     var incomingResult: (VaultMessage) throws -> IncomingCall = { _ in throw CallMessageError("not set") }
     var acceptResult: (OutgoingCall) throws -> AcceptedCall = { _ in throw CallMessageError("not set") }
@@ -37,6 +37,12 @@ final class FakeGateway: CallGateway {
     init() { (stream, cont) = AsyncStream.makeStream(of: CallEvent.self) }
 
     func send(_ e: CallEvent) { cont.yield(e) }
+
+    /// The vault's events end (the relay reconnects); the next listen gets a new stream.
+    func endEvents() {
+        cont.finish()
+        (stream, cont) = AsyncStream.makeStream(of: CallEvent.self)
+    }
 
     func events() -> AsyncStream<CallEvent> { stream }
 
@@ -75,7 +81,7 @@ final class FakeGateway: CallGateway {
 /// reaches the state machine that the gateway's checks did not pass, each check is made against the identity of the right
 /// connection, and key material does not outlive its use. Port of vettid-android `VaultCallSignallingTest`.
 @MainActor
-@Suite final class VaultCallSignallingTests {
+@Suite(.serialized) final class VaultCallSignallingTests {
     let s1 = MediaSuite.aes128Gcm
     let gateway = FakeGateway()
     let clock = TestClock()
@@ -96,11 +102,15 @@ final class FakeGateway: CallGateway {
             },
             clock: clock
         )
+        listen(s)
+        await clock.runCurrent()
+        return s
+    }
+
+    func listen(_ s: VaultCallSignalling) {
         collector = Task { [unowned self] in
             do { for try await e in s.events() { out.append(e) } } catch {}
         }
-        await clock.runCurrent()
-        return s
     }
 
     func message(_ type: String, _ body: String) -> VaultMessage {
@@ -406,5 +416,29 @@ final class FakeGateway: CallGateway {
         gateway.send(answerEvent("01JB2Z6V9K3M4N5P6Q7R8S9T52"))
         await settle()
         #expect(out.count == 1)
+    }
+
+    /// The listen ends (the relay reconnects) between an answer that overtook `call.start` and that start's return: the answer is
+    /// kept for the next listen, not yielded into the ended one (the caller would ring on while the callee had answered).
+    @Test func anAnswerHeldAcrossTheEndOfAListenReachesTheNextOne() async throws {
+        let s = await signalling()
+        gateway.startGate = Gate()
+        gateway.startResult = { try self.outgoingCall($0, pinned: $1) }
+        gateway.acceptResult = { AcceptedCall(callId: $0.callId, sdp: "v=0 answer", keys: self.keys()) }
+        let starting = Task { _ = try? await s.start(connectionId: "conn-1", sdp: "v=0", suites: [s1]) }
+        await settle()
+        gateway.send(answerEvent())
+        await settle()
+        gateway.endEvents()
+        await settle()
+        await collector?.value
+        gateway.startGate?.open()
+        await settle()
+        await starting.value
+        #expect(out.isEmpty, "nothing reached the ended listen")
+        listen(s)
+        await settle()
+        guard case .answer(let a)? = out.first, out.count == 1 else { throw Unexpected() }
+        #expect(a.sdp == "v=0 answer")
     }
 }

@@ -71,7 +71,8 @@ package final class CallMachine {
         loops.append(Task { [weak self] in await self?.listen() })
     }
 
-    /// Stops the machine: a live call is let go (its engine closed, its keys wiped) and nothing is sent.
+    /// Stops the machine: a live call is let go (its engine closed, its keys wiped) and nothing is sent. A `call.start` still on
+    /// its way is not ended either (a C2 vault ends unanswered calls itself; at S10 the callee's ring timer bounds it). The listening loop holds the machine until this is called.
     package func stop() {
         inbox.finish()
         for t in loops { t.cancel() }

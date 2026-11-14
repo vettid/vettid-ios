@@ -41,6 +41,8 @@ package final class VaultCallSignalling: CallSignalling {
     /// Answers that arrived for no known call while one was being started: looked at again when it is.
     private var heldAnswers: [(callId: String, message: VaultMessage)] = []
     private var sink: AsyncThrowingStream<SignalEvent, Error>.Continuation?
+    /// Which listen ``sink`` feeds, so that an older one ending does not drop a newer one.
+    private var listen = 0
     private var late: [SignalEvent] = []
 
     /// Offers and answers that did not pass their checks since the process started (diagnostics; no detail is kept).
@@ -69,6 +71,8 @@ package final class VaultCallSignalling: CallSignalling {
     package func events() -> AsyncThrowingStream<SignalEvent, Error> {
         let (stream, continuation) = AsyncThrowingStream.makeStream(of: SignalEvent.self)
         sink = continuation
+        listen += 1
+        let thisListen = listen
         let held = late
         late.removeAll()
         for e in held { continuation.yield(e) }
@@ -80,7 +84,10 @@ package final class VaultCallSignalling: CallSignalling {
             }
             continuation.finish()
         }
-        continuation.onTermination = { _ in pump.cancel() }
+        continuation.onTermination = { [weak self] _ in
+            pump.cancel()
+            Task { @MainActor in self?.ended(thisListen) }
+        }
         return stream
     }
 
@@ -98,7 +105,17 @@ package final class VaultCallSignalling: CallSignalling {
 
     /// An event for the listener, outside the flow of the gateway's events (an answer that overtook `call.start`).
     private func emitLate(_ e: SignalEvent) {
-        if let sink { sink.yield(e) } else { late.append(e) }
+        guard let sink else { return late.append(e) }
+        // A listen that ended (the relay reconnected) and was not listened to again yet: kept for the next one.
+        if case .terminated = sink.yield(e) {
+            self.sink = nil
+            late.append(e)
+        }
+    }
+
+    /// The listen numbered `which` has ended: what comes outside the flow is kept until the next one.
+    private func ended(_ which: Int) {
+        if which == listen { sink = nil }
     }
 
     /// The connection's identity, looked for a second time after the list has been read again (see ``refreshConnections``). The
@@ -195,7 +212,13 @@ package final class VaultCallSignalling: CallSignalling {
     /// Rule 3: copies for the engine (which wipes them), and the originals destroyed here.
     private func handOver(_ keys: CallKeys) throws -> MediaKeys {
         defer { keys.destroy() }
-        return MediaKeys(suite: keys.suite, send: try keys.send(), receive: try keys.receive())
+        var send = try keys.send()
+        do {
+            return MediaKeys(suite: keys.suite, send: send, receive: try keys.receive())
+        } catch {
+            Bytes.wipe(&send)
+            throw error
+        }
     }
 
     private func forget(_ callId: String) {

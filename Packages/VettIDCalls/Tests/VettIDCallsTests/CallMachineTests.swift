@@ -11,7 +11,7 @@ struct StartFailure: Error {}
 /// Port of vettid-android `CallMachineTest`: one suite, every test sharing the fakes and the helpers below. Time is virtual
 /// (``TestClock``): nothing sleeps.
 @MainActor
-@Suite struct CallMachineTests {
+@Suite(.serialized) struct CallMachineTests {
     let signalling = FakeSignalling()
     let engines = FakeEngines()
     let clock = TestClock()
@@ -423,5 +423,29 @@ struct StartFailure: Error {}
         await runCurrent()
         await advance(9_000)
         #expect(try live(m).phase == .calling)
+    }
+}
+
+extension CallMachineTests {
+    /// Stopping the machine during a live call lets the call go (its engine closed, the keys it was given wiped) and sends
+    /// nothing: no `call.end`, no candidates, and nothing that arrives afterwards is handled.
+    @Test func stoppingTheMachineLetsALiveCallGoAndSendsNothing() async throws {
+        let m = machine()
+        try await placed(m)
+        let engine = engines.last
+        let (event, keys) = answerEvent()
+        signalling.deliver(event)
+        await runCurrent()
+        #expect(try live(m).phase == .connecting)
+        let sentBefore = signalling.sent
+        m.stop()
+        await runCurrent()
+        #expect(engine.closed)
+        #expect(wiped(keys))
+        engine.emit(.localCandidate(candidate(1)))
+        signalling.deliver(.ice(callId: callId, candidates: [candidate(7)]))
+        await advance(120_000)
+        #expect(signalling.sent == sentBefore, "nothing sent after the stop")
+        #expect(noEnd(signalling))
     }
 }
