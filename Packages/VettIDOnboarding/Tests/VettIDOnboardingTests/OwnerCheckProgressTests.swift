@@ -126,6 +126,9 @@ import VettIDDataTesting
         answer.complete(())
         await vm.settle()
         #expect(told.count == 2 && told[1].0 == false && told[1].1 == .badPin(checksLeft: 8))
+        // Typing again clears the line, and the shell hears it (no failure carried to a gated check).
+        vm.setPin("1")
+        #expect(told.count == 3 && told[2].0 == false && told[2].1 == nil)
     }
 
     @Test func thePassStaysOutThroughTheTick() async {
