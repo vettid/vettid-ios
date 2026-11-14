@@ -33,8 +33,11 @@ public protocol CallAudioSession: AnyObject {
     func didActivate()
     /// CallKit deactivated the session: the audio unit stops.
     func didDeactivate()
-    /// The speaker, only when the member asks for it; false returns to the headset or the earpiece.
+    /// The speaker, only when the member asks for it; false returns to the headset or the earpiece. The request outlives a
+    /// deactivation (an interruption) and is applied again at the next activation, until ``callEnded()``.
     func setSpeaker(_ on: Bool)
+    /// The call is over: the speaker request ends with it.
+    func callEnded()
 }
 
 /// The sounds the app plays around a call: the ring-back only. CallKit plays the ringtone of an incoming call, and when it

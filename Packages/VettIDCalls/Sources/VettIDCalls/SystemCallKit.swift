@@ -109,8 +109,8 @@ package final class SystemCallKit: CallKitProviding, CallKitControlling {
         }
 
         func provider(_ provider: CXProvider, timedOutPerforming action: CXAction) {
-            guard SystemCallKit.endsCallOnTimeout(action) else { return }
-            MainActor.assumeIsolated { target?.actionTimedOut() }
+            guard SystemCallKit.endsCallOnTimeout(action), let uuid = (action as? CXCallAction)?.callUUID else { return }
+            MainActor.assumeIsolated { target?.actionTimedOut(uuid: uuid) }
         }
 
         func provider(_ provider: CXProvider, perform action: CXStartCallAction) {

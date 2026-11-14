@@ -102,7 +102,8 @@ package final class CallMachine {
     // MARK: transitions
 
     /// Every state the machine publishes, in order, none merged (``state`` itself may skip one: `ended` and the next call's
-    /// `live` can be published in one turn). A live call at the time of the call is the first element.
+    /// `live` can be published in one turn). A call that is live at the time of the call is the first element; an ended or idle
+    /// state is not repeated to a late watcher. The stream ends when the machine is stopped.
     package func transitions() -> AsyncStream<CallTransition> {
         let (stream, continuation) = AsyncStream.makeStream(of: CallTransition.self)
         let id = nextWatcher
@@ -138,9 +139,6 @@ package final class CallMachine {
 
     /// ``end(_:)`` for the call [seq] only.
     package func end(_ reason: CallEnd, seq: Int) { post(.hangUpIf(seq: seq, reason)) }
-
-    /// Ends the call in any phase with [reason] (CallKit refused it, for one).
-    package func end(_ reason: CallEnd) { post(.hangUp(reason)) }
 
     /// The vault is being locked: a live call ends.
     package func vaultLocking() { post(.hangUp(.locked)) }
