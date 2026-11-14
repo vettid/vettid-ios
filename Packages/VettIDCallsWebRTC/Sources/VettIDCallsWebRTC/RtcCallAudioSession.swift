@@ -55,13 +55,18 @@ public final class RtcCallAudioSession: CallAudioSession {
 
     public func didDeactivate() {
         activated = false
-        speakerWanted = false
+        // The speaker request stays (an interruption must not lose it): it is applied again at the next activation.
         speakerApplied = false
         rtc.isAudioEnabled = false
         rtc.audioSessionDidDeactivate(AVAudioSession.sharedInstance())
         if let o = routeObserver { NotificationCenter.default.removeObserver(o) }
         routeObserver = nil
         publish(AudioState())
+    }
+
+    public func callEnded() {
+        speakerWanted = false
+        speakerApplied = false
     }
 
     public func setSpeaker(_ on: Bool) {
@@ -92,6 +97,12 @@ public final class RtcCallAudioSession: CallAudioSession {
     private func routeChanged(_ reason: AVAudioSession.RouteChangeReason?) {
         guard activated else { return }
         if reason == .newDeviceAvailable || reason == .oldDeviceUnavailable { speakerWanted = false }
+        // The system may have dropped the override with the route (not our own override's notification): applied again if the
+        // member still wants the speaker, and `speakerApplied` follows what is asked.
+        if speakerWanted, reason != .override, AVAudioSession.sharedInstance().currentRoute.outputs.first?.portType != .builtInSpeaker {
+            applySpeaker()
+        }
+        speakerApplied = speakerWanted
         refresh()
     }
 

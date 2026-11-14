@@ -10,7 +10,7 @@ import VettIDCrypto
 struct EngineRulesTests {
     private func engine(_ config: MediaConfig = MediaConfig()) throws -> WebRtcMediaEngine {
         _ = TestStack.ready
-        return try #require(try WebRtcMediaEngineFactory(testBuild: true).create(config: config) as? WebRtcMediaEngine)
+        return try #require(try testFactory(testBuild: true).create(config: config) as? WebRtcMediaEngine)
     }
 
     private func connectionOpen(_ engine: WebRtcMediaEngine) -> Bool {
@@ -140,7 +140,7 @@ struct EngineRulesTests {
     // MARK: the test options
 
     @Test func aNonTestFactoryRefusesEveryTestOption() {
-        let plain = WebRtcMediaEngineFactory()
+        let plain = testFactory()
         let configs = [
             MediaConfig(dtlsPqcTrial: true),
             MediaConfig(faults: MediaFaults(keepRemoteSsrc: true)),

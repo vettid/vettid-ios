@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 import VettIDCrypto
+import VettIDData
 import VettIDVault
 @testable import VettIDCalls
 
@@ -70,7 +71,7 @@ extension CallKitCoordinatorTests {
         await clock.runCurrent()
         await settle()
         let uuid = try #require(kit.uuid)
-        #expect(kit.actions.first == .start(uuid, handle: "handle-conn-1"))
+        #expect(kit.actions.first == .start(uuid, handle: c.trackedHandle ?? ""))
         c.stop()
     }
 
@@ -85,7 +86,7 @@ extension CallKitCoordinatorTests {
         c.providerDidReset()
         await clock.runCurrent()
         guard case .ended = m.state else { throw WrongState(state: m.state) }
-        #expect(audio.log.suffix(1) == ["deactivate"])
+        #expect(audio.log.contains("deactivate"))
         c.stop()
     }
 
@@ -159,6 +160,92 @@ extension CallKitCoordinatorTests {
         #expect(second != first)
     }
 
+    // MARK: letting go
+
+    /// The machine is stopped mid-call (a lock, a sign-out): the stream ends and nothing stays open in CallKit.
+    @Test func aMachineStoppedMidCallClosesTheCallInCallKitAndResetsTheAudio() async throws {
+        let signalling = FakeSignalling()
+        let m = CallMachine(signalling: signalling, engines: engines, clock: clock)
+        let c = coordinator(m)
+        c.start()
+        m.call("conn-1")
+        await clock.runCurrent()
+        await settle()
+        let uuid = try #require(kit.uuid)
+        c.audioDidActivate()
+        c.apply(state(.ringing, .outgoing))
+        #expect(tones.ringBackNow)
+        m.stop()
+        await settle()
+        #expect(kit.events.last == .ended(uuid, .failed))
+        #expect(audio.log.suffix(2) == ["deactivate", "callEnded"])
+        #expect(!tones.ringBackNow)
+        c.stop()
+        #expect(kit.events.filter { if case .ended = $0 { true } else { false } }.count == 1, "reported once")
+    }
+
+    @Test func stoppingTheCoordinatorMidCallClosesTheCallInCallKitToo() async throws {
+        let c = coordinator(machine())
+        c.apply(state(.incoming, .incoming))
+        await settle()
+        let uuid = try #require(kit.uuid)
+        c.audioDidActivate()
+        c.stop()
+        #expect(kit.events.last == .ended(uuid, .failed))
+        #expect(audio.log.suffix(2) == ["deactivate", "callEnded"])
+    }
+
+    @Test func theHandleIsOpaqueAndPerCallAndTheNameIsIsolated() async throws {
+        let c = coordinator(machine())
+        c.apply(state(.starting, .outgoing))
+        await settle()
+        let first = try #require(c.trackedHandle)
+        #expect(UUID(uuidString: first) != nil && !first.contains("conn-1"))
+        c.apply(ended(.noAnswer))
+        c.apply(state(.starting, .outgoing), seq: 1)
+        #expect(c.trackedHandle != first)
+        #expect(AccountNames.isolate("Name of conn-1") != "Name of conn-1", "the name CallKit gets is wrapped")
+    }
+
+    @Test func aTimedOutActionOfAnotherCallIsIgnored() async throws {
+        let c = coordinator(machine())
+        c.apply(state(.active, .incoming))
+        await settle()
+        c.actionTimedOut(uuid: UUID())
+        await settle()
+        #expect(kit.events.allSatisfy { if case .ended = $0 { false } else { true } })
+    }
+
+    /// A failure is not the member's own end: the call held meanwhile still rings.
+    @Test func aFailureOfAnOutgoingCallStillRingsTheHeldOffer() async throws {
+        let signalling = FakeSignalling()
+        signalling.holdStart()
+        let m = CallMachine(signalling: signalling, engines: engines, clock: clock)
+        m.call("conn-1")
+        await clock.runCurrent()
+        signalling.deliver(offer(glareId))
+        await clock.runCurrent()
+        m.end(.failed, seq: 0)
+        await clock.runCurrent()
+        guard case .live(let l) = m.state else { throw WrongState(state: m.state) }
+        #expect(l.callId == glareId && l.phase == .incoming)
+    }
+
+    @Test func aRefusedMuteLeavesCallKitWithWhatItHad() async throws {
+        let c = coordinator(machine())
+        c.apply(state(.active, .incoming))
+        await settle()
+        kit.refuseActions = true
+        c.apply(state(.active, .incoming, muted: true))
+        await settle()
+        kit.refuseActions = false
+        let asked = kit.actions.count
+        // The machine unmutes again: CallKit never had the mute, so it is not asked to unmute.
+        c.apply(state(.active, .incoming, muted: false))
+        await settle()
+        #expect(kit.actions.count == asked)
+    }
+
     // MARK: CallKit's actions
 
     /// An end action for a call the coordinator no longer tracks (a replaced call), or never did, is fulfilled.
@@ -182,7 +269,7 @@ extension CallKitCoordinatorTests {
         signalling.deliver(offer())
         await clock.runCurrent()
         await settle()
-        c.actionTimedOut()
+        c.actionTimedOut(uuid: try #require(kit.uuid))
         await clock.runCurrent()
         guard case .live = m.state else { throw WrongState(state: m.state) }
         #expect(signalling.sent == ["ringing(\(callId))"], "a ringing call is not declined for a local failure")
@@ -198,19 +285,20 @@ extension CallKitCoordinatorTests {
         let kit2 = FakeKit()
         let c2 = CallKitCoordinator(
             machine: m2, provider: kit2, control: kit2, audio: audio, tones: tones, clock: clock,
-            party: { CallParty(handle: $0, name: $0) }, isForeground: { true }
+            party: { CallParty(name: $0) }, isForeground: { true }
         )
         kit2.delegate = c2
         c2.start()
         m2.call("conn-1")
         await clock.runCurrent()
         await settle()
-        c2.actionTimedOut()
+        c2.actionTimedOut(uuid: try #require(kit2.uuid))
         await clock.runCurrent()
         guard case .ended(let e) = m2.state else { throw WrongState(state: m2.state) }
         #expect(e.reason == .failed)
         await settle()
-        #expect(kit2.events.allSatisfy { if case .ended = $0 { false } else { true } }, "CallKit timed out: it is not told again")
+        // Not silent: the end is reported (for a call CallKit has already ended that is a harmless no-op).
+        #expect(kit2.events.last == .ended(try #require(kit2.uuid), .failed))
         c2.stop()
     }
 
@@ -258,7 +346,7 @@ extension CallKitCoordinatorTests {
         let m = CallMachine(signalling: signalling, engines: engines, clock: clock)
         let c = CallKitCoordinator(
             machine: m, provider: kit, control: kit, audio: audio, tones: tones, clock: clock,
-            party: { CallParty(handle: $0, name: $0) }, isForeground: { false }
+            party: { CallParty(name: $0) }, isForeground: { false }
         )
         c.start()
         signalling.deliver(offer())

@@ -4,6 +4,7 @@ import CallKit
 import Foundation
 import Testing
 import VettIDCrypto
+import VettIDData
 import VettIDVault
 @testable import VettIDCalls
 
@@ -69,6 +70,7 @@ final class FakeAudio: CallAudioSession {
     func didActivate() { log.append("activate") }
     func didDeactivate() { log.append("deactivate") }
     func setSpeaker(_ on: Bool) { log.append("speaker(\(on))") }
+    func callEnded() { log.append("callEnded") }
 }
 
 @MainActor
@@ -95,7 +97,7 @@ private final class Player {}
     func coordinator(_ m: CallMachine, foreground: Bool = true) -> CallKitCoordinator {
         let c = CallKitCoordinator(
             machine: m, provider: kit, control: kit, audio: audio, tones: tones, clock: clock,
-            party: { CallParty(handle: "handle-\($0)", name: "Name of \($0)") }, isForeground: { foreground }
+            party: { CallParty(name: "Name of \($0)") }, isForeground: { foreground }
         )
         kit.delegate = c
         return c
@@ -127,7 +129,7 @@ private final class Player {}
         c.apply(state(.incoming, .incoming))
         await settle()
         let uuid = try #require(kit.uuid)
-        let expected = CallKitUpdate(handle: "handle-conn-1", name: "Name of conn-1")
+        let expected = CallKitUpdate(handle: c.trackedHandle ?? "", name: AccountNames.isolate("Name of conn-1"))
         #expect(kit.events == [.incoming(uuid, expected)])
         #expect(!expected.hasVideo && !expected.supportsHolding && !expected.supportsGrouping && !expected.supportsUngrouping)
         #expect(!expected.supportsDTMF)
@@ -157,7 +159,7 @@ private final class Player {}
             let m = CallMachine(signalling: signalling, engines: engines, clock: clock)
             let c = CallKitCoordinator(
                 machine: m, provider: kit, control: kit, audio: audio, tones: tones, clock: clock,
-                party: { CallParty(handle: $0, name: $0) }, isForeground: { true }
+                party: { CallParty(name: $0) }, isForeground: { true }
             )
             kit.delegate = c
             c.start()
@@ -185,7 +187,7 @@ private final class Player {}
         let m = CallMachine(signalling: signalling, engines: engines, clock: clock)
         let c = CallKitCoordinator(
             machine: m, provider: kit, control: kit, audio: audio, tones: tones, clock: clock,
-            party: { CallParty(handle: $0, name: $0) }, isForeground: { false }
+            party: { CallParty(name: $0) }, isForeground: { false }
         )
         kit.delegate = c
         c.start()
@@ -250,11 +252,12 @@ private final class Player {}
         c.apply(state(.starting, .outgoing))
         await settle()
         let uuid = try #require(kit.uuid)
-        #expect(kit.actions == [.start(uuid, handle: "handle-conn-1")])
+        #expect(kit.actions == [.start(uuid, handle: c.trackedHandle ?? "")])
         #expect(audio.log == ["prepare"])
 
         // CallKit performed the start (the fake performs what is requested): the name and the connecting.
-        #expect(kit.events == [.updated(uuid, CallKitUpdate(handle: "handle-conn-1", name: "Name of conn-1")), .connecting(uuid)])
+        let update = CallKitUpdate(handle: c.trackedHandle ?? "", name: AccountNames.isolate("Name of conn-1"))
+        #expect(kit.events == [.updated(uuid, update), .connecting(uuid)])
 
         c.apply(state(.calling, .outgoing))
         c.apply(state(.ringing, .outgoing))
@@ -355,7 +358,7 @@ private final class Player {}
                 let kit = FakeKit()
                 let c = CallKitCoordinator(
                     machine: machine(), provider: kit, control: kit, audio: audio, tones: tones, clock: clock,
-                    party: { CallParty(handle: $0, name: $0) }, isForeground: { true }
+                    party: { CallParty(name: $0) }, isForeground: { true }
                 )
                 kit.delegate = c
                 c.apply(state(.active, .incoming))
@@ -395,7 +398,7 @@ private final class Player {}
         let m2 = CallMachine(signalling: signalling2, engines: engines, clock: clock)
         let c2 = CallKitCoordinator(
             machine: m2, provider: kit2, control: kit2, audio: audio, tones: tones, clock: clock,
-            party: { CallParty(handle: $0, name: $0) }, isForeground: { true }
+            party: { CallParty(name: $0) }, isForeground: { true }
         )
         kit2.delegate = c2
         c2.start()
@@ -449,9 +452,9 @@ private final class Player {}
         c.audioDidActivate()
         #expect(audio.log == ["prepare", "activate"])
         c.apply(ended(.hungUp))
-        #expect(audio.log == ["prepare", "activate"], "an ended call does not deactivate: CallKit does")
+        #expect(audio.log == ["prepare", "activate", "callEnded"], "an ended call does not deactivate: CallKit does")
         c.audioDidDeactivate()
-        #expect(audio.log == ["prepare", "activate", "deactivate"])
+        #expect(audio.log == ["prepare", "activate", "callEnded", "deactivate"])
     }
 
     @Test func theSpeakerIsOnlyWhatTheMemberAsks() {

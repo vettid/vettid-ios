@@ -61,7 +61,7 @@ final class LoopbackCall {
 
     init(callerFaults: MediaFaults = MediaFaults(), calleeFaults: MediaFaults = MediaFaults()) throws {
         _ = TestStack.ready
-        let factory = WebRtcMediaEngineFactory(testBuild: true)
+        let factory = testFactory(testBuild: true)
         a = try #require(try factory.create(config: MediaConfig(faults: callerFaults)) as? WebRtcMediaEngine)
         b = try #require(try factory.create(config: MediaConfig(faults: calleeFaults)) as? WebRtcMediaEngine)
         for (engine, heard) in [(a, heardA), (b, heardB)] {

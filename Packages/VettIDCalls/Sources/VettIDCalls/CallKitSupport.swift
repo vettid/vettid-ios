@@ -4,16 +4,12 @@ import Foundation
 // small types below and runs (and is tested) anywhere; ``SystemCallKit`` (iOS only) turns them into `CXProvider` and
 // `CXCallController` calls.
 
-/// What CallKit shows of the other member: only what the app passes in. Never a phone number.
+/// What CallKit shows of the other member: only the name the app passes in (it is bidi-isolated before CallKit gets it). Never a
+/// phone number, and the handle is an opaque value of the call's own, never the connection's id.
 package struct CallParty: Equatable, Sendable {
-    /// The handle (a generic CallKit handle): an opaque text, not a number.
-    package var handle: String
     package var name: String
 
-    package init(handle: String, name: String) {
-        self.handle = handle
-        self.name = name
-    }
+    package init(name: String) { self.name = name }
 }
 
 /// The call as CallKit is told about it (`CXCallUpdate`). Audio only, no holding, grouping or tones.
@@ -74,7 +70,7 @@ package protocol CallKitEvents: AnyObject {
     func audioDidDeactivate()
     func providerDidReset()
     /// CallKit gave up waiting for an action: the call ends.
-    func actionTimedOut()
+    func actionTimedOut(uuid: UUID)
 }
 
 /// The provider's settings (`CXProviderConfiguration`; spec-silent values are chosen here, see the PR text).

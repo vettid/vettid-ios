@@ -45,6 +45,13 @@ enum WebRtcRuntime {
     /// trial is on in this process.
     static func start(_ config: MediaConfig) throws -> Bool {
         try MediaLogGuard.check()
+        // Whatever made the engine: the stack does not start its audio unit by itself. Only CallKit's activation starts it
+        // (``RtcCallAudioSession``).
+        #if os(iOS)
+        let rtc = RTCAudioSession.sharedInstance()
+        rtc.useManualAudio = true
+        rtc.isAudioEnabled = false
+        #endif
         return trial.withLock { state in
             if let state { return state }
             if config.dtlsPqcTrial { RTCPeerConnectionFactory.configureFieldTrials(dtlsPqcTrialName) }
