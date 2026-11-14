@@ -54,6 +54,8 @@ public final class RtcCallAudioSession: CallAudioSession {
     }
 
     public func didDeactivate() {
+        // Once: the coordinator's own reset (a stop) and CallKit's later `didDeactivate` are both calls of this.
+        guard activated else { return }
         activated = false
         // The speaker request stays (an interruption must not lose it): it is applied again at the next activation.
         speakerApplied = false

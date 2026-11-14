@@ -331,6 +331,8 @@ package final class CallKitCoordinator: CallKitEvents {
     // MARK: the audio session
 
     package func audioDidActivate() {
+        // A late activation (after a stop, or for a call CallKit does not carry) must not open the microphone with no call.
+        guard current?.over == false, current?.kit == true else { return }
         audioActive = true
         audio.didActivate()
         updateTones()

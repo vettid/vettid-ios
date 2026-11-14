@@ -162,6 +162,28 @@ extension CallKitCoordinatorTests {
 
     // MARK: letting go
 
+    /// A late `didActivate` (after a stop, or with no call) opens nothing.
+    @Test func aLateActivationOpensNoAudio() async throws {
+        let c = coordinator(machine())
+        c.audioDidActivate()
+        #expect(!audio.log.contains("activate"), "no call")
+        c.apply(state(.incoming, .incoming))
+        await settle()
+        c.stop()
+        c.audioDidActivate()
+        #expect(!audio.log.contains("activate"), "after the stop")
+        let other = FakeKit()
+        other.incomingResult = .filtered
+        let c2 = CallKitCoordinator(
+            machine: machine(), provider: other, control: other, audio: audio, tones: tones, clock: clock,
+            party: { CallParty(name: $0) }, isForeground: { true }
+        )
+        c2.apply(state(.incoming, .incoming))
+        await settle()
+        c2.audioDidActivate()
+        #expect(!audio.log.contains("activate"), "a call CallKit does not carry")
+    }
+
     /// The machine is stopped mid-call (a lock, a sign-out): the stream ends and nothing stays open in CallKit.
     @Test func aMachineStoppedMidCallClosesTheCallInCallKitAndResetsTheAudio() async throws {
         let signalling = FakeSignalling()
