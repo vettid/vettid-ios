@@ -204,7 +204,7 @@
     "name": "Ooura FFT (common_audio)",
     "version": "",
     "licence": "Ooura licence",
-    "url": "http://www.kurims.kyoto-u.ac.jp/~ooura/fft.html",
+    "url": "https://github.com/webrtc-sdk/webrtc/tree/a545de45259b47dfac5f3635863e47cb601f1bb2/common_audio/third_party/ooura",
     "text": "/*\n * http://www.kurims.kyoto-u.ac.jp/~ooura/fft.html\n * Copyright Takuya OOURA, 1996-2001\n *\n * You may use, copy, modify and distribute this code for any purpose (include\n * commercial use) and without fee. Please refer to this package when you modify\n * this code.\n */"
   },
   {
@@ -220,7 +220,7 @@
     "name": "spl_sqrt_floor",
     "version": "",
     "licence": "Permissive (Wilco Dijkstra)",
-    "url": "http://www.pertinentdetail.org/sqrt",
+    "url": "https://github.com/webrtc-sdk/webrtc/tree/a545de45259b47dfac5f3635863e47cb601f1bb2/common_audio/third_party/spl_sqrt_floor",
     "text": "/*\n * Written by Wilco Dijkstra, 1996. The following email exchange establishes the\n * license.\n *\n * From: Wilco Dijkstra <Wilco.Dijkstra@ntlworld.com>\n * Date: Fri, Jun 24, 2011 at 3:20 AM\n * Subject: Re: sqrt routine\n * To: Kevin Ma <kma@google.com>\n * Hi Kevin,\n * Thanks for asking. Those routines are public domain (originally posted to\n * comp.sys.arm a long time ago), so you can use them freely for any purpose.\n * Cheers,\n * Wilco\n *\n * ----- Original Message -----\n * From: \"Kevin Ma\" <kma@google.com>\n * To: <Wilco.Dijkstra@ntlworld.com>\n * Sent: Thursday, June 23, 2011 11:44 PM\n * Subject: Fwd: sqrt routine\n * Hi Wilco,\n * I saw your sqrt routine from several web sites, including\n * http://www.finesse.demon.co.uk/steven/sqrt.html.\n * Just wonder if there's any copyright information with your Successive\n * approximation routines, or if I can freely use it for any purpose.\n * Thanks.\n * Kevin\n */"
   },
   {
