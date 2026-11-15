@@ -272,6 +272,16 @@ final class FakeConversationCalls {
         #expect(!m.state.callsOutOfDate, "nothing read since the unlock")
     }
 
+    /// "With lines kept": a history that read with no line for this conversation, then a failed read, says nothing (as
+    /// vettid-android).
+    @Test func noOutOfDateNoteWithoutALineKept() async {
+        fake.history = ConversationCallHistory(calls: [])
+        fake.failFrom = 1
+        fake.availability = .ready
+        let m = await model()
+        #expect(fake.reads.count == 2 && m.state.calls.isEmpty && !m.state.callsOutOfDate)
+    }
+
     /// A conversation whose only content is a call is not "Say hello".
     @Test func aCallAloneIsNotAnEmptyConversation() async {
         fake.history = ConversationCallHistory(calls: [call("k1")])

@@ -124,6 +124,14 @@ import VettIDUI
         }
     }
 
+    /// The note scrolls into view only when it comes, and only for a member at the end of the list.
+    @Test func theOutOfDateNoteComesIntoViewOnlyAtTheEnd() {
+        #expect(MessageList.showsOutOfDate(was: false, now: true, atEnd: true))
+        #expect(!MessageList.showsOutOfDate(was: false, now: true, atEnd: false), "reading older rows: the place stays")
+        #expect(!MessageList.showsOutOfDate(was: true, now: true, atEnd: true), "already up")
+        #expect(!MessageList.showsOutOfDate(was: true, now: false, atEnd: true), "gone")
+    }
+
     /// Every state of the conversation with calls is drawn (the screens' texts and presence on the simulator are the catalog's
     /// UI test: the accessibility tree of a hosted view is not built outside it).
     @Test func everyStateIsDrawn() {

@@ -91,8 +91,8 @@ public struct ConversationState: Equatable, Sendable, CustomStringConvertible, C
     public var calls: [ConversationCall] = []
     /// Some of the vault's calls did not read: "Some calls couldn't be shown." (in every conversation).
     public var callsNotShown = false
-    /// A read of the history failed after an earlier one had answered: the lines shown are kept, and "Calls may be out of date.
-    /// VettID couldn't check them just now." goes at the end of the list (owner decision, Ground Control #11240 a). The next
+    /// A read of the history failed after an earlier one had answered with call lines: the lines are kept, and "Calls may be out
+    /// of date. VettID couldn't check them just now." goes at the end of the list (owner decision, Ground Control #11240 a). The next
     /// read that answers, and a lock, clear it.
     public var callsOutOfDate = false
     /// What the calls say now; ``callShown`` follows it.
@@ -237,11 +237,12 @@ public final class ConversationViewModel {
         }
     }
 
-    /// A read's answer: the lines and the note, or (nil, the read failed) the lines kept, said to be out of date once a read has
-    /// answered since the vault was opened (nothing read yet: nothing to say).
+    /// A read's answer: the lines and the note, or (nil, the read failed) the lines kept, said to be out of date when there are
+    /// lines from a read that answered since the vault was opened (nothing read, or no line kept: nothing to say; as
+    /// vettid-android).
     private func applyHistory(_ h: ConversationCallHistory?) {
         guard let h else {
-            if historyRead { local.callsOutOfDate = true }
+            if historyRead, !local.calls.isEmpty { local.callsOutOfDate = true }
             return
         }
         historyRead = true

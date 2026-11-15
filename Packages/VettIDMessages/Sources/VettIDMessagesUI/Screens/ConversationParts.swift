@@ -11,6 +11,14 @@ struct MessageList: View {
     let name: String
     let actions: ConversationActions
     @State private var trigger = OlderTrigger()
+    /// The end of the list is in view (it opens there).
+    @State private var atEnd = true
+
+    static let outOfDateID = "calls_out_of_date_row"
+
+    /// "Calls may be out of date." scrolls into view when it comes and the member was at the end; never when they are reading
+    /// older rows, nor on a return to the screen with it already up (a change only, as vettid-android).
+    static func showsOutOfDate(was: Bool, now: Bool, atEnd: Bool) -> Bool { !was && now && atEnd }
 
     /// Which end of the list moved: the first message (only an older page changes it) and the last row.
     struct Edges: Equatable {
@@ -52,7 +60,11 @@ struct MessageList: View {
                         DayDivider(MessageTimes.dayLabel(group.day))
                         ForEach(group.rows) { r in row(r).id(r.id) }
                     }
-                    if state.callsOutOfDate { CallsOutOfDateLine() }
+                    if state.callsOutOfDate { CallsOutOfDateLine().id(Self.outOfDateID) }
+                    // Whether the member is at the end of the list (a lazy stack's rows appear and go as they scroll in and out).
+                    Color.clear.frame(height: 1)
+                        .onAppear { atEnd = true }
+                        .onDisappear { atEnd = false }
                 }
                 .padding(.vertical, Spacing.s)
             }
@@ -63,6 +75,11 @@ struct MessageList: View {
                 case .toEnd(let last): withAnimation { proxy.scrollTo(last, anchor: .bottom) }
                 case .keep(let first): proxy.scrollTo(first, anchor: .top)
                 case .none: break
+                }
+            }
+            .onChange(of: state.callsOutOfDate) { was, now in
+                if Self.showsOutOfDate(was: was, now: now, atEnd: atEnd) {
+                    withAnimation { proxy.scrollTo(Self.outOfDateID, anchor: .bottom) }
                 }
             }
             .task {
