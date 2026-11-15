@@ -224,6 +224,44 @@ extension VaultCallSignallingTests {
         #expect(!endedHere)
     }
 
+    /// The vault ended the call before its start returned, and the end was remembered: the start says the call is lost, so the
+    /// machine ends it from the end it holds, or fails it at once if it holds none (it keeps the oldest events, this the newest
+    /// ends).
+    @Test func aRememberedEndAlsoSaysTheCallIsLost() async throws {
+        let s = await signalling()
+        let (call, error) = try await heldStartResult(s) { gateway.send(.ended(CallEnded(callId: callId, reason: "busy"))) }
+        #expect(destroyed(call))
+        #expect(error as? CallLostError == CallLostError(callId: callId))
+        #expect(!endedHere)
+    }
+
+    /// A start still looking up its connection when ends overflow has sent no `call.start` yet: it cannot be the lost end's
+    /// call, and is kept.
+    @Test func aStartStillLookingUpItsConnectionDuringAnOverflowIsKept() async throws {
+        let lookup = Gate()
+        let s = VaultCallSignalling(
+            gateway: gateway, pinned: { [unowned self] id in
+                await lookup.wait()
+                return identities[id]
+            }, suites: [s1], clock: clock
+        )
+        listen(s)
+        await settle()
+        var made: OutgoingCall?
+        gateway.startResult = { [unowned self] in
+            let call = try outgoingCall($0, pinned: $1)
+            made = call
+            return call
+        }
+        let starting = Task { try await s.start(connectionId: "conn-1", sdp: "v=0", suites: [s1]) }
+        await settle()
+        unrelatedEnds(17)
+        await settle()
+        lookup.open()
+        _ = try await starting.value
+        #expect(!destroyed(try #require(made)))
+    }
+
     /// A start that fails with ends remembered: they are forgotten with it, and a later start of a call with the same id is kept.
     @Test func aStartThatFailsForgetsTheEndsAndTheNextStartIsKept() async throws {
         let s = await signalling()

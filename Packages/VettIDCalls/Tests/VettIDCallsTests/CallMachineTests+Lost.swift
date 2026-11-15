@@ -101,4 +101,48 @@ extension CallMachineTests {
         #expect(try ended(m).reason == .busy)
         #expect(!hasSent(signalling, "end("))
     }
+
+    /// The held ends are a glare's and then its winner's own: as for a placed call, the call is missed at once, nothing is
+    /// sent, and the winner's offer if it comes after is not answered or rung.
+    @Test func aLostCallWhoseGlaresWinnerEndedIsMissed() async throws {
+        let m = machine()
+        signalling.holdStart()
+        m.call("conn-1")
+        await runCurrent()
+        signalling.deliver(.end(callId: callId, reason: CallReason.busy, supersededBy: glareId))
+        signalling.deliver(.end(callId: glareId, reason: CallReason.hangup))
+        await runCurrent()
+        signalling.startResult = { throw CallLostError(callId: callId) }
+        signalling.releaseStart()
+        await runCurrent()
+        #expect(try ended(m).reason == .missed)
+        signalling.deliver(offer(glareId))
+        await runCurrent()
+        #expect(try ended(m).reason == .missed, "the ended winner's offer is not rung")
+        #expect(!hasSent(signalling, "end(") && !hasSent(signalling, "answer("))
+    }
+
+    /// An offer held before the call had its id carries that very id: it is the lost call itself, never rung after it fails.
+    @Test func aLostCallsOwnOfferIsNotRung() async throws {
+        let m = machine()
+        signalling.holdStart()
+        m.call("conn-1")
+        await runCurrent()
+        signalling.deliver(offer(callId))
+        await runCurrent()
+        signalling.startResult = { throw CallLostError(callId: callId) }
+        signalling.releaseStart()
+        await runCurrent()
+        #expect(try ended(m).reason == .failed)
+        #expect(!hasSent(signalling, "ringing("))
+    }
+
+    /// No session knows the lost call (let go, the abandoned starts' list full): it is ended at the vault all the same.
+    @Test func aLostCallNoSessionKnowsIsEndedAtTheVault() async throws {
+        let m = machine()
+        await runCurrent()
+        m.post(.lost(seq: 999, callId: callId))
+        await runCurrent()
+        #expect(signalling.sent.filter { $0.hasPrefix("end") } == ["end(\(callId), failed)"])
+    }
 }

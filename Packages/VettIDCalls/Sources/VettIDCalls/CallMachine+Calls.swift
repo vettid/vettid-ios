@@ -47,17 +47,20 @@ extension CallMachine {
     /// the vault was answering is ended as hung up, as ``onPlaced(_:seq:call:atMs:)`` does.
     func onLost(_ s: CallSession?, seq: Int, callId: String) {
         if let s, s.seq == seq {
-            // The machine may hold the vault's own end for it (it keeps more early events than the signalling keeps ends): that
-            // end says how the call ended (`busy`, a glare's winner), as for a placed call (``onPlaced(_:seq:call:atMs:)``).
-            // Nothing else held is of use: the call has no key, and its media never started.
+            // The machine may hold the vault's own end for it among its early events (the oldest ``maxEarly`` of every kind,
+            // where the signalling remembers the newest ends): that end says how the call ended (`busy`, a glare's winner, the
+            // winner's own end), as for a placed call (``onPlaced(_:seq:call:atMs:)``). Nothing else held is of use: the call
+            // has no key, and its media never started.
             let early = s.early
             s.early.removeAll()
             s.callId = callId
+            // An offer held before the call had its id, that turns out to carry this very id, is no other call.
+            if s.glareOffer?.callId == callId { s.glareOffer = nil }
             s.phase = .calling
             for e in early {
                 if case .answer(let a) = e {
                     a.keys.wipe()
-                } else if case .end = e, session === s, s.supersededBy == nil {
+                } else if case .end = e, session === s {
                     onSignal(s, e)
                 }
             }

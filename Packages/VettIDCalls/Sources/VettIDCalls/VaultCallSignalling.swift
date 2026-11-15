@@ -251,7 +251,6 @@ package final class VaultCallSignalling: CallSignalling {
         starting += 1
         let call: OutgoingCall
         let endedAlready: Bool
-        let endLost: Bool
         do {
             let fingerprint: String
             do {
@@ -260,16 +259,13 @@ package final class VaultCallSignalling: CallSignalling {
                 // A connection the app does not know: no call is placed.
                 throw CallRefusedError(code: "not_found")
             }
-            // Numbered as `call.start` goes: an end lost before this cannot be this call's.
+            // Numbered just before `call.start` goes: an end lost before this cannot be this call's.
             startsBegun += 1
             let mine = startsBegun
             call = try await gateway.start(connectionId: connectionId, pinnedFingerprint: fingerprint, sdp: sdp, suites: suites)
-            let remembered = endedWhileStarting.contains(call.callId)
-            endLost = !remembered && mine <= lostForStartsUpTo
-            endedAlready = remembered || endLost
+            endedAlready = endedWhileStarting.contains(call.callId) || mine <= lostForStartsUpTo
             if endedAlready {
-                // Ended before this start returned, or it may have been: not kept, and its key destroyed now. A remembered end
-                // is in the machine's held events, which end the call; for one that may have been lost, see below.
+                // Ended before this start returned, or it may have been: not kept, and its key destroyed now.
                 call.destroy()
             } else {
                 placed.append((call.callId, call))
@@ -286,14 +282,15 @@ package final class VaultCallSignalling: CallSignalling {
             throw error
         }
         let held = endStart()
-        if endLost {
-            // Its end may have been lost, and it can no longer be answered: the machine ends it at the vault and shows it
-            // failed now, rather than ringing out. (More than ``maxEndedKept`` ends of other calls, a mailbox replayed after a
-            // reconnect for one, fail a good call too: its key is gone either way.)
+        if endedAlready {
+            // It can no longer be answered. The machine ends it from its own held end for it if it has one (it may not: it holds
+            // the oldest events, this the newest ends), and otherwise at the vault, showing it failed now rather than ringing
+            // out. (More than ``maxEndedKept`` ends of other calls, a mailbox replayed after a reconnect for one, fail a good
+            // call too: its key is gone either way.)
             throw CallLostError(callId: call.callId)
         }
-        // An answer that overtook the vault's answer to `call.start`: checked now, as any answer (none for a call already ended).
-        for h in held where !endedAlready && h.callId == call.callId {
+        // An answer that overtook the vault's answer to `call.start`: checked now, as any answer.
+        for h in held where h.callId == call.callId {
             if let a = await check(answer: h.message, callId: h.callId) { emitLate(a) }
         }
         return PlacedCall(callId: call.callId, exp: call.exp, servers: call.ice.servers)

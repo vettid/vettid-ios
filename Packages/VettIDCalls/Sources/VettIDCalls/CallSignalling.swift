@@ -66,8 +66,8 @@ package struct CallRefusedError: Error, Equatable, Sendable, CustomStringConvert
     package var description: String { "call refused: \(code)" }
 }
 
-/// `call.start` placed [callId], but the call can no longer be made: an end for it may have been lost while it was being
-/// started, and its key is gone. The machine ends it (``CallMachine``'s `lost`), with the reason the session calls for.
+/// `call.start` placed [callId], but the call can no longer be made: it was ended, or an end for it may have been lost, while
+/// it was being started, and its key is gone. The machine ends it (``CallMachine``'s `lost`), with the reason the session calls for.
 package struct CallLostError: Error, Equatable, Sendable, CustomStringConvertible {
     package let callId: String
 
@@ -183,7 +183,8 @@ package protocol CallSignalling: AnyObject {
     /// until form 1 is retired (VAULT-MESSAGING §10.10 "Call forms" rule 3, "Mixed releases").
     func offerable(_ suites: [MediaSuite]) -> [MediaSuite]
 
-    /// `call.start`. Throws ``CallRefusedError`` with the vault's code, ``CallSecurityError``, or another error.
+    /// `call.start`. Throws ``CallRefusedError`` with the vault's code, ``CallLostError`` for a call placed but ended (or
+    /// perhaps ended) before this returned, ``CallSecurityError``, or another error.
     func start(connectionId: String, sdp: String, suites: [MediaSuite]) async throws -> PlacedCall
 
     /// `call.answer` for a verified offer: returns the call's keys. Throws ``CallSecurityError`` or another error.
