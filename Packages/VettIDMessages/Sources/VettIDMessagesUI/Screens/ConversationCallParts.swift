@@ -28,11 +28,15 @@ struct CallEntry: View {
     /// The line's text: the outcome, then the time.
     static func text(_ call: ConversationCall) -> String { "\(MessagesStrings.callLine(call)) · \(MessageTimes.time(call.startedAt))" }
 
+    /// The direction's arrow, mirrored right to left. SF Symbols' phone arrows do not mirror by themselves (a test renders them
+    /// both ways); Android's are auto-mirrored.
+    static func arrow(outgoing: Bool) -> some View {
+        (outgoing ? VettIDSymbol.callMade : VettIDSymbol.callReceived).image.flipsForRightToLeftLayoutDirection(true)
+    }
+
     var body: some View {
         HStack(spacing: Spacing.xs) {
-            // SF Symbols' phone arrows do not mirror by themselves; Android's are auto-mirrored.
-            (call.outgoing ? VettIDSymbol.callMade : VettIDSymbol.callReceived).image
-                .flipsForRightToLeftLayoutDirection(true)
+            Self.arrow(outgoing: call.outgoing)
                 .scaledIcon(size: 16)
                 .foregroundStyle(colors.onSurfaceVariant)
                 .accessibilityHidden(true)

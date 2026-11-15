@@ -13,7 +13,8 @@ import VettIDDataTesting
 @Observable
 final class FakeConversationCalls {
     var availability: ConversationCallAvailability = .unavailable
-    @ObservationIgnored var history = ConversationCallHistory()
+    /// nil: the read fails.
+    @ObservationIgnored var history: ConversationCallHistory? = ConversationCallHistory()
     @ObservationIgnored private(set) var reads: [String] = []
     @ObservationIgnored private(set) var called: [String] = []
     /// While true, a read waits for ``release()``.
@@ -203,6 +204,23 @@ final class FakeConversationCalls {
         fake.availability = .ready
         await c1.settle()
         #expect(c1.state.callsNotShown, "skipped again after the unlock")
+    }
+
+    /// A read that fails keeps the lines shown and the note, on the first read after a call and on the re-read a moment later
+    /// (no silent emptying).
+    @Test func aFailedReadKeepsTheLinesShown() async {
+        fake.history = ConversationCallHistory(calls: [call("k1")], someNotShown: true)
+        fake.availability = .ready
+        let m = await model()
+        #expect(m.state.calls.map(\.callId) == ["k1"] && m.state.callsNotShown)
+
+        fake.history = nil
+        fake.availability = .inCall
+        await m.settle()
+        fake.availability = .ready
+        await m.settle()
+        #expect(fake.reads.count == 4, "both reads after the call were made")
+        #expect(m.state.calls.map(\.callId) == ["k1"] && m.state.callsNotShown, "the lines and the note stay")
     }
 
     /// A conversation whose only content is a call is not "Say hello".

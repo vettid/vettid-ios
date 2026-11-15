@@ -55,14 +55,14 @@ public enum ConversationCallAvailability: Equatable, Sendable {
 public struct ConversationCalls: Sendable {
     /// Read where it is used, so that a change of the answer is followed (the host is observable).
     public var availability: @MainActor @Sendable () -> ConversationCallAvailability
-    /// The calls with a connection, newest first.
-    public var history: @MainActor @Sendable (String) async -> ConversationCallHistory
+    /// The calls with a connection, newest first; nil when they could not be read (the lines shown stay).
+    public var history: @MainActor @Sendable (String) async -> ConversationCallHistory?
     /// A tap on the Call action: through the microphone gate and the machine.
     public var call: @MainActor @Sendable (String) -> Void
 
     public init(
         availability: @escaping @MainActor @Sendable () -> ConversationCallAvailability,
-        history: @escaping @MainActor @Sendable (String) async -> ConversationCallHistory,
+        history: @escaping @MainActor @Sendable (String) async -> ConversationCallHistory?,
         call: @escaping @MainActor @Sendable (String) -> Void
     ) {
         self.availability = availability

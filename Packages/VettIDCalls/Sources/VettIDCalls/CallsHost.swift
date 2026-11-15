@@ -177,8 +177,8 @@ public final class CallsHost {
     public func call(_ connectionId: String) { runtime?.controller.call(connectionId) }
 
     /// The calls with a connection as its conversation shows them (newest first, and whether some could not be shown); empty when
-    /// no vault is open or the vault has no calls.
-    public func history(_ connectionId: String) async -> CallHistory {
+    /// no vault is open or the vault has no calls; nil when the read failed.
+    public func history(_ connectionId: String) async -> CallHistory? {
         guard let controller = runtime?.controller else { return CallHistory() }
         return await controller.history(connectionId)
     }

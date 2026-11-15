@@ -12,14 +12,35 @@ struct MessageList: View {
     let actions: ConversationActions
     @State private var trigger = OlderTrigger()
 
-    /// The first and last messages: which end of the list moved.
+    /// Which end of the list moved: the first message (only an older page changes it) and the last row.
     struct Edges: Equatable {
-        var first: String?
+        var firstMessage: String?
         var last: String?
     }
 
-    /// Which end of the list moved: the ids of its first and last rows (a call added at the end scrolls to it, like a message).
-    private var edges: Edges { Edges(first: state.rows.first?.id, last: state.rows.last?.id) }
+    /// What a change of the edges does to the scroll position.
+    enum Scroll: Equatable {
+        case none
+        /// Something was added at the end: show it.
+        case toEnd(String)
+        /// An older page was added at the top: stay at the message that was first.
+        case keep(String)
+    }
+
+    /// The first message, not the first row: call lines read after the messages (older than the first message, in a fully loaded
+    /// conversation) are not an older page and must not move the member's place. The last row: a call added at the end scrolls to
+    /// it, like a message.
+    private var edges: Edges { Self.edges(state) }
+
+    static func edges(_ state: ConversationState) -> Edges {
+        Edges(firstMessage: state.messages.first?.messageID, last: state.rows.last?.id)
+    }
+
+    static func scroll(from old: Edges, to new: Edges) -> Scroll {
+        if new.last != old.last, let last = new.last { return .toEnd(last) }
+        if new.firstMessage != old.firstMessage, let first = old.firstMessage { return .keep(first) }
+        return .none
+    }
 
     var body: some View {
         ScrollViewReader { proxy in
@@ -37,10 +58,10 @@ struct MessageList: View {
             .defaultScrollAnchor(.bottom)
             .scrollDismissesKeyboard(.interactively)
             .onChange(of: edges) { old, new in
-                if new.last != old.last, let last = new.last {
-                    withAnimation { proxy.scrollTo(last, anchor: .bottom) }
-                } else if new.first != old.first, let first = old.first {
-                    proxy.scrollTo(first, anchor: .top)
+                switch Self.scroll(from: old, to: new) {
+                case .toEnd(let last): withAnimation { proxy.scrollTo(last, anchor: .bottom) }
+                case .keep(let first): proxy.scrollTo(first, anchor: .top)
+                case .none: break
                 }
             }
             .task {

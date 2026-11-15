@@ -51,7 +51,7 @@ extension ShellCalls {
         self.init(
             canCall: { host.canCall }, call: { host.call($0) },
             availability: { ConversationCallAvailability(host.availability) },
-            history: { ConversationCallHistory(await host.history($0)) }
+            history: { await host.history($0).map(ConversationCallHistory.init) }
         )
     }
 }

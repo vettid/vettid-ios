@@ -290,7 +290,7 @@ final class FakeAppVault: CallsAppVault {
     }
 
     /// A conversation's history through the host: empty with no vault open, the connection's calls once it is (the skipped count
-    /// with them, in every conversation), and empty again for a vault without calls.
+    /// with them, in every conversation), and empty again once the vault is locked.
     @Test func theHistoryOfAConversationComesThroughTheHost() async {
         let h = host()
         vault.inner.gatewayFake.listResult = {
@@ -301,9 +301,9 @@ final class FakeAppVault: CallsAppVault {
         vault.inner.setUnlocked(true)
         await settle()
         let mine = await h.history("conn-1")
-        #expect(mine.entries.map(\.outcome) == [.declined] && mine.someNotShown)
+        #expect(mine?.entries.map(\.outcome) == [.declined] && mine?.someNotShown == true)
         let other = await h.history("conn-2")
-        #expect(other.entries.isEmpty && other.someNotShown)
+        #expect(other?.entries.isEmpty == true && other?.someNotShown == true)
         vault.inner.setUnlocked(false)
         await settle()
         #expect(await h.history("conn-1") == CallHistory())
@@ -316,6 +316,9 @@ final class FakeAppVault: CallsAppVault {
         vault.inner.setUnlocked(true)
         await settle()
         #expect(h.availability == .notInVault && !h.canCall)
+        let before = vault.inner.gatewayFake.listCalls
+        #expect(await h.history("conn-1") == CallHistory(), "a vault without calls: no lines, and not asked again")
+        #expect(vault.inner.gatewayFake.listCalls == before)
     }
 
     @Test func noCallButtonWhenTheProbeIsRefusedOtherwise() async {

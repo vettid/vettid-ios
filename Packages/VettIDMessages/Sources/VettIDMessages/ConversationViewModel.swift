@@ -208,15 +208,16 @@ public final class ConversationViewModel {
             let (id, again) = (connectionID, historyAgain)
             // `self` is never held across a suspension: leaving the screen ends the read and the re-read.
             historyTask = work.launch { [weak self] in
-                let h = await calls.history(id)
+                // A read that failed keeps the lines shown (nil), rather than emptying them silently.
+                if let h = await calls.history(id), !Task.isCancelled {
+                    self?.local.calls = h.calls
+                    self?.local.callsNotShown = h.someNotShown
+                }
                 guard !Task.isCancelled else { return }
-                self?.local.calls = h.calls
-                self?.local.callsNotShown = h.someNotShown
                 // Read at the moment a call ends, the vault may not have taken its `call.end` yet: the call would stay going on
                 // in the list. Once more, a moment later (not if the availability changed meanwhile).
                 do { try await Task.sleep(for: again) } catch { return }
-                let later = await calls.history(id)
-                guard !Task.isCancelled else { return }
+                guard let later = await calls.history(id), !Task.isCancelled else { return }
                 self?.local.calls = later.calls
                 self?.local.callsNotShown = later.someNotShown
             }

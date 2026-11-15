@@ -85,6 +85,44 @@ import VettIDUI
         #expect(ConversationBody.phase(only) == .empty)
     }
 
+    /// Call lines read after the messages do not move the member's place: a call older than the first message of a fully loaded
+    /// conversation (read at open, and again after each unlock) is not an older page. Only a change of the first message is; a
+    /// call at the end scrolls to it, like a message.
+    @Test func callLinesDoNotJumpTheListToTheTop() {
+        func edges(_ s: ConversationState) -> MessageList.Edges { MessageList.edges(s) }
+        let base = state()
+        var oldCall = base
+        oldCall.calls = [ConversationCall(callId: "old", outgoing: false, outcome: .missed, startedAt: Self.t0.addingTimeInterval(-120))]
+        #expect(oldCall.rows.first?.id == "call-old", "the call is the first row")
+        #expect(MessageList.scroll(from: edges(base), to: edges(oldCall)) == .none, "the call read: no jump")
+        #expect(MessageList.scroll(from: edges(oldCall), to: edges(base)) == .none, "the call dropped at a lock: no jump")
+
+        var older = oldCall
+        older.messages.insert(MessagesScreensTests.message("m0", at: Self.t0.addingTimeInterval(-180), read: true), at: 0)
+        #expect(MessageList.scroll(from: edges(oldCall), to: edges(older)) == .keep("m1"), "an older page keeps the place")
+
+        var newCall = base
+        newCall.calls = [call("k", .missed)]
+        #expect(MessageList.scroll(from: edges(base), to: edges(newCall)) == .toEnd("call-k"), "a call at the end is shown")
+    }
+
+    /// The arrows mirror exactly once right to left: the symbol itself has no right-to-left variant (drawn the same in both
+    /// directions without the modifier), and the modifier mirrors it.
+    @Test func theArrowsMirrorOnceRightToLeft() throws {
+        func pixels(_ view: some View, _ direction: LayoutDirection) throws -> Data {
+            let r = ImageRenderer(content: view.frame(width: 32, height: 32).environment(\.layoutDirection, direction))
+            r.scale = 2
+            return try #require(r.uiImage?.pngData())
+        }
+        for outgoing in [true, false] {
+            let plain = (outgoing ? VettIDSymbol.callMade : VettIDSymbol.callReceived).image.font(.system(size: 24))
+            #expect(try pixels(plain, .leftToRight) == pixels(plain, .rightToLeft), "no right-to-left variant of its own")
+            let arrow = CallEntry.arrow(outgoing: outgoing).font(.system(size: 24))
+            #expect(try pixels(arrow, .leftToRight) == pixels(plain, .leftToRight), "left to right: as drawn")
+            #expect(try pixels(arrow, .rightToLeft) != pixels(arrow, .leftToRight), "right to left: mirrored")
+        }
+    }
+
     /// Every state of the conversation with calls is drawn (the screens' texts and presence on the simulator are the catalog's
     /// UI test: the accessibility tree of a hosted view is not built outside it).
     @Test func everyStateIsDrawn() {

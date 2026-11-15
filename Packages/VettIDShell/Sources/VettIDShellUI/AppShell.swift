@@ -31,13 +31,13 @@ public struct ShellCalls {
     public var call: @MainActor (String) -> Void
     /// The calls' availability for a conversation: ready, going on, or not (the default follows [canCall]).
     public var availability: @MainActor () -> ConversationCallAvailability
-    /// The calls with a connection (the default has none).
-    public var history: @MainActor (String) async -> ConversationCallHistory
+    /// The calls with a connection (the default has none); nil when they could not be read.
+    public var history: @MainActor (String) async -> ConversationCallHistory?
 
     public init(
         canCall: @escaping @MainActor () -> Bool, call: @escaping @MainActor (String) -> Void,
         availability: (@MainActor () -> ConversationCallAvailability)? = nil,
-        history: @escaping @MainActor (String) async -> ConversationCallHistory = { _ in ConversationCallHistory() }
+        history: @escaping @MainActor (String) async -> ConversationCallHistory? = { _ in ConversationCallHistory() }
     ) {
         self.canCall = canCall
         self.call = call

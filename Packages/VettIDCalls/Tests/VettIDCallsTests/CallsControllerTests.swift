@@ -276,7 +276,7 @@ import VettIDCrypto
 
     // MARK: the history
 
-    @Test func theHistoryIsTheConnectionsRowsAndSaysWhenSomeCouldNotBeShown() async {
+    @Test func theHistoryIsTheConnectionsRowsAndSaysWhenSomeCouldNotBeShown() async throws {
         vault.gatewayFake.listResult = {
             CallList(calls: [
                 record("A", direction: "out", reason: "hangup", startedAtMs: -5000, answeredAtMs: -4000, endedAtMs: -1000),
@@ -286,7 +286,7 @@ import VettIDCrypto
         }
         let c = controller(FakeMicrophone(.granted))
         await unlock()
-        let h = await c.history("conn-1")
+        let h = try #require(await c.history("conn-1"))
         #expect(h.entries.map(\.callId) == ["A"], "the other connection's call and the one answered elsewhere have no row")
         #expect(h.entries.first?.outcome == .talked && h.entries.first?.duration == .seconds(3))
         #expect(h.someNotShown, "the vault skipped one entry")
@@ -303,11 +303,12 @@ import VettIDCrypto
         #expect(vault.gatewayFake.listCalls == before, "not asked of a vault without calls")
     }
 
-    @Test func aHistoryReadThatFailsIsEmptyNotAnError() async {
+    /// A read that fails is nil, not an empty history: the conversation keeps the lines it shows.
+    @Test func aHistoryReadThatFailsIsNil() async {
         let c = controller(FakeMicrophone(.granted))
         await unlock()
         vault.gatewayFake.listResult = { throw StartFailure() }
-        #expect(await c.history("conn-1") == CallHistory())
+        #expect(await c.history("conn-1") == nil)
     }
 
     // MARK: ringing offers
