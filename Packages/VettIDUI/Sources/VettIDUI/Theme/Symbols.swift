@@ -15,6 +15,8 @@ public enum VettIDSymbol: String, CaseIterable, Sendable {
     // Calls (the call screen and a connection's Call button)
     case call = "phone" // Call
     case callEnd = "phone.down" // CallEnd
+    case callMade = "phone.arrow.up.right" // CallMade (a call line of a conversation: one you made)
+    case callReceived = "phone.arrow.down.left" // CallReceived (one you received)
     case micOff = "mic.slash" // MicOff
     case volumeUp = "speaker.wave.2" // VolumeUp
 

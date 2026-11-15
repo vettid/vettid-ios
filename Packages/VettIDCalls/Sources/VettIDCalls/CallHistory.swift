@@ -32,6 +32,15 @@ public struct CallHistoryEntry: Equatable, Sendable {
     public let startedAt: Date
     /// How long the call was answered for; nil if it never was.
     public let duration: Duration?
+
+    public init(callId: String, connectionId: String, outgoing: Bool, outcome: CallOutcome, startedAt: Date, duration: Duration? = nil) {
+        self.callId = callId
+        self.connectionId = connectionId
+        self.outgoing = outgoing
+        self.outcome = outcome
+        self.startedAt = startedAt
+        self.duration = duration
+    }
 }
 
 /// A conversation's calls: [entries], newest first, and [someNotShown] when the vault's list had entries that did not read: the

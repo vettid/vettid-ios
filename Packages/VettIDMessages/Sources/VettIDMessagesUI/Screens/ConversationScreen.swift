@@ -27,6 +27,8 @@ public struct ConversationActions {
     public var onDismissLink: @MainActor () -> Void = {}
     /// The photos (VAULT-MESSAGING §10.5.1): the button, the camera, the draft, the bubbles and the viewer.
     public var photos = PhotoActions()
+    /// The Call action; nil: the screen has none (the state's ``ConversationState/callShown`` decides when it shows).
+    public var onCall: (@MainActor () -> Void)?
 
     public init() {}
 }
@@ -75,6 +77,10 @@ public struct ConversationScreen: View {
                 Composer(state: state, name: isolated, actions: actions)
             }
         } actions: {
+            if let onCall = Self.callAction(state, actions) {
+                IconButton(.call, label: MessagesStrings.call, action: onCall)
+                    .accessibilityIdentifier("conversation_call")
+            }
             IconButton(.info, label: MessagesStrings.details(isolated), action: actions.onDetails)
                 .accessibilityIdentifier("conversation_details")
         }
@@ -105,6 +111,12 @@ public struct ConversationScreen: View {
         .accessibilityIdentifier("conversation_screen")
     }
 
+    /// The Call action of the top bar: nil (hidden, not disabled) unless the state says it is shown (an active person, the
+    /// vault's probe says it has calls, no call going on) and the screen has the action.
+    static func callAction(_ state: ConversationState, _ actions: ConversationActions) -> (@MainActor () -> Void)? {
+        state.callShown ? actions.onCall : nil
+    }
+
     /// The camera, or the prepared photos waiting for Send or Cancel.
     var photoCover: Bool { state.capturing || state.photoDraft != nil }
 
@@ -126,7 +138,7 @@ struct ConversationBody: View {
 
     /// What the body shows: a conversation that could not be read is never "Say hello".
     static func phase(_ state: ConversationState) -> ListPhase {
-        ListPhase.of(loading: state.loading, empty: state.messages.isEmpty, failed: state.loadError != nil)
+        ListPhase.of(loading: state.loading, empty: state.messages.isEmpty && state.calls.isEmpty, failed: state.loadError != nil)
     }
 
     /// Whether a failed read offers "Try again": not when the connection is gone (`not_found`), which reading again cannot

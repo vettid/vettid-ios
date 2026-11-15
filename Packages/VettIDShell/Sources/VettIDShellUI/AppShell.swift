@@ -24,14 +24,30 @@ import VettIDUI
 import VettIDVotes
 import VettIDVotesUI
 
-/// What the shell asks of the calls (the app's `CallsHost`): whether a conversation shows a Call button now, and a tap on it.
+/// What the shell asks of the calls (the app's `CallsHost`): whether a connection's page or a conversation shows a Call button
+/// now, a tap on it, and a conversation's call history.
 public struct ShellCalls {
     public var canCall: @MainActor () -> Bool
     public var call: @MainActor (String) -> Void
+    /// The calls' availability for a conversation: ready, going on, or not (the default follows [canCall]).
+    public var availability: @MainActor () -> ConversationCallAvailability
+    /// The calls with a connection (the default has none); nil when they could not be read.
+    public var history: @MainActor (String) async -> ConversationCallHistory?
 
-    public init(canCall: @escaping @MainActor () -> Bool, call: @escaping @MainActor (String) -> Void) {
+    public init(
+        canCall: @escaping @MainActor () -> Bool, call: @escaping @MainActor (String) -> Void,
+        availability: (@MainActor () -> ConversationCallAvailability)? = nil,
+        history: @escaping @MainActor (String) async -> ConversationCallHistory? = { _ in ConversationCallHistory() }
+    ) {
         self.canCall = canCall
         self.call = call
+        self.availability = availability ?? { canCall() ? .ready : .unavailable }
+        self.history = history
+    }
+
+    /// The calls as a conversation uses them.
+    var conversation: ConversationCalls {
+        ConversationCalls(availability: availability, history: history, call: call)
     }
 }
 
@@ -458,7 +474,10 @@ public struct AppShell: View {
         switch route {
         case .conversation(let id):
             if let messages, let connections {
-                ConversationRoute(id, messages: messages, connections: connections, attachments: attachments, host: messagesHost)
+                ConversationRoute(
+                    id, messages: messages, connections: connections, attachments: attachments, calls: calls?.conversation,
+                    host: messagesHost
+                )
             }
         case .newMessage:
             if let connections { NewMessageRoute(connections: connections, host: messagesHost) }

@@ -39,6 +39,7 @@
 		28D9D7D72D09CA06F5EFEC00 /* CallsCatalogUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF1B951337F93E1A73F8EF1C /* CallsCatalogUITests.swift */; };
 		2B7C58D7CD92999F58FB865D /* SettingsFlowsCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93AFC9E49CAEEB5D0ABC86DF /* SettingsFlowsCatalog.swift */; };
 		2DB59791D7D6903F1DE6E8CB /* VettIDAltChan in Frameworks */ = {isa = PBXBuildFile; productRef = 2022889C73B639A3FEDD0CBE /* VettIDAltChan */; };
+		2E655CEAFBD69FACAAAD4381 /* CallsConversation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A179D7136DE7C03261D8D10 /* CallsConversation.swift */; };
 		2ED9F7D436AE5EBE6EC6A918 /* VettIDCrypto in Frameworks */ = {isa = PBXBuildFile; productRef = 2628100D3340AAA9869F33DF /* VettIDCrypto */; };
 		3038151F076162BD2127BC3F /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = AB0B96F2AA5C25C8DBAE14D6 /* Assets.xcassets */; };
 		34D5AD803AA496D57470232B /* VaultUITestCase.swift in Sources */ = {isa = PBXBuildFile; fileRef = 461CF475BEF16D6D464D6ECE /* VaultUITestCase.swift */; };
@@ -48,6 +49,7 @@
 		4458E614973C93BE7AB0089C /* AppLockGate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5CBB4C9A8E482B333CED7362 /* AppLockGate.swift */; };
 		4790B24DD7B2AF69BB6923F1 /* SecureHardware.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5BC7B2415F948B243F5CAD54 /* SecureHardware.swift */; };
 		48C14D9734DD1B7FCF3CF6B0 /* AppLockWindowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB1D13186B27047D3E39486C /* AppLockWindowTests.swift */; };
+		49D20571E632272EE61727C4 /* CallsConversation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A179D7136DE7C03261D8D10 /* CallsConversation.swift */; };
 		4A0056FD27140A0BEDA20DEC /* NoSecureHardware.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4DAFB636C365A57D892BA212 /* NoSecureHardware.swift */; };
 		4DC22C8F06D2B43DE77D5460 /* VettIDDevices in Frameworks */ = {isa = PBXBuildFile; productRef = 72D4476B960FF68A0BEE6140 /* VettIDDevices */; };
 		518BE854550899264F951BA4 /* VettIDVault in Frameworks */ = {isa = PBXBuildFile; productRef = F31EB6E3CE01034FEB597AE6 /* VettIDVault */; };
@@ -121,6 +123,7 @@
 		C0637A00FD1447A4A4C583B6 /* ShellCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2C4EF17933B13C37D62C1ED /* ShellCatalog.swift */; };
 		C08AE4F5C6230F3C38A555DD /* VettIDDevices in Frameworks */ = {isa = PBXBuildFile; productRef = 29DFC2B30963794399EAFDBB /* VettIDDevices */; };
 		C16277EC80296B2350B60276 /* CallsWiringTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FE633DD8FFE64A6E2D63CF4 /* CallsWiringTests.swift */; };
+		C1A6EB8D1D12BC24A07C1957 /* CallsConversationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 487FDD5894FCC86CC8623FF7 /* CallsConversationTests.swift */; };
 		C5D7F03C08449B0C0839B40D /* VettIDKeys in Frameworks */ = {isa = PBXBuildFile; productRef = 7F7CDB0CA3D4891C7BC81EED /* VettIDKeys */; };
 		C6FDE6FB207680D30A950256 /* NoSecureHardware.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4DAFB636C365A57D892BA212 /* NoSecureHardware.swift */; };
 		CA07610D628893FD4E928A2C /* VettIDVotes in Frameworks */ = {isa = PBXBuildFile; productRef = 068D755D987154249EB496D1 /* VettIDVotes */; };
@@ -181,6 +184,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		0A179D7136DE7C03261D8D10 /* CallsConversation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CallsConversation.swift; sourceTree = "<group>"; };
 		0FA837F1B3F48BDD0B340707 /* GalleryScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GalleryScreen.swift; sourceTree = "<group>"; };
 		0FE633DD8FFE64A6E2D63CF4 /* CallsWiringTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CallsWiringTests.swift; sourceTree = "<group>"; };
 		1845D6E5C1F3EBC1B359437D /* NotificationSoundsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationSoundsTests.swift; sourceTree = "<group>"; };
@@ -199,6 +203,7 @@
 		412ACBC39A6E3761D83FDE48 /* AppEnvironment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppEnvironment.swift; sourceTree = "<group>"; };
 		413317A388BA8F9F2776CB1B /* Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Release.xcconfig; sourceTree = "<group>"; };
 		461CF475BEF16D6D464D6ECE /* VaultUITestCase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultUITestCase.swift; sourceTree = "<group>"; };
+		487FDD5894FCC86CC8623FF7 /* CallsConversationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CallsConversationTests.swift; sourceTree = "<group>"; };
 		4CEC8D115B6CD5EAB8C1F445 /* Staging.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Staging.xcconfig; sourceTree = "<group>"; };
 		4DAFB636C365A57D892BA212 /* NoSecureHardware.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoSecureHardware.swift; sourceTree = "<group>"; };
 		5419A46086305A3A71AFECC8 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
@@ -405,6 +410,7 @@
 				9D2B5CA030BC6FA62B3EEF7D /* AppAttestDeviceTests.swift */,
 				D78BD3F6C3BB2643C264466A /* AppEnvironmentTests.swift */,
 				EB1D13186B27047D3E39486C /* AppLockWindowTests.swift */,
+				487FDD5894FCC86CC8623FF7 /* CallsConversationTests.swift */,
 				E7DE72A8BEA6545C60125D53 /* CallsWindowTests.swift */,
 				0FE633DD8FFE64A6E2D63CF4 /* CallsWiringTests.swift */,
 				6026316F2864710BB7DFBBCB /* CanaryManifestFilesTests.swift */,
@@ -477,6 +483,7 @@
 				412ACBC39A6E3761D83FDE48 /* AppEnvironment.swift */,
 				5CBB4C9A8E482B333CED7362 /* AppLockGate.swift */,
 				AB0B96F2AA5C25C8DBAE14D6 /* Assets.xcassets */,
+				0A179D7136DE7C03261D8D10 /* CallsConversation.swift */,
 				7F2EA67554B107444FF813EF /* CanaryManifestFiles.swift */,
 				E19B16C3C80D7D44FEA75D72 /* InstalledFromBuild.swift */,
 				651F1FB251573B18571FE4F0 /* OpenedLinks.swift */,
@@ -807,6 +814,7 @@
 				5395E0025FC61CCE44A33E9D /* AppNotifications.swift in Sources */,
 				732235F0D7CDBADC340E6D41 /* AppWipeTargets.swift in Sources */,
 				D92A272A8A2F2BEF0E89BF6A /* CallsCatalog.swift in Sources */,
+				49D20571E632272EE61727C4 /* CallsConversation.swift in Sources */,
 				ADB09CCE535DE329A04819EC /* CanaryManifestFiles.swift in Sources */,
 				0847C4526D3C1991B627B07F /* DebugCatalog.swift in Sources */,
 				E47F8A336CA8647AB9653FFA /* GalleryScreen.swift in Sources */,
@@ -844,6 +852,7 @@
 				A65E5E4EFA6A74AF7B884B2E /* AppAttestDeviceTests.swift in Sources */,
 				926662D958BB0CF0087EB183 /* AppEnvironmentTests.swift in Sources */,
 				48C14D9734DD1B7FCF3CF6B0 /* AppLockWindowTests.swift in Sources */,
+				C1A6EB8D1D12BC24A07C1957 /* CallsConversationTests.swift in Sources */,
 				A8F7BF4C8B3342DC23AF52B0 /* CallsWindowTests.swift in Sources */,
 				C16277EC80296B2350B60276 /* CallsWiringTests.swift in Sources */,
 				944241F35F84B24040C3C97F /* CanaryManifestFilesTests.swift in Sources */,
@@ -876,6 +885,7 @@
 				39B37FECFC4A4C167B610AFD /* AppNotifications.swift in Sources */,
 				AE4084C7B01741C3B0050BA5 /* AppWipeTargets.swift in Sources */,
 				80917292E1FA6C377B2456F2 /* CallsCatalog.swift in Sources */,
+				2E655CEAFBD69FACAAAD4381 /* CallsConversation.swift in Sources */,
 				154378D4143FFC3C81EFB544 /* CanaryManifestFiles.swift in Sources */,
 				E077D76E9DFBC0587596D6B0 /* DebugCatalog.swift in Sources */,
 				952798E17BA70F638B502377 /* DevStackWiring.swift in Sources */,

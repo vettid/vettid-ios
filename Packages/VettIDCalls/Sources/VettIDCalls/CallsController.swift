@@ -440,13 +440,13 @@ package final class CallsController {
 
     // MARK: the history
 
-    /// The calls with [connectionId], newest first; empty when there are none or they cannot be read.
-    package func history(_ connectionId: String) async -> CallHistory {
-        var list: CallList?
-        if supported == true {
-            list = try? await vault.gateway.list(limit: Self.historyLimit)
-        }
-        if let list, openFlag.isOpen { listSkipped = list.skipped }
+    /// The calls with [connectionId], newest first; empty when there are none or the vault has no calls, nil when the read
+    /// failed (the conversation then keeps the lines it shows: no silent emptying).
+    package func history(_ connectionId: String) async -> CallHistory? {
+        guard supported == true else { return CallHistory() }
+        let list: CallList
+        do { list = try await vault.gateway.list(limit: Self.historyLimit) } catch { return nil }
+        if openFlag.isOpen { listSkipped = list.skipped }
         return CallHistoryRows.history(list, connectionId: connectionId, now: clock.now())
     }
 
