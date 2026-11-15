@@ -2410,6 +2410,17 @@
           }
         }
       }
+    },
+    "connections_detail_call": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Call"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

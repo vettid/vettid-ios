@@ -115,6 +115,55 @@ extension VaultDevice {
         try save()
     }
 
+    /// The unsolicited messages the device acts on itself (its pairing, its tokens, its keys): never held.
+    static let handledByDevice: Set<String> = [
+        "device.paired", typePairRejected, "relay.token.issued", "relay.token.refresh", "identity.rotate", typeHsFin, HsTypes.confirm,
+    ]
+
+    /// Whether the event [inner] is left unacked now (``holdEvents(_:)``): not one a call of this device is waiting for
+    /// (``awaitEvent(of:timeout:match:)``: a flow begun before the app left the foreground must not time out), and at most
+    /// ``maxHeldUnacked`` different ones, so that the relay's window of unacked messages is not filled; one held before is held
+    /// again when it is redelivered. The rest are handed to the app, which keeps them in memory.
+    func holdsEvent(_ inner: Inner) -> Bool {
+        mem.withLock {
+            guard let hold = memory.eventHold else { return false }
+            guard hold(inner.type) else { return false }
+            // What warns the member is always held, outside the cap and before any exemption: rare, and never to be lost with the
+            // process. (No type is both this and awaited by a flow of the device.)
+            if Self.alwaysHeld(inner.type) {
+                memory.heldIDs.insert(inner.id)
+                return true
+            }
+            if memory.awaited[inner.type, default: 0] > 0 { return false }
+            if memory.heldIDs.contains(inner.id) { return true }
+            guard memory.heldIDs.count < Self.maxHeldUnacked else { return false }
+            memory.heldIDs.insert(inner.id)
+            return true
+        }
+    }
+
+    /// The events a hold always leaves unacked, whatever the cap: the clone and freeze alarm (§3.5.9), `sync.event` (its kind, the
+    /// alarm among them, is known only once opened) and the connections' authentication results and keys.
+    static func alwaysHeld(_ type: String) -> Bool {
+        type == "credential.alarm" || type == "sync.event" || type.hasPrefix("connection.authenticate.")
+    }
+
+    /// The hold ended: the cap counts afresh at the next one.
+    public func holdEnded() { mem.withLock { memory.heldIDs.removeAll() } }
+
+    /// How many different events a hold leaves unacked: well within the relay's window of unacked messages (128, RELAY-PROTOCOL §6.4).
+    static let maxHeldUnacked = 32
+
+    /// Leaves unacked the unsolicited vault events [hold] says to hold (it is asked with the event's type, from any thread): the
+    /// relay keeps them and delivers them again after its lease, so that a process that ends meanwhile loses none. For a
+    /// call kept running in the background, which handles only its own and the lock's events. nil ends the hold.
+    public func holdEvents(_ hold: (@Sendable (String) -> Bool)?) {
+        mem.withLock {
+            memory.eventHold = hold
+            memory.heldIDs.removeAll()
+        }
+    }
+
     static func prune(_ m: inout [String: Int64], _ t: Date) {
         let cutoff = ms(t.addingTimeInterval(-seenRetention))
         m = m.filter { $0.value >= cutoff }
@@ -187,6 +236,11 @@ extension VaultDevice {
             let tooOld = inner.exp == nil && t.timeIntervalSince(inner.ts) > Inner.maxDurableAge
             if future || tooOld { timeDropBroadcast.emit(inner.type) }
             throw e
+        }
+        // A call in the background holds the events of the app's lists, feed and warnings (``holdEvents(_:)``): left unacked, with
+        // nothing of the message recorded or applied, for the relay's redelivery after its lease, once the app is back.
+        if inner.re == nil, !Self.handledByDevice.contains(inner.type), holdsEvent(inner) {
+            throw LeaveUnacked("held while a call keeps the collection in the background")
         }
         noteVaultTime(inner.ts)
         // An answer (also a cached one sent again, also one that comes after its wait ended) settles its request.

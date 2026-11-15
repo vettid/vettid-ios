@@ -10,6 +10,8 @@ import VettIDUI
 public struct DetailActions {
     public var onBack: @MainActor () -> Void = {}
     public var onMessage: (@MainActor () -> Void)?
+    /// Calls the connection; nil (the button hidden) unless the vault has said it has calls (owner decision) and no call is going on.
+    public var onCall: (@MainActor () -> Void)?
     /// The connection's History (ANDROID-PLAN §4 History).
     public var onHistory: (@MainActor () -> Void)?
     public var onFavorite: @MainActor () -> Void = {}
@@ -121,6 +123,10 @@ public struct ConnectionDetailScreen: View {
         var list: [PillAction] = []
         if let onMessage = actions.onMessage, c.state == .active, !c.isService {
             list.append(PillAction(.messages, label: ConnectStrings.detailMessage(named), action: onMessage))
+        }
+        // A service can't call (ANDROID-PLAN 0.1.90): the button is simply absent, as for the vaults without calls.
+        if let onCall = actions.onCall, c.state == .active, !c.isService {
+            list.append(PillAction(.call, label: ConnectStrings.detailCall, action: onCall))
         }
         list.append(PillAction(c.favorite ? .star : .starOutline, label: ConnectionRow.favoriteLabel(named, favorite: c.favorite),
                                action: actions.onFavorite))

@@ -90,6 +90,9 @@ targets:
         VettIDManifestHost: $(VETTID_MANIFEST_HOST)
         VettIDManifestKeys: $(VETTID_MANIFEST_KEYS)
         VettIDVotesHost: $(VETTID_VOTES_HOST)
+        # A live call keeps going when VettID leaves the foreground (owner decision, Ground Control #10740 a): the audio
+        # background mode, and nothing else (no voip, no fetch, no processing); scripts/release-check.sh requires exactly this.
+        UIBackgroundModes: [audio]
         # A canary manifest (VAULT-RELEASES §10.1 step 9, VAULT-MESSAGING §11.10.1) is opened with VettID from Files, the
         # share sheet or AirDrop, in every configuration (the canary phone runs the release build). JSON is declared at
         # rank Alternate (VettID is never the default app for JSON) as a viewer; an opened file is copied in (not opened
@@ -178,6 +181,8 @@ targets:
       - package: VettIDVotes
       - package: VettIDDevices
       - package: VettIDCalls
+      - package: VettIDCalls
+        product: VettIDCallsUI
       - package: VettIDCallsWebRTC
 
   # TEST ONLY: the app's sources and screens against the local dev stack on the simulator (IOS-PLAN §8 exit I1 (a)),
@@ -207,6 +212,7 @@ targets:
         # The dev stack's member API and relay are plain HTTP on the Mac's 127.0.0.1.
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true
+        UIBackgroundModes: [audio]
     settings:
       base:
         # Its own bundle id, beside the VettID app built in the DevStack configuration (com.vettid.app.devstack).
@@ -258,6 +264,8 @@ targets:
       - package: VettIDVotes
       - package: VettIDDevices
       - package: VettIDCalls
+      - package: VettIDCalls
+        product: VettIDCallsUI
       - package: VettIDCallsWebRTC
       # TEST ONLY: the TEST iOS attester and the software keys.
       - package: VettIDAltChan
@@ -353,6 +361,7 @@ schemes:
         - package: VettIDDevices/VettIDDevicesTests
         - package: VettIDDevices/VettIDDevicesUITests
         - package: VettIDCalls/VettIDCallsTests
+        - package: VettIDCalls/VettIDCallsUITests
         - package: VettIDTesting/VettIDTestingTests
     profile:
       config: Release

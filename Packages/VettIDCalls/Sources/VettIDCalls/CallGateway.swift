@@ -34,8 +34,14 @@ package protocol CallGateway: AnyObject {
 /// phone).
 package final class VaultCallGateway: CallGateway {
     private let api: @MainActor () throws -> VaultApi
+    private let sendEnd: (@MainActor (String, String) async throws -> Void)?
 
-    package init(api: @escaping @MainActor () throws -> VaultApi) { self.api = api }
+    /// [end]: how `call.end` goes, when it must go where [api] is refused (the vault manager's, which also works while a lock is
+    /// pending: the hang-up before a lock). By default through [api].
+    package init(api: @escaping @MainActor () throws -> VaultApi, end: (@MainActor (String, String) async throws -> Void)? = nil) {
+        self.api = api
+        sendEnd = end
+    }
 
     package func events() -> AsyncStream<CallEvent> {
         guard let source = try? api().callEvents() else { return AsyncStream { $0.finish() } }
@@ -66,7 +72,9 @@ package final class VaultCallGateway: CallGateway {
 
     package func ice(_ callId: String, _ candidates: [CallCandidate]) async throws { try await api().callIce(callId, candidates) }
 
-    package func end(_ callId: String, reason: String) async throws { try await api().callEnd(callId, reason: reason) }
+    package func end(_ callId: String, reason: String) async throws {
+        if let sendEnd { try await sendEnd(callId, reason) } else { try await api().callEnd(callId, reason: reason) }
+    }
 
     package func list(limit: Int) async throws -> CallList { try await api().callList(limit: limit) }
 }

@@ -315,13 +315,13 @@ extension VaultManager {
                 }
                 cuts[ObjectIdentifier(x)] = c.count
             }
-            if m.backgrounded || m.moveFlags.book.backgrounds != backgrounds {
+            if m.inBackground || m.moveFlags.book.backgrounds != backgrounds {
                 (pending, widen) = (true, true)
                 backgrounds = m.moveFlags.book.backgrounds
             }
             lastOuts = outNow()
             streamWasOpen = collectors.contains { $0.streamOpen }
-            guard pending, !m.backgrounded else { return }
+            guard pending, !m.inBackground else { return }
             pending = false
             extend(m, now: up)
         }
@@ -396,7 +396,7 @@ extension VaultManager {
 
         /// Whether the app went to the background since the last collect went (or is there now).
         func backgroundSinceFinal(_ m: VaultManager) -> Bool {
-            m.backgrounded || m.moveFlags.book.backgrounds != backgroundsAtFinal
+            m.inBackground || m.moveFlags.book.backgrounds != backgroundsAtFinal
         }
 
         /// After a collect of the last look: whether a cut (a lost reply, a 5xx, an unreadable answer, or the window stopped),

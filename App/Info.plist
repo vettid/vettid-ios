@@ -48,6 +48,10 @@
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>LSSupportsOpeningDocumentsInPlace</key>
 	<false/>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>audio</string>
+	</array>
 	<key>VettIDAccountHost</key>
 	<string>$(VETTID_ACCOUNT_HOST)</string>
 	<key>VettIDEnvironment</key>

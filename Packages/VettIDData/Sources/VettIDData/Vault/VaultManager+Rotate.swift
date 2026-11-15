@@ -91,12 +91,32 @@ extension VaultManager {
     /// The alarm as `credential.version` shows it now (the `presenter` of the alert kept for the same alarm); unchanged
     /// when the vault does not answer.
     func refreshAlarm(_ api: VaultApi) async {
-        guard let info = try? await api.credentialVersion() else { return }
+        let started = beginAlarmRead()
+        // A read that fails changes nothing, the order of events included: the alarm events still to come are applied.
+        guard let stamped = try? await api.credentialVersionStamped() else { return }
+        finishAlarmRead(stamped.info, at: stamped.ts, started: started)
+    }
+
+    /// A read of the alarm begins: it makes an older read's answer stale.
+    func beginAlarmRead() -> Int {
+        alarmGeneration += 1
+        return alarmGeneration
+    }
+
+    /// The answer of a read that began at [started]: kept only if nothing newer came since (another read, or a change of the alarm:
+    /// a `credential.alarm` event, a resolution), which this older answer would set or clear.
+    /// [ts] is the answer's, by the vault's clock: an alarm event stamped before it is covered by the answer, so it is dropped when it is
+    /// redelivered (vault time against vault time only, never the phone's clock).
+    func finishAlarmRead(_ info: CredentialInfo, at ts: Date, started: Int) {
+        guard started == alarmGeneration else { return }
+        alarmEventAt = max(alarmEventAt ?? .distantPast, ts)
         keepAlarm(info)
     }
 
     /// The alarm of a `credential.version` answer.
     private func keepAlarm(_ info: CredentialInfo) {
+        // An open alarm ends the unlock window (§3.5.9), whether it was heard of by event or only by this read.
+        if info.alarm != nil { unlockWindow = nil }
         alarm = info.alarm.flatMap { a in
             a.alarmID.map { id in
                 CredentialAlarm(

@@ -24,6 +24,17 @@ import VettIDUI
 import VettIDVotes
 import VettIDVotesUI
 
+/// What the shell asks of the calls (the app's `CallsHost`): whether a conversation shows a Call button now, and a tap on it.
+public struct ShellCalls {
+    public var canCall: @MainActor () -> Bool
+    public var call: @MainActor (String) -> Void
+
+    public init(canCall: @escaping @MainActor () -> Bool, call: @escaping @MainActor (String) -> Void) {
+        self.canCall = canCall
+        self.call = call
+    }
+}
+
 /// The open app (IOS-PLAN ID14): the slide-in drawer, the only top-level navigation (no tab bar), with its destinations in
 /// vettid-android's order; the owner check's banners above every screen; a navigation stack per destination for the
 /// screens pushed over it, with the system back gesture; the avatar sheet; and the owner check the member asks for
@@ -63,6 +74,7 @@ public struct AppShell: View {
     let devices: (any DevicesRepository)?
     let pairing: (any PairingRepository)?
     private let move: (any MoveRepository)?
+    let calls: ShellCalls?
     private let onOpenPortal: @MainActor () -> Void
     /// The member's own profile photo (VAULT-MESSAGING §10.8), decoded once per photo, for the top bar's avatar, the avatar
     /// sheet and the account card (vettid-android `rememberProfilePhoto(ownPhoto)`).
@@ -115,6 +127,7 @@ public struct AppShell: View {
         devices: (any DevicesRepository)? = nil,
         pairing: (any PairingRepository)? = nil,
         move: (any MoveRepository)? = nil,
+        calls: ShellCalls? = nil,
         onOpenPortal: @escaping @MainActor () -> Void
     ) {
         self.account = account
@@ -149,6 +162,7 @@ public struct AppShell: View {
         self.devices = devices
         self.pairing = pairing
         self.move = move
+        self.calls = calls
         self.onOpenPortal = onOpenPortal
     }
 
@@ -485,30 +499,6 @@ public struct AppShell: View {
         l.onReviewAlarm = { model.push(.alarm) }
         l.onNewCredential = { model.push(.newCredential) }
         return l
-    }
-
-    var connectHost: ConnectHost {
-        let model = model
-        var h = ConnectHost()
-        h.onBack = { model.pop() }
-        h.replace = { model.replace(.connect($0)) }
-        h.push = { model.push(.connect($0)) }
-        h.onOpenConnection = { model.push(.connection($0)) }
-        h.replaceWithConnection = { model.replace(.connection($0)) }
-        // A connection's History, once History is there (IOS-PLAN §8 I2.3).
-        if history != nil, historyExport != nil { h.onOpenHistory = { model.openConnectionHistory($0) } }
-        // "Send a message" on a connection's page and after connecting, once the messages are there (IOS-PLAN §8 I2.2).
-        if messages != nil { h.onOpenConversation = { model.openConversation($0) } }
-        // "Votes from <name>" on a service connection's page, once the Votes are there.
-        if votes != nil { h.onOpenVotes = { model.openConnectionVotes($0) } }
-        // The sharing cards of a connection's page, once the Vault's sharing screens are there (IOS-PLAN §8 I3.2).
-        if items != nil, sharing != nil {
-            h.onOpenSharing = { model.openSharing($0) }
-            h.onOpenShared = { model.openShared($0) }
-            h.onOpenShareRule = { model.openRule($0, $1) }
-            h.onAskFor = { model.openShared($0, ask: true) }
-        }
-        return h
     }
 
     /// Where the Messages screens go (vettid-android `MessagesHost`).

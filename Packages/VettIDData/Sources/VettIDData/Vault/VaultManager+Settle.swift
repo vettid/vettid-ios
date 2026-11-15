@@ -91,7 +91,7 @@ extension VaultManager {
 
     private func collectWindow(_ d: VaultDevice) async -> WindowEnd {
         let visibility = await windowVisibility(d)
-        let clock = WindowClock(visibility: visibility, backgrounds: moveFlags.book.backgrounds, background: backgrounded)
+        let clock = WindowClock(visibility: visibility, backgrounds: moveFlags.book.backgrounds, background: inBackground)
         clock.start(self, d)
         defer { clock.stop() }
         let sessionEnds = moveFlags.book.sessionEnds
@@ -141,7 +141,7 @@ extension VaultManager {
         // A hold raised during the one more last collect is waited for first, and one `wait=0` look follows it.
         let held = await clock.holdAfterExtra(self)
         let waited = clock.backgroundSinceFinal(self)
-        while backgrounded, !Task.isCancelled {
+        while inBackground, !Task.isCancelled {
             await backgroundPause()
             switch await lookOnce(d, clock: clock, sessionEnds: sessionEnds) {
             case .ends(let end): return end
@@ -182,7 +182,7 @@ extension VaultManager {
     /// Between collects: a pause after a failure (1 s, doubled, at most 8 s), or while the collector long-polls; in the
     /// background, ``backgroundCollectPause``.
     private func pauseBetweenCollects(failures: Int, wait: TimeInterval) async {
-        if backgrounded { return await backgroundPause() }
+        if inBackground { return await backgroundPause() }
         guard failures > 0 || wait == 0 else { return }
         let seconds = failures > 0 ? min(Double(1 << min(failures - 1, 3)), 8) : 1
         moveFlags.book.windowPauseSeconds = seconds
@@ -370,7 +370,7 @@ extension VaultManager {
         else { return nil }
         session = held
         memberVault.set(device: held.device)
-        if !backgrounded { held.device.start() }
+        startUnlessBackground(held.device)
         observe(held)
         return held
     }

@@ -39,7 +39,8 @@ public enum CallEvent: Sendable, CustomStringConvertible, CustomDebugStringConve
     }
 }
 
-private let callEventTypes: Set<String> = ["call.offer", "call.answer", "call.ringing", "call.end", "call.ice"]
+/// The vault events of calls: the calls take them from the device (``VaultApi/callEvents()``), whatever else is held back.
+public let callEventTypes: Set<String> = ["call.offer", "call.answer", "call.ringing", "call.end", "call.ice"]
 
 private func parseCandidate(_ v: JsonValue) -> CallCandidate? {
     guard let o = try? v.asObject(), let candidate = VaultJSON.string(o, "candidate") else { return nil }

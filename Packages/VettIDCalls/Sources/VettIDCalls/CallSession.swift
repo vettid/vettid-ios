@@ -9,6 +9,8 @@ enum CallMessage: Sendable {
     case hangUp(CallEnd)
     /// Only if the session [seq] is still the machine's current one.
     case hangUpIf(seq: Int, CallEnd)
+    /// The ringing call [seq] is over for this phone, nothing is sent: it rings out as missed.
+    case ringOver(seq: Int)
     case mute(Bool)
     case dismiss
     case signal(SignalEvent)

@@ -58,7 +58,7 @@ extension VaultManager {
             // A read nobody asked for goes only over the session open now, while the vault is open and collecting: it
             // never opens one (in the background, after a lock).
             quietOps: {
-                guard let m = ref.manager, m.phase == .unlocked, !m.backgrounded, let s = m.session else {
+                guard let m = ref.manager, m.phase == .unlocked, !m.inBackground, let s = m.session else {
                     throw VaultFailure(.other, code: "session_dropped")
                 }
                 return try m.openApi(s)
@@ -78,7 +78,7 @@ extension VaultManager {
                 return try m.openApi(try await m.openSession())
             },
             quietOps: {
-                guard let m = ref.manager, m.phase == .unlocked, !m.backgrounded, let s = m.session else {
+                guard let m = ref.manager, m.phase == .unlocked, !m.inBackground, let s = m.session else {
                     throw VaultFailure(.other, code: "session_dropped")
                 }
                 return try m.openApi(s)
@@ -105,6 +105,9 @@ extension VaultManager {
     /// The vault is no longer open on this phone: what was read from it is dropped (the connections, the requests, the
     /// messages and their photos, the items and tags, the feed, the approvals' lists, History and the member's own profile).
     func forgetOpenLists() {
+        clearHeldEvents()
+        alarmEventAt = nil
+        listMarks = [:]
         forgetOwnProfile()
         forgetHeld()
         connections.forgetAuthentication()
@@ -116,15 +119,28 @@ extension VaultManager {
     /// profile, the connections and the requests, the approvals' lists, the feed, then the conversations (one request per connection, last, so that asks
     /// that expire are not kept waiting behind them), the items and the votes are read again, one after the other; failures are left
     /// for the screens.
-    func refreshListsQuietly() {
+    /// [onAnswered]: told of each list whose events are patches, the moment its own read answered and was applied (and no newer read
+    /// of the lists began, and the vault is still open): a list that failed, or that the vault does not have, is not told.
+    func refreshListsQuietly(onAnswered: (@MainActor (_ list: ReReadList) -> Void)? = nil) {
         listsReads += 1
         let reads = listsReads
         listsRead = Task { [weak self] in
             guard let self else { return }
+            @MainActor func answered(_ list: ReReadList) {
+                if listsReads == reads, phase == .unlocked { onAnswered?(list) }
+            }
             profiles.refreshQuietly()
             try? await connections.refresh(quietly: true)
-            try? await connections.refreshRequests(quietly: true)
-            try? await approvals.refreshApprovals(quietly: true, requests: false)
+            do {
+                if try await connections.refreshRequests(quietly: true) { answered(.requests) }
+            } catch {}
+            // What each approvals list answered (a list the vault does not have, or that failed, covers nothing).
+            try? await approvals.refreshApprovals(quietly: true, requests: false) { covered in
+                if covered.pending { answered(.approvals) }
+                if covered.grant { answered(.grants) }
+                if covered.share { answered(.shares) }
+                if covered.critical { answered(.critical) }
+            }
             await feed.openNow()
             await messages.refreshConversationsQuietly()
             // The items last (chosen; not in the spec: vettid-android reads them beside the others): nothing that expires

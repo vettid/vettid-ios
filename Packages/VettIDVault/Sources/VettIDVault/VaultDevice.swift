@@ -182,6 +182,8 @@ public final class VaultDevice: @unchecked Sendable {
     var collector: Task<Void, Never>?
     var collectEnded: String?
     var collectSince: (at: Date, sent: CollectSent?)?, collectLastSent: CollectSent?, collectRound = 0, collectFresh = false
+    /// The collection is a long poll while a call holds the background (``collectsLongPoll(_:)``).
+    var collectLongPoll = false
     /// When the collector's last request ended (uptime).
     var collectLastEnded: TimeInterval?
     var stopped = true

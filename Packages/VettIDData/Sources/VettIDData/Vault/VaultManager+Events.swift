@@ -14,6 +14,12 @@ extension VaultManager {
     func observe(_ s: VaultSession) {
         stopObserving()
         readMoveMarker()
+        // In a background a call holds, the events that are not the calls' or the lock's are left unacked at the relay: it delivers
+        // them again once the app is back, so that a process that ends meanwhile loses none (the memory buffer below is the fast
+        // path for what the device had already handed over).
+        let flag = heldFlag
+        let passes: Set<String> = [LockNotices.type, HolderPolicy.deviceUnlinked, Self.typeHeld]
+        s.device.holdEvents { type in flag.on && !passes.contains(type) && !callEventTypes.contains(type) }
         let events = s.device.events()
         let counts = s.device.vaultRefusalCounts()
         let required = s.device.ownerCheckRequired()
@@ -28,7 +34,7 @@ extension VaultManager {
             Task { @MainActor [weak self] in
                 for await _ in reconnects {
                     guard let self else { return }
-                    ownerChecks.onRelayReconnected()
+                    relayReconnected()
                 }
             },
             Task { @MainActor [weak self] in
@@ -87,6 +93,13 @@ extension VaultManager {
     public func onForeground() {
         // A background task that began before this does not stop the collection (``onBackground(budget:)``).
         foregrounds += 1
+        // Back from a background that a call held: what was not handled meanwhile is read again below, with the lists.
+        heldBackground = nil
+        backgroundCounted = false
+        session?.device.collectsLongPoll(false)
+        let catchUp = eventsMissedWhileHeld
+        eventsMissedWhileHeld = false
+        replayHeldEvents()
         moveFlags.book.lifecycle += 1
         backgrounded = false
         ownerChecks.setForeground(true)
@@ -116,6 +129,20 @@ extension VaultManager {
             s.device.start()
             // The device's lock gate holds what may not go while a lock is pending (``setFlushGate``).
             await s.device.flushOutbox()
+            // The events a held background did not handle (no list, feed or approval was touched in the background): read again now.
+            if catchUp, phase == .unlocked, let s = try? await openSession() {
+                // The lists are read as of now (the vault's time): what comes back from the relay older than this, after its lease, is
+                // covered by the read of its list (``supersededByReread(_:)``). Each list's mark is set the moment that list's read
+                // answered and was applied, not when the others are over: a failed one, one the vault does not have, and one a lock or a
+                // newer read overtook cover nothing, and the events of it that come back are applied.
+                let at = s.device.knowsVaultTime ? s.device.vaultNow() : nil
+                refreshListsQuietly { [weak self] list in
+                    guard let self, let at else { return }
+                    listMarks[list] = (at, config.now().addingTimeInterval(Self.rereadWindow))
+                }
+                // And the alarm, whatever older events are still to be redelivered (they are ordered by their `ts`, ``raiseAlarm(_:)``).
+                if let api = try? openApi(s) { await refreshAlarm(api) }
+            }
         }
     }
 
@@ -132,6 +159,18 @@ extension VaultManager {
         ownerChecks.setForeground(false)
         // No run with the votes site while the app is away (there is no background job).
         votes.pauseSync()
+        // A live call holds the collection: decided first, so that what arrives during the work below is already kept, not acted on.
+        if collectionHeld?() == true {
+            heldBackground = began
+            // The WebSocket's window of unacked messages would fill with the held events: a long poll meanwhile.
+            session?.device.collectsLongPoll(true)
+        }
+        // A held background is a background for the settlement windows: counted once, when it begins.
+        if heldBackground != nil, !backgroundCounted {
+            moveFlags.book.backgrounds += 1
+            backgroundCounted = true
+        }
+        backgroundWorks += 1
         let work = Task { @MainActor [weak self] in
             guard let self else { return }
             await lockGuard.keeper.firstAttemptDone()
@@ -153,12 +192,120 @@ extension VaultManager {
         }
         work.cancel()
         watcher.cancel()
+        backgroundWorks -= 1
         // Back in the foreground meanwhile: the collection runs on.
         guard began == foregrounds else { return }
+        // A live call keeps the collection: its peer's `call.end` and ICE come through it, and its own go out through the session.
+        // The stop waits for the hold to end (``collectionHoldEnded()``). A call that went live during the work holds it too.
+        if collectionHeld?() == true {
+            if heldBackground == nil {
+                heldBackground = began
+                session?.device.collectsLongPoll(true)
+                if !backgroundCounted {
+                    moveFlags.book.backgrounds += 1
+                    backgroundCounted = true
+                }
+            }
+            return
+        }
+        finishBackground()
+    }
+
+    /// Starts a device's collection unless the app is in the background; while a call holds the background it collects by long poll.
+    func startUnlessBackground(_ d: VaultDevice) {
+        if backgrounded { return }
+        if heldBackground != nil { d.collectsLongPoll(true) }
+        d.start()
+    }
+
+    /// What a hold lets the foreground's leaving finish, once it may: the state of the background and the end of the collection.
+    private func finishBackground() {
+        heldBackground = nil
         backgrounded = true
         moveFlags.book.lifecycle += 1
-        moveFlags.book.backgrounds += 1
+        if !backgroundCounted { moveFlags.book.backgrounds += 1 }
+        backgroundCounted = false
+        // The held events stay for the foreground (a call's end in the background closes the connection, not the vault's state).
+        finishingBackground = true
+        let device = session?.device
         stopCollecting()
+        finishingBackground = false
+        // The stopped device goes back to the build's mode (it does not start again by this).
+        device?.collectsLongPoll(false)
+    }
+
+    /// How many events a held background keeps (about the most a call's length brings); more drop the oldest.
+    static let maxHeldEvents = 500
+
+    /// Whether [m] is kept for later now, in a background a call holds: nothing of it is acted on until the foreground, where
+    /// ``replayHeldEvents()`` handles it in order.
+    private func dropsInHeldBackground(_ m: VaultMessage) -> Bool {
+        // The calls take their own events from the device: they are not kept here.
+        guard heldBackground != nil, !Self.locksOrEndsSession(m.type), !callEventTypes.contains(m.type) else { return false }
+        eventsMissedWhileHeld = true
+        heldEvents.append(m)
+        if heldEvents.count > Self.maxHeldEvents {
+            heldEvents.removeFirst()
+            heldEventsOverflowed = true
+        }
+        return true
+    }
+
+    /// The held events are forgotten (the open vault ended: a lock, a sign-out, a wipe, a dropped session).
+    func clearHeldEvents() {
+        heldEvents = []
+        heldEventsOverflowed = false
+        reconnectedWhileHeld = false
+    }
+
+    /// Back in the foreground: what a held background kept is handled now, in the order it arrived, through the usual path and before
+    /// the lists are read again; a reconnect meanwhile reads the owner check again. After an overflow, where the oldest events
+    /// are gone, the state they carried is read instead: the alarm, the account and the owner check, the unlock window ended
+    /// (an alarm ends it) and the connections' authentication forgotten (its results are events, not read again).
+    private func replayHeldEvents() {
+        let events = heldEvents
+        let overflowed = heldEventsOverflowed
+        let reconnected = reconnectedWhileHeld
+        clearHeldEvents()
+        guard phase == .unlocked else { return }
+        for m in events { onEvent(m) }
+        if reconnected || overflowed { ownerChecks.onRelayReconnected() }
+        guard overflowed else { return }
+        unlockWindow = nil
+        connections.forgetAuthentication()
+        Task { [weak self] in
+            guard let self else { return }
+            if let s = try? await openSession(), let api = try? openApi(s) { await refreshAlarm(api) }
+            await refreshAccount()
+        }
+    }
+
+    /// The relay connection is back: the owner check's state is read again, except in a background a call holds, where nothing is
+    /// read (the foreground reads again, ``onForeground()``).
+    private func relayReconnected() {
+        guard heldBackground == nil else {
+            eventsMissedWhileHeld = true
+            reconnectedWhileHeld = true
+            return
+        }
+        ownerChecks.onRelayReconnected()
+    }
+
+    /// The events that are handled in a background a call holds: the lock's own signal and what ends the session.
+    static func locksOrEndsSession(_ type: String) -> Bool {
+        type == LockNotices.type || type == HolderPolicy.deviceUnlinked || type == typeHeld
+    }
+
+    /// Keeps the mailbox collection running while [held] says so, when the app leaves the foreground (a live call: the app runs on
+    /// in the background for its audio). The holder calls ``collectionHoldEnded()`` when [held] turns false.
+    public func holdCollection(_ held: @escaping @MainActor () -> Bool) { collectionHeld = held }
+
+    /// The hold of ``holdCollection(_:)`` ended. If the app left the foreground meanwhile and has not come back, the background
+    /// that was waiting finishes now: the collection stops as ``onBackground(budget:)`` would have stopped it.
+    public func collectionHoldEnded() {
+        // (Not while the background's own work runs: ``onBackground(budget:)`` decides at its end.)
+        guard backgroundWorks == 0, let began = heldBackground, began == foregrounds, collectionHeld?() != true else { return }
+        finishBackground()
     }
 
     func stopObserving() {
@@ -166,12 +313,19 @@ extension VaultManager {
         observers = []
     }
 
+    // swiftlint:disable cyclomatic_complexity
     /// One vault event. Mirrors the part of vettid-android `VaultManager.onEvent` that the unlock, the lock and the owner
     /// check need; the lists and the feed follow theirs with their rows.
     func onEvent(_ m: VaultMessage) {
         // The lock before this phone's last unlock (the one an unlock of a running vault makes), relayed late.
         if lockNotices.stale(m) { return }
+        // In the background, kept running by a live call, only what locks or ends the session is handled here (the calls take their
+        // own events from the device); nothing else is read or acted on, the owner check's events included (they are applied once, at
+        // the replay). What the device had already acked is kept in memory and handled at the foreground (``replayHeldEvents()``);
+        // the rest the relay delivers again after its lease.
+        if dropsInHeldBackground(m) { return }
         ownerChecks.onEvent(m)
+        if supersededByReread(m) { return }
         // Nothing the vault sends is taken into the app's lists while a lock is pending (as vettid-android).
         if lockGuard.takesEvents() {
             connections.onEvent(m)
@@ -209,6 +363,7 @@ extension VaultManager {
             break
         }
     }
+    // swiftlint:enable cyclomatic_complexity
 
     /// `vault.locking` (§12.3): the vault is locking; after this phone's last unlock, a lock of this phone that was in doubt
     /// no longer is. (One whose place in time is not known confirms nothing: the status read will.)
@@ -234,17 +389,66 @@ extension VaultManager {
     /// `credential.alarm` (§3.5.9): it ends the unlock window.
     private func raiseAlarm(_ m: VaultMessage) {
         guard let id = VaultJSON.string(m.object, "alarm_id") else { return }
+        // An alarm ends the unlock window (§3.5.9), whatever the order of events: an older one, redelivered late, still closes it.
         unlockWindow = nil
+        guard isNewestAlarmEvent(m) else {
+            // The order drops its state, not its presenter: a read answers without one, and this event is the only one that names it.
+            if let a = alarm, a.alarmID == id, a.presenter == nil, let presenter = VaultJSON.string(m.object, "presenter") {
+                alarm?.presenter = presenter
+            }
+            return
+        }
         alarm = CredentialAlarm(
             alarmID: id, state: VaultJSON.string(m.object, "state") ?? CredentialAlarm.stateFrozen,
             at: VaultJSON.string(m.object, "at"), presenter: VaultJSON.string(m.object, "presenter")
         )
     }
 
+    /// How long after the foreground's read the events older than it are dropped: the relay's lease (60 s) and a margin.
+    static let rereadWindow: TimeInterval = 120
+
+    /// The lists whose events are patches, and that the foreground reads again: an event of one that comes back from the relay (after
+    /// its lease) older than that list's answered read is covered by it, and would put back what a newer event or decision had moved
+    /// on (`connection.request.pending` re-adds an ended request). Every other event is applied: it is idempotent (`message.new`,
+    /// `feed.event`, `vote.event`), told only by itself (`connection.event`) or state no read gives (the alarm, the authentication,
+    /// the device and the vault's own).
+    enum ReReadList: Hashable {
+        case requests, approvals, grants, shares, critical
+
+        init?(eventType t: String) {
+            switch t {
+            case "connection.request.pending", "connection.request.outgoing": self = .requests
+            case ApprovalsManager.approvalType: self = .approvals
+            case _ where t.hasPrefix("grant."): self = .grants
+            case _ where t.hasPrefix("share."): self = .shares
+            case _ where t.hasPrefix("critical-secret-use."): self = .critical
+            default: return nil
+            }
+        }
+    }
+
+    /// Whether [m] is covered by the answered read of its own list (vault time against vault time), within the window.
+    func supersededByReread(_ m: VaultMessage) -> Bool {
+        guard let list = ReReadList(eventType: m.type), let mark = listMarks[list] else { return false }
+        guard config.now() < mark.until else {
+            listMarks[list] = nil
+            return false
+        }
+        return m.inner.ts < mark.vault
+    }
+
+    /// Whether [m] is not older than the newest alarm event applied, or than a read of the alarm since: one redelivered late (a held
+    /// background's, after its lease) must not set or clear what a newer event or read has said.
+    private func isNewestAlarmEvent(_ m: VaultMessage) -> Bool {
+        if let last = alarmEventAt, m.inner.ts < last { return false }
+        alarmEventAt = m.inner.ts
+        return true
+    }
+
     /// `sync.event{kind: "credential.alarm"}` (§3.5.9): the alarm's state as another device changed it.
     private func syncAlarm(_ m: VaultMessage) {
         let o = m.object
-        guard VaultJSON.string(o, "kind") == Self.typeAlarm else { return }
+        guard VaultJSON.string(o, "kind") == Self.typeAlarm, isNewestAlarmEvent(m) else { return }
         let state = VaultJSON.string(o, "state")
         let id = VaultJSON.string(o, "alarm_id")
         if state == CredentialAlarm.stateResolved {

@@ -213,11 +213,13 @@ extension ConnectionsManager {
 
     public func refreshRequests() async throws { try await refreshRequests(quietly: false) }
 
-    func refreshRequests(quietly: Bool) async throws {
+    /// Whether the list was taken in: false when the requests were forgotten meanwhile (a hold, a lock, a wipe), and nothing was applied.
+    @discardableResult
+    func refreshRequests(quietly: Bool) async throws -> Bool {
         let g = requestGeneration
         let o = quietly ? quietOps : ops
         let list = try await guarded { try await o().requestList() }
-        guard g == requestGeneration else { return }
+        guard g == requestGeneration else { return false }
         let t = now()
         let parsed: [PendingConnection] = VaultJSON.objects(list, "incoming").compactMap { ConnectionParser.incoming($0, at: t) }
             .map(PendingConnection.incoming)
@@ -227,6 +229,7 @@ extension ConnectionsManager {
         // come back (chosen; not in the spec: vettid-android replaces its list wholesale).
         open = parsed.filter { requestEnds[$0.id] == nil }.map { r in open.first { $0.id == r.id }.map { $0.merged(r) } ?? r }
         rememberNames(parsed.compactMap { r in r.name.map { (r.id, $0) } })
+        return true
     }
 
     /// Runs a decision on a connection request; `not_found` means it already ended.

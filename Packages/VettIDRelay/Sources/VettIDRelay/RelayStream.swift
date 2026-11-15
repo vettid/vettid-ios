@@ -216,6 +216,8 @@ public struct MailboxCollector: Sendable {
     let source: MailboxSource
     let mode: Mode
     let wait: TimeInterval
+    /// How many messages one long-poll round asks for.
+    let pollMax: Int
     let fallback: TimeInterval
     let now: @Sendable () -> Date
     let sleep: @Sendable (TimeInterval) async throws -> Void
@@ -238,6 +240,7 @@ public struct MailboxCollector: Sendable {
         source: MailboxSource,
         mode: Mode = .longPoll,
         wait: TimeInterval = RelayClient.defaultWait,
+        max: Int = RelayClient.defaultMax,
         fallback: TimeInterval = 300,
         now: @escaping @Sendable () -> Date = { Date() },
         sleep: @escaping @Sendable (TimeInterval) async throws -> Void = { try await Task.sleep(nanoseconds: UInt64($0 * 1e9)) },
@@ -250,6 +253,7 @@ public struct MailboxCollector: Sendable {
         self.source = source
         self.mode = mode
         self.wait = wait
+        self.pollMax = max
         self.fallback = fallback
         self.now = now
         self.sleep = sleep
@@ -344,7 +348,7 @@ public struct MailboxCollector: Sendable {
     }
 
     private func poll(_ handle: @Sendable (RelayMessage) async throws -> Void, _ handed: Handed) async throws -> Int {
-        let msgs = try await source.collect(wait: wait, max: RelayClient.defaultMax, sent: { [onSent, wait] in onSent(wait) })
+        let msgs = try await source.collect(wait: wait, max: pollMax, sent: { [onSent, wait] in onSent(wait) })
         if !msgs.isEmpty { handed.set() }
         for m in msgs where try await handled(m, handle) { try await source.ack(m.msgID) }
         return msgs.count

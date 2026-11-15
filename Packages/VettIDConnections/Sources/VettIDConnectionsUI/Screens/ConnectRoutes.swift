@@ -31,6 +31,11 @@ public struct ConnectHost {
     public var onAskFor: (@MainActor (String) -> Void)?
     /// The votes from a service connection (the Votes screens); nil while the app has no Votes.
     public var onOpenVotes: (@MainActor (String) -> Void)?
+    /// Calls a connection (the microphone gate, then the call); nil while the app has no calls.
+    public var onCall: (@MainActor (String) -> Void)?
+    /// Whether the Call button shows now: true only when the vault's probe said it has calls and no call is going on. Read in
+    /// the page's body, so that the button follows the answer.
+    public var canCall: @MainActor () -> Bool = { false }
 
     public init() {}
 }
@@ -244,6 +249,7 @@ public struct ConnectionDetailRoute: View {
         a.onMessage = opening(host.onOpenConversation, connectionID)
         a.onHistory = opening(host.onOpenHistory, connectionID)
         a.onOpenVotes = opening(host.onOpenVotes, connectionID)
+        if host.canCall() { a.onCall = opening(host.onCall, connectionID) }
         if hasSharing {
             let id = connectionID
             a.onSharing = opening(host.onOpenSharing, id)

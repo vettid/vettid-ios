@@ -17,6 +17,8 @@ final class ControllerGateway: CallGateway {
     /// Held until the test opens it: a `call.list` or a `call.end` the vault is slow to answer.
     var listGate: Gate?
     var endGate: Gate?
+    /// Held until the test opens it: the vault is slow to answer `call.start`.
+    var startGate: Gate?
     /// Call ids whose `call.end` fails.
     var endFails: Set<String> = []
     var startResult: (String, String) throws -> OutgoingCall = { _, _ in throw CallMessageError("not set") }
@@ -32,6 +34,7 @@ final class ControllerGateway: CallGateway {
 
     func start(connectionId: String, pinnedFingerprint: String, sdp: String, suites: [MediaSuite]) async throws -> OutgoingCall {
         asked.append("start(\(connectionId))")
+        await startGate?.wait()
         return try startResult(connectionId, pinnedFingerprint)
     }
 

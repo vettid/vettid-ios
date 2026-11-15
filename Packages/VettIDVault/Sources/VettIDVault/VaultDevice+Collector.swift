@@ -12,12 +12,38 @@ extension VaultDevice {
     func collector(of round: Int) -> MailboxCollector {
         MailboxCollector(
             source: RelayMailbox(client: own, transport: cfg.transport, fresh: { [weak self] in self?.collectsFresh ?? false }),
-            mode: cfg.collectMode, wait: cfg.pollWait, now: cfg.now,
+            // While a call holds the background the collection is a long poll that asks for many (``collectsLongPoll(_:)``).
+            mode: mem.withLock { collectLongPoll } ? .longPoll : cfg.collectMode, wait: cfg.pollWait,
+            max: mem.withLock { collectLongPoll } ? Self.heldCollectMax : RelayClient.defaultMax, now: cfg.now,
             onRequest: { [weak self] out in self?.collectorRequest(out, of: round) },
             onRecovered: { [weak self] in self?.relayCameBack() },
             onFailed: { [weak self] e, handed in self?.collectorFailed(e, handed: handed, of: round) },
             onSent: { [weak self] wait in self?.collectorSent(of: round, wait: wait) }
         )
+    }
+
+    /// How many messages a long-poll round asks for while a call holds the background.
+    static let heldCollectMax = 100
+
+    /// The mode the collection runs in: the build's, or a long poll while a call holds the background.
+    public var collectMode: MailboxCollector.Mode { mem.withLock { collectLongPoll } ? .longPoll : cfg.collectMode }
+
+    /// Collects by long poll (many a round) instead of the WebSocket while [on], and starts the collection over in that mode if
+    /// it runs. For a call kept running in the background: the events held unacked (``holdEvents(_:)``) fill the WebSocket's
+    /// window of unacked messages (RELAY-PROTOCOL §6.4), and the call's own would wait for their leases; a long poll skips what is
+    /// leased and brings the oldest of the rest. A stopped device stays stopped.
+    public func collectsLongPoll(_ on: Bool) {
+        let restart: Bool = mem.withLock {
+            guard collectLongPoll != on else { return false }
+            collectLongPoll = on
+            // Only a WebSocket collection is switched (and so cut: what the relay handed to the stream that was closed stays leased
+            // until its lease ends); a long poll already skips what is leased.
+            return cfg.collectMode == .webSocket && !stopped && collector != nil
+        }
+        if restart {
+            stop()
+            start()
+        }
     }
 
     /// Whether the collector's long polls go on a connection of their own (``HTTPTransport/freshSession()``): while a
