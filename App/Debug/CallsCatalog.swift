@@ -2,6 +2,9 @@
 import SwiftUI
 import VettIDCalls
 import VettIDCallsUI
+import VettIDData
+import VettIDMessages
+import VettIDMessagesUI
 import VettIDUI
 
 /// Debug only: every state of the call screen and the microphone gate's two dialogs, with sample data, for the screen catalog and
@@ -16,6 +19,41 @@ enum CallsCatalog {
     enum Screen: Sendable {
         case call(CallUiState)
         case microphone(blocked: Bool)
+        /// A conversation with call lines (its Call action shown or not).
+        case conversation(ConversationState)
+    }
+
+    /// A conversation with Ada: a message before and after calls of every outcome, and the note for calls that did not read.
+    static func conversation(availability: ConversationCallAvailability, notShown: Bool) -> ConversationState {
+        var c = ConnectionInfo(id: "c1", name: "", state: .active)
+        c.firstName = "Ada"
+        c.lastName = "Lovelace"
+        func message(_ id: String, _ text: String, outgoing: Bool, at: TimeInterval) -> MessageInfo {
+            MessageInfo(
+                connectionID: "c1", messageID: id, outgoing: outgoing, text: text, sentAt: since.addingTimeInterval(at), delivered: true,
+                read: true
+            )
+        }
+        func call(_ id: String, _ outcome: ConversationCallOutcome, at: TimeInterval, outgoing: Bool, duration: TimeInterval? = nil)
+            -> ConversationCall {
+            ConversationCall(callId: id, outgoing: outgoing, outcome: outcome, startedAt: since.addingTimeInterval(at), duration: duration)
+        }
+        var s = ConversationState(connectionID: "c1")
+        s.loading = false
+        s.connection = c
+        s.messages = [
+            message("m1", "Are you free to talk?", outgoing: true, at: 0), message("m2", "Calling you now", outgoing: false, at: 3_000),
+        ]
+        s.calls = [
+            call("k1", .talked, at: 60, outgoing: true, duration: 252), call("k2", .talked, at: 120, outgoing: false, duration: 3_840),
+            call("k3", .talked, at: 180, outgoing: true, duration: 12), call("k4", .declined, at: 240, outgoing: true),
+            call("k5", .declinedHere, at: 300, outgoing: false), call("k6", .busy, at: 360, outgoing: true),
+            call("k7", .notAnswered, at: 420, outgoing: true), call("k8", .missed, at: 480, outgoing: false),
+            call("k9", .failed, at: 540, outgoing: true),
+        ]
+        s.callsNotShown = notShown
+        s.callAvailability = availability
+        return s
     }
 
     static let since = Date(timeIntervalSince1970: 1_791_384_000)
@@ -54,6 +92,14 @@ enum CallsCatalog {
         }
         all.append(Entry(id: "microphone_explain", title: "Microphone: explain", screen: .microphone(blocked: false)))
         all.append(Entry(id: "microphone_blocked", title: "Microphone: blocked", screen: .microphone(blocked: true)))
+        all.append(Entry(
+            id: "conversation_calls", title: "Conversation: calls of each outcome, Call action, note",
+            screen: .conversation(conversation(availability: .ready, notShown: true))
+        ))
+        all.append(Entry(
+            id: "conversation_in_call", title: "Conversation: during a call (no Call action)",
+            screen: .conversation(conversation(availability: .inCall, notShown: false))
+        ))
         return all
     }()
 
@@ -65,7 +111,15 @@ enum CallsCatalog {
             CallScreen(state, actions: CallActions(), now: { since })
         case .microphone(let blocked):
             MicrophoneCatalogView(blocked: blocked)
+        case .conversation(let state):
+            ConversationScreen(state: state, actions: conversationActions)
         }
+    }
+
+    private static var conversationActions: ConversationActions {
+        var a = ConversationActions()
+        a.onCall = {}
+        return a
     }
 }
 
@@ -109,8 +163,10 @@ struct CallsCatalogScreen: View {
         .navigationDestination(item: $shown) { id in
             if let entry = CallsCatalog.entries.first(where: { $0.id == id }) {
                 CallsCatalog.screen(entry)
-                    .overlay(alignment: .topTrailing) {
+                    // A conversation has its own top bar: the catalog's way back goes above its composer instead.
+                    .overlay(alignment: entry.id.hasPrefix("conversation") ? .bottomTrailing : .topTrailing) {
                         IconButton(.close, label: "Close catalog") { shown = nil }.padding(.horizontal, Spacing.xs)
+                            .padding(.bottom, entry.id.hasPrefix("conversation") ? 88 : 0)
                             .accessibilityIdentifier("catalog_calls_back")
                     }
                     .toolbar(.hidden, for: .navigationBar)

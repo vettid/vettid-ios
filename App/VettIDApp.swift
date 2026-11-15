@@ -339,7 +339,7 @@ struct AppRoot: View {
                     messages: vault.messages, attachments: vault.attachments, feed: vault.feed, approvals: vault.approvals,
                     history: vault.history, historyExport: vault.historyExport, items: vault.items, sharing: vault.sharing,
                     votes: vault.votes, devices: vault.devices, pairing: vault.pairing, move: move,
-                    calls: calls.map { host in ShellCalls(canCall: { host.canCall }, call: { host.call($0) }) }
+                    calls: calls.map { ShellCalls($0) }
                 ) { openPortal() }
                 .environment(\.accountDeletionURL, AccountDeletion.url(origin: environment.apiOrigin))
                 .modifier(OptionalNotificationsHook(

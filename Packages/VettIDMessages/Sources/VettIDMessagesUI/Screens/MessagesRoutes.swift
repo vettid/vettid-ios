@@ -66,20 +66,23 @@ public struct ConversationRoute: View {
     private let messages: any MessagesRepository
     private let connections: any ConnectionsRepository
     private let attachments: (any AttachmentsRepository)?
+    private let calls: ConversationCalls?
     private let host: MessagesHost
     @Environment(\.openURL) private var openURL
     @Environment(\.scenePhase) private var scenePhase
     @State private var model: ConversationViewModel?
 
-    /// [attachments]: the photos (VAULT-MESSAGING §10.5.1); nil offers none.
+    /// [attachments]: the photos (VAULT-MESSAGING §10.5.1); nil offers none. [calls]: the app's calls (the Call action and the
+    /// call lines); nil offers none.
     public init(
         _ connectionID: String, messages: any MessagesRepository, connections: any ConnectionsRepository,
-        attachments: (any AttachmentsRepository)? = nil, host: MessagesHost
+        attachments: (any AttachmentsRepository)? = nil, calls: ConversationCalls? = nil, host: MessagesHost
     ) {
         self.connectionID = connectionID
         self.messages = messages
         self.connections = connections
         self.attachments = attachments
+        self.calls = calls
         self.host = host
     }
 
@@ -87,7 +90,7 @@ public struct ConversationRoute: View {
         ConversationScreen(state: model?.state ?? ConversationState(connectionID: connectionID), actions: actions)
             .onAppear {
                 let m = model ?? ConversationViewModel(
-                    connectionID: connectionID, messages: messages, connections: connections, attachments: attachments
+                    connectionID: connectionID, messages: messages, connections: connections, attachments: attachments, calls: calls
                 )
                 model = m
                 m.setForeground(scenePhase == .active)
@@ -115,6 +118,7 @@ public struct ConversationRoute: View {
         a.onConfirmLink = { LinkOpening.perform(m.confirmLink(), open: { openURL($0) }, invite: host.onInviteLink) }
         a.onDismissLink = { m.dismissLink() }
         a.photos = Self.photoActions(m, id, host)
+        if calls != nil { a.onCall = { m.call() } }
         return a
     }
 

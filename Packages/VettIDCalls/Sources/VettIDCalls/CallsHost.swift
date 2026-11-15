@@ -171,6 +171,13 @@ public final class CallsHost {
     /// A tap on a Call button: the microphone gate first (its screen, ``microphoneScreen``), then the call.
     public func call(_ connectionId: String) { runtime?.controller.call(connectionId) }
 
+    /// The calls with a connection as its conversation shows them (newest first, and whether some could not be shown); empty when
+    /// no vault is open or the vault has no calls.
+    public func history(_ connectionId: String) async -> CallHistory {
+        guard let controller = runtime?.controller else { return CallHistory() }
+        return await controller.history(connectionId)
+    }
+
     /// The state the call screen shows.
     package var uiState: CallUiState {
         guard let r = runtime else { return CallUiState() }

@@ -18,21 +18,25 @@ struct MessageList: View {
         var last: String?
     }
 
+    /// Which end of the list moved: the ids of its first and last rows (a call added at the end scrolls to it, like a message).
+    private var edges: Edges { Edges(first: state.rows.first?.id, last: state.rows.last?.id) }
+
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(spacing: 0) {
                     if state.olderAvailable { older }
-                    ForEach(Self.days(state.messages), id: \.day) { group in
+                    if state.callsNotShown { CallsNotShownLine() }
+                    ForEach(Self.days(state.rows), id: \.day) { group in
                         DayDivider(MessageTimes.dayLabel(group.day))
-                        ForEach(group.messages) { m in row(m).id(m.messageID) }
+                        ForEach(group.rows) { r in row(r).id(r.id) }
                     }
                 }
                 .padding(.vertical, Spacing.s)
             }
             .defaultScrollAnchor(.bottom)
             .scrollDismissesKeyboard(.interactively)
-            .onChange(of: Edges(first: state.messages.first?.messageID, last: state.messages.last?.messageID)) { old, new in
+            .onChange(of: edges) { old, new in
                 if new.last != old.last, let last = new.last {
                     withAnimation { proxy.scrollTo(last, anchor: .bottom) }
                 } else if new.first != old.first, let first = old.first {
@@ -55,8 +59,15 @@ struct MessageList: View {
             .onDisappear { trigger.disappeared() }
     }
 
-    /// A photo message as a photo bubble (VAULT-MESSAGING §10.5.1), any other as text.
-    @ViewBuilder private func row(_ m: MessageInfo) -> some View {
+    /// A call as its line; a photo message as a photo bubble (VAULT-MESSAGING §10.5.1), any other as text.
+    @ViewBuilder private func row(_ r: ConversationRow) -> some View {
+        switch r {
+        case .call(let c): CallEntry(call: c)
+        case .message(let m): message(m)
+        }
+    }
+
+    @ViewBuilder private func message(_ m: MessageInfo) -> some View {
         if m.attachment != nil {
             PhotoBubble(
                 message: m, name: name, generation: state.photoGeneration, actions: actions.photos,
@@ -90,21 +101,21 @@ struct MessageList: View {
 
     struct Day {
         let day: Date
-        var messages: [MessageInfo]
+        var rows: [ConversationRow]
     }
 
-    /// The messages grouped by their calendar day, in the order each day first appears, the vault's order kept within a day
-    /// (vettid-android's `groupBy`).
-    static func days(_ messages: [MessageInfo], calendar: Calendar = .current) -> [Day] {
+    /// The rows (messages and calls) grouped by their calendar day, in the order each day first appears, the order of the
+    /// rows kept within a day (vettid-android's `groupBy`).
+    static func days(_ rows: [ConversationRow], calendar: Calendar = .current) -> [Day] {
         var out: [Day] = []
         var index: [Date: Int] = [:]
-        for m in messages {
-            let d = calendar.startOfDay(for: m.sentAt)
+        for r in rows {
+            let d = calendar.startOfDay(for: r.at)
             if let i = index[d] {
-                out[i].messages.append(m)
+                out[i].rows.append(r)
             } else {
                 index[d] = out.count
-                out.append(Day(day: d, messages: [m]))
+                out.append(Day(day: d, rows: [r]))
             }
         }
         return out

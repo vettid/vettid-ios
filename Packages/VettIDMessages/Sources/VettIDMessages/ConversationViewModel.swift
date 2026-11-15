@@ -86,10 +86,27 @@ public struct ConversationState: Equatable, Sendable, CustomStringConvertible, C
     /// The vault answered `forbidden` to a message sent to a service (VAULT-MESSAGING §6.4): "Services can't do that." in
     /// place of the composer, which goes.
     public var serviceForbidden = false
+    /// The calls with this connection as the vault's history has them, newest first (kept in memory only while the vault is
+    /// known to have calls).
+    public var calls: [ConversationCall] = []
+    /// Some of the vault's calls did not read: "Some calls couldn't be shown." (in every conversation).
+    public var callsNotShown = false
+    /// What the calls say now; ``callShown`` follows it.
+    public var callAvailability: ConversationCallAvailability = .unavailable
 
     public init(connectionID: String) { self.connectionID = connectionID }
 
     public var active: Bool { connection?.state == .active }
+
+    /// The Call action shows: the connection is an active person (not a service) and the vault's probe said it has calls, with no
+    /// call going on. Hidden otherwise (owner decision #10677); vettid-android shows it disabled during a call.
+    public var callShown: Bool { active && !noComposer && callAvailability == .ready }
+
+    /// The messages and the calls in one list, oldest first; a call older than the oldest loaded message is left out while
+    /// older messages remain.
+    public var rows: [ConversationRow] {
+        CallEntries.rows(messages, calls, notBefore: olderAvailable ? messages.first?.sentAt : nil)
+    }
 
     /// Nothing can be sent here: the connection is a service (VAULT-MESSAGING §6.4: it has no conversation; the screen
     /// can still be opened from a notification or a link), or the vault refused a message to one.
@@ -120,6 +137,12 @@ public final class ConversationViewModel {
     @ObservationIgnored private let connections: any ConnectionsRepository
     /// Photo attachments; nil: none on this screen (no photo button).
     @ObservationIgnored let attachments: (any AttachmentsRepository)?
+    /// The app's calls; nil: none on this screen (no Call action, no call lines).
+    @ObservationIgnored private let calls: ConversationCalls?
+    /// After a call ended its history is read once more, this much later (the vault takes the hang-up in a moment).
+    @ObservationIgnored private let historyAgain: Duration
+    /// The read of the calls' history now under way: replaced when the availability changes.
+    @ObservationIgnored private var historyTask: Task<Void, Never>?
     @ObservationIgnored let work = Work()
     @ObservationIgnored private let follows = TaskBag()
     /// The photos this conversation holds, reachable from `deinit` (leaving the conversation is a Cancel).
@@ -138,9 +161,11 @@ public final class ConversationViewModel {
     /// [attachments]: the photos of the conversation (VAULT-MESSAGING §10.5.1); nil offers none.
     public init(
         connectionID: String, messages: any MessagesRepository, connections: any ConnectionsRepository,
-        attachments: (any AttachmentsRepository)? = nil
+        attachments: (any AttachmentsRepository)? = nil, calls: ConversationCalls? = nil, historyAgain: Duration = .seconds(2)
     ) {
         self.connectionID = connectionID
+        self.calls = calls
+        self.historyAgain = historyAgain
         self.messages = messages
         self.connections = connections
         self.attachments = attachments
@@ -151,12 +176,14 @@ public final class ConversationViewModel {
         follows.add(follow(self, read: { $0.unreadIDs }, apply: { $0.onUnread($1) }))
         // A lock, the hold or due state, a wipe or an unlink (ANDROID-PLAN "Memory only, wiped at lock"): the draft, the
         // pending upload and the thumbnails shown go, and the bubbles read their thumbnails again.
+        if calls != nil { follows.add(follow(self, read: { $0.calls?.availability() ?? .unavailable }, apply: { $0.onCalls($1) })) }
         if attachments != nil { follows.add(follow(self, read: { $0.attachments?.cleared ?? 0 }, apply: { $0.onCleared($1) })) }
     }
 
     deinit {
         work.cancelAll()
         follows.cancelAll()
+        historyTask?.cancel()
         // Leaving the conversation is a Cancel: an upload not sent is discarded at the vault, the prepared photos wiped.
         photoHold.release(attachments)
     }
@@ -168,6 +195,45 @@ public final class ConversationViewModel {
         s.connection = connections.connections.first { $0.id == connectionID } ?? local.connection
         s.olderAvailable = messages.olderAvailable(connectionID)
         return s
+    }
+
+    /// The calls' availability changed. Read when the vault is known to have calls, and again after each call (the availability
+    /// goes from "in a call" back to "ready"); a read in progress is dropped (as vettid-android's `collectLatest`).
+    private func onCalls(_ a: ConversationCallAvailability) {
+        local.callAvailability = a
+        historyTask?.cancel()
+        historyTask = nil
+        guard let calls else { return }
+        switch a {
+        case .ready:
+            let (id, again) = (connectionID, historyAgain)
+            historyTask = work.launch { [weak self] in
+                let h = await calls.history(id)
+                guard !Task.isCancelled, let self else { return }
+                local.calls = h.calls
+                local.callsNotShown = h.someNotShown
+                // Read at the moment a call ends, the vault may not have taken its `call.end` yet: the call would stay going on
+                // in the list. Once more, a moment later (not if the availability changed meanwhile).
+                do { try await Task.sleep(for: again) } catch { return }
+                let later = await calls.history(id)
+                guard !Task.isCancelled else { return }
+                local.calls = later.calls
+                local.callsNotShown = later.someNotShown
+            }
+        case .unavailable:
+            // Locked, not asked yet, or a vault without calls: nothing of the vault's history stays in memory. During a call
+            // the list stays.
+            local.calls = []
+            local.callsNotShown = false
+        case .inCall:
+            break
+        }
+    }
+
+    /// The Call action. Nothing unless it is shown; the call goes through the microphone gate and the machine.
+    public func call() {
+        guard state.callShown else { return }
+        calls?.call(connectionID)
     }
 
     /// The incoming messages not read yet.

@@ -32,7 +32,7 @@ import VettIDUI
             .appendingPathComponent("Sources/VettIDMessagesUI/Resources/Localizable.xcstrings")
         let doc = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
         let keys = try #require((doc["strings"] as? [String: Any])?.keys)
-        #expect(keys.count == 99)
+        #expect(keys.count == 111)
         let missing = "\u{0}missing"
         for key in keys {
             let text = Bundle.module.localizedString(forKey: key, value: missing, table: nil)
@@ -220,8 +220,8 @@ import VettIDUI
         let day2 = day1.addingTimeInterval(86_400)
         let ms = [Self.message("a", at: day1), Self.message("b", at: day1.addingTimeInterval(60)), Self.message("c", at: day2),
                   Self.message("d", at: day1.addingTimeInterval(120))]
-        let days = MessageList.days(ms, calendar: calendar)
-        #expect(days.map { $0.messages.map(\.messageID) } == [["a", "b", "d"], ["c"]])
+        let days = MessageList.days(ms.map(ConversationRow.message), calendar: calendar)
+        #expect(days.map { $0.rows.map(\.id) } == [["a", "b", "d"], ["c"]])
     }
 
     /// Reaching the top loads older messages only once the opening settled, and not for a top in view from the start until

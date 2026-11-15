@@ -46,6 +46,13 @@ final class CallsCatalogUITests: XCTestCase {
         Case("ended_callsOff", texts: ["Calls with", "are off."]),
         Case("microphone_explain", texts: ["Allow the microphone", "Allow", "Not now"]),
         Case("microphone_blocked", texts: ["The microphone is turned off for VettID", "Open Settings", "Close"]),
+        // A conversation with call lines: every outcome and duration format, the note, and the Call action (hidden during a call).
+        Case("conversation_calls", texts: ["Call, 4 min 12 s", "Call, 1 h 4 min", "Call, 12 s", "Call declined", "Call you declined",
+                                           "Call not answered: busy", "Call not answered ·", "Missed call", "Call failed",
+                                           "Some calls couldn't be shown."],
+             controls: ["conversation_call", "calls_not_shown", "conversation_call_entry"]),
+        Case("conversation_in_call", texts: ["Missed call", "Call, 4 min 12 s"], controls: ["conversation_call_entry"],
+             absent: ["conversation_call", "calls_not_shown"]),
     ]
 
     @MainActor
