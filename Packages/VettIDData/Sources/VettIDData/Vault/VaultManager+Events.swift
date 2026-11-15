@@ -132,12 +132,13 @@ extension VaultManager {
             // The events a held background did not handle (no list, feed or approval was touched in the background): read again now.
             if catchUp, phase == .unlocked, let s = try? await openSession() {
                 // The lists are read as of now (the vault's time): what comes back from the relay older than this, after its lease, is
-                // covered by the read (``supersededByReread(_:)``).
-                // Only once the reads answered: a failed read covers nothing, and the events that come back are applied.
+                // covered by the read of its list (``supersededByReread(_:)``). Each list's mark is set the moment that list's read
+                // answered and was applied, not when the others are over: a failed one, one the vault does not have, and one a lock or a
+                // newer read overtook cover nothing, and the events of it that come back are applied.
                 let at = s.device.knowsVaultTime ? s.device.vaultNow() : nil
-                refreshListsQuietly { [weak self] answered in
-                    guard answered, let self, let at else { return }
-                    listsReadAt = (at, config.now().addingTimeInterval(Self.rereadWindow))
+                refreshListsQuietly { [weak self] list in
+                    guard let self, let at else { return }
+                    listMarks[list] = (at, config.now().addingTimeInterval(Self.rereadWindow))
                 }
                 // And the alarm, whatever older events are still to be redelivered (they are ordered by their `ts`, ``raiseAlarm(_:)``).
                 if let api = try? openApi(s) { await refreshAlarm(api) }
@@ -387,8 +388,16 @@ extension VaultManager {
 
     /// `credential.alarm` (§3.5.9): it ends the unlock window.
     private func raiseAlarm(_ m: VaultMessage) {
-        guard let id = VaultJSON.string(m.object, "alarm_id"), isNewestAlarmEvent(m) else { return }
+        guard let id = VaultJSON.string(m.object, "alarm_id") else { return }
+        // An alarm ends the unlock window (§3.5.9), whatever the order of events: an older one, redelivered late, still closes it.
         unlockWindow = nil
+        guard isNewestAlarmEvent(m) else {
+            // The order drops its state, not its presenter: a read answers without one, and this event is the only one that names it.
+            if let a = alarm, a.alarmID == id, a.presenter == nil, let presenter = VaultJSON.string(m.object, "presenter") {
+                alarm?.presenter = presenter
+            }
+            return
+        }
         alarm = CredentialAlarm(
             alarmID: id, state: VaultJSON.string(m.object, "state") ?? CredentialAlarm.stateFrozen,
             at: VaultJSON.string(m.object, "at"), presenter: VaultJSON.string(m.object, "presenter")
@@ -398,23 +407,34 @@ extension VaultManager {
     /// How long after the foreground's read the events older than it are dropped: the relay's lease (60 s) and a margin.
     static let rereadWindow: TimeInterval = 120
 
-    /// Whether [m] came back from the relay (after its lease) older than the foreground's read of the lists, which covers it: a patch
-    /// such as a request event would put back what a newer event or decision had moved on (`connection.request.pending` re-adds an
-    /// ended request). The events that carry state no read gives are always applied: the alarm, the authentication, the device and
-    /// the vault's own.
+    /// The lists whose events are patches, and that the foreground reads again: an event of one that comes back from the relay (after
+    /// its lease) older than that list's answered read is covered by it, and would put back what a newer event or decision had moved
+    /// on (`connection.request.pending` re-adds an ended request). Every other event is applied: it is idempotent (`message.new`,
+    /// `feed.event`, `vote.event`), told only by itself (`connection.event`) or state no read gives (the alarm, the authentication,
+    /// the device and the vault's own).
+    enum ReReadList: Hashable {
+        case requests, approvals, grants, shares, critical
+
+        init?(eventType t: String) {
+            switch t {
+            case "connection.request.pending", "connection.request.outgoing": self = .requests
+            case ApprovalsManager.approvalType: self = .approvals
+            case _ where t.hasPrefix("grant."): self = .grants
+            case _ where t.hasPrefix("share."): self = .shares
+            case _ where t.hasPrefix("critical-secret-use."): self = .critical
+            default: return nil
+            }
+        }
+    }
+
+    /// Whether [m] is covered by the answered read of its own list (vault time against vault time), within the window.
     func supersededByReread(_ m: VaultMessage) -> Bool {
-        guard let read = listsReadAt, config.now() < read.until else {
-            listsReadAt = nil
+        guard let list = ReReadList(eventType: m.type), let mark = listMarks[list] else { return false }
+        guard config.now() < mark.until else {
+            listMarks[list] = nil
             return false
         }
-        let t = m.type
-        // `connection.event` is also told only by the event (a request the inviter declined); a vault without `pending.list` never reads
-        // its approvals back, so these are applied (``ApprovalsManager``).
-        if t.hasPrefix("credential.") || t.hasPrefix("connection.authenticate.") || t.hasPrefix("device.") || t.hasPrefix("vault.")
-            || t == "sync.event" || t == "connection.event" { return false }
-        if approvals.pendingListUnsupported,
-           t.hasPrefix("approval.") || t.hasPrefix("critical-secret-use.") { return false }
-        return m.inner.ts < read.vault
+        return m.inner.ts < mark.vault
     }
 
     /// Whether [m] is not older than the newest alarm event applied, or than a read of the alarm since: one redelivered late (a held

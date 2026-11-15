@@ -119,6 +119,8 @@ import VettIDDataTesting
         let raised = service.raiseCloneAlarm()
         #expect(await waitFor { service.mailboxCounts.leased >= 1 }, "collected and leased, not acked")
         try await Task.sleep(for: .milliseconds(300))
+        // (A read the vault's own flows make may show the alarm; the event itself, which names its presenter, is not applied.)
+        #expect(m.alarm?.presenter != "other" && m.heldEvents.isEmpty, "the held event is not acted on in the background")
         m.onForeground()
         service.endLeases()
         #expect(await waitFor { m.alarm?.alarmID == raised }, "delivered again and applied once the app is back")
