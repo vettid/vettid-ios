@@ -24,6 +24,8 @@ extension CallMachine {
                     post(.placed(seq: s.seq, placed, atMs: clock.elapsedMs()))
                 } catch let e as CallRefusedError {
                     post(.failed(seq: s.seq, Self.refusal(e.code)))
+                } catch let e as CallLostError {
+                    post(.lost(seq: s.seq, callId: e.callId))
                 }
             }
         }
@@ -37,6 +39,24 @@ extension CallMachine {
         case "owner_check_required": .ownerCheckRequired
         case "unsupported_type": .notSupported
         default: .failed
+        }
+    }
+
+    /// `call.start` placed a call that can no longer be made (``CallLostError``): it is ended at the vault, through
+    /// ``sendEnd(_:_:)`` like every end (a lock waits for it). The member's call shows it failed; one the member hung up while
+    /// the vault was answering is ended as hung up, as ``onPlaced(_:seq:call:atMs:)`` does.
+    func onLost(_ s: CallSession?, seq: Int, callId: String) {
+        if let s, s.seq == seq {
+            // A call that lost a glare was ended by the vault already.
+            guard s.supersededBy == nil else { return }
+            s.callId = callId
+            finish(s, .failed, CallReason.failed)
+        } else if let i = abandoned.firstIndex(of: seq) {
+            abandoned.remove(at: i)
+            sendEnd(callId, CallReason.hangup)
+        } else {
+            // No session knows it (it was let go, the list of abandoned starts was full): ended all the same, nothing else will.
+            sendEnd(callId, CallReason.failed)
         }
     }
 

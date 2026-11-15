@@ -66,6 +66,16 @@ package struct CallRefusedError: Error, Equatable, Sendable, CustomStringConvert
     package var description: String { "call refused: \(code)" }
 }
 
+/// `call.start` placed [callId], but the call can no longer be made: an end for it may have been lost while it was being
+/// started, and its key is gone. The machine ends it (``CallMachine``'s `lost`), with the reason the session calls for.
+package struct CallLostError: Error, Equatable, Sendable, CustomStringConvertible {
+    package let callId: String
+
+    package init(callId: String) { self.callId = callId }
+
+    package var description: String { "call lost" }
+}
+
 /// The call cannot be made secure: a key-exchange share, an ICE configuration or a media suite that does not check out, or
 /// no suite in common. The call ends; nothing of the message is used.
 package struct CallSecurityError: Error, Equatable, Sendable, CustomStringConvertible {

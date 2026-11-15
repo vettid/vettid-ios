@@ -43,11 +43,11 @@ package final class VaultCallSignalling: CallSignalling {
     /// Calls ended (`call.end`, by the vault or here) for no placed call while one was being started: the call being started may
     /// be one of them, and its ephemeral key is then destroyed as soon as it is known (rule 3).
     private var endedWhileStarting: [String] = []
-    /// Starts begun since the process started: each start's number.
+    /// Starts whose `call.start` was sent since the process started: each one's number.
     private var startsBegun = 0
     /// More ends than ``maxEndedKept`` came while starts were in flight, so an id may have been lost: the starts numbered up
-    /// to this one (those in flight then) keep no call they return. A start begun later cannot be the lost end's call, since
-    /// the vault ended that one before this start's `call.start` was sent.
+    /// to this one (those whose `call.start` had gone then) keep no call they return. A later one cannot be the lost end's
+    /// call, since the vault ended that one before this one's `call.start` was sent.
     private var lostForStartsUpTo = 0
     private var sink: AsyncThrowingStream<SignalEvent, Error>.Continuation?
     /// Which listen ``sink`` feeds, so that an older one ending does not drop a newer one.
@@ -249,8 +249,6 @@ package final class VaultCallSignalling: CallSignalling {
 
     package func start(connectionId: String, sdp: String, suites: [MediaSuite]) async throws -> PlacedCall {
         starting += 1
-        startsBegun += 1
-        let mine = startsBegun
         let call: OutgoingCall
         let endedAlready: Bool
         let endLost: Bool
@@ -262,6 +260,9 @@ package final class VaultCallSignalling: CallSignalling {
                 // A connection the app does not know: no call is placed.
                 throw CallRefusedError(code: "not_found")
             }
+            // Numbered as `call.start` goes: an end lost before this cannot be this call's.
+            startsBegun += 1
+            let mine = startsBegun
             call = try await gateway.start(connectionId: connectionId, pinnedFingerprint: fingerprint, sdp: sdp, suites: suites)
             let remembered = endedWhileStarting.contains(call.callId)
             endLost = !remembered && mine <= lostForStartsUpTo
@@ -286,10 +287,10 @@ package final class VaultCallSignalling: CallSignalling {
         }
         let held = endStart()
         if endLost {
-            // Its end may have been lost, and it can no longer be answered: it is ended at the vault, and the machine shows it
-            // failed now (it has no call id to end it with when `start` throws), rather than ringing out.
-            try? await gateway.end(call.callId, reason: CallReason.failed)
-            throw CallRefusedError(code: CallReason.failed)
+            // Its end may have been lost, and it can no longer be answered: the machine ends it at the vault and shows it
+            // failed now, rather than ringing out. (More than ``maxEndedKept`` ends of other calls, a mailbox replayed after a
+            // reconnect for one, fail a good call too: its key is gone either way.)
+            throw CallLostError(callId: call.callId)
         }
         // An answer that overtook the vault's answer to `call.start`: checked now, as any answer (none for a call already ended).
         for h in held where !endedAlready && h.callId == call.callId {

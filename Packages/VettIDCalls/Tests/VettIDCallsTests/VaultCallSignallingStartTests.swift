@@ -139,7 +139,8 @@ extension VaultCallSignallingTests {
         for i in 0..<n { gateway.send(.ended(CallEnded(callId: "01JB2Z6V9K3M4N5P6Q7R8S9U\(String(i + 10))", reason: "hangup"))) }
     }
 
-    var endedAsFailed: Bool { gateway.asked.contains("end(\(callId), failed)") }
+    /// The signalling ends nothing itself: the machine ends a lost call (``CallMachine``'s `lost`).
+    var endedHere: Bool { gateway.asked.contains { $0.hasPrefix("end(") } }
 
     func destroyed(_ call: OutgoingCall) -> Bool { (try? call.key().seed()) == nil }
 
@@ -164,9 +165,9 @@ extension VaultCallSignallingTests {
             unrelatedEnds(16)
         }
         #expect(destroyed(call))
-        // Its own end was pushed out, so it is ended here as failed (the vault already ended it: that end changes nothing).
-        #expect(error as? CallRefusedError == CallRefusedError(code: "failed"))
-        #expect(endedAsFailed)
+        // Its own end was pushed out, so the start says the call is lost (the machine ends it; the vault already did).
+        #expect(error as? CallLostError == CallLostError(callId: callId))
+        #expect(!endedHere)
         gateway.send(answerEvent())
         await settle()
         #expect(gateway.asked.allSatisfy { !$0.hasPrefix("accept") })
@@ -175,22 +176,21 @@ extension VaultCallSignallingTests {
         #expect(!destroyed(next))
     }
 
-    /// An overflow during a start, and the call's own end never came: it can no longer be answered, so it is ended at the
-    /// vault as failed and the start throws, and the member sees it fail at once instead of ringing out.
+    /// An overflow during a start, and the call's own end never came: it can no longer be answered, so the start throws that
+    /// it is lost (with its id, for the machine to end it), and the member sees it fail at once instead of ringing out.
     @Test func aCallDroppedByAnOverflowAloneEndsAsFailedAtOnce() async throws {
         let s = await signalling()
         let (call, error) = try await heldStartResult(s) { unrelatedEnds(17) }
         #expect(destroyed(call))
-        #expect(error as? CallRefusedError == CallRefusedError(code: "failed"))
-        #expect(endedAsFailed)
-        #expect(CallMachine.refusal("failed") == .failed, "the machine shows it failed, not refused or not encrypted")
+        #expect(error as? CallLostError == CallLostError(callId: callId))
+        #expect(!endedHere)
     }
 
     /// Exactly as many ends as are remembered: nothing was lost, so the call is kept and answers.
     @Test func asManyEndsAsAreRememberedKeepTheCall() async throws {
         let s = await signalling()
         let (call, error) = try await heldStartResult(s) { unrelatedEnds(16) }
-        #expect(error == nil && !destroyed(call) && !endedAsFailed)
+        #expect(error == nil && !destroyed(call))
         gateway.send(answerEvent())
         await settle()
         guard case .answer? = out.last else { throw Unexpected() }
@@ -218,10 +218,10 @@ extension VaultCallSignallingTests {
         then.open()
         _ = try await b.value
         first.open()
-        await #expect(throws: CallRefusedError(code: "failed")) { _ = try await a.value }
+        await #expect(throws: CallLostError(callId: callId)) { _ = try await a.value }
         let lost = try #require(made[callId]), kept = try #require(made[second])
         #expect(destroyed(lost) && !destroyed(kept))
-        #expect(endedAsFailed && !gateway.asked.contains("end(\(second), failed)"))
+        #expect(!endedHere)
     }
 
     /// A start that fails with ends remembered: they are forgotten with it, and a later start of a call with the same id is kept.

@@ -221,6 +221,16 @@ class FakeSignalling: CallSignalling {
 
     func releaseStart() { startGate?.yield() }
 
+    /// While held, `end` waits for ``releaseEnd()``: a `call.end` on its way.
+    private var endGate: (stream: AsyncStream<Void>, cont: AsyncStream<Void>.Continuation)?
+
+    func holdEnd() {
+        let (stream, cont) = AsyncStream.makeStream(of: Void.self)
+        endGate = (stream, cont)
+    }
+
+    func releaseEnd() { endGate?.cont.yield() }
+
     func deliver(_ e: SignalEvent) { deliveries.yield(e) }
 
     func events() -> AsyncThrowingStream<SignalEvent, Error> {
@@ -255,5 +265,11 @@ class FakeSignalling: CallSignalling {
         ice.append(candidates)
     }
 
-    func end(callId: String, reason: String) async throws { sent.append("end(\(callId), \(reason))") }
+    func end(callId: String, reason: String) async throws {
+        sent.append("end(\(callId), \(reason))")
+        if let endGate {
+            var it = endGate.stream.makeAsyncIterator()
+            _ = await it.next()
+        }
+    }
 }
