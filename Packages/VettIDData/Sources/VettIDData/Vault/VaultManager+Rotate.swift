@@ -115,6 +115,8 @@ extension VaultManager {
 
     /// The alarm of a `credential.version` answer.
     private func keepAlarm(_ info: CredentialInfo) {
+        // An open alarm ends the unlock window (§3.5.9), whether it was heard of by event or only by this read.
+        if info.alarm != nil { unlockWindow = nil }
         alarm = info.alarm.flatMap { a in
             a.alarmID.map { id in
                 CredentialAlarm(

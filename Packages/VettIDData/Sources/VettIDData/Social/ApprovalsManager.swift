@@ -445,11 +445,33 @@ public final class ApprovalsManager: ApprovalsRepository {
 
     public func refreshApprovals() async throws { try await refreshApprovals(quietly: false) }
 
+    /// Which lists the last read of the approvals answered (a list a vault does not have, and one that failed, did not).
+    struct ReadCoverage: Equatable {
+        var grant = false
+        var critical = false
+        var share = false
+        /// `pending.list`: the open asks that arrived only as events.
+        var pending = false
+
+        init() {}
+
+        init(_ lists: Lists, _ pending: PendingRead) {
+            grant = lists.grants != nil
+            critical = lists.critical != nil
+            share = lists.shares != nil
+            if case .answered = pending { self.pending = true }
+        }
+    }
+
+    /// Set by ``refreshApprovals(quietly:requests:)``: empty until a read answers.
+    @ObservationIgnored var lastCoverage = ReadCoverage()
+
     /// [requests] false: the connection requests are read by the caller. What was read is shown even when another list
     /// failed; then that list's failure is thrown, so that the screen does not say there is nothing to approve when it
     /// could not tell. A list the vault does not have (an older release) is no failure; the open asks' failure is
     /// ``openAsksError``.
     func refreshApprovals(quietly: Bool, requests: Bool = true) async throws {
+        lastCoverage = ReadCoverage()
         rereadDeviceSessions()
         let g = generation
         let since = changes
@@ -473,6 +495,7 @@ public final class ApprovalsManager: ApprovalsRepository {
         case .failed(let kind): openAsksError = kind
         case .answered, .unsupported: openAsksError = nil
         }
+        lastCoverage = ReadCoverage(lists, pending.result)
         let changed = { (key: String) in (self.changedAt[key] ?? 0) > since }
         // A list the vault did not answer covers nothing: what was known of it stays (VAULT-MESSAGING 0.55.7 §10.12).
         let next = mergedWithChanges(lists.approvals(at: t), since: since, changed: changed) + listed.filter { !lists.covers($0) }
