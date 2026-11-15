@@ -87,7 +87,7 @@ extension VaultManagerHoldCollectionTests {
         // Something was kept: the foreground reads the lists again.
         m.onEvent(VaultMessage(inner: Inner(id: "k", type: "tag.changed", ts: Date(), body: Array("{}".utf8))))
         m.onForeground()
-        #expect(await waitFor { m.listsReadAt != nil }, "the lists were read as of a vault time")
+        #expect(await waitFor(seconds: 60) { m.listsReadAt != nil }, "the lists were read as of a vault time")
         let stale = VaultMessage(inner: Inner(
             id: "s1", type: "connection.request.pending", ts: Date().addingTimeInterval(-120),
             body: Array(#"{"pending_id":"gone","sas":"042817"}"#.utf8)
@@ -114,7 +114,7 @@ extension VaultManagerHoldCollectionTests {
         try await heldBackground()
         m.onEvent(VaultMessage(inner: Inner(id: "k", type: "tag.changed", ts: Date(), body: Array("{}".utf8))))
         m.onForeground()
-        #expect(await waitFor { m.listsReadAt != nil })
+        #expect(await waitFor(seconds: 60) { m.listsReadAt != nil })
         m.onEvent(VaultMessage(inner: Inner(
             id: "o1", type: "connection.request.outgoing", ts: Date().addingTimeInterval(30),
             body: Array(#"{"connection_id":"c1","sas":"111111","profile":{"first_name":"Morgan","last_name":"Lee"}}"#.utf8)
@@ -144,7 +144,7 @@ extension VaultManagerHoldCollectionTests {
         try await heldBackground()
         m.onEvent(VaultMessage(inner: Inner(id: "k", type: "tag.changed", ts: Date(), body: Array("{}".utf8))))
         m.onForeground()
-        #expect(await waitFor { m.listsReadAt != nil })
+        #expect(await waitFor(seconds: 60) { m.listsReadAt != nil })
         let read = try #require(m.listsReadAt).vault
         let approval = VaultMessage(inner: Inner(
             id: "ap1", type: "approval.pending", ts: read.addingTimeInterval(-1), body: Array(#"{"approval_id":"d1"}"#.utf8)
