@@ -31,6 +31,8 @@ final class FakeGateway: CallGateway {
     var acceptResult: (OutgoingCall) throws -> AcceptedCall = { _ in throw CallMessageError("not set") }
     var startResult: (String, String) throws -> OutgoingCall = { _, _ in throw CallMessageError("not set") }
     var startGate: Gate?
+    /// One gate per start, in the order the starts are asked (used before ``startGate``).
+    var startGates: [Gate] = []
     var answerKeys: CallKeys?
     var acceptGate: Gate?
 
@@ -48,7 +50,7 @@ final class FakeGateway: CallGateway {
 
     func start(connectionId: String, pinnedFingerprint: String, sdp: String, suites: [MediaSuite]) async throws -> OutgoingCall {
         asked.append("start(\(connectionId), \(suites.map(\.id)))")
-        await startGate?.wait()
+        if startGates.isEmpty { await startGate?.wait() } else { await startGates.removeFirst().wait() }
         return try startResult(connectionId, pinnedFingerprint)
     }
 
@@ -132,9 +134,9 @@ final class FakeGateway: CallGateway {
         )
     }
 
-    func outgoingCall(_ connectionId: String = "conn-1", pinned: String = "") throws -> OutgoingCall {
+    func outgoingCall(_ connectionId: String = "conn-1", pinned: String = "", id: String = callId) throws -> OutgoingCall {
         OutgoingCall(
-            callId: callId, connectionId: connectionId, media: "audio", exp: at(45_000),
+            callId: id, connectionId: connectionId, media: "audio", exp: at(45_000),
             ice: CallWire.IceConfig(callId: callId, exp: at(600_000), servers: []), offered: [1], pinnedFingerprint: pinned,
             offerKey: try CallWire.newOfferKey()
         )
