@@ -62,8 +62,8 @@ extension ApprovalsManager {
 
     /// What a read of `pending.list` did (``onOpenAsksRead``).
     enum OpenAsksRead: Equatable {
-        /// Every page read and merged: the approval keys it listed, and when the read began (this phone's clock).
-        case merged(Set<String>, startedAt: Date)
+        /// Every page read and merged: the approval keys it listed, and the read's stamp (``readsBegun`` when it began).
+        case merged(Set<String>, stamp: Int)
         /// `unsupported_type` (a vault before 0.70.0, or one known as such): there are no open asks to read.
         case unsupported
         /// A page failed, or an answer read later was merged first: nothing merged.
@@ -71,10 +71,10 @@ extension ApprovalsManager {
     }
 
     /// [read] merged when it answered (``mergePendingAsks(_:readTs:at:since:changed:)``), and what it did.
-    func merged(_ read: PendingRead, at t: Date, since: Int, changed: (String) -> Bool) -> OpenAsksRead {
+    func merged(_ read: PendingRead, at t: Date, since: Int, changed: (String) -> Bool, stamp: Int) -> OpenAsksRead {
         switch read {
         case .answered(let asks, let readTs):
-            mergePendingAsks(asks, readTs: readTs, at: t, since: since, changed: changed).map { .merged($0, startedAt: t) } ?? .failed
+            mergePendingAsks(asks, readTs: readTs, at: t, since: since, changed: changed).map { .merged($0, stamp: stamp) } ?? .failed
         case .unsupported: .unsupported
         case .failed: .failed
         }

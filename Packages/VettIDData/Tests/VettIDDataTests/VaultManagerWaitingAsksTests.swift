@@ -5,9 +5,9 @@ import VettIDDataTesting
 import VettIDVault
 
 /// (Owner decisions of 2026-11-15; ANDROID-PLAN 0.1.132 Notifications 7, IOS-PLAN §6.7) The asks still waiting when a
-/// passed check, this phone's own or another device's, ends the held or due state in an open session, arrive once (``FeedManager/onArrival``, the
-/// notifications' source) after the feed's full read and the approvals' read; nothing else is replayed, an expired ask is
-/// not, and an unlock replays nothing.
+/// passed check, this phone's own or another device's, ends the held or due state, are replayed once
+/// (``FeedManager/onWaitingAsk``, taken as the app's notifier takes it) after the feed's full read and the approvals' read;
+/// nothing else is replayed, an expired ask is not, and an unlock replays nothing.
 @MainActor
 @Suite(.serialized) struct VaultManagerWaitingAsksTests {
     let service: FakeVaultService
@@ -144,12 +144,24 @@ import VettIDVault
         _ = try await connected()
         m.replayDue(.here, stateEnded: true)
         #expect(m.asksToNotify)
-        m.openAsksRead(.merged([], startedAt: m.asksSince.addingTimeInterval(-1)))
+        m.openAsksRead(.merged([], stamp: m.asksFrom - 1))
         #expect(m.asksToNotify, "begun before: still waiting for its read")
         m.openAsksRead(.failed)
         #expect(m.asksToNotify, "a failed read: the next one")
-        m.openAsksRead(.merged([], startedAt: m.asksSince))
+        m.openAsksRead(.merged([], stamp: m.asksFrom))
         #expect(!m.asksToNotify)
+    }
+
+    /// The read's stamp is a count, not the clock: the phone's clock set back between the check and the read does not make
+    /// the first read after the check look older than it.
+    @Test func aClockSetBackBetweenTheCheckAndTheReadStillCounts() async throws {
+        defer { phone.close() }
+        _ = try await connected()
+        m.replayDue(.here, stateEnded: true)
+        #expect(m.asksToNotify)
+        phone.clockAhead = -2 // a little, so that the session itself is not disturbed
+        try await m.approvals.refreshApprovals(quietly: true, requests: false)
+        #expect(!m.asksToNotify, "the read begun after the check counted")
     }
 
     /// A lock while the reads after the check are on their way: nothing is replayed, then or after the next unlock.

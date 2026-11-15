@@ -43,9 +43,11 @@ public final class OwnerCheckManager: OwnerCheckRepository {
 
     public private(set) var ownerCheck: OwnerCheckView? {
         didSet {
+            // Read first: a value set from within ``onHeldChange`` (nested) clears it.
+            let pass = passing
             let (was, now) = ((oldValue?.state ?? .ok) != .ok, (ownerCheck?.state ?? .ok) != .ok)
             if was != now { onHeldChange(now) }
-            if let pass = passing, OwnerCheckView.replayDue(from: oldValue, to: ownerCheck, at: self.now()) {
+            if let pass, OwnerCheckView.replayDue(from: oldValue, to: ownerCheck, at: self.now()) {
                 onReplayDue(pass, was != now)
             }
         }
@@ -72,7 +74,7 @@ public final class OwnerCheckManager: OwnerCheckRepository {
     public internal(set) var leftFront = 0
     public private(set) var notices: [OwnerCheckNotice] = []
     public private(set) var presenceUnrecorded = false
-    public private(set) var checkAfterCancel = false
+    public internal(set) var checkAfterCancel = false
     /// (Release L) The vault locked itself (kept on the phone until it opens again); the idle-lock setting (nil before it was
     /// read, and for a vault that does not list it).
     public private(set) var idleLocked: IdleLocked?
@@ -215,13 +217,16 @@ public final class OwnerCheckManager: OwnerCheckRepository {
                 // idle-lock value set before it is in force now (§3.6.8).
                 checkPassedForIdleLock()
                 estimate = OwnerCheckView.maxFailures
+                // Without a new deadline the passed one is not kept: the pass ends the gate, and the status says the next.
+                let deadline = Self.instant(VaultJSON.string(m.object, "deadline"))
                 update(pass: .elsewhere) { v in
                     v.state = .ok
-                    v.deadline = Self.instant(VaultJSON.string(m.object, "deadline")) ?? v.deadline
+                    v.deadline = deadline
                     v.failures = 0
                     v.waiting = nil
                     v.idleLockAt = nil
                 }
+                if deadline == nil { refreshQuietly() }
             case "settings.changed": refreshQuietly()
             default: break
             }
@@ -293,19 +298,6 @@ public final class OwnerCheckManager: OwnerCheckRepository {
         idleLocked = nil
         lockedHere = false
         saveFlags()
-    }
-
-    /// (Release R, ANDROID-PLAN "Other screens") Right after an unlock that cancelled a recovery: the owner check at once,
-    /// with the same entries, whatever the deadline, because it records that the member is present (§11.14.5). A check
-    /// that does not pass waits in ``unlockCheckOutcome``, and ``checkAfterCancel`` asks for the check screen.
-    func afterCancelledRecovery(pin: String, password: String) async {
-        markOpen()
-        forgetEstimate()
-        let r = await checkOutcome(pin: pin, password: password, holdOff: nil, forUnlock: true)
-        if r != .passed {
-            unlockCheckOutcome = r
-            checkAfterCancel = true
-        }
     }
 
     // MARK: - OwnerCheckRepository

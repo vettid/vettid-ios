@@ -89,6 +89,8 @@ public final class FeedNotifier {
     /// Notifications 7): any notification still posted under its `item_id` goes first, then it is posted as a new arrival
     /// (a fresh alert, not an update), with the skips of every arrival (the screen in front, the Notifications list).
     public func replayed(_ item: FeedItem) {
+        // Skipped (the Notifications list or its screen in front): the one posted stays as it is.
+        guard NotificationMapping.category(item) != nil, notifiable(item) else { return }
         if posted.remove(item.itemID) != nil { poster.remove([item.itemID]) }
         arrived(item)
     }

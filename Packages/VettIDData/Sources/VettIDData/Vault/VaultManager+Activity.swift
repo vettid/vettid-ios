@@ -120,7 +120,8 @@ extension VaultManager {
         feed.closeWaitingAsks()
         guard phase == .unlocked else { return }
         asksToNotify = true
-        asksSince = config.now()
+        // A monotonic stamp, not the clock: a read begun from now counts, whatever the clock is set to meanwhile.
+        asksFrom = approvals.readsBegun + 1
         feed.openWaitingAsks()
         guard pass == .elsewhere, !stateEnded else { return }
         Task { [weak self] in
@@ -142,8 +143,8 @@ extension VaultManager {
         case .unsupported:
             asksToNotify = false
             feed.closeWaitingAsks()
-        case .merged(let keys, let startedAt):
-            guard startedAt >= asksSince else { return }
+        case .merged(let keys, let stamp):
+            guard stamp >= asksFrom else { return }
             asksToNotify = false
             guard phase == .unlocked else { return feed.closeWaitingAsks() }
             feed.replayWaitingAsks(approvals.approvals.filter { keys.contains($0.key) })
