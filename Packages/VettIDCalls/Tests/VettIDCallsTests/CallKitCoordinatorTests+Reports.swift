@@ -76,6 +76,7 @@ extension CallKitCoordinatorTests {
         kit.incomingGate = gate
         c.apply(state(.incoming, .incoming), seq: 1)
         await settle()
+        let second = try #require(kit.uuid)
         c.apply(ended(.missed, .incoming), seq: 1)
         await settle()
         #expect(c.endReasons.count == 1, "kept while the report is on its way")
@@ -84,6 +85,7 @@ extension CallKitCoordinatorTests {
         await settle()
         gate.open()
         await settle()
+        #expect(kit.events.contains(.ended(second, CallEnd.missed.callKitReason)), "the replaced call is told its own reason")
         #expect(c.endReasons.isEmpty, "dropped when the report is answered")
     }
 }

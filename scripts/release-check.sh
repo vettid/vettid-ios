@@ -85,8 +85,8 @@ archive() {
 # Every status is checked by hand: callers run this on the left of `&&` or inside `if`, where errexit is off, so a failing
 # strings, file or cat must be returned, not ignored.
 bundle_text() {
-  local app=$1 f out list
-  # The file list first, so that a find that fails is a failure, not a shorter list.
+  local app=$1 f out list rc=0
+  # The file list first, so that a find that fails is a failure, not a shorter list. One way out, so the list always goes.
   list=$(mktemp) || return 1
   find "${app}" -type f -print0 >"${list}" || { echo "${app}: find failed" >&2; rm -f "${list}"; return 1; }
   while IFS= read -r -d '' f; do
@@ -94,17 +94,18 @@ bundle_text() {
       # The vendor's media stack (webrtc-sdk, checksum-pinned) holds the loopback address 127.0.0.1 in its strings, a line of its
       # own: that one line is set aside, and everything else it holds is scanned like the rest of the bundle (so a dev host or
       # a TEST marker added to it is refused).
-      out=$(strings -a "${f}") || { echo "${app}: strings failed on ${f#"${app}"/}" >&2; return 1; }
-      { grep -vxF '127.0.0.1' <<<"${out}" || [[ $? -eq 1 ]]; } || return 1
+      out=$(strings -a "${f}") || { echo "${app}: strings failed on ${f#"${app}"/}" >&2; rc=1; break; }
+      { grep -vxF '127.0.0.1' <<<"${out}" || [[ $? -eq 1 ]]; } || { rc=1; break; }
     elif file -b "${f}" | grep -q 'Mach-O'; then
-      strings -a "${f}" || { echo "${app}: strings failed on ${f#"${app}"/}" >&2; return 1; }
+      strings -a "${f}" || { echo "${app}: strings failed on ${f#"${app}"/}" >&2; rc=1; break; }
     elif [[ "${f}" == *.plist ]]; then
-      plutil -convert xml1 -o - "${f}" 2>/dev/null || cat "${f}" || return 1
+      plutil -convert xml1 -o - "${f}" 2>/dev/null || cat "${f}" || { rc=1; break; }
     else
-      cat "${f}" || { echo "${app}: cannot read ${f#"${app}"/}" >&2; rm -f "${list}"; return 1; }
+      cat "${f}" || { echo "${app}: cannot read ${f#"${app}"/}" >&2; rc=1; break; }
     fi
   done <"${list}"
   rm -f "${list}"
+  return "${rc}"
 }
 
 # check_app <app> <expected bundle id> <required...> -- <forbidden...>
