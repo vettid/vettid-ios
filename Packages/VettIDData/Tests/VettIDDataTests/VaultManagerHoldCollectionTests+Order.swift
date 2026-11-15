@@ -101,4 +101,60 @@ extension VaultManagerHoldCollectionTests {
         m.onEvent(fresh)
         #expect(m.connections.requests.contains { $0.id == "new" }, "newer than the read: applied")
     }
+
+    // MARK: what a re-read does not cover
+
+    func old(_ type: String, _ body: String, id: String, by seconds: TimeInterval = 120) -> VaultMessage {
+        VaultMessage(inner: Inner(id: id, type: type, ts: Date().addingTimeInterval(-seconds), body: Array(body.utf8)))
+    }
+
+    /// The inviter's decline is told only by the event: a held one redelivered after the re-read is still shown.
+    @Test func aHeldDeclineRedeliveredAfterTheReReadIsStillShown() async throws {
+        defer { phone.close() }
+        try await heldBackground()
+        m.onEvent(VaultMessage(inner: Inner(id: "k", type: "tag.changed", ts: Date(), body: Array("{}".utf8))))
+        m.onForeground()
+        #expect(await waitFor { m.listsReadAt != nil })
+        m.onEvent(VaultMessage(inner: Inner(
+            id: "o1", type: "connection.request.outgoing", ts: Date().addingTimeInterval(30),
+            body: Array(#"{"connection_id":"c1","sas":"111111","profile":{"first_name":"Morgan","last_name":"Lee"}}"#.utf8)
+        )))
+        m.onEvent(old("connection.event", #"{"connection_id":"c1","event":"failed","reason":"declined"}"#, id: "d1"))
+        #expect(!m.connections.peerDeclines.isEmpty, "the notice is told")
+    }
+
+    /// A re-read that failed covers nothing: no mark is set, and the redelivered patch is applied, not ignored.
+    @Test func aFailedReReadDoesNotSuppressTheRedeliveries() async throws {
+        defer { phone.close() }
+        try await heldBackground()
+        service.refuse("connection.list", with: "retry", times: 20)
+        m.onEvent(VaultMessage(inner: Inner(id: "k", type: "tag.changed", ts: Date(), body: Array("{}".utf8))))
+        let reads = m.listsReads
+        m.onForeground()
+        #expect(await waitFor(seconds: 30) { m.listsReads > reads }, "the foreground's read began")
+        await m.listsRead?.value
+        #expect(m.listsReadAt == nil, "the read did not answer: nothing is covered")
+        m.onEvent(old("connection.request.pending", #"{"pending_id":"late","sas":"042817"}"#, id: "p1"))
+        #expect(m.connections.requests.contains { $0.id == "late" }, "applied")
+    }
+
+    /// A vault without `pending.list` never reads its approvals back: its approval events are always applied.
+    @Test func approvalEventsOfAVaultWithoutPendingListAreAlwaysApplied() async throws {
+        defer { phone.close() }
+        try await heldBackground()
+        m.onEvent(VaultMessage(inner: Inner(id: "k", type: "tag.changed", ts: Date(), body: Array("{}".utf8))))
+        m.onForeground()
+        #expect(await waitFor { m.listsReadAt != nil })
+        let read = try #require(m.listsReadAt).vault
+        let approval = VaultMessage(inner: Inner(
+            id: "ap1", type: "approval.pending", ts: read.addingTimeInterval(-1), body: Array(#"{"approval_id":"d1"}"#.utf8)
+        ))
+        // A vault with `pending.list` reads its approvals back: the older event is covered by the read.
+        #expect(m.supersededByReread(approval), "covered by the list")
+        // One without it never does: the event is all there is of the approval, and it is applied.
+        m.approvals.pendingListUnsupported = true
+        #expect(!m.supersededByReread(approval), "kept: no list would give it back")
+        let critical = VaultMessage(inner: Inner(id: "c", type: "critical-secret-use.pending", ts: read.addingTimeInterval(-1), body: []))
+        #expect(!m.supersededByReread(critical))
+    }
 }

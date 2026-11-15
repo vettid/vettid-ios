@@ -133,8 +133,12 @@ extension VaultManager {
             if catchUp, phase == .unlocked, let s = try? await openSession() {
                 // The lists are read as of now (the vault's time): what comes back from the relay older than this, after its lease, is
                 // covered by the read (``supersededByReread(_:)``).
-                if s.device.knowsVaultTime { listsReadAt = (s.device.vaultNow(), config.now().addingTimeInterval(Self.rereadWindow)) }
-                refreshListsQuietly()
+                // Only once the reads answered: a failed read covers nothing, and the events that come back are applied.
+                let at = s.device.knowsVaultTime ? s.device.vaultNow() : nil
+                refreshListsQuietly { [weak self] answered in
+                    guard answered, let self, let at else { return }
+                    listsReadAt = (at, config.now().addingTimeInterval(Self.rereadWindow))
+                }
                 // And the alarm, whatever older events are still to be redelivered (they are ordered by their `ts`, ``raiseAlarm(_:)``).
                 if let api = try? openApi(s) { await refreshAlarm(api) }
             }
@@ -392,7 +396,7 @@ extension VaultManager {
     }
 
     /// How long after the foreground's read the events older than it are dropped: the relay's lease (60 s) and a margin.
-    static let rereadWindow: TimeInterval = 90
+    static let rereadWindow: TimeInterval = 120
 
     /// Whether [m] came back from the relay (after its lease) older than the foreground's read of the lists, which covers it: a patch
     /// such as a request event would put back what a newer event or decision had moved on (`connection.request.pending` re-adds an
@@ -404,8 +408,12 @@ extension VaultManager {
             return false
         }
         let t = m.type
+        // `connection.event` is also told only by the event (a request the inviter declined); a vault without `pending.list` never reads
+        // its approvals back, so these are applied (``ApprovalsManager``).
         if t.hasPrefix("credential.") || t.hasPrefix("connection.authenticate.") || t.hasPrefix("device.") || t.hasPrefix("vault.")
-            || t == "sync.event" { return false }
+            || t == "sync.event" || t == "connection.event" { return false }
+        if approvals.pendingListUnsupported,
+           t.hasPrefix("approval.") || t.hasPrefix("critical-secret-use.") { return false }
         return m.inner.ts < read.vault
     }
 
