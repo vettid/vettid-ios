@@ -418,6 +418,61 @@ final class FakeGateway: CallGateway {
         #expect(out.count == 1)
     }
 
+    /// The vault can end the call (`busy`) before its answer to `call.start` has been read here. The call it then returns is not
+    /// kept, and its ephemeral key is destroyed at once, not when later calls push it out.
+    @Test func aCallEndedBeforeItsStartReturnedIsNotKeptAndItsKeyIsDestroyed() async throws {
+        let s = await signalling()
+        gateway.startGate = Gate()
+        var made: OutgoingCall?
+        gateway.startResult = { [unowned self] in
+            let call = try outgoingCall($0, pinned: $1)
+            made = call
+            return call
+        }
+        gateway.acceptResult = { AcceptedCall(callId: $0.callId, sdp: "v=0 answer", keys: self.keys()) }
+        let starting = Task { _ = try? await s.start(connectionId: "conn-1", sdp: "v=0", suites: [s1]) }
+        await settle()
+        gateway.send(.ended(CallEnded(callId: callId, reason: "busy")))
+        await settle()
+        #expect(out.map(\.description) == ["End(\(callId), busy, nil)"])
+        gateway.startGate?.open()
+        await settle()
+        await starting.value
+        let call = try #require(made)
+        #expect(throws: (any Error).self, "the offer key is destroyed") { _ = try call.key().seed() }
+        // Not kept: an answer for it now finds no call.
+        gateway.send(answerEvent())
+        await settle()
+        #expect(out.count == 1)
+        #expect(gateway.asked.allSatisfy { !$0.hasPrefix("accept") })
+    }
+
+    /// An end for some other call while one is being started does not touch the call being started.
+    @Test func anEndForAnotherCallDuringAStartLeavesTheStartedCall() async throws {
+        let s = await signalling()
+        gateway.startGate = Gate()
+        var made: OutgoingCall?
+        gateway.startResult = { [unowned self] in
+            let call = try outgoingCall($0, pinned: $1)
+            made = call
+            return call
+        }
+        gateway.acceptResult = { AcceptedCall(callId: $0.callId, sdp: "v=0 answer", keys: self.keys()) }
+        let starting = Task { _ = try? await s.start(connectionId: "conn-1", sdp: "v=0", suites: [s1]) }
+        await settle()
+        gateway.send(.ended(CallEnded(callId: "01JB2Z6V9K3M4N5P6Q7R8S9T51", reason: "hangup")))
+        await settle()
+        gateway.startGate?.open()
+        await settle()
+        await starting.value
+        let call = try #require(made)
+        #expect(throws: Never.self) { _ = try call.key().seed() }
+        gateway.send(answerEvent())
+        await settle()
+        guard case .answer(let a)? = out.last else { throw Unexpected() }
+        #expect(a.sdp == "v=0 answer")
+    }
+
     /// The listen ends (the relay reconnects) between an answer that overtook `call.start` and that start's return: the answer is
     /// kept for the next listen, not yielded into the ended one (the caller would ring on while the callee had answered).
     @Test func anAnswerHeldAcrossTheEndOfAListenReachesTheNextOne() async throws {

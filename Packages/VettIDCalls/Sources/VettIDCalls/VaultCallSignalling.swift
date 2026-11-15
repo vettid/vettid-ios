@@ -40,6 +40,9 @@ package final class VaultCallSignalling: CallSignalling {
     private var starting = 0
     /// Answers that arrived for no known call while one was being started: looked at again when it is.
     private var heldAnswers: [(callId: String, message: VaultMessage)] = []
+    /// Calls the vault ended (`call.end`) for no known call while one was being started: the call being started may be one of
+    /// them, and its ephemeral key is then destroyed as soon as it is known (rule 3).
+    private var endedWhileStarting: [String] = []
     private var sink: AsyncThrowingStream<SignalEvent, Error>.Continuation?
     /// Which listen ``sink`` feeds, so that an older one ending does not drop a newer one.
     private var listen = 0
@@ -222,7 +225,13 @@ package final class VaultCallSignalling: CallSignalling {
     }
 
     private func forget(_ callId: String) {
-        take(placed: callId)?.destroy()
+        if let call = take(placed: callId) {
+            call.destroy()
+        } else if starting > 0, !endedWhileStarting.contains(callId) {
+            // The vault can end the call (`busy`) before its answer to `call.start` has been read here.
+            endedWhileStarting.append(callId)
+            while endedWhileStarting.count > Self.maxKept { endedWhileStarting.removeFirst() }
+        }
         ringingCalls.removeAll { $0.callId == callId }
     }
 
@@ -240,6 +249,8 @@ package final class VaultCallSignalling: CallSignalling {
             call = try await gateway.start(connectionId: connectionId, pinnedFingerprint: fingerprint, sdp: sdp, suites: suites)
             placed.append((call.callId, call))
             while placed.count > Self.maxKept { placed.removeFirst().call.destroy() }
+            // Ended before this start returned: not kept, and its key destroyed now (the machine ends it from the held event).
+            if endedWhileStarting.contains(call.callId) { forget(call.callId) }
         } catch let e as VaultOpError {
             endStart()
             throw CallRefusedError(code: e.code)
@@ -251,7 +262,8 @@ package final class VaultCallSignalling: CallSignalling {
             throw error
         }
         let held = endStart()
-        // An answer that overtook the vault's answer to `call.start`: checked now, as any answer.
+        // An answer that overtook the vault's answer to `call.start`: checked now, as any answer (one for a call already ended
+        // finds nothing).
         for h in held where h.callId == call.callId {
             if let a = await check(answer: h.message, callId: h.callId) { emitLate(a) }
         }
@@ -262,7 +274,10 @@ package final class VaultCallSignalling: CallSignalling {
     private func endStart() -> [(callId: String, message: VaultMessage)] {
         starting -= 1
         let held = heldAnswers
-        if starting == 0 { heldAnswers.removeAll() }
+        if starting == 0 {
+            heldAnswers.removeAll()
+            endedWhileStarting.removeAll()
+        }
         return held
     }
 
