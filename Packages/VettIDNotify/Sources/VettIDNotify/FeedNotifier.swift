@@ -18,7 +18,9 @@ public protocol NotificationPoster: AnyObject {
 /// Turns the feed into notifications (ANDROID-PLAN §4 Notification modes 7 and 8; IOS-PLAN §6.7). One per item, updated in
 /// place for a batch without alerting again, removed when the item is read, archived or deleted on any device; every item
 /// notification is removed when the feed is forgotten (the vault locked, was held or wiped). Only arrivals notify (a live
-/// event or a catch-up, never a full read), so nothing missed while the vault was locked is replayed. Nothing about the
+/// event or a catch-up, never a full read), so nothing missed while the vault was locked, held or due is replayed, except
+/// the asks still waiting when a passed check ends the held or due state in an open session, which arrive once
+/// (``FeedManager/replayWaitingAsks(_:)``; ANDROID-PLAN 0.1.132 Notifications 7). Nothing about the
 /// screen in front is notified: the Notifications list, or the screen the item opens. Nothing here is kept on disk.
 ///
 /// iOS before Apple push (IOS-PLAN ID12): the feed is collected only while the app is in the foreground, so these show as
@@ -82,6 +84,14 @@ public final class FeedNotifier {
     /// How long a `vote.result` waits for the votes list read before it is titled generically (VAULT-MESSAGING 0.83.6
     /// §10.19.6 step 4: the item carries no check state, the list does).
     public nonisolated static let defaultVoteListWait: Duration = .seconds(3)
+
+    /// A waiting ask replayed after a passed owner check (``FeedManager/onWaitingAsk``; ANDROID-PLAN 0.1.132
+    /// Notifications 7): any notification still posted under its `item_id` goes first, then it is posted as a new arrival
+    /// (a fresh alert, not an update), with the skips of every arrival (the screen in front, the Notifications list).
+    public func replayed(_ item: FeedItem) {
+        if posted.remove(item.itemID) != nil { poster.remove([item.itemID]) }
+        arrived(item)
+    }
 
     /// A new or changed unread item (``FeedManager/onArrival``). A `vote.result` is the give-up item only by its vote's state
     /// in the list, and that list may be older than the item (a re-check's verdict, or the vault giving up on its own

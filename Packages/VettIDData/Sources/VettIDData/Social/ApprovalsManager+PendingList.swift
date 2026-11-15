@@ -60,6 +60,26 @@ extension ApprovalsManager {
         var body: String
     }
 
+    /// What a read of `pending.list` did (``onOpenAsksRead``).
+    enum OpenAsksRead: Equatable {
+        /// Every page read and merged: the approval keys it listed, and when the read began (this phone's clock).
+        case merged(Set<String>, startedAt: Date)
+        /// `unsupported_type` (a vault before 0.70.0, or one known as such): there are no open asks to read.
+        case unsupported
+        /// A page failed, or an answer read later was merged first: nothing merged.
+        case failed
+    }
+
+    /// [read] merged when it answered (``mergePendingAsks(_:readTs:at:since:changed:)``), and what it did.
+    func merged(_ read: PendingRead, at t: Date, since: Int, changed: (String) -> Bool) -> OpenAsksRead {
+        switch read {
+        case .answered(let asks, let readTs):
+            mergePendingAsks(asks, readTs: readTs, at: t, since: since, changed: changed).map { .merged($0, startedAt: t) } ?? .failed
+        case .unsupported: .unsupported
+        case .failed: .failed
+        }
+    }
+
     /// What the read of `pending.list` found.
     enum PendingRead {
         /// Every page was read; [ts] is the first page's `ts`.
@@ -167,8 +187,11 @@ extension ApprovalsManager {
     /// holds that is not kept comes back (received now, since the list does not say when; chosen; not in the spec), and
     /// what changed since [since] (an event later than [readTs] that arrived, a decision or a closing) is not undone. A
     /// list older than one merged before is not merged (chosen; not in the spec). A device has one session request at most.
-    func mergePendingAsks(_ asks: [OpenAsk], readTs: Date, at t: Date, since: Int, changed: (String) -> Bool) {
-        if let merged = mergedListTs, readTs < merged { return }
+    /// The approval keys `pending.list` listed, or nil when an answer read later was merged before this one (nothing
+    /// merged).
+    @discardableResult
+    func mergePendingAsks(_ asks: [OpenAsk], readTs: Date, at t: Date, since: Int, changed: (String) -> Bool) -> Set<String>? {
+        if let merged = mergedListTs, readTs < merged { return nil }
         mergedListTs = readTs
         // An event as old as the list, processed before its first page answered, is for the list to judge.
         func changedAfter(_ key: String, _ ts: Date?) -> Bool { changed(key) && !(ts.map { $0 <= readTs } ?? false) }
@@ -206,6 +229,7 @@ extension ApprovalsManager {
             }
             events = kept
         }
+        return Set(byKey.keys)
     }
 
     /// The listed asks that can be taken, in the list's order, by key, with the device of each session request: expired

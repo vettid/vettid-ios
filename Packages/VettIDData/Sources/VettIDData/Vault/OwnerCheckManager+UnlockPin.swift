@@ -21,7 +21,7 @@ extension OwnerCheckManager {
         endIdleLocked()
         let v = try? await readStatus().view
         guard unlock == unlockEpoch, let v, v.gated(now()) else { return }
-        let r = await checkOutcome(pin: pin, password: password, holdOff: nil)
+        let r = await checkOutcome(pin: pin, password: password, holdOff: nil, forUnlock: true)
         guard unlock == unlockEpoch else { return }
         unlockCheckOutcome = r
         if Self.keepsPin(r), kept == pinEpoch, left == leftFront, inFront, !lockedByOwnerCheck { unlockPin = pin }

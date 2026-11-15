@@ -285,6 +285,22 @@ import VettIDVault
         #expect(Set(w.poster.shown.keys) == ["f3", "v2"])
     }
 
+    /// ANDROID-PLAN 0.1.132 Notifications 7: a waiting ask replayed after a passed check is a new arrival (one still posted
+    /// under its `item_id` goes first, and the new one alerts), with the skips of every arrival.
+    @Test func aReplayedAskIsPostedAsANewArrival() {
+        let w = World()
+        let ask = item("a1", kind: "approval.pending", ref: "r1")
+        w.arrive(ask)
+        w.notifier.replayed(ask)
+        #expect(w.poster.log == ["post:a1", "remove:a1", "post:a1"])
+        #expect(w.poster.shown["a1"]?.update == false, "a fresh alert")
+        w.notifier.replayed(item("a2", kind: "device.session.pending", ref: "r2"))
+        #expect(w.poster.shown["a2"]?.update == false)
+        w.visible = .notifications
+        w.notifier.replayed(item("a3", kind: "approval.pending", ref: "r3"))
+        #expect(w.poster.shown["a3"] == nil, "not while the Notifications list is in front")
+    }
+
     /// ANDROID-PLAN §4 Notification modes 8: a notification posted before the process ended does not outlive the open vault.
     @Test func atStartWithTheVaultNotOpenWhatAnEarlierProcessPostedGoes() {
         let w = World()

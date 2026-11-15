@@ -45,10 +45,19 @@ public final class OwnerCheckManager: OwnerCheckRepository {
         didSet {
             let (was, now) = ((oldValue?.state ?? .ok) != .ok, (ownerCheck?.state ?? .ok) != .ok)
             if was != now { onHeldChange(now) }
+            if let pass = passing, OwnerCheckView.replayDue(from: oldValue, to: ownerCheck, at: self.now()) {
+                onReplayDue(pass, was != now)
+            }
         }
     }
     /// Told when the vault becomes held or due (true) and when it is no longer (false), as the state says (§3.6.3).
     @ObservationIgnored public var onHeldChange: @MainActor (_ held: Bool) -> Void = { _ in }
+    /// Told when a counted check ends the held or due state (``OwnerCheckView/replayDue(from:to:at:)``), with where it
+    /// passed; [stateEnded]: the state was held or due (``onHeldChange`` was told false just before), not only the clock.
+    @ObservationIgnored public var onReplayDue: @MainActor (OwnerCheckPass, _ stateEnded: Bool) -> Void = { _, _ in }
+    /// The checks counted in ``OwnerCheckView/passes``, and the one being set (``set(_:pass:)``).
+    @ObservationIgnored private var passCount = 0
+    @ObservationIgnored private var passing: OwnerCheckPass?
     public internal(set) var lockedByOwnerCheck = false
     /// (VAULT-MESSAGING 0.73.0 §3.6.5) ``lockedByOwnerCheck`` came from a read that found the vault locked without a known
     /// cause.
@@ -206,7 +215,7 @@ public final class OwnerCheckManager: OwnerCheckRepository {
                 // idle-lock value set before it is in force now (§3.6.8).
                 checkPassedForIdleLock()
                 estimate = OwnerCheckView.maxFailures
-                update { v in
+                update(pass: .elsewhere) { v in
                     v.state = .ok
                     v.deadline = Self.instant(VaultJSON.string(m.object, "deadline")) ?? v.deadline
                     v.failures = 0
@@ -292,7 +301,7 @@ public final class OwnerCheckManager: OwnerCheckRepository {
     func afterCancelledRecovery(pin: String, password: String) async {
         markOpen()
         forgetEstimate()
-        let r = await checkOutcome(pin: pin, password: password, holdOff: nil)
+        let r = await checkOutcome(pin: pin, password: password, holdOff: nil, forUnlock: true)
         if r != .passed {
             unlockCheckOutcome = r
             checkAfterCancel = true
@@ -344,7 +353,8 @@ public final class OwnerCheckManager: OwnerCheckRepository {
         return await checkOutcome(pin: pin, password: password, holdOff: holdOff)
     }
 
-    func checkOutcome(pin: String, password: String, holdOff: HoldOff?) async -> OwnerCheckOutcome {
+    /// [forUnlock]: an unlock's own check (``afterUnlock(pin:password:left:)``, a cancelled recovery's): not counted.
+    func checkOutcome(pin: String, password: String, holdOff: HoldOff?, forUnlock: Bool = false) async -> OwnerCheckOutcome {
         let until = holdOff?.until.map(clampHoldOff)
         let cleared = clears
         do {
@@ -369,7 +379,7 @@ public final class OwnerCheckManager: OwnerCheckRepository {
                 failures: 0,
                 hold: r.hold ?? true,
                 holdOffUntil: Self.instant(r.holdOffUntil)
-            ))
+            ), pass: forUnlock ? nil : .here)
             onPassed()
             return .passed
         } catch let e as VaultFailure {
@@ -531,10 +541,10 @@ public final class OwnerCheckManager: OwnerCheckRepository {
 
     private static func unknownHeld() -> OwnerCheckView { OwnerCheckView(state: .held, deadline: nil) }
 
-    private func update(_ f: (inout OwnerCheckView) -> Void) {
+    private func update(pass: OwnerCheckPass? = nil, _ f: (inout OwnerCheckView) -> Void) {
         guard var v = ownerCheck else { return }
         f(&v)
-        set(v)
+        set(v, pass: pass)
     }
 
     /// Keeps the idle-lock flags on the phone, with or without a view of the check: a restart before any view was read must
@@ -559,15 +569,21 @@ public final class OwnerCheckManager: OwnerCheckRepository {
         if let b = try? JSONEncoder().encode(saved) { try? persist(Array(b)) }
     }
 
-    private func set(_ view: OwnerCheckView) {
+    /// [pass]: [view] is the OK of a check counted in ``OwnerCheckView/passes``. The count is stamped here, in the same
+    /// step that publishes, so a value built earlier (a slow status read) never publishes a lower one.
+    private func set(_ view: OwnerCheckView, pass: OwnerCheckPass? = nil) {
         var v = view
+        if pass != nil { passCount += 1 }
+        v.passes = passCount
         // STAGING-TIME-SCALE §5.2: a new deadline's early warning takes the scale known now; the same deadline keeps the
         // scale it was learnt with.
         let same = v.deadline != nil && v.deadline == ownerCheck?.deadline
         v.timeScale = same ? ownerCheck?.timeScale ?? scaleNow() : scaleNow()
         // Newer than what the file held: the file is not read over it.
         loaded = true
+        passing = pass
         ownerCheck = v
+        passing = nil
         // Before the deadline the idle lock's time is the deadline plus the value in force (§3.6.8).
         if v.state == .ok, let d = v.deadline, now() < d, let after = v.idleAfterSeconds { idleAfterKnown = after }
         persistSaved(v)
@@ -580,21 +596,5 @@ public final class OwnerCheckManager: OwnerCheckRepository {
 
     private static func counts(_ h: HeldCounts?) -> WaitingCounts? {
         h.map { WaitingCounts(messages: $0.messages ?? 0, requests: $0.requests ?? 0, calls: $0.calls ?? 0, other: $0.other ?? 0) }
-    }
-
-    /// An RFC 3339 instant of the vault (with or without fractional seconds); nil when absent or unreadable.
-    public nonisolated static func instant(_ s: String?) -> Date? {
-        guard let s else { return nil }
-        let f = ISO8601DateFormatter()
-        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        if let d = f.date(from: s) { return d }
-        f.formatOptions = [.withInternetDateTime]
-        return f.date(from: s)
-    }
-
-    nonisolated static func format(_ d: Date) -> String {
-        let f = ISO8601DateFormatter()
-        f.formatOptions = [.withInternetDateTime]
-        return f.string(from: d)
     }
 }

@@ -188,6 +188,11 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
     /// The reads of every list (``refreshListsQuietly()``) begun, and the last one, which the end of a hold waits for.
     @ObservationIgnored var listsReads = 0
     @ObservationIgnored var listsRead: Task<Void, Never>?
+    /// A passed check (not the unlock's) ended the held or due state, and the first read of `pending.list` begun after it
+    /// (at ``asksSince``) has not answered yet: then the asks still waiting are notified (``openAsksRead(_:)``). Dropped by
+    /// a hold or a lock; in memory only.
+    @ObservationIgnored var asksToNotify = false
+    @ObservationIgnored var asksSince = Date.distantFuture
     @ObservationIgnored var retiredRemoved = false // the files of VaultFiles.retired are gone (removeRetiredFiles)
     @ObservationIgnored let moveFlags = MoveFlags() // the move to another phone, and the rotate offer (VaultManager+MoveState)
     /// The tasks that follow the open session's events and refusals.

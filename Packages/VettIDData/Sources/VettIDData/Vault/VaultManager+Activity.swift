@@ -48,6 +48,8 @@ extension VaultManager {
         feed.onChanged = { ref.manager?.feedSeen($0) }
         approvals.onDecided = { [weak feed] kinds, ref in feed?.markReadWhere(kinds: kinds, ref: ref) }
         approvals.onAskRead = { [weak feed] ref, onlySingle in feed?.markAskRead(ref: ref, onlySingle: onlySingle) }
+        approvals.onOpenAsksRead = { ref.manager?.openAsksRead($0) }
+        checks.onReplayDue = { pass, stateEnded in ref.manager?.replayDue(pass, stateEnded: stateEnded) }
         followHold(checks, ref)
         let selfID = { @MainActor in ref.manager?.session?.device.deviceID }
         return (
@@ -72,6 +74,7 @@ extension VaultManager {
     /// (``refreshAfterHold()``, or this phone's own check's ``refreshListsQuietly()``). Reads on their way are not
     /// published.
     func forgetHeld() {
+        asksToNotify = false
         listMarks = [:]
         items.clear()
         sharing.clear()
@@ -102,6 +105,48 @@ extension VaultManager {
             try? await items.refresh(quietly: true)
             await votes.openNow()
             if phase == .unlocked, !votes.held() { votes.startSync() }
+        }
+    }
+
+    /// A check passed with the vault open, here or on another device, ended the held or due state (owner decisions of
+    /// 2026-11-15; ANDROID-PLAN 0.1.132 Notifications 7, IOS-PLAN 0.1.76 §6.7; ``OwnerCheckView/replayDue(from:to:at:)``:
+    /// an unlock's own check and a status read never count). The feed notes what arrives from now
+    /// (``FeedManager/openWaitingAsks()``), and the first read of `pending.list` begun from now that succeeds replays the
+    /// asks still waiting (``openAsksRead(_:)``). The lists are read as before: by this phone's check (`onPassed`), or for a
+    /// hold's end (``refreshAfterHold()``); a due state known only by the clock that another device's check ended has
+    /// neither, so the feed and the approvals are read here (the feed first: the replay waits for its full read).
+    func replayDue(_ pass: OwnerCheckPass, stateEnded: Bool) {
+        asksToNotify = false
+        feed.closeWaitingAsks()
+        guard phase == .unlocked else { return }
+        asksToNotify = true
+        asksSince = config.now()
+        feed.openWaitingAsks()
+        guard pass == .elsewhere, !stateEnded else { return }
+        Task { [weak self] in
+            await self?.feed.openNow()
+            try? await self?.approvals.refreshApprovals(quietly: true, requests: false)
+        }
+    }
+
+    /// A read of `pending.list` was applied (``ApprovalsManager/onOpenAsksRead``). While a replay waits
+    /// (``replayDue(_:stateEnded:)``): one that failed leaves it to the next read (none before a lock: nothing); one begun
+    /// before the check does not count; `unsupported_type` means there are none; the first that merged replays, against
+    /// what it listed, after the feed's first full read since the check (``FeedManager/replayWaitingAsks(_:)``), while the
+    /// vault is still open and not held again.
+    func openAsksRead(_ read: ApprovalsManager.OpenAsksRead) {
+        guard asksToNotify else { return }
+        switch read {
+        case .failed:
+            return
+        case .unsupported:
+            asksToNotify = false
+            feed.closeWaitingAsks()
+        case .merged(let keys, let startedAt):
+            guard startedAt >= asksSince else { return }
+            asksToNotify = false
+            guard phase == .unlocked else { return feed.closeWaitingAsks() }
+            feed.replayWaitingAsks(approvals.approvals.filter { keys.contains($0.key) })
         }
     }
 
