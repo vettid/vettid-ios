@@ -159,10 +159,15 @@ import VettIDDataTesting
         #expect(await eventually { ops.calls.contains("deviceList") })
         ops.devices = []
         m.onEvent(event("sync.event", #"{"kind":"device.session","device_id":"d1"}"#))
+        // The event reads the list again (a screen asks); both reads are at the vault before either is answered, and the
+        // answers may come in either order: whichever does, the stale one never brings the session back.
+        #expect(await eventually { ops.calls.filter { $0 == "deviceList" }.count == 2 })
         gate.complete(())
         try await read.value
-        #expect(m.deviceSessionsKnown && m.deviceSessions["d1"] == nil, "the stale answer does not bring the session back")
-        #expect(await eventually { m.deviceSessionReads == 2 } && m.deviceSessions["d1"] == nil)
+        #expect(await eventually { m.deviceSessionsKnown })
+        #expect(m.deviceSessions["d1"] == nil, "the stale answer does not bring the session back")
+        await Task.yield()
+        #expect(m.deviceSessions["d1"] == nil)
     }
 
     /// An answer to a read begun before one already applied is dropped.

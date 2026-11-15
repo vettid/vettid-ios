@@ -25,7 +25,7 @@ private func obj(_ s: String) -> JsonObject { voteObj(s) }
 
 /// TEST ONLY. The vault calls of ``VotesManager``, as vettid-vault's `features/vote` answers them.
 @MainActor
-final class FakeVoteOps: VoteOps, @unchecked Sendable {
+final class FakeVoteOps: VoteOps {
     var list = obj("{}")
     var detail = obj("{}")
     var evidence = obj(#"{"evidence":{"proposal":"AAAA","member":{"ballot":{"choice_id":"yes"}}}}"#)

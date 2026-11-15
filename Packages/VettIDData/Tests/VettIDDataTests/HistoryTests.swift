@@ -9,7 +9,8 @@ import VettIDDataTesting
 // swiftlint:disable line_length
 
 /// TEST ONLY. The vault calls of History and its export, answered from a list of entries; every call recorded.
-final class FakeAuditOps: AuditOps, @unchecked Sendable {
+@MainActor
+final class FakeAuditOps: AuditOps {
     var entries: [AuditEntry] = []
     var calls: [String] = []
     var refuseSearch = false

@@ -9,7 +9,8 @@ import VettIDDataTesting
 // swiftlint:disable line_length
 
 /// TEST ONLY. The vault calls of ``ApprovalsManager``, answered from fixtures; every call recorded.
-final class FakeApprovalOps: ApprovalOps, @unchecked Sendable {
+@MainActor
+final class FakeApprovalOps: ApprovalOps {
     var calls: [String] = []
     var errors: [String: VaultOpError] = [:]
     var grants = #"{"pending":[]}"#

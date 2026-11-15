@@ -76,7 +76,7 @@ final class FakeVoteSite: VoteSite, @unchecked Sendable {
 /// TEST ONLY. The vault's side of the work with the site: every `vote.site.sync` body as the vault received it (a
 /// claim-check blob opened), the uploads, and every `vote.results.submit` body.
 @MainActor
-final class FakeVoteSiteOps: VoteSiteOps, @unchecked Sendable {
+final class FakeVoteSiteOps: VoteSiteOps {
     var syncs: [[UInt8]] = []
     var blobSyncs = 0
     var inlineSyncs = 0
