@@ -31,6 +31,8 @@ final class FakeGateway: CallGateway {
     var acceptResult: (OutgoingCall) throws -> AcceptedCall = { _ in throw CallMessageError("not set") }
     var startResult: (String, String) throws -> OutgoingCall = { _, _ in throw CallMessageError("not set") }
     var startGate: Gate?
+    /// One gate per start, in the order the starts are asked (used before ``startGate``).
+    var startGates: [Gate] = []
     var answerKeys: CallKeys?
     var acceptGate: Gate?
 
@@ -48,7 +50,7 @@ final class FakeGateway: CallGateway {
 
     func start(connectionId: String, pinnedFingerprint: String, sdp: String, suites: [MediaSuite]) async throws -> OutgoingCall {
         asked.append("start(\(connectionId), \(suites.map(\.id)))")
-        await startGate?.wait()
+        if startGates.isEmpty { await startGate?.wait() } else { await startGates.removeFirst().wait() }
         return try startResult(connectionId, pinnedFingerprint)
     }
 
@@ -132,9 +134,9 @@ final class FakeGateway: CallGateway {
         )
     }
 
-    func outgoingCall(_ connectionId: String = "conn-1", pinned: String = "") throws -> OutgoingCall {
+    func outgoingCall(_ connectionId: String = "conn-1", pinned: String = "", id: String = callId) throws -> OutgoingCall {
         OutgoingCall(
-            callId: callId, connectionId: connectionId, media: "audio", exp: at(45_000),
+            callId: id, connectionId: connectionId, media: "audio", exp: at(45_000),
             ice: CallWire.IceConfig(callId: callId, exp: at(600_000), servers: []), offered: [1], pinnedFingerprint: pinned,
             offerKey: try CallWire.newOfferKey()
         )
@@ -471,6 +473,44 @@ final class FakeGateway: CallGateway {
         await settle()
         guard case .answer(let a)? = out.last else { throw Unexpected() }
         #expect(a.sdp == "v=0 answer")
+    }
+
+    /// Two starts in flight (one abandoned, a new call placed): the first is ended by the vault, the second returns first, and the
+    /// first's key is still destroyed when it returns. Other ends in between (calls that rang, a local end) do not push it out.
+    @Test func anEndIsRememberedUntilEveryStartInFlightHasReturned() async throws {
+        let s = await signalling()
+        let second = "01JB2Z6V9K3M4N5P6Q7R8S9T51"
+        let first = Gate(), then = Gate()
+        gateway.startGates = [first, then]
+        var made: [String: OutgoingCall] = [:]
+        gateway.startResult = { [unowned self] conn, pinned in
+            let call = try outgoingCall(conn, pinned: pinned, id: conn == "conn-1" ? callId : second)
+            made[call.callId] = call
+            return call
+        }
+        gateway.acceptResult = { AcceptedCall(callId: $0.callId, sdp: "v=0 answer", keys: self.keys()) }
+        let a = Task { _ = try? await s.start(connectionId: "conn-1", sdp: "v=0", suites: [s1]) }
+        await settle()
+        let b = Task { _ = try? await s.start(connectionId: "conn-2", sdp: "v=0", suites: [s1]) }
+        await settle()
+        gateway.send(.ended(CallEnded(callId: callId, reason: "busy")))
+        // More than the four calls kept, fewer than the ids remembered.
+        for i in 0..<10 { gateway.send(.ended(CallEnded(callId: "01JB2Z6V9K3M4N5P6Q7R8S9U0\(i)", reason: "hangup"))) }
+        await settle()
+        then.open()
+        await settle()
+        await b.value
+        first.open()
+        await settle()
+        await a.value
+        let ended = try #require(made[callId]), live = try #require(made[second])
+        #expect(throws: (any Error).self, "the ended call's key is destroyed") { _ = try ended.key().seed() }
+        #expect(throws: Never.self) { _ = try live.key().seed() }
+        // Once no start is in flight, nothing is remembered: an end for no call changes nothing, and the live call still answers.
+        gateway.send(answerEvent(second))
+        await settle()
+        guard case .answer(let ans)? = out.last else { throw Unexpected() }
+        #expect(ans.callId == second)
     }
 
     /// The listen ends (the relay reconnects) between an answer that overtook `call.start` and that start's return: the answer is

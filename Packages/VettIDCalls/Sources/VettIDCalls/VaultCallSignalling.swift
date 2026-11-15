@@ -55,6 +55,8 @@ package final class VaultCallSignalling: CallSignalling {
 
     /// One call at a time: anything beyond a few is left over from calls that ended without a word.
     private static let maxKept = 4
+    /// Ids only, and only while a start is in flight: more room than ``maxKept``, so other ends cannot push a needed one out.
+    private static let maxEndedKept = 16
     /// What reading the connections again may take inside the ordered flow of events.
     private static let refreshTimeout = Duration.seconds(3)
 
@@ -227,10 +229,10 @@ package final class VaultCallSignalling: CallSignalling {
     private func forget(_ callId: String) {
         if let call = take(placed: callId) {
             call.destroy()
-        } else if starting > 0, !endedWhileStarting.contains(callId) {
+        } else if starting > 0, !ringingCalls.contains(where: { $0.callId == callId }), !endedWhileStarting.contains(callId) {
             // The vault can end the call (`busy`) before its answer to `call.start` has been read here.
             endedWhileStarting.append(callId)
-            while endedWhileStarting.count > Self.maxKept { endedWhileStarting.removeFirst() }
+            while endedWhileStarting.count > Self.maxEndedKept { endedWhileStarting.removeFirst() }
         }
         ringingCalls.removeAll { $0.callId == callId }
     }
@@ -238,6 +240,7 @@ package final class VaultCallSignalling: CallSignalling {
     package func start(connectionId: String, sdp: String, suites: [MediaSuite]) async throws -> PlacedCall {
         starting += 1
         let call: OutgoingCall
+        let endedAlready: Bool
         do {
             let fingerprint: String
             do {
@@ -247,10 +250,14 @@ package final class VaultCallSignalling: CallSignalling {
                 throw CallRefusedError(code: "not_found")
             }
             call = try await gateway.start(connectionId: connectionId, pinnedFingerprint: fingerprint, sdp: sdp, suites: suites)
-            placed.append((call.callId, call))
-            while placed.count > Self.maxKept { placed.removeFirst().call.destroy() }
-            // Ended before this start returned: not kept, and its key destroyed now (the machine ends it from the held event).
-            if endedWhileStarting.contains(call.callId) { forget(call.callId) }
+            endedAlready = endedWhileStarting.contains(call.callId)
+            if endedAlready {
+                // Ended before this start returned: not kept, and its key destroyed now (the machine ends it from the held event).
+                call.destroy()
+            } else {
+                placed.append((call.callId, call))
+                while placed.count > Self.maxKept { placed.removeFirst().call.destroy() }
+            }
         } catch let e as VaultOpError {
             endStart()
             throw CallRefusedError(code: e.code)
@@ -262,9 +269,8 @@ package final class VaultCallSignalling: CallSignalling {
             throw error
         }
         let held = endStart()
-        // An answer that overtook the vault's answer to `call.start`: checked now, as any answer (one for a call already ended
-        // finds nothing).
-        for h in held where h.callId == call.callId {
+        // An answer that overtook the vault's answer to `call.start`: checked now, as any answer (none for a call already ended).
+        for h in held where !endedAlready && h.callId == call.callId {
             if let a = await check(answer: h.message, callId: h.callId) { emitLate(a) }
         }
         return PlacedCall(callId: call.callId, exp: call.exp, servers: call.ice.servers)
