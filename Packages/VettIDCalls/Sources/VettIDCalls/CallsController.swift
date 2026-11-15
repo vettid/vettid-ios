@@ -324,6 +324,16 @@ package final class CallsController {
         }
     }
 
+    /// Waits (at most ``lockWait``) until the hang-ups handed to the vault are with the relay. Only waits: a call that rings or goes on
+    /// is left alone (the end of one call may ring the connection's held offer in the same turn).
+    package func waitForPendingEnds() async {
+        let deadline = clock.elapsedMs() + Self.lockWait.wholeMilliseconds
+        while machine.pendingEnds > 0 {
+            if clock.elapsedMs() >= deadline { return }
+            do { try await clock.sleep(for: Self.pollEvery) } catch { return }
+        }
+    }
+
     private func startProbe() {
         probeGeneration += 1
         let generation = probeGeneration

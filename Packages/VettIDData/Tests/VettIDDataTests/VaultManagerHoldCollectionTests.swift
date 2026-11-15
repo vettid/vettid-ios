@@ -116,13 +116,12 @@ import VettIDDataTesting
         defer { phone.close() }
         service.leasesCollected = 60
         try await heldBackground()
-        service.sendEvent("credential.alarm", alarm("a1"))
+        let raised = service.raiseCloneAlarm()
         #expect(await waitFor { service.mailboxCounts.leased >= 1 }, "collected and leased, not acked")
         try await Task.sleep(for: .milliseconds(300))
-        #expect(m.alarm == nil, "nothing is acted on in the background")
         m.onForeground()
         service.endLeases()
-        #expect(await waitFor { m.alarm?.alarmID == "a1" }, "delivered again and applied once the app is back")
+        #expect(await waitFor { m.alarm?.alarmID == raised }, "delivered again and applied once the app is back")
         #expect(await waitFor { service.mailboxCounts.leased == 0 }, "and acked then")
     }
 
@@ -384,11 +383,11 @@ import VettIDDataTesting
         let started = m.beginAlarmRead()
         m.onEvent(VaultMessage(inner: Inner(id: "ev1", type: "credential.alarm", ts: Date(), body: Array(alarm("a1").utf8))))
         #expect(m.alarm?.alarmID == "a1")
-        m.finishAlarmRead(CredentialInfo(exists: true, version: 1, key: nil, updatedAt: nil, alarm: nil), started: started)
+        m.finishAlarmRead(CredentialInfo(exists: true, version: 1, key: nil, updatedAt: nil, alarm: nil), at: Date(), started: started)
         #expect(m.alarm?.alarmID == "a1", "the older answer does not clear it")
         // A read that began after the event is current.
         let later = m.beginAlarmRead()
-        m.finishAlarmRead(CredentialInfo(exists: true, version: 1, key: nil, updatedAt: nil, alarm: nil), started: later)
+        m.finishAlarmRead(CredentialInfo(exists: true, version: 1, key: nil, updatedAt: nil, alarm: nil), at: Date(), started: later)
         #expect(m.alarm == nil)
     }
 

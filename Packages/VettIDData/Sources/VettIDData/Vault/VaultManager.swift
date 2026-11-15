@@ -216,7 +216,12 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
     /// again when the app is back in the foreground (``onForeground()``).
     @ObservationIgnored var eventsMissedWhileHeld = false
     /// ``onBackground(budget:)`` is doing its work (a hold decided at its start waits for it to end).
-    @ObservationIgnored var backgroundWorking = false
+    @ObservationIgnored var backgroundWorks = 0
+    /// The leaving of the foreground in hand has been counted in ``moveFlags`` (a held background counts when it begins).
+    @ObservationIgnored var backgroundCounted = false
+    /// The vault's time at the foreground's read of the lists, and until when (the phone's clock) the events older than it are
+    /// dropped when they come back: the read covers them (``supersededByReread(_:)``).
+    @ObservationIgnored var listsReadAt: (vault: Date, until: Date)?
     /// The `ts` of the newest alarm event applied (or the earliest a read made one stale): an older one, redelivered late, is dropped.
     @ObservationIgnored var alarmEventAt: Date?
     /// The events a held background did not handle, in arrival order, in memory only (IOS-PLAN §6.9): replayed through

@@ -107,6 +107,7 @@ extension VaultManager {
     func forgetOpenLists() {
         clearHeldEvents()
         alarmEventAt = nil
+        listsReadAt = nil
         forgetOwnProfile()
         forgetHeld()
         connections.forgetAuthentication()

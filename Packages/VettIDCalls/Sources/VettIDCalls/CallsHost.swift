@@ -66,7 +66,8 @@ package final class CallsRuntime {
             for await t in transitions {
                 if case .live = t.state { continue }
                 // The hang-up of this call is with the relay first (bounded, as before a lock): the collection stops with the call.
-                await controller?.endCallBeforeLock()
+                // (It only waits: the end of this call may ring the connection's held offer in the same turn, which a lock's end would hang up.)
+                await controller?.waitForPendingEnds()
                 // The vault's collection no longer needs to run on in the background (``VaultManager/holdCollection(_:)``).
                 notLive()
                 guard case .ended(let e) = t.state, !CallTexts.staysOpen(e.reason) else { continue }
