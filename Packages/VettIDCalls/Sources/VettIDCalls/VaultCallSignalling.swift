@@ -43,9 +43,12 @@ package final class VaultCallSignalling: CallSignalling {
     /// Calls ended (`call.end`, by the vault or here) for no placed call while one was being started: the call being started may
     /// be one of them, and its ephemeral key is then destroyed as soon as it is known (rule 3).
     private var endedWhileStarting: [String] = []
-    /// More ends than ``maxEndedKept`` came while a start was in flight, so an id may have been lost: no call returned before
-    /// every start in flight has returned is kept.
-    private var endedOverflowed = false
+    /// Starts begun since the process started: each start's number.
+    private var startsBegun = 0
+    /// More ends than ``maxEndedKept`` came while starts were in flight, so an id may have been lost: the starts numbered up
+    /// to this one (those in flight then) keep no call they return. A start begun later cannot be the lost end's call, since
+    /// the vault ended that one before this start's `call.start` was sent.
+    private var lostForStartsUpTo = 0
     private var sink: AsyncThrowingStream<SignalEvent, Error>.Continuation?
     /// Which listen ``sink`` feeds, so that an older one ending does not drop a newer one.
     private var listen = 0
@@ -59,7 +62,7 @@ package final class VaultCallSignalling: CallSignalling {
     /// One call at a time: anything beyond a few is left over from calls that ended without a word.
     private static let maxKept = 4
     /// Ids only, and only while a start is in flight. Unlike ``heldAnswers`` (which keeps the first ones: an answer that overtook
-    /// a start comes right after it), the newest are kept, and losing an older one is covered by ``endedOverflowed``.
+    /// a start comes right after it), the newest are kept, and losing an older one is covered by ``lostForStartsUpTo``.
     private static let maxEndedKept = 16
     /// What reading the connections again may take inside the ordered flow of events.
     private static let refreshTimeout = Duration.seconds(3)
@@ -238,7 +241,7 @@ package final class VaultCallSignalling: CallSignalling {
             endedWhileStarting.append(callId)
             if endedWhileStarting.count > Self.maxEndedKept {
                 endedWhileStarting.removeFirst()
-                endedOverflowed = true
+                lostForStartsUpTo = startsBegun
             }
         }
         ringingCalls.removeAll { $0.callId == callId }
@@ -246,8 +249,11 @@ package final class VaultCallSignalling: CallSignalling {
 
     package func start(connectionId: String, sdp: String, suites: [MediaSuite]) async throws -> PlacedCall {
         starting += 1
+        startsBegun += 1
+        let mine = startsBegun
         let call: OutgoingCall
         let endedAlready: Bool
+        let endLost: Bool
         do {
             let fingerprint: String
             do {
@@ -257,10 +263,12 @@ package final class VaultCallSignalling: CallSignalling {
                 throw CallRefusedError(code: "not_found")
             }
             call = try await gateway.start(connectionId: connectionId, pinnedFingerprint: fingerprint, sdp: sdp, suites: suites)
-            endedAlready = endedOverflowed || endedWhileStarting.contains(call.callId)
+            let remembered = endedWhileStarting.contains(call.callId)
+            endLost = !remembered && mine <= lostForStartsUpTo
+            endedAlready = remembered || endLost
             if endedAlready {
-                // Ended before this start returned (or it may have been): not kept, and its key destroyed now. The machine ends it
-                // from the held event; a call whose end was lost to the overflow gets no answer, and rings out.
+                // Ended before this start returned, or it may have been: not kept, and its key destroyed now. A remembered end
+                // is in the machine's held events, which end the call; for one that may have been lost, see below.
                 call.destroy()
             } else {
                 placed.append((call.callId, call))
@@ -277,6 +285,12 @@ package final class VaultCallSignalling: CallSignalling {
             throw error
         }
         let held = endStart()
+        if endLost {
+            // Its end may have been lost, and it can no longer be answered: it is ended at the vault, and the machine shows it
+            // failed now (it has no call id to end it with when `start` throws), rather than ringing out.
+            try? await gateway.end(call.callId, reason: CallReason.failed)
+            throw CallRefusedError(code: CallReason.failed)
+        }
         // An answer that overtook the vault's answer to `call.start`: checked now, as any answer (none for a call already ended).
         for h in held where !endedAlready && h.callId == call.callId {
             if let a = await check(answer: h.message, callId: h.callId) { emitLate(a) }
@@ -291,7 +305,7 @@ package final class VaultCallSignalling: CallSignalling {
         if starting == 0 {
             heldAnswers.removeAll()
             endedWhileStarting.removeAll()
-            endedOverflowed = false
+            lostForStartsUpTo = 0
         }
         return held
     }
