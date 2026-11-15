@@ -8,7 +8,7 @@ import VettIDShellUI
 extension ConversationCallHistory {
     init(_ history: CallHistory) {
         self.init(
-            calls: history.entries.compactMap { e in
+            calls: history.entries.map { e in
                 ConversationCall(
                     callId: e.callId, outgoing: e.outgoing, outcome: ConversationCallOutcome(e.outcome), startedAt: e.startedAt,
                     duration: e.duration.map { Double($0.components.seconds) + Double($0.components.attoseconds) / 1e18 }

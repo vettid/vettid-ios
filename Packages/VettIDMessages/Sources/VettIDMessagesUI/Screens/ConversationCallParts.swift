@@ -30,7 +30,10 @@ struct CallEntry: View {
 
     var body: some View {
         HStack(spacing: Spacing.xs) {
-            (call.outgoing ? VettIDSymbol.callMade : VettIDSymbol.callReceived).image.scaledIcon(size: 16)
+            // SF Symbols' phone arrows do not mirror by themselves; Android's are auto-mirrored.
+            (call.outgoing ? VettIDSymbol.callMade : VettIDSymbol.callReceived).image
+                .flipsForRightToLeftLayoutDirection(true)
+                .scaledIcon(size: 16)
                 .foregroundStyle(colors.onSurfaceVariant)
                 .accessibilityHidden(true)
             Text(Self.text(call)).vettIDFont(.labelMedium).foregroundStyle(colors.onSurfaceVariant)

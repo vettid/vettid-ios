@@ -16,13 +16,25 @@ final class FakeConversationCalls {
     @ObservationIgnored var history = ConversationCallHistory()
     @ObservationIgnored private(set) var reads: [String] = []
     @ObservationIgnored private(set) var called: [String] = []
+    /// While true, a read waits for ``release()``.
+    @ObservationIgnored var holding = false
+    @ObservationIgnored private var waiting: [CheckedContinuation<Void, Never>] = []
+
+    func release() {
+        holding = false
+        let all = waiting
+        waiting = []
+        for c in all { c.resume() }
+    }
 
     var calls: ConversationCalls {
         ConversationCalls(
             availability: { [self] in availability },
             history: { [self] id in
                 reads.append(id)
-                return history
+                let answer = history
+                if holding { await withCheckedContinuation { waiting.append($0) } }
+                return answer
             },
             call: { [self] id in called.append(id) }
         )
@@ -131,11 +143,11 @@ final class FakeConversationCalls {
         #expect(m.state.rows.map(\.id) == ["call-early", "m1", "call-between", "m2", "call-late"])
     }
 
-    /// A call at the same moment as a message goes after it; messages alone keep the vault's order.
+    /// A call at the same moment as a message goes after it; messages are sorted by time too.
     @Test func orderOfRows() {
         let a = Samples.message("a", at: Self.t0.timeIntervalSince1970 + 5)
         let b = Samples.message("b", at: Self.t0.timeIntervalSince1970)
-        #expect(CallEntries.rows([a, b], []).map(\.id) == ["a", "b"])
+        #expect(CallEntries.rows([a, b], []).map(\.id) == ["b", "a"], "messages by time always, as Android")
         let rows = CallEntries.rows([a, b], [call("x", at: 5), call("y", at: 0)])
         #expect(rows.map(\.id) == ["b", "call-y", "a", "call-x"])
         #expect(CallEntries.rows([], [call("x", at: 5)], notBefore: Self.t0.addingTimeInterval(6)).isEmpty)
@@ -207,5 +219,55 @@ final class FakeConversationCalls {
         fake.availability = .ready
         let m = await model()
         #expect(!"\(m.state)".contains("secret-call-id") && !String(reflecting: m.state).contains("secret-call-id"))
+    }
+
+    // MARK: leaving and changing mid-read
+
+    /// A model dropped with its re-read waiting is not kept alive by it, and sends no second read.
+    @Test func leavingTheScreenEndsTheReReadAndFreesTheModel() async {
+        fake.availability = .ready
+        weak var weakModel: ConversationViewModel?
+        do {
+            let m = ConversationViewModel(
+                connectionID: "c1", messages: messages, connections: connections, calls: fake.calls, historyAgain: .seconds(30)
+            )
+            weakModel = m
+            for _ in 0..<50 { await Task.yield() }
+            #expect(fake.reads == ["c1"])
+        }
+        for _ in 0..<50 { await Task.yield() }
+        #expect(weakModel == nil, "the re-read does not hold the model")
+        #expect(fake.reads == ["c1"], "and sends no second call.list")
+    }
+
+    /// A read in flight when the vault locks, or a call starts, does not put its answer in the list.
+    @Test func aReadInFlightWhenTheAvailabilityChangesIsDropped() async {
+        fake.history = ConversationCallHistory(calls: [call("k1")], someNotShown: true)
+        fake.holding = true
+        fake.availability = .ready
+        let m = await modelNotSettled()
+        fake.availability = .unavailable // a lock, mid-read
+        for _ in 0..<20 { await Task.yield() }
+        fake.release()
+        await m.settle()
+        #expect(m.state.calls.isEmpty && !m.state.callsNotShown)
+
+        // A call starting mid-read: the list stays as it was (empty here), not filled by the read dropped.
+        fake.holding = true
+        fake.availability = .ready
+        for _ in 0..<20 { await Task.yield() }
+        fake.availability = .inCall
+        for _ in 0..<20 { await Task.yield() }
+        fake.release()
+        await m.settle()
+        #expect(m.state.calls.isEmpty && !m.state.callsNotShown)
+    }
+
+    func modelNotSettled() async -> ConversationViewModel {
+        let m = ConversationViewModel(
+            connectionID: "c1", messages: messages, connections: connections, calls: fake.calls, historyAgain: .zero
+        )
+        for _ in 0..<20 { await Task.yield() }
+        return m
     }
 }

@@ -183,7 +183,6 @@ public final class ConversationViewModel {
     deinit {
         work.cancelAll()
         follows.cancelAll()
-        historyTask?.cancel()
         // Leaving the conversation is a Cancel: an upload not sent is discarded at the vault, the prepared photos wiped.
         photoHold.release(attachments)
     }
@@ -207,18 +206,19 @@ public final class ConversationViewModel {
         switch a {
         case .ready:
             let (id, again) = (connectionID, historyAgain)
+            // `self` is never held across a suspension: leaving the screen ends the read and the re-read.
             historyTask = work.launch { [weak self] in
                 let h = await calls.history(id)
-                guard !Task.isCancelled, let self else { return }
-                local.calls = h.calls
-                local.callsNotShown = h.someNotShown
+                guard !Task.isCancelled else { return }
+                self?.local.calls = h.calls
+                self?.local.callsNotShown = h.someNotShown
                 // Read at the moment a call ends, the vault may not have taken its `call.end` yet: the call would stay going on
                 // in the list. Once more, a moment later (not if the availability changed meanwhile).
                 do { try await Task.sleep(for: again) } catch { return }
                 let later = await calls.history(id)
                 guard !Task.isCancelled else { return }
-                local.calls = later.calls
-                local.callsNotShown = later.someNotShown
+                self?.local.calls = later.calls
+                self?.local.callsNotShown = later.someNotShown
             }
         case .unavailable:
             // Locked, not asked yet, or a vault without calls: nothing of the vault's history stays in memory. During a call

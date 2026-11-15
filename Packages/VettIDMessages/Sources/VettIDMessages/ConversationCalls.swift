@@ -116,8 +116,6 @@ public enum CallEntries {
     /// messages remain in the vault the list starts at its oldest loaded message, so a call before it is left out (it would
     /// hang above the messages with nothing around it); it comes back with the older page.
     public static func rows(_ messages: [MessageInfo], _ calls: [ConversationCall], notBefore: Date? = nil) -> [ConversationRow] {
-        // Without calls the messages keep the vault's order.
-        if calls.isEmpty { return messages.map(ConversationRow.message) }
         let shown = calls.filter { call in notBefore.map { call.startedAt >= $0 } ?? true }
         let all = messages.map(ConversationRow.message) + shown.map(ConversationRow.call)
         // `sorted` is not stable: the index keeps ties in order.
