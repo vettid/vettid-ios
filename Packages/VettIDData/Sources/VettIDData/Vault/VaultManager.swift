@@ -196,6 +196,9 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
     @ObservationIgnored var foregrounds = 0
     /// The app left the foreground and its background work stopped the collection.
     @ObservationIgnored var backgrounded = false // false at launch: matters once the app launches in the background (phase P)
+    /// In the background, or in one a call holds (``heldBackground``): nothing is read that nobody asked for, and a session that is
+    /// opened collects only for the call.
+    var inBackground: Bool { backgrounded || heldBackground != nil }
     /// Whether something that lives past the foreground (a live call, ``holdCollection(_:)``) needs the collection to go on.
     @ObservationIgnored var collectionHeld: (@MainActor () -> Bool)?
     /// The ``foregrounds`` count of a leaving of the foreground that was finished but for the collection's stop, which a hold kept
@@ -212,6 +215,15 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
     /// Events that were not handled while a call held the collection in the background (``heldBackground``): the lists are read
     /// again when the app is back in the foreground (``onForeground()``).
     @ObservationIgnored var eventsMissedWhileHeld = false
+    /// ``onBackground(budget:)`` is doing its work (a hold decided at its start waits for it to end).
+    @ObservationIgnored var backgroundWorks = 0
+    /// The leaving of the foreground in hand has been counted in ``moveFlags`` (a held background counts when it begins).
+    @ObservationIgnored var backgroundCounted = false
+    /// The vault's time at the foreground's read of the lists, and until when (the phone's clock) the events older than it are
+    /// dropped when they come back: the read covers them (``supersededByReread(_:)``).
+    @ObservationIgnored var listsReadAt: (vault: Date, until: Date)?
+    /// The `ts` of the newest alarm event applied (or the earliest a read made one stale): an older one, redelivered late, is dropped.
+    @ObservationIgnored var alarmEventAt: Date?
     /// The events a held background did not handle, in arrival order, in memory only (IOS-PLAN §6.9): replayed through
     /// ``onEvent(_:)`` when the app is back in the foreground, and cleared with anything that ends the open vault.
     @ObservationIgnored var heldEvents: [VaultMessage] = []
@@ -428,7 +440,7 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
         s.device.setFlushGate { @MainActor [weak self] in self.map { !$0.lockGuard.pending } ?? false }
         // In the background nothing starts the collection again (a lock's retry opens the session): the return to the
         // foreground does (IOS-PLAN §6.6).
-        if !backgrounded { s.device.start() }
+        startUnlessBackground(s.device)
         observe(s)
         // A start or a reconnection: a change whose answer was lost is decided first (§11.14.9 step 2).
         kickChangeCheck()

@@ -345,7 +345,7 @@ extension VaultManager: MoveRepository {
         memberVault.set(recorded: record.value.vaultID)
         usesPhoneSecret = phoneSecrets.inUse
         // The answers of the take-over come over the mailbox: it is collected (not in the background, where nothing starts it).
-        if !backgrounded { d.start() }
+        startUnlessBackground(d)
         try await openApi(s).credentialTakeOver()
         // The pending epoch-1 record is this phone's secret now: it stays until the first unlock confirms it.
         _ = try? record.update(since: record.generation) {

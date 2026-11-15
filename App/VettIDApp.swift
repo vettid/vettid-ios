@@ -85,7 +85,10 @@ struct RootView: View {
             #endif
         }
         // The calls' own window: the call screen and the microphone dialogs over everything but the app lock (IOS-PLAN §6.6).
-        .callsWindow(composition.calls, themeMode: themeMode)
+        .callsWindow(
+            composition.calls, themeMode: themeMode,
+            hiddenFromAccessibility: composition.appLock.state == .locked || composition.appLock.state == .pending
+        )
         // The app lock's settings could not be read at launch (the iPhone not unlocked since it started): read again.
         .onChange(of: scenePhase) { _, now in if now == .active { composition.startAppLock() } }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.protectedDataDidBecomeAvailableNotification)) { _ in

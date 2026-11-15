@@ -207,6 +207,60 @@ final class FakeAppVault: CallsAppVault {
         await waiter.value
     }
 
+    /// Your own hang-up in the background: the vault's collection is let go only once the hang-up is with the relay (bounded), not as
+    /// soon as the call is over on this phone.
+    @Test func theCollectionIsLetGoOnlyAfterTheHangUpIsWithTheRelay() async throws {
+        let h = host()
+        h.start()
+        vault.inner.setUnlocked(true)
+        await settle()
+        try await activeCall(h)
+        let gate = Gate()
+        vault.inner.gatewayFake.endGate = gate
+        let before = vault.holdsEnded
+        h.hangUp()
+        await clock.advance(by: 500)
+        #expect(vault.holdsEnded == before, "the hang-up is not with the relay yet")
+        gate.open()
+        await settle()
+        #expect(vault.holdsEnded > before, "let go once it is")
+    }
+
+    /// A call that ends and rings the connection's held offer in the same turn (a glare): the offer keeps ringing; the end of the first
+    /// is not taken for a lock's.
+    @Test func theEndOfACallDoesNotHangUpTheGlareOfferThatRingsNext() async throws {
+        let h = host()
+        h.start()
+        vault.inner.setUnlocked(true)
+        await settle()
+        let gateway = vault.inner.gatewayFake
+        gateway.startResult = { _, _ in
+            OutgoingCall(
+                callId: callId, connectionId: "conn-1", media: "audio", exp: at(45_000),
+                ice: CallWire.IceConfig(callId: callId, exp: at(600_000), servers: []), offered: [1], pinnedFingerprint: "",
+                offerKey: try CallWire.newOfferKey()
+            )
+        }
+        gateway.incomingResult = { _ in
+            IncomingCall(
+                callId: glareId, connectionId: "conn-1", media: "audio", sdp: "v=0\r\n", exp: at(45_000), ringFor: 45,
+                ice: CallWire.IceConfig(callId: glareId, exp: at(600_000), servers: []),
+                negotiated: try CallMedia.Negotiated(chosen: .aes128Gcm, offered: [1]), ek: [UInt8](repeating: 0, count: 1216)
+            )
+        }
+        h.call("conn-1")
+        await settle()
+        let body = #"{"connection_id":"conn-1","call_id":"\#(glareId)"}"#
+        let offer = Inner(id: "01JB2Z6V9K3M4N5P6Q7R8S9T62", type: "call.offer", ts: t0, body: Array(body.utf8))
+        gateway.send(.offer(VaultMessage(inner: offer)))
+        await settle()
+        gateway.send(.ended(CallEnded(callId: callId, reason: CallReason.decline)))
+        await settle()
+        guard case .live(let l) = h.uiState.call else { throw WrongState(state: h.uiState.call) }
+        #expect(l.phase == .incoming && l.callId == glareId, "the offer rings on")
+        #expect(!gateway.asked.contains { $0.hasPrefix("end(\(glareId)") }, "and is not ended as a lock's")
+    }
+
     @Test func aLockTellsTheVaultNoCallHoldsTheCollection() async {
         let h = host()
         h.start()
