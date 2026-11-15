@@ -47,10 +47,22 @@ extension CallMachine {
     /// the vault was answering is ended as hung up, as ``onPlaced(_:seq:call:atMs:)`` does.
     func onLost(_ s: CallSession?, seq: Int, callId: String) {
         if let s, s.seq == seq {
-            // A call that lost a glare was ended by the vault already.
-            guard s.supersededBy == nil else { return }
+            // The machine may hold the vault's own end for it (it keeps more early events than the signalling keeps ends): that
+            // end says how the call ended (`busy`, a glare's winner), as for a placed call (``onPlaced(_:seq:call:atMs:)``).
+            // Nothing else held is of use: the call has no key, and its media never started.
+            let early = s.early
+            s.early.removeAll()
             s.callId = callId
-            finish(s, .failed, CallReason.failed)
+            s.phase = .calling
+            for e in early {
+                if case .answer(let a) = e {
+                    a.keys.wipe()
+                } else if case .end = e, session === s, s.supersededBy == nil {
+                    onSignal(s, e)
+                }
+            }
+            // Ended by none of them, and not waiting for a glare's winner: it fails now.
+            if session === s, s.supersededBy == nil { finish(s, .failed, CallReason.failed) }
         } else if let i = abandoned.firstIndex(of: seq) {
             abandoned.remove(at: i)
             sendEnd(callId, CallReason.hangup)

@@ -47,4 +47,39 @@ extension CallMachineTests {
         #expect(signalling.sent.filter { $0.hasPrefix("end") } == ["end(\(callId), hangup)"])
         #expect(try ended(m).reason == .hungUp, "the ended call is not shown failed after the fact")
     }
+
+    /// The vault's own end for the lost call is held by the machine (it came before `call.start` was answered): it says how
+    /// the call ended, and nothing more is sent.
+    @Test func aLostCallEndedByAHeldEndShowsThatEnd() async throws {
+        let m = machine()
+        signalling.holdStart()
+        m.call("conn-1")
+        await runCurrent()
+        signalling.deliver(.end(callId: callId, reason: CallReason.decline))
+        await runCurrent()
+        signalling.startResult = { throw CallLostError(callId: callId) }
+        signalling.releaseStart()
+        await runCurrent()
+        let e = try ended(m)
+        #expect(e.reason == .declined && e.callId == callId)
+        #expect(!hasSent(signalling, "end("), "the vault ended it")
+    }
+
+    /// The held end is a glare's, and the winner's offer is held too: the winning call is answered, as for a placed call.
+    @Test func aLostCallThatLostAGlareAnswersTheWinner() async throws {
+        let m = machine()
+        signalling.holdStart()
+        m.call("conn-1")
+        await runCurrent()
+        signalling.deliver(offer(glareId))
+        signalling.deliver(.end(callId: callId, reason: CallReason.busy, supersededBy: glareId))
+        await runCurrent()
+        signalling.startResult = { throw CallLostError(callId: callId) }
+        signalling.releaseStart()
+        await runCurrent()
+        let l = try live(m)
+        #expect(l.direction == .incoming && l.callId == glareId)
+        #expect(signalling.sent.contains("answer(\(glareId))"))
+        #expect(!hasSent(signalling, "end("), "nothing sent for the lost call")
+    }
 }
