@@ -207,4 +207,64 @@ extension VaultManagerHoldCollectionTests {
         m.finishAlarmRead(info, at: Date(), started: started)
         #expect(m.alarm?.alarmID == "a9" && m.unlockWindow == nil)
     }
+
+    // MARK: marks as each list answers
+
+    /// A redelivered request that arrives after the requests read answered, but before the other reads are over, is dropped: the
+    /// mark is set where that read answers, not at the end of them all.
+    @Test func aMarkIsSetAsItsOwnReadAnswersNotAtTheEnd() async throws {
+        defer { phone.close() }
+        try await openVault()
+        var droppedWhileOthersRun = false
+        var finished = false
+        let at = Date()
+        let itemsBefore = seen("item.list")
+        m.refreshListsQuietly { [m] list in
+            m.listMarks[list] = (at, Date().addingTimeInterval(120))
+            guard list == .requests else { return }
+            // Right after the requests answered: the feed, the conversations and the items are still to be read.
+            let stale = VaultMessage(inner: Inner(
+                id: "late", type: "connection.request.pending", ts: at.addingTimeInterval(-1),
+                body: Array(#"{"pending_id":"late","sas":"042817"}"#.utf8)
+            ))
+            m.onEvent(stale)
+            // The items are read last: not yet asked for when the requests answered.
+            droppedWhileOthersRun = !finished && seen("item.list") == itemsBefore && !m.connections.requests.contains { $0.id == "late" }
+        }
+        await m.listsRead?.value
+        finished = true
+        #expect(droppedWhileOthersRun, "dropped between the requests' answer and the end of the other reads")
+    }
+
+    /// A requests read that was not applied (the requests were forgotten meanwhile) reports so: no mark.
+    @Test func aRequestsReadThatWasNotAppliedIsNotCoverage() async throws {
+        defer { phone.close() }
+        try await openVault()
+        let read = Task { @MainActor in try await m.connections.refreshRequests(quietly: true) }
+        await Task.yield()
+        m.connections.forgetOpenVault()
+        let applied = try await read.value
+        #expect(!applied, "forgotten while it was read: nothing was applied")
+        let again = try await m.connections.refreshRequests(quietly: true)
+        #expect(again, "a read that is applied says so")
+    }
+
+    // MARK: the presenter
+
+    /// The read at the foreground answers without a presenter; the redelivered alarm event, dropped as older, still gives it.
+    @Test func aDroppedAlarmEventStillGivesItsPresenter() async throws {
+        defer { phone.close() }
+        try await openVault()
+        let started = m.beginAlarmRead()
+        let info = CredentialInfo(
+            exists: true, version: 1, key: nil, updatedAt: nil, alarm: CredentialAlarmInfo(alarmID: "a1", state: "frozen", at: nil)
+        )
+        m.finishAlarmRead(info, at: Date(), started: started)
+        #expect(m.alarm?.alarmID == "a1" && m.alarm?.presenter == nil)
+        let body = #"{"alarm_id":"a1","state":"frozen","presenter":"other"}"#
+        m.onEvent(VaultMessage(inner: Inner(
+            id: "e1", type: "credential.alarm", ts: Date().addingTimeInterval(-60), body: Array(body.utf8)
+        )))
+        #expect(m.alarm?.state == "frozen" && m.alarm?.presenter == "other", "the state follows the order; the presenter is the event's")
+    }
 }

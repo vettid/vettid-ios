@@ -463,15 +463,13 @@ public final class ApprovalsManager: ApprovalsRepository {
         }
     }
 
-    /// Set by ``refreshApprovals(quietly:requests:)``: empty until a read answers.
-    @ObservationIgnored var lastCoverage = ReadCoverage()
-
     /// [requests] false: the connection requests are read by the caller. What was read is shown even when another list
     /// failed; then that list's failure is thrown, so that the screen does not say there is nothing to approve when it
     /// could not tell. A list the vault does not have (an older release) is no failure; the open asks' failure is
     /// ``openAsksError``.
-    func refreshApprovals(quietly: Bool, requests: Bool = true) async throws {
-        lastCoverage = ReadCoverage()
+    /// [covered]: told what this read's own lists answered, when the read was applied (not when the vault was locked, held or wiped
+    /// meanwhile).
+    func refreshApprovals(quietly: Bool, requests: Bool = true, covered: (@MainActor (ReadCoverage) -> Void)? = nil) async throws {
         rereadDeviceSessions()
         let g = generation
         let since = changes
@@ -495,7 +493,7 @@ public final class ApprovalsManager: ApprovalsRepository {
         case .failed(let kind): openAsksError = kind
         case .answered, .unsupported: openAsksError = nil
         }
-        lastCoverage = ReadCoverage(lists, pending.result)
+        covered?(ReadCoverage(lists, pending.result))
         let changed = { (key: String) in (self.changedAt[key] ?? 0) > since }
         // A list the vault did not answer covers nothing: what was known of it stays (VAULT-MESSAGING 0.55.7 §10.12).
         let next = mergedWithChanges(lists.approvals(at: t), since: since, changed: changed) + listed.filter { !lists.covers($0) }

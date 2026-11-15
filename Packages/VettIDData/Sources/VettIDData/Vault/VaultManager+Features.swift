@@ -119,32 +119,33 @@ extension VaultManager {
     /// profile, the connections and the requests, the approvals' lists, the feed, then the conversations (one request per connection, last, so that asks
     /// that expire are not kept waiting behind them), the items and the votes are read again, one after the other; failures are left
     /// for the screens.
-    /// [onDone]: told, when the reads are over and no newer one began, which of the lists whose events are patches answered.
-    func refreshListsQuietly(onDone: (@MainActor (_ answered: Set<ReReadList>) -> Void)? = nil) {
+    /// [onAnswered]: told of each list whose events are patches, the moment its own read answered and was applied (and no newer read
+    /// of the lists began, and the vault is still open): a list that failed, or that the vault does not have, is not told.
+    func refreshListsQuietly(onAnswered: (@MainActor (_ list: ReReadList) -> Void)? = nil) {
         listsReads += 1
         let reads = listsReads
         listsRead = Task { [weak self] in
             guard let self else { return }
-            var answered: Set<ReReadList> = []
+            @MainActor func answered(_ list: ReReadList) {
+                if listsReads == reads, phase == .unlocked { onAnswered?(list) }
+            }
             profiles.refreshQuietly()
             try? await connections.refresh(quietly: true)
             do {
-                try await connections.refreshRequests(quietly: true)
-                answered.insert(.requests)
+                if try await connections.refreshRequests(quietly: true) { answered(.requests) }
             } catch {}
-            try? await approvals.refreshApprovals(quietly: true, requests: false)
             // What each approvals list answered (a list the vault does not have, or that failed, covers nothing).
-            let covered = approvals.lastCoverage
-            if covered.pending { answered.insert(.approvals) }
-            if covered.grant { answered.insert(.grants) }
-            if covered.share { answered.insert(.shares) }
-            if covered.critical { answered.insert(.critical) }
+            try? await approvals.refreshApprovals(quietly: true, requests: false) { covered in
+                if covered.pending { answered(.approvals) }
+                if covered.grant { answered(.grants) }
+                if covered.share { answered(.shares) }
+                if covered.critical { answered(.critical) }
+            }
             await feed.openNow()
             await messages.refreshConversationsQuietly()
             // The items last (chosen; not in the spec: vettid-android reads them beside the others): nothing that expires
             // waits behind them, and no screen needs them before the member opens the Vault.
             try? await items.refresh(quietly: true)
-            if listsReads == reads, phase == .unlocked { onDone?(answered) }
             // The votes after the items (chosen; not in the spec): nothing that expires within minutes waits on them.
             await votes.openNow()
             // Then the public site, and every hour while the vault stays open (not when a lock, a hold or a newer read came

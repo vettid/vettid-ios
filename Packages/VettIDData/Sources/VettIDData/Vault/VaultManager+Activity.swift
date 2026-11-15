@@ -72,6 +72,7 @@ extension VaultManager {
     /// (``refreshAfterHold()``, or this phone's own check's ``refreshListsQuietly()``). Reads on their way are not
     /// published.
     func forgetHeld() {
+        listMarks = [:]
         items.clear()
         sharing.clear()
         connections.forgetOpenVault(keepingAuthentication: true)
