@@ -750,6 +750,9 @@ if [[ ${SELF_TEST} -eq 1 ]]; then
       xcrun clang -fobjc-arc -dynamiclib -framework Foundation -undefined dynamic_lookup -o "${dir}/VettID.app/${where}/Planted" \
         "${dir}/planted.m"
       strip -x "${dir}/VettID.app/${where}/Planted"
+    elif [[ "${language}" == swift ]]; then
+      xcrun swiftc -emit-library -module-cache-path "${dir}/module-cache" -o "${dir}/VettID.app/${where}/Planted" "${dir}/planted.swift"
+      strip -x "${dir}/VettID.app/${where}/Planted"
     else
       xcrun clang -dynamiclib -undefined dynamic_lookup -o "${dir}/VettID.app/${where}/Planted" "${dir}/planted.c"
     fi
@@ -786,6 +789,15 @@ if [[ ${SELF_TEST} -eq 1 ]]; then
 @implementation Tap
 - (void)renderPCMBuffer:(id)buffer { (void)buffer; }
 @end' Frameworks/Planted.framework m
+    # The same adoption by a Swift class (as the app's code would write one): its protocol list keeps the name too.
+    plant_logging "${config}" "a Swift class adopting RTCAudioRenderer" \
+      'import Foundation
+@objc(RTCAudioRenderer) protocol RTCAudioRenderer: NSObjectProtocol {
+    func renderPCMBuffer(_ buffer: Any)
+}
+final class Tap: NSObject, RTCAudioRenderer {
+    func renderPCMBuffer(_ buffer: Any) { _ = buffer }
+}' Frameworks/Planted.framework swift
     plant_logging "${config}" "a class adopting RTCAudioDevice (a custom audio device)" \
       '#import <Foundation/Foundation.h>
 @protocol RTCAudioDevice <NSObject>
