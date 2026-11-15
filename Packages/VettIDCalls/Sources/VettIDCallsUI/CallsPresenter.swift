@@ -98,20 +98,16 @@ public final class CallsWindow {
             built = true
         }
         guard window.isHidden else { return }
-        // No text field of the app keeps the keyboard: it would sit over the call screen. Only the app's own windows are asked, and a
-        // secure field (a PIN or a password being typed, as under the owner check) keeps it.
+        // No text field of the app keeps the keyboard: it would sit over the call screen, typing into a field it covers (a PIN or a
+        // password under the owner check included). Only the app's own windows are asked.
         Self.resignKeyboard(of: window.windowScene)
         window.isHidden = false
         UIAccessibility.post(notification: .screenChanged, argument: nil)
     }
 
-    /// The first responder of the app's windows lets go, unless it is a secure text field.
+    /// The first responder of the app's windows lets go (a secure field too: the call screen covers it).
     public static func resignKeyboard(of scene: UIWindowScene?) {
-        for w in scene?.windows ?? [] where w.windowLevel < level {
-            guard let responder = firstResponder(in: w) else { continue }
-            if (responder as? UITextField)?.isSecureTextEntry == true || (responder as? UITextView)?.isSecureTextEntry == true { continue }
-            responder.resignFirstResponder()
-        }
+        for w in scene?.windows ?? [] where w.windowLevel < level { firstResponder(in: w)?.resignFirstResponder() }
     }
 
     private static func firstResponder(in view: UIView) -> UIView? {

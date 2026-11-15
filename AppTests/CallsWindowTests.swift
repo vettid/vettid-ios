@@ -1,6 +1,8 @@
+import Observation
 import SwiftUI
 import Testing
 import UIKit
+import VettIDCalls
 import VettIDCallsUI
 import VettIDUI
 @testable import VettID
@@ -54,8 +56,8 @@ struct CallsWindowTests {
         #expect(calls.window.rootViewController?.view.accessibilityElementsHidden == false)
     }
 
-    /// A secure field (a PIN or a password being typed) keeps the keyboard under an incoming call; any other field lets go.
-    @Test func aSecureFieldKeepsTheKeyboardAndAPlainOneLetsGo() throws {
+    /// No field keeps the keyboard under an incoming call, a secure one included: the call screen covers it.
+    @Test func noFieldKeepsTheKeyboardUnderTheCall() throws {
         let scene = try scene()
         let app = UIWindow(windowScene: scene)
         let plain = UITextField()
@@ -67,14 +69,48 @@ struct CallsWindowTests {
         defer { app.isHidden = true }
         #expect(secure.becomeFirstResponder())
         CallsWindow.resignKeyboard(of: scene)
-        #expect(secure.isFirstResponder, "the PIN or password keeps it")
+        #expect(!secure.isFirstResponder, "a PIN or password field lets go too")
         #expect(plain.becomeFirstResponder())
         CallsWindow.resignKeyboard(of: scene)
         #expect(!plain.isFirstResponder)
     }
 
+    /// The `callsWindow` modifier follows the app lock's state: hidden from VoiceOver while it covers the app, read again when it does not.
+    @Test func theModifierHidesTheCallScreenWhileTheAppLockCovers() throws {
+        let scene = try scene()
+        let calls = AppComposition.shared.calls
+        let host = UIWindow(windowScene: scene)
+        let model = LockModel()
+        host.rootViewController = UIHostingController(rootView: LockedHost(model: model, calls: calls))
+        host.makeKeyAndVisible()
+        defer { host.isHidden = true }
+        let window = CallsWindow.install(on: scene)
+        func hidden() -> Bool? { window.window.rootViewController?.view.accessibilityElementsHidden }
+        model.covered = true
+        host.layoutIfNeeded()
+        RunLoop.main.run(until: Date().addingTimeInterval(0.3))
+        #expect(hidden() == true, "the lock covers: the call screen is not read")
+        model.covered = false
+        RunLoop.main.run(until: Date().addingTimeInterval(0.3))
+        #expect(hidden() == false)
+    }
+
     @Test func theAppUnderTheCallIsHiddenFromVoiceOver() throws {
         let calls = CallsWindow.install(on: try scene())
         #expect(calls.window.rootViewController?.view.accessibilityViewIsModal == true)
+    }
+}
+
+/// What the app lock's covering is, for the modifier's test.
+@MainActor @Observable final class LockModel {
+    var covered = false
+}
+
+private struct LockedHost: View {
+    let model: LockModel
+    let calls: CallsHost
+
+    var body: some View {
+        Color.clear.callsWindow(calls, themeMode: .light, hiddenFromAccessibility: model.covered)
     }
 }
