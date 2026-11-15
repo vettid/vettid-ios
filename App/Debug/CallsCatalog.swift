@@ -23,8 +23,9 @@ enum CallsCatalog {
         case conversation(ConversationState)
     }
 
-    /// A conversation with Ada: a message before and after calls of every outcome, and the note for calls that did not read.
-    static func conversation(availability: ConversationCallAvailability, notShown: Bool) -> ConversationState {
+    /// A conversation with Ada: a message before and after calls of every outcome, the note for calls that did not read, and the
+    /// one for a history that could not be checked.
+    static func conversation(availability: ConversationCallAvailability, notShown: Bool, outOfDate: Bool = false) -> ConversationState {
         var c = ConnectionInfo(id: "c1", name: "", state: .active)
         c.firstName = "Ada"
         c.lastName = "Lovelace"
@@ -52,6 +53,7 @@ enum CallsCatalog {
             call("k9", .failed, at: 540, outgoing: true),
         ]
         s.callsNotShown = notShown
+        s.callsOutOfDate = outOfDate
         s.callAvailability = availability
         return s
     }
@@ -94,7 +96,7 @@ enum CallsCatalog {
         all.append(Entry(id: "microphone_blocked", title: "Microphone: blocked", screen: .microphone(blocked: true)))
         all.append(Entry(
             id: "conversation_calls", title: "Conversation: calls of each outcome, Call action, note",
-            screen: .conversation(conversation(availability: .ready, notShown: true))
+            screen: .conversation(conversation(availability: .ready, notShown: true, outOfDate: true))
         ))
         all.append(Entry(
             id: "conversation_in_call", title: "Conversation: during a call (no Call action)",

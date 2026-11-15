@@ -91,6 +91,10 @@ public struct ConversationState: Equatable, Sendable, CustomStringConvertible, C
     public var calls: [ConversationCall] = []
     /// Some of the vault's calls did not read: "Some calls couldn't be shown." (in every conversation).
     public var callsNotShown = false
+    /// A read of the history failed after an earlier one had answered: the lines shown are kept, and "Calls may be out of date.
+    /// VettID couldn't check them just now." goes at the end of the list (owner decision, Ground Control #11240 a). The next
+    /// read that answers, and a lock, clear it.
+    public var callsOutOfDate = false
     /// What the calls say now; ``callShown`` follows it.
     public var callAvailability: ConversationCallAvailability = .unavailable
 
@@ -143,6 +147,8 @@ public final class ConversationViewModel {
     @ObservationIgnored private let historyAgain: Duration
     /// The read of the calls' history now under way: replaced when the availability changes.
     @ObservationIgnored private var historyTask: Task<Void, Never>?
+    /// A read of the history has answered since the vault was opened (a lock resets it).
+    @ObservationIgnored private var historyRead = false
     @ObservationIgnored let work = Work()
     @ObservationIgnored private let follows = TaskBag()
     /// The photos this conversation holds, reachable from `deinit` (leaving the conversation is a Cancel).
@@ -209,26 +215,39 @@ public final class ConversationViewModel {
             // `self` is never held across a suspension: leaving the screen ends the read and the re-read.
             historyTask = work.launch { [weak self] in
                 // A read that failed keeps the lines shown (nil), rather than emptying them silently.
-                if let h = await calls.history(id), !Task.isCancelled {
-                    self?.local.calls = h.calls
-                    self?.local.callsNotShown = h.someNotShown
-                }
+                let h = await calls.history(id)
                 guard !Task.isCancelled else { return }
+                self?.applyHistory(h)
                 // Read at the moment a call ends, the vault may not have taken its `call.end` yet: the call would stay going on
                 // in the list. Once more, a moment later (not if the availability changed meanwhile).
                 do { try await Task.sleep(for: again) } catch { return }
-                guard let later = await calls.history(id), !Task.isCancelled else { return }
-                self?.local.calls = later.calls
-                self?.local.callsNotShown = later.someNotShown
+                let later = await calls.history(id)
+                guard !Task.isCancelled else { return }
+                self?.applyHistory(later)
             }
         case .unavailable:
             // Locked, not asked yet, or a vault without calls: nothing of the vault's history stays in memory. During a call
             // the list stays.
             local.calls = []
             local.callsNotShown = false
+            local.callsOutOfDate = false
+            historyRead = false
         case .inCall:
             break
         }
+    }
+
+    /// A read's answer: the lines and the note, or (nil, the read failed) the lines kept, said to be out of date once a read has
+    /// answered since the vault was opened (nothing read yet: nothing to say).
+    private func applyHistory(_ h: ConversationCallHistory?) {
+        guard let h else {
+            if historyRead { local.callsOutOfDate = true }
+            return
+        }
+        historyRead = true
+        local.calls = h.calls
+        local.callsNotShown = h.someNotShown
+        local.callsOutOfDate = false
     }
 
     /// The Call action. Nothing unless it is shown; the call goes through the microphone gate and the machine.

@@ -16,6 +16,8 @@ final class FakeConversationCalls {
     /// nil: the read fails.
     @ObservationIgnored var history: ConversationCallHistory? = ConversationCallHistory()
     @ObservationIgnored private(set) var reads: [String] = []
+    /// Reads from this many on fail (nil), whatever ``history`` says: a read that answers, then a re-read that fails.
+    @ObservationIgnored var failFrom: Int?
     @ObservationIgnored private(set) var called: [String] = []
     /// While true, a read waits for ``release()``.
     @ObservationIgnored var holding = false
@@ -33,7 +35,7 @@ final class FakeConversationCalls {
             availability: { [self] in availability },
             history: { [self] id in
                 reads.append(id)
-                let answer = history
+                let answer = failFrom.map { reads.count > $0 } == true ? nil : history
                 if holding { await withCheckedContinuation { waiting.append($0) } }
                 return answer
             },
@@ -221,6 +223,53 @@ final class FakeConversationCalls {
         await m.settle()
         #expect(fake.reads.count == 4, "both reads after the call were made")
         #expect(m.state.calls.map(\.callId) == ["k1"] && m.state.callsNotShown, "the lines and the note stay")
+    }
+
+    /// "Calls may be out of date.": the case behind it is a call that just ended whose re-read, a moment after the read that
+    /// answered, failed. The lines stay and the note says so; the next read that answers clears it (owner decision #11240 a).
+    @Test func aFailedReReadSaysTheCallsMayBeOutOfDate() async {
+        fake.history = ConversationCallHistory(calls: [call("k1")])
+        fake.failFrom = 1
+        fake.availability = .ready
+        let m = await model()
+        #expect(fake.reads.count == 2, "the read answered, the re-read failed")
+        #expect(m.state.calls.map(\.callId) == ["k1"] && m.state.callsOutOfDate)
+
+        fake.failFrom = nil
+        fake.availability = .inCall
+        await m.settle()
+        #expect(m.state.callsOutOfDate, "during a call the note stays with the lines")
+        fake.availability = .ready
+        await m.settle()
+        #expect(!m.state.callsOutOfDate, "a read that answers clears it")
+    }
+
+    /// Nothing read yet: no lines and no note, whatever fails; a lock clears the note and what was read, so a failed read after
+    /// the unlock says nothing either.
+    @Test func noOutOfDateNoteWhenNothingWasRead() async {
+        fake.history = nil
+        fake.availability = .ready
+        let m = await model()
+        #expect(m.state.calls.isEmpty && !m.state.callsOutOfDate, "never read: nothing to say")
+
+        fake.history = ConversationCallHistory(calls: [call("k1")])
+        fake.availability = .inCall
+        await m.settle()
+        fake.availability = .ready
+        await m.settle()
+        fake.history = nil
+        fake.availability = .inCall
+        await m.settle()
+        fake.availability = .ready
+        await m.settle()
+        #expect(m.state.callsOutOfDate)
+
+        fake.availability = .unavailable // locked
+        await m.settle()
+        #expect(!m.state.callsOutOfDate && m.state.calls.isEmpty, "a lock clears the note with the lines")
+        fake.availability = .ready
+        await m.settle()
+        #expect(!m.state.callsOutOfDate, "nothing read since the unlock")
     }
 
     /// A conversation whose only content is a call is not "Say hello".

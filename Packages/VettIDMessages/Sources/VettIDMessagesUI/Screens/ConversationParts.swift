@@ -52,6 +52,7 @@ struct MessageList: View {
                         DayDivider(MessageTimes.dayLabel(group.day))
                         ForEach(group.rows) { r in row(r).id(r.id) }
                     }
+                    if state.callsOutOfDate { CallsOutOfDateLine() }
                 }
                 .padding(.vertical, Spacing.s)
             }

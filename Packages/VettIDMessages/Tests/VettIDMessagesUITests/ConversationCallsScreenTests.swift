@@ -41,6 +41,7 @@ import VettIDUI
         for (outcome, text) in said { #expect(MessagesStrings.callLine(call("k", outcome)) == text) }
         #expect(MessagesStrings.call == "Call")
         #expect(MessagesStrings.callsNotShown == "Some calls couldn't be shown.")
+        #expect(MessagesStrings.callsOutOfDate == "Calls may be out of date. VettID couldn't check them just now.")
     }
 
     /// A talked call says its duration as its two largest parts.
@@ -129,7 +130,11 @@ import VettIDUI
         let calls = [call("k1", .missed), call("k2", .talked, outgoing: true, duration: 252), call("k3", .failed, outgoing: true)]
         var actions = ConversationActions()
         actions.onCall = {}
-        for s in [state(calls: calls, notShown: true), state(calls: calls, availability: .inCall), state(availability: .unavailable)] {
+        var outOfDate = state(calls: calls, notShown: true)
+        outOfDate.callsOutOfDate = true
+        for s in [
+            state(calls: calls, notShown: true), outOfDate, state(calls: calls, availability: .inCall), state(availability: .unavailable),
+        ] {
             let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
             window.rootViewController = UIHostingController(rootView: ConversationScreen(state: s, actions: actions).vettIDTheme())
             window.isHidden = false

@@ -1225,6 +1225,17 @@
         }
       }
     },
+    "messages_calls_out_of_date": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Calls may be out of date. VettID couldn't check them just now."
+          }
+        }
+      }
+    },
     "messages_call_duration_h_min": {
       "extractionState": "manual",
       "localizations": {
