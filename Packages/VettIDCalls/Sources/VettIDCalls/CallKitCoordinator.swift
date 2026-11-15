@@ -63,8 +63,11 @@ package final class CallKitCoordinator: CallKitEvents {
     }
 
     @ObservationIgnored private var current: Tracked?
-    /// How each call the machine ended was ended, until CallKit has taken its report (a call replaced before that is told it).
-    @ObservationIgnored private var endReasons: [UUID: CallKitEndReason] = [:]
+    /// The calls whose report CallKit has not answered yet.
+    @ObservationIgnored private var reporting: Set<UUID> = []
+    /// How each of those the machine ended was ended (a call replaced before its report is answered is told it then). Kept
+    /// only while the report is on its way: dropped when it is answered.
+    @ObservationIgnored private(set) var endReasons: [UUID: CallKitEndReason] = [:]
     /// Whether the member may answer the call [seq] now: the microphone gate (the controller's). False: CallKit's answer is
     /// refused, and the call keeps ringing.
     @ObservationIgnored private let mayAnswer: @MainActor (_ seq: Int) -> Bool
@@ -203,9 +206,12 @@ package final class CallKitCoordinator: CallKitEvents {
     private func report(_ c: Tracked) {
         let update = update(c)
         let uuid = c.uuid
+        reporting.insert(uuid)
         launch { [weak self] in
             guard let self else { return }
             let result = await provider.reportNewIncomingCall(uuid: uuid, update: update)
+            reporting.remove(uuid)
+            let endReason = endReasons.removeValue(forKey: uuid)
             // Refused (Do Not Disturb, a block list, an error): respected. The call carries no audio and rings out as missed.
             if result != .reported {
                 if current?.uuid == uuid, current?.over == false { current?.kit = false }
@@ -217,7 +223,7 @@ package final class CallKitCoordinator: CallKitEvents {
                 guard let c = current, c.over, !c.endedInKit else { return }
                 provider.reportCall(uuid: uuid, endedAt: clock.now(), reason: c.endReason ?? .failed)
             } else {
-                provider.reportCall(uuid: uuid, endedAt: clock.now(), reason: endReasons.removeValue(forKey: uuid) ?? .failed)
+                provider.reportCall(uuid: uuid, endedAt: clock.now(), reason: endReason ?? .failed)
             }
         }
     }
@@ -261,8 +267,7 @@ package final class CallKitCoordinator: CallKitEvents {
         guard var c = current, c.seq == seq, !c.over else { return }
         c.over = true
         c.endReason = e.reason.callKitReason
-        endReasons[c.uuid] = c.endReason
-        if endReasons.count > 8, let drop = endReasons.keys.first(where: { $0 != c.uuid }) { endReasons[drop] = nil }
+        if reporting.contains(c.uuid) { endReasons[c.uuid] = c.endReason }
         current = c
         updateTones()
         audio.callEnded()

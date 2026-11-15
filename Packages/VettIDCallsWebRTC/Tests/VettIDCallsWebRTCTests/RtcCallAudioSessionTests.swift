@@ -69,6 +69,25 @@ struct RtcCallAudioSessionTests {
         audio.didDeactivate()
     }
 
+    /// A speaker override that fails leaves `speakerApplied` false (what the session has), and is tried again at the next
+    /// activation.
+    @Test func aFailedSpeakerOverrideIsNotAppliedAndIsTriedAgainAtTheNextActivation() {
+        let port = FlakySpeakerOverride()
+        let audio = RtcCallAudioSession(speakerOverride: port)
+        audio.prepare()
+        audio.didActivate()
+        port.fails = true
+        audio.setSpeaker(true)
+        #expect(!audio.speakerApplied, "the override failed")
+        audio.didDeactivate()
+        port.fails = false
+        audio.didActivate()
+        #expect(audio.speakerApplied, "tried again at the activation")
+        #expect(port.asked.last == true)
+        audio.didDeactivate()
+        audio.callEnded()
+    }
+
     /// CallKit may activate the session before the engine opens (answer, fulfil, then the machine's turn): the engine must not
     /// switch the audio off again.
     @Test func anEngineOpenedAfterTheActivationLeavesTheAudioOn() throws {
@@ -142,6 +161,17 @@ struct RtcCallAudioSessionTests {
             (.airPlay, nil), (.builtInMic, nil),
         ]
         for (port, route) in expected { #expect(RtcCallAudioSession.route(of: port) == route, "\(port.rawValue)") }
+    }
+}
+/// TEST ONLY. A speaker override that fails while ``fails`` is set; what it was asked, in order.
+@MainActor
+final class FlakySpeakerOverride: SpeakerOverride {
+    var fails = false
+    var asked: [Bool] = []
+
+    func override(speaker: Bool) throws {
+        asked.append(speaker)
+        if fails { throw CocoaError(.featureUnsupported) }
     }
 }
 #endif

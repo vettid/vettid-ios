@@ -2,8 +2,8 @@
 import PackageDescription
 
 // Calls, part 2 (vettid-android `core/calls`): the call state machine and the vault signalling, with no media stack and no
-// UI (IOS-PLAN §8; CALLS-PLAN; VAULT-MESSAGING §10.10). The media engine is a protocol here; its WebRTC implementation is VettIDCallsWebRTC, which the app links
-// with this package, in every configuration.
+// UI (IOS-PLAN §8; CALLS-PLAN; VAULT-MESSAGING §10.10). The media engine is a protocol here: its WebRTC implementation is
+// VettIDCallsWebRTC, which the app links with this package in every configuration.
 let package = Package(
     name: "VettIDCalls",
     defaultLocalization: "en",

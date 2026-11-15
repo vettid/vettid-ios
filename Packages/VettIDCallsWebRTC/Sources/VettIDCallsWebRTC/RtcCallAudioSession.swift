@@ -4,6 +4,21 @@ import Foundation
 import VettIDCalls
 @preconcurrency import WebRTC
 
+/// The speaker override of the session, behind a protocol so that a test can make it fail.
+@MainActor
+protocol SpeakerOverride {
+    /// Called with the stack's session locked for configuration.
+    func override(speaker: Bool) throws
+}
+
+/// The real override: the stack's session's `overrideOutputAudioPort`.
+@MainActor
+struct RtcSpeakerOverride: SpeakerOverride {
+    func override(speaker: Bool) throws {
+        try RTCAudioSession.sharedInstance().overrideOutputAudioPort(speaker ? .speaker : .none)
+    }
+}
+
 /// ``CallAudioSession`` on `AVAudioSession` and the stack's `RTCAudioSession`, the standard WebRTC-with-CallKit arrangement:
 /// the stack does not start its audio unit by itself (`useManualAudio`), and `isAudioEnabled` is true only between the
 /// activation CallKit gives (`provider(_:didActivate:)`) and the deactivation it takes back. This type never activates the
@@ -23,10 +38,14 @@ public final class RtcCallAudioSession: CallAudioSession {
     /// Whether the speaker override is on the session now (false before the activation, whatever was asked).
     private(set) var speakerApplied = false
     private var routeObserver: (any NSObjectProtocol)?
+    private let speakerOverride: any SpeakerOverride
 
     /// The stack must not start its audio unit by itself, from the first track of the first engine: so the switches are set here,
     /// before any engine exists. (The audio unit starts only when CallKit has activated the session.)
-    public init() {
+    public convenience init() { self.init(speakerOverride: RtcSpeakerOverride()) }
+
+    init(speakerOverride: any SpeakerOverride) {
+        self.speakerOverride = speakerOverride
         rtc.useManualAudio = true
         rtc.isAudioEnabled = false
     }
@@ -82,7 +101,7 @@ public final class RtcCallAudioSession: CallAudioSession {
         rtc.lockForConfiguration()
         defer { rtc.unlockForConfiguration() }
         do {
-            try rtc.overrideOutputAudioPort(speakerWanted ? .speaker : .none)
+            try speakerOverride.override(speaker: speakerWanted)
             speakerApplied = speakerWanted
         } catch {
             // Not applied: what the session has stays what ``speakerApplied`` says.

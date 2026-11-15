@@ -132,6 +132,7 @@ extension CallsControllerTests {
         // Denied: blocked, and the call keeps ringing.
         mic.status = .denied
         c.answer()
+        await settle()
         #expect(c.microphonePrompt == .blocked(.answer(seq: seq)))
         #expect(answered == 1)
         c.closeMicrophonePrompt()
@@ -186,6 +187,7 @@ extension CallsControllerTests {
         let c = controller(FakeMicrophone(.denied))
         await unlock()
         c.call("conn-1")
+        await settle()
         #expect(c.microphonePrompt != nil)
         vault.setUnlocked(false)
         await settle()
