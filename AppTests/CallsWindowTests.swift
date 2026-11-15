@@ -45,6 +45,34 @@ struct CallsWindowTests {
         #expect(!field.isFirstResponder)
     }
 
+    /// While the app lock covers the app VoiceOver does not read the call screen (its window is under the lock's, and read through it).
+    @Test func theCallScreenIsHiddenFromVoiceOverWhileTheAppLockCoversIt() throws {
+        let calls = CallsWindow.install(on: try scene())
+        calls.hideFromAccessibility(true)
+        #expect(calls.window.rootViewController?.view.accessibilityElementsHidden == true)
+        calls.hideFromAccessibility(false)
+        #expect(calls.window.rootViewController?.view.accessibilityElementsHidden == false)
+    }
+
+    /// A secure field (a PIN or a password being typed) keeps the keyboard under an incoming call; any other field lets go.
+    @Test func aSecureFieldKeepsTheKeyboardAndAPlainOneLetsGo() throws {
+        let scene = try scene()
+        let app = UIWindow(windowScene: scene)
+        let plain = UITextField()
+        let secure = UITextField()
+        secure.isSecureTextEntry = true
+        app.addSubview(plain)
+        app.addSubview(secure)
+        app.makeKeyAndVisible()
+        defer { app.isHidden = true }
+        #expect(secure.becomeFirstResponder())
+        CallsWindow.resignKeyboard(of: scene)
+        #expect(secure.isFirstResponder, "the PIN or password keeps it")
+        #expect(plain.becomeFirstResponder())
+        CallsWindow.resignKeyboard(of: scene)
+        #expect(!plain.isFirstResponder)
+    }
+
     @Test func theAppUnderTheCallIsHiddenFromVoiceOver() throws {
         let calls = CallsWindow.install(on: try scene())
         #expect(calls.window.rootViewController?.view.accessibilityViewIsModal == true)

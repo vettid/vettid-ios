@@ -98,11 +98,30 @@ public final class CallsWindow {
             built = true
         }
         guard window.isHidden else { return }
-        // No text field of the app keeps the keyboard: it would sit over the call screen (as the app lock's window does it).
-        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+        // No text field of the app keeps the keyboard: it would sit over the call screen. Only the app's own windows are asked, and a
+        // secure field (a PIN or a password being typed, as under the owner check) keeps it.
+        Self.resignKeyboard(of: window.windowScene)
         window.isHidden = false
         UIAccessibility.post(notification: .screenChanged, argument: nil)
     }
+
+    /// The first responder of the app's windows lets go, unless it is a secure text field.
+    public static func resignKeyboard(of scene: UIWindowScene?) {
+        for w in scene?.windows ?? [] where w.windowLevel < level {
+            guard let responder = firstResponder(in: w) else { continue }
+            if (responder as? UITextField)?.isSecureTextEntry == true || (responder as? UITextView)?.isSecureTextEntry == true { continue }
+            responder.resignFirstResponder()
+        }
+    }
+
+    private static func firstResponder(in view: UIView) -> UIView? {
+        if view.isFirstResponder { return view }
+        for sub in view.subviews { if let found = firstResponder(in: sub) { return found } }
+        return nil
+    }
+
+    /// While the app lock covers the app VoiceOver does not read the call screen either (as the shell under the lock is not read).
+    public func hideFromAccessibility(_ hidden: Bool) { controller.view.accessibilityElementsHidden = hidden }
 
     public func hide() {
         guard !window.isHidden else { return }
@@ -113,14 +132,16 @@ public final class CallsWindow {
 
 extension View {
     /// Presents the calls' window (the call screen, the microphone dialogs) over the app while [host] has anything to show.
-    public func callsWindow(_ host: CallsHost, themeMode: ThemeMode) -> some View {
-        modifier(CallsWindowModifier(host: host, themeMode: themeMode))
+    /// [hiddenFromAccessibility]: the app lock covers the app (its window is over this one): VoiceOver reads only the lock.
+    public func callsWindow(_ host: CallsHost, themeMode: ThemeMode, hiddenFromAccessibility: Bool = false) -> some View {
+        modifier(CallsWindowModifier(host: host, themeMode: themeMode, hidden: hiddenFromAccessibility))
     }
 }
 
 private struct CallsWindowModifier: ViewModifier {
     let host: CallsHost
     let themeMode: ThemeMode
+    let hidden: Bool
     @State private var scene: UIWindowScene?
 
     func body(content: Content) -> some View {
@@ -131,11 +152,13 @@ private struct CallsWindowModifier: ViewModifier {
             .onChange(of: shown, initial: true) { _, _ in update() }
             .onChange(of: scene) { _, _ in update() }
             .onChange(of: themeMode) { _, _ in update(rebuild: true) }
+            .onChange(of: hidden, initial: true) { _, _ in update() }
     }
 
     private func update(rebuild: Bool = false) {
         guard let scene else { return }
         let w = CallsWindow.install(on: scene)
+        w.hideFromAccessibility(hidden)
         if host.screenShown {
             w.show(AnyView(CallsContent(host: host).vettIDTheme(themeMode)), rebuild: rebuild)
         } else {
