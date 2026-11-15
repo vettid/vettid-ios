@@ -252,6 +252,64 @@ final class StoredBytes {
         #expect(passed.count == 1, "the catch-up")
     }
 
+    /// (ANDROID-PLAN 0.1.132 Notifications 7) The end of the gate the feed uses (the state, or the deadline passed by the
+    /// clock alone), with what ended it: this phone's check, the unlock's own check (marked where it is sent), or elsewhere.
+    @Test func theGateEndsWithWhatEndedIt() async throws {
+        let ops = FakeOwnerCheckOps()
+        let m = manager(ops)
+        var ends: [String] = []
+        m.onGateEnded = { how, stateEnded in ends.append("\(how):\(stateEnded)") }
+        let held = #"{"state":"held","deadline":"2026-10-06T11:00:00Z","interval_seconds":86400,"hold":true}"#
+        ops.status = #"{"state":"ok","deadline":"2026-10-06T11:00:00Z","interval_seconds":86400,"hold":true}"#
+        try await m.refreshOwnerCheck()
+        #expect(m.ownerCheck?.gated(now) == true && ends.isEmpty, "due by the clock alone")
+        #expect(try await m.check(pin: "975310", password: "pw") == .passed)
+        #expect(ends == ["check:false"])
+        ops.status = held
+        try await m.refreshOwnerCheck()
+        // Another device's check: the status moved the deadline.
+        ops.status = #"{"state":"ok","deadline":"2026-10-07T18:00:00Z","interval_seconds":86400,"hold":true}"#
+        try await m.refreshOwnerCheck()
+        #expect(ends == ["check:false", "elsewhere:true"])
+        ops.status = held
+        try await m.refreshOwnerCheck()
+        ops.answerDeadline = "2026-10-07T20:00:00Z"
+        await m.afterUnlock(pin: "975310", password: "pw")
+        #expect(m.unlockCheckOutcome == .passed)
+        #expect(ends == ["check:false", "elsewhere:true", "unlockCheck:true"])
+        // A check while not gated ends nothing.
+        #expect(try await m.check(pin: "975310", password: "pw") == .passed)
+        #expect(ends.count == 3)
+        // The unlock's own check by the clock path: a status that says ok with its deadline passed on the phone's clock.
+        ops.answerDeadline = "2026-10-08T12:00:00Z"
+        ops.status = #"{"state":"ok","deadline":"2026-10-06T11:30:00Z","interval_seconds":86400,"hold":true}"#
+        await m.afterUnlock(pin: "975310", password: "pw")
+        #expect(m.unlockCheckOutcome == .passed)
+        #expect(ends.last == "unlockCheck:false" && ends.count == 4)
+        // A stale status that takes the view back, then the fresh one again: no new end.
+        ops.status = #"{"state":"ok","deadline":"2026-10-06T11:30:00Z","interval_seconds":86400,"hold":true}"#
+        try await m.refreshOwnerCheck()
+        ops.status = #"{"state":"ok","deadline":"2026-10-08T12:00:00Z","interval_seconds":86400,"hold":true}"#
+        try await m.refreshOwnerCheck()
+        #expect(ends.count == 4)
+    }
+
+    /// ``OwnerCheckView/gateEnded(from:to:at:lastEnd:)``: gated before and not after, the deadline moved past the last end.
+    @Test func whatEndsTheGate() {
+        let past = now.addingTimeInterval(-3_600), next = now.addingTimeInterval(86_400), later = now.addingTimeInterval(2 * 86_400)
+        let held = OwnerCheckView(state: .held, deadline: past), due = OwnerCheckView(state: .due, deadline: past)
+        let clockDue = OwnerCheckView(state: .ok, deadline: past), ok = OwnerCheckView(state: .ok, deadline: next)
+        #expect(OwnerCheckView.gateEnded(from: held, to: ok, at: now, lastEnd: nil), "held to ok in one change")
+        #expect(OwnerCheckView.gateEnded(from: due, to: ok, at: now, lastEnd: past))
+        #expect(OwnerCheckView.gateEnded(from: clockDue, to: ok, at: now, lastEnd: nil), "due by the clock alone")
+        #expect(!OwnerCheckView.gateEnded(from: ok, to: OwnerCheckView(state: .ok, deadline: later), at: now, lastEnd: nil), "not gated before")
+        #expect(!OwnerCheckView.gateEnded(from: held, to: due, at: now, lastEnd: nil), "still gated")
+        #expect(!OwnerCheckView.gateEnded(from: held, to: nil, at: now, lastEnd: nil), "forgotten")
+        #expect(!OwnerCheckView.gateEnded(from: nil, to: ok, at: now, lastEnd: nil), "first read")
+        #expect(!OwnerCheckView.gateEnded(from: clockDue, to: ok, at: now, lastEnd: next), "a stale view and the fresh one again")
+        #expect(OwnerCheckView.gateEnded(from: clockDue, to: OwnerCheckView(state: .ok, deadline: later), at: now, lastEnd: next))
+    }
+
     @Test func holdOffRidesOnTheCheckAndIsClampedToThirtyDays() async throws {
         let ops = FakeOwnerCheckOps()
         ops.status = #"{"state":"ok","deadline":"2026-10-07T00:00:00Z","interval_seconds":86400}"#

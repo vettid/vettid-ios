@@ -67,6 +67,7 @@ final class AppNotifications: NSObject, UNUserNotificationCenterDelegate {
         self.notifier = notifier
         previews.onSet = { [weak notifier] in notifier?.previewsChanged($0) }
         vault.feed.onArrival = { [weak notifier] in notifier?.arrived($0) }
+        vault.feed.onWaitingAsk = { [weak notifier] in notifier?.replayed($0) }
         vault.feed.onItems = { [weak notifier] in notifier?.itemsChanged($0) }
         vault.feed.onCleared = { [weak notifier] in notifier?.cleared() }
         notifier.start()

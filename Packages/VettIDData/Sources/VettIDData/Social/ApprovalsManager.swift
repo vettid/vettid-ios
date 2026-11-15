@@ -120,6 +120,9 @@ public final class ApprovalsManager: ApprovalsRepository {
     /// Told of a withdrawn ask's feed item to mark read, by its `ref` (VAULT-MESSAGING 0.80.0 §10.4 "Closing"): [onlySingle]
     /// for an ask this phone does not hold, whose item is read only if it stands for no batch.
     @ObservationIgnored public var onAskRead: @MainActor (_ ref: String, _ onlySingle: Bool) -> Void = { _, _ in }
+    /// Told of each read of the open asks (`pending.list`, every page) that was applied: what it merged (the waiting asks'
+    /// replay after a passed owner check, ANDROID-PLAN 0.1.132 Notifications 7).
+    @ObservationIgnored var onOpenAsksRead: @MainActor (OpenAsksRead) -> Void = { _ in }
     /// The batches whose first ask was withdrawn while others were open, by its `ref` (``batchAskClosed(_:)``).
     @ObservationIgnored var withdrawnBatches: [String: Set<String>] = [:]
     /// The asks closed as withdrawn (`decided{withdrawn: true}`), newest last, at most ``maxClosedAsks``, for a screen
@@ -511,9 +514,7 @@ public final class ApprovalsManager: ApprovalsRepository {
                 return Self.withItems(e, batched[p.key] ?? [])
             }
         }
-        if case .answered(let asks, let readTs) = pending.result {
-            mergePendingAsks(asks, readTs: readTs, at: t, since: since, changed: changed)
-        }
+        onOpenAsksRead(merged(pending.result, at: t, since: since, changed: changed))
         withdrawnBatchesListed()
         if let failure = requestsFailure ?? lists.failures.first { throw failure }
     }

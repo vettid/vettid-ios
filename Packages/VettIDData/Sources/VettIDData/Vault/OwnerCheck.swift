@@ -94,6 +94,16 @@ public struct OwnerCheckView: Equatable, Sendable {
     /// Past the deadline: the app may send only the check (§3.6.3), whether or not the hold is on.
     public func gated(_ now: Date) -> Bool { state != .ok || deadline.map { now >= $0 } == true }
 
+    /// Whether going from [old] to [new] at [now] ends the gate (``gated(_:)``, the state or the deadline passed by the
+    /// clock alone; ANDROID-PLAN 0.1.132 Notifications 7): gated before, not after, and the deadline moved past the one
+    /// of the last end [lastEnd], as a passed check moves it. A stale status that took the view back and the fresh one
+    /// after it is no new end.
+    public static func gateEnded(from old: OwnerCheckView?, to new: OwnerCheckView?, at now: Date, lastEnd: Date?) -> Bool {
+        guard old?.gated(now) == true, let new, !new.gated(now) else { return false }
+        guard let d = new.deadline, let lastEnd else { return true }
+        return d > lastEnd
+    }
+
     /// From ``warningAhead`` (at ``timeScale``) before the deadline until it (§3.6.5).
     public func warning(_ now: Date) -> Bool {
         guard let deadline, !gated(now) else { return false }
@@ -142,6 +152,16 @@ public struct IdleLockSetting: Equatable, Sendable {
     public static let defaultSeconds: Int64 = 604_800
     /// The choices (ANDROID-PLAN §4 "Locking the vault" part 2): 1 hour, 1 day, 7 days, 14 days, 30 days.
     public static let choices: [Int64] = [3_600, 86_400, 604_800, 1_209_600, 2_592_000]
+}
+
+/// What ended the held or due state (``OwnerCheckManager/onGateEnded``).
+public enum OwnerCheckGateEnd: Equatable, Sendable {
+    /// The check an unlock sent with its own entries (VAULT-MESSAGING §3.6.5): counts as the unlock.
+    case unlockCheck
+    /// A check the member passed on this phone, the vault open.
+    case check
+    /// Another device's check, or a read of the status that found the deadline moved.
+    case elsewhere
 }
 
 /// The answer to a check (§3.6.1). Mirrors vettid-android `OwnerCheckOutcome`.

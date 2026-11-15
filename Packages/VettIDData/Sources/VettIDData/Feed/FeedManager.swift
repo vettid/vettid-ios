@@ -125,6 +125,12 @@ public final class FeedManager: FeedRepository {
     @ObservationIgnored private var generation = 0
     @ObservationIgnored private var reading: Task<Void, any Error>?
     @ObservationIgnored private var catchUpQueued = false
+    /// Open from the end of the held or due state until the waiting asks' replay (``openWaitingAsks()``): the items that
+    /// arrived meanwhile, which the replay leaves out. Nil when closed.
+    @ObservationIgnored private var arrivedSinceCheck: Set<String>?
+    /// A full read applied since ``openWaitingAsks()``; until then a replay asked for waits for it (``waitingReplay``).
+    @ObservationIgnored private var fullReadSinceCheck = false
+    @ObservationIgnored private var waitingReplay: [PendingApproval]?
     @ObservationIgnored private let marking = FeedMarking(limit: FeedManager.inFlight)
 
     @ObservationIgnored let ops: @MainActor () async throws -> any FeedOps
@@ -134,8 +140,12 @@ public final class FeedManager: FeedRepository {
     @ObservationIgnored private let gated: @MainActor () -> Bool
     @ObservationIgnored let now: @Sendable () -> Date
     /// New and changed unread items as they arrive (`feed.event`, the items of a catch-up), never from a full read: the
-    /// notifications' source (IOS-PLAN §6.7), so that nothing missed while locked or held is replayed as a notification.
+    /// notifications' source (IOS-PLAN §6.7), so that nothing missed while locked or held is replayed as a notification,
+    /// except the asks still waiting when a passed check ends the held or due state (``replayWaitingAsks(_:)``).
     @ObservationIgnored public var onArrival: @MainActor (FeedItem) -> Void = { _ in }
+    /// A waiting ask replayed after a passed check (``replayWaitingAsks(_:)``), to be posted as a new arrival (a fresh
+    /// alert, not an update); nil: ``onArrival``.
+    @ObservationIgnored public var onWaitingAsk: (@MainActor (FeedItem) -> Void)?
     /// The items after each change (a read, an event, a status set here or on another device, the clear): the
     /// notifications of items read, archived or deleted anywhere go (IOS-PLAN §6.7).
     @ObservationIgnored public var onItems: @MainActor ([FeedItem]) -> Void = { _ in }
@@ -170,6 +180,7 @@ public final class FeedManager: FeedRepository {
         byID = [:]
         cursor = 0
         catchUpQueued = false
+        closeWaitingAsks()
         load = .notLoaded
         publish()
         onCleared()
@@ -242,7 +253,7 @@ public final class FeedManager: FeedRepository {
             apply(changed)
             cursor = max(full ? 0 : cursor, seq)
             load = .loaded
-            guard !full else { return }
+            guard !full else { return fullReadForWaitingAsks() }
             var seen = Set<String>()
             for c in changed where c.status == Self.statusActive && (known[c.itemID]?.seq ?? 0) < c.seq && seen.insert(c.itemID).inserted {
                 if let now = byID[c.itemID] { arrived(now) }
@@ -273,9 +284,52 @@ public final class FeedManager: FeedRepository {
         retentionDays = d
     }
 
+    /// A passed check ended the held or due state (owner decisions of 2026-11-15; ANDROID-PLAN 0.1.132 Notifications 7,
+    /// IOS-PLAN §6.7): from now until the replay (``replayWaitingAsks(_:)``, ``closeWaitingAsks()`` or a ``clear()``), the
+    /// items that arrive are noted, so that an ask notified live is not replayed as well.
+    public func openWaitingAsks() {
+        arrivedSinceCheck = []
+        fullReadSinceCheck = false
+        waitingReplay = nil
+    }
+
+    /// No replay (none to make, or no longer: a hold, a lock).
+    public func closeWaitingAsks() {
+        arrivedSinceCheck = nil
+        fullReadSinceCheck = false
+        waitingReplay = nil
+    }
+
+    /// Each ask still waiting (``WaitingAsks``, against [approvals] as `pending.list` listed them after the check) and not
+    /// arrived since ``openWaitingAsks()`` is passed once to ``onWaitingAsk``, as a new arrival, after the feed's first
+    /// full read since then (at once if it is in); nothing else of that read notifies. Closes the window; nothing when it
+    /// is not open, or while held or due.
+    public func replayWaitingAsks(_ approvals: [PendingApproval]) {
+        guard arrivedSinceCheck != nil else { return }
+        waitingReplay = approvals
+        if fullReadSinceCheck { runWaitingReplay() }
+    }
+
+    private func fullReadForWaitingAsks() {
+        guard arrivedSinceCheck != nil else { return }
+        fullReadSinceCheck = true
+        runWaitingReplay()
+    }
+
+    private func runWaitingReplay() {
+        guard let since = arrivedSinceCheck, let approvals = waitingReplay else { return }
+        closeWaitingAsks()
+        guard !gated(), load == .loaded else { return }
+        for item in WaitingAsks.of(byID.values, approvals: approvals, now: now()) where !since.contains(item.itemID) {
+            if !FeedKinds.isHidden(item) { (onWaitingAsk ?? onArrival)(item) }
+        }
+    }
+
     /// A notification's source, except the History-only kinds (IOS-PLAN §4.1, de-duplication).
     private func arrived(_ item: FeedItem) {
-        if !FeedKinds.isHidden(item) { onArrival(item) }
+        guard !FeedKinds.isHidden(item) else { return }
+        arrivedSinceCheck?.insert(item.itemID)
+        onArrival(item)
     }
 
     /// Replaces each item by id, removes the deleted ones, drops what is past retention, and publishes. The History-only

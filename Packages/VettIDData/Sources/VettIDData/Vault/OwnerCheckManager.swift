@@ -45,10 +45,21 @@ public final class OwnerCheckManager: OwnerCheckRepository {
         didSet {
             let (was, now) = ((oldValue?.state ?? .ok) != .ok, (ownerCheck?.state ?? .ok) != .ok)
             if was != now { onHeldChange(now) }
+            if OwnerCheckView.gateEnded(from: oldValue, to: ownerCheck, at: self.now(), lastEnd: lastGateEnd) {
+                lastGateEnd = ownerCheck?.deadline
+                onGateEnded(passing ?? .elsewhere, was != now)
+            }
         }
     }
     /// Told when the vault becomes held or due (true) and when it is no longer (false), as the state says (§3.6.3).
     @ObservationIgnored public var onHeldChange: @MainActor (_ held: Bool) -> Void = { _ in }
+    /// Told when the vault is no longer held or due by ``OwnerCheckView/gated(_:)`` (the state, or the deadline passed by
+    /// the clock), and by what: the waiting asks' replay (ANDROID-PLAN 0.1.132 Notifications 7) skips the unlock's check.
+    /// [stateEnded]: the state was held or due (``onHeldChange`` was told false just before), not only the clock.
+    @ObservationIgnored public var onGateEnded: @MainActor (OwnerCheckGateEnd, _ stateEnded: Bool) -> Void = { _, _ in }
+    /// The check whose answer is being applied (``checkOutcome(pin:password:holdOff:forUnlock:)``); the last end's deadline.
+    @ObservationIgnored private var passing: OwnerCheckGateEnd?
+    @ObservationIgnored private var lastGateEnd: Date?
     public internal(set) var lockedByOwnerCheck = false
     /// (VAULT-MESSAGING 0.73.0 §3.6.5) ``lockedByOwnerCheck`` came from a read that found the vault locked without a known
     /// cause.
@@ -292,7 +303,7 @@ public final class OwnerCheckManager: OwnerCheckRepository {
     func afterCancelledRecovery(pin: String, password: String) async {
         markOpen()
         forgetEstimate()
-        let r = await checkOutcome(pin: pin, password: password, holdOff: nil)
+        let r = await checkOutcome(pin: pin, password: password, holdOff: nil, forUnlock: true)
         if r != .passed {
             unlockCheckOutcome = r
             checkAfterCancel = true
@@ -344,7 +355,8 @@ public final class OwnerCheckManager: OwnerCheckRepository {
         return await checkOutcome(pin: pin, password: password, holdOff: holdOff)
     }
 
-    func checkOutcome(pin: String, password: String, holdOff: HoldOff?) async -> OwnerCheckOutcome {
+    /// [forUnlock]: an unlock's own check (``afterUnlock(pin:password:left:)``, a cancelled recovery's): ``OwnerCheckGateEnd/unlockCheck``.
+    func checkOutcome(pin: String, password: String, holdOff: HoldOff?, forUnlock: Bool = false) async -> OwnerCheckOutcome {
         let until = holdOff?.until.map(clampHoldOff)
         let cleared = clears
         do {
@@ -362,6 +374,7 @@ public final class OwnerCheckManager: OwnerCheckRepository {
             lockedHere = false
             checkPassedForIdleLock()
             presenceFromCheck(r)
+            passing = forUnlock ? .unlockCheck : .check
             set(OwnerCheckView(
                 state: .ok,
                 deadline: Self.instant(r.deadline),
@@ -370,6 +383,7 @@ public final class OwnerCheckManager: OwnerCheckRepository {
                 hold: r.hold ?? true,
                 holdOffUntil: Self.instant(r.holdOffUntil)
             ))
+            passing = nil
             onPassed()
             return .passed
         } catch let e as VaultFailure {
@@ -580,21 +594,5 @@ public final class OwnerCheckManager: OwnerCheckRepository {
 
     private static func counts(_ h: HeldCounts?) -> WaitingCounts? {
         h.map { WaitingCounts(messages: $0.messages ?? 0, requests: $0.requests ?? 0, calls: $0.calls ?? 0, other: $0.other ?? 0) }
-    }
-
-    /// An RFC 3339 instant of the vault (with or without fractional seconds); nil when absent or unreadable.
-    public nonisolated static func instant(_ s: String?) -> Date? {
-        guard let s else { return nil }
-        let f = ISO8601DateFormatter()
-        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        if let d = f.date(from: s) { return d }
-        f.formatOptions = [.withInternetDateTime]
-        return f.date(from: s)
-    }
-
-    nonisolated static func format(_ d: Date) -> String {
-        let f = ISO8601DateFormatter()
-        f.formatOptions = [.withInternetDateTime]
-        return f.string(from: d)
     }
 }
