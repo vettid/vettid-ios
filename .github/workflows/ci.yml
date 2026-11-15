@@ -97,6 +97,8 @@ jobs:
           key: webrtc-binary-${{ hashFiles('Packages/VettIDCallsWebRTC/Package.swift', 'Packages/VettIDCallsWebRTC/Package.resolved') }}
       - name: swift test (macOS)
         run: swift test --package-path Packages/VettIDCallsWebRTC
+      - name: the licence list names the binary's components (a WebRTC upgrade that adds one fails here)
+        run: scripts/webrtc-components.sh --check "$(find Packages/VettIDCallsWebRTC/.build -type d -name WebRTC.xcframework -print -quit)"
       - name: tests on a simulator (the iOS-only ones included)
         run: |
           cd Packages/VettIDCallsWebRTC

@@ -57,9 +57,14 @@ enum WebRtcRuntime {
         #endif
         return trial.withLock { state in
             if let state { return state }
-            if config.dtlsPqcTrial { RTCPeerConnectionFactory.configureFieldTrials(dtlsPqcTrialName) }
-            state = config.dtlsPqcTrial
-            return config.dtlsPqcTrial
+            #if DEBUG
+            let pqc = config.dtlsPqcTrial
+            if pqc { RTCPeerConnectionFactory.configureFieldTrials(dtlsPqcTrialName) }
+            #else
+            let pqc = false
+            #endif
+            state = pqc
+            return pqc
         }
     }
 
