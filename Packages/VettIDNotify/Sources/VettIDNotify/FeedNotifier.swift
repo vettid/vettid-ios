@@ -20,7 +20,7 @@ public protocol NotificationPoster: AnyObject {
 /// notification is removed when the feed is forgotten (the vault locked, was held or wiped). Only arrivals notify (a live
 /// event or a catch-up, never a full read), so nothing missed while the vault was locked, held or due is replayed, except
 /// the asks still waiting when a passed check ends the held or due state in an open session, which arrive once
-/// (``FeedManager/replayWaitingAsks(_:now:)``; ANDROID-PLAN 0.1.132 Notifications 7). Nothing about the
+/// (``FeedManager/replayWaitingAsks(_:)``; ANDROID-PLAN 0.1.132 Notifications 7). Nothing about the
 /// screen in front is notified: the Notifications list, or the screen the item opens. Nothing here is kept on disk.
 ///
 /// iOS before Apple push (IOS-PLAN ID12): the feed is collected only while the app is in the foreground, so these show as

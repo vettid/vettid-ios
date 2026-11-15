@@ -60,6 +60,10 @@ public struct OwnerCheckView: Equatable, Sendable {
     /// (VAULT-MESSAGING §3.6.8, release L) When the vault locks itself if no check is passed, as it last said
     /// (`vault.status`, `vault.held`); nil from a vault before L, and until it said again after a check moved the deadline.
     public var idleLockAt: Date?
+    /// (ANDROID-PLAN 0.1.132 Notifications 7) The checks passed with the vault open in this process, as the manager
+    /// counted them when this value was set: this phone's own (not an unlock's) and another device's (`sync.event`). A
+    /// status read never raises it; never kept on the phone, so 0 after a restart.
+    public var passes = 0
 
     public init(
         state: OwnerCheckState,
@@ -94,14 +98,13 @@ public struct OwnerCheckView: Equatable, Sendable {
     /// Past the deadline: the app may send only the check (§3.6.3), whether or not the hold is on.
     public func gated(_ now: Date) -> Bool { state != .ok || deadline.map { now >= $0 } == true }
 
-    /// Whether going from [old] to [new] at [now] ends the gate (``gated(_:)``, the state or the deadline passed by the
-    /// clock alone; ANDROID-PLAN 0.1.132 Notifications 7): gated before, not after, and the deadline moved past the one
-    /// of the last end [lastEnd], as a passed check moves it. A stale status that took the view back and the fresh one
-    /// after it is no new end.
-    public static func gateEnded(from old: OwnerCheckView?, to new: OwnerCheckView?, at now: Date, lastEnd: Date?) -> Bool {
-        guard old?.gated(now) == true, let new, !new.gated(now) else { return false }
-        guard let d = new.deadline, let lastEnd else { return true }
-        return d > lastEnd
+    /// (ANDROID-PLAN 0.1.132 Notifications 7; owner decisions of 2026-11-15) Whether the asks still waiting are notified
+    /// once: [new] ends the held or due state of [old] (``gated(_:)``, also one known only from the clock, looked at [now]),
+    /// and a check passed with the vault open since [old] (``passes`` rose: the check an unlock makes never counts, nor
+    /// a status read). As vettid-android `WaitingAsksReplay.due`; the vault being open is the caller's.
+    public static func replayDue(from old: OwnerCheckView?, to new: OwnerCheckView?, at now: Date) -> Bool {
+        guard let old, let new else { return false }
+        return old.gated(now) && !new.gated(now) && new.passes > old.passes
     }
 
     /// From ``warningAhead`` (at ``timeScale``) before the deadline until it (§3.6.5).
@@ -154,13 +157,11 @@ public struct IdleLockSetting: Equatable, Sendable {
     public static let choices: [Int64] = [3_600, 86_400, 604_800, 1_209_600, 2_592_000]
 }
 
-/// What ended the held or due state (``OwnerCheckManager/onGateEnded``).
-public enum OwnerCheckGateEnd: Equatable, Sendable {
-    /// The check an unlock sent with its own entries (VAULT-MESSAGING §3.6.5): counts as the unlock.
-    case unlockCheck
-    /// A check the member passed on this phone, the vault open.
-    case check
-    /// Another device's check, or a read of the status that found the deadline moved.
+/// Where a check counted in ``OwnerCheckView/passes`` passed (``OwnerCheckManager/onReplayDue``).
+public enum OwnerCheckPass: Equatable, Sendable {
+    /// On this phone, the vault open (not an unlock's own check).
+    case here
+    /// On another device (`sync.event{owner_check}`, §3.6.3).
     case elsewhere
 }
 

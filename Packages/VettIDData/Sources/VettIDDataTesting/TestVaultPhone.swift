@@ -222,7 +222,12 @@ public final class TestVaultPhone {
         get { gate.failure }
         set { gate.failure = newValue }
     }
-    public private(set) var manager: VaultManager
+    public private(set) var manager: VaultManager {
+        didSet { notified.follow(manager.feed) }
+    }
+    /// The feed's notifications, taken as the app's notifier takes them (``FeedManager/onArrival``,
+    /// ``FeedManager/onWaitingAsk``).
+    public let notified = TestNotified()
     /// Moves this phone's clock (seconds ahead of the real one).
     public var clockAhead: TimeInterval {
         get { clock.ahead }
@@ -329,6 +334,7 @@ public final class TestVaultPhone {
         )
         Self.votes(&config, votesSite, votesPauses); process = Self.mark(&config, service)
         manager = VaultManager(config: config)
+        notified.follow(manager.feed)
     }
 
     /// The public votes site the test serves (nil: none), and the hourly wait of the work with it, released by the test.
@@ -554,6 +560,18 @@ final class PrepareSwitch: @unchecked Sendable {
 
     func check() throws {
         if let failure { throw failure }
+    }
+}
+/// TEST ONLY. The feed's notifications of a test phone, as `kind:ref`: the live arrivals and the waiting asks replayed
+/// after a passed owner check (ANDROID-PLAN 0.1.132 Notifications 7).
+@MainActor
+public final class TestNotified {
+    public var arrivals: [String] = []
+    public var replays: [String] = []
+
+    func follow(_ feed: FeedManager) {
+        feed.onArrival = { [weak self] in self?.arrivals.append("\($0.kind):\($0.ref ?? "")") }
+        feed.onWaitingAsk = { [weak self] in self?.replays.append("\($0.kind):\($0.ref ?? "")") }
     }
 }
 #endif

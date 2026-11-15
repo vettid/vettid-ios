@@ -14,12 +14,9 @@ import VettIDVault
     let phone: TestVaultPhone
     let pin = "402817"
     let password = "correct horse battery"
-    /// The arrivals, as `kind:ref`.
-    let arrived = Arrivals()
-
-    @MainActor final class Arrivals {
-        var all: [String] = []
-    }
+    /// The waiting asks replayed and the live arrivals, as `kind:ref`, taken as the app's notifier takes them.
+    var replays: [String] { phone.notified.replays }
+    var live: [String] { phone.notified.arrivals }
 
     init() throws {
         service = try FakeVaultService()
@@ -42,8 +39,8 @@ import VettIDVault
         #expect(await eventually { m.feed.load == .loaded })
         // The opening's read of every list is over before the arrivals are counted.
         await m.listsRead?.value
-        let arrived = arrived
-        m.feed.onArrival = { arrived.all.append("\($0.kind):\($0.ref ?? "")") }
+        phone.notified.arrivals = []
+        phone.notified.replays = []
         return r.connectionID
     }
 
@@ -80,11 +77,11 @@ import VettIDVault
         #expect(m.ownerChecks.ownerCheck?.state != .ok)
         let expected = try asksWhileHeld(id)
         try await Task.sleep(for: .milliseconds(100))
-        #expect(arrived.all.isEmpty, "nothing while held")
+        #expect(replays.isEmpty && live.isEmpty, "nothing while held")
         #expect(try await m.ownerChecks.check(pin: pin, password: password) == .passed)
-        #expect(await eventually { arrived.all == expected }, "\(arrived.all)")
+        #expect(await eventually { replays == expected }, "\(replays)")
         try await settled()
-        #expect(arrived.all == expected, "once")
+        #expect(replays == expected, "once")
         #expect(m.feed.items.contains { $0.kind == "message.received" }, "listed, not notified")
     }
 
@@ -95,12 +92,64 @@ import VettIDVault
         #expect(m.ownerChecks.ownerCheck?.state != .ok)
         let expected = try asksWhileHeld(id)
         try await Task.sleep(for: .milliseconds(100))
-        #expect(arrived.all.isEmpty, "nothing while held")
+        #expect(replays.isEmpty && live.isEmpty, "nothing while held")
         try service.otherDevicePassesCheck()
         #expect(await eventually { m.ownerChecks.ownerCheck?.state == .ok })
-        #expect(await eventually { arrived.all == expected }, "\(arrived.all)")
+        #expect(await eventually { replays == expected }, "\(replays)")
         try await settled()
-        #expect(arrived.all == expected, "once")
+        #expect(replays == expected, "once")
+    }
+
+    /// A shortened interval moves the deadline earlier: the next passed check after a hold still replays.
+    @Test func aShortenedIntervalStillReplays() async throws {
+        defer { phone.close() }
+        let id = try await connected()
+        service.advanceVaultClock(86_401)
+        try await m.ownerChecks.refreshOwnerCheck()
+        #expect(try await m.ownerChecks.check(pin: pin, password: password) == .passed)
+        await m.listsRead?.value
+        try await m.ownerChecks.setCheckInterval(seconds: 3_600)
+        service.advanceVaultClock(3_601)
+        try await m.ownerChecks.refreshOwnerCheck()
+        #expect(m.ownerChecks.ownerCheck?.state == .held)
+        let expected = try asksWhileHeld(id)
+        #expect(try await m.ownerChecks.check(pin: pin, password: password) == .passed)
+        #expect(await eventually { replays == expected }, "\(replays)")
+    }
+
+    /// Due by the phone's clock alone (the vault last said ok), ended by another device's check: no hold ended and nothing
+    /// else reads the lists, so the replay's own reads (the feed, then the approvals) bring the ask.
+    @Test func aDueStateKnownByTheClockEndedElsewhereReplays() async throws {
+        defer { phone.close() }
+        let id = try await connected()
+        try await m.ownerChecks.setCheckInterval(seconds: 3_600)
+        await m.listsRead?.value
+        phone.clockAhead = 3_601
+        service.advanceVaultClock(3_601)
+        #expect(m.ownerChecks.ownerCheck?.state == .ok && m.ownerChecks.ownerCheck?.gated(Date().addingTimeInterval(3_601)) == true)
+        let auth = try service.peerAsksAuthentication(id, expiresIn: 7_200)
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(replays.isEmpty && live.isEmpty, "nothing while due")
+        let pagesBefore = service.pendingListPagesAnswered
+        try service.otherDevicePassesCheck()
+        #expect(await eventually { replays == ["connection.authenticate.requested:\(auth)"] }, "\(replays)")
+        #expect(service.pendingListPagesAnswered > pagesBefore, "read by the replay's own reads")
+        try await settled()
+        #expect(replays.count == 1)
+    }
+
+    /// A `pending.list` read begun before the check does not count; one begun after it does.
+    @Test func aReadBegunBeforeTheCheckDoesNotCount() async throws {
+        defer { phone.close() }
+        _ = try await connected()
+        m.replayDue(.here, stateEnded: true)
+        #expect(m.asksToNotify)
+        m.openAsksRead(.merged([], startedAt: m.asksSince.addingTimeInterval(-1)))
+        #expect(m.asksToNotify, "begun before: still waiting for its read")
+        m.openAsksRead(.failed)
+        #expect(m.asksToNotify, "a failed read: the next one")
+        m.openAsksRead(.merged([], startedAt: m.asksSince))
+        #expect(!m.asksToNotify)
     }
 
     /// A lock while the reads after the check are on their way: nothing is replayed, then or after the next unlock.
@@ -122,7 +171,7 @@ import VettIDVault
         #expect(try await m.unlock(pin: pin) == .success)
         #expect(await eventually { m.feed.items.contains { $0.kind == "message.received" } })
         try await settled()
-        #expect(arrived.all.isEmpty, "\(arrived.all)")
+        #expect(replays.isEmpty, "\(replays)")
     }
 
     /// The due state (the hold off, VAULT-MESSAGING §3.6.7) ended by a passed check, as the held one.
@@ -136,9 +185,9 @@ import VettIDVault
         #expect(m.ownerChecks.ownerCheck?.state == .due)
         let expected = try asksWhileHeld(id, devices: true)
         #expect(try await m.ownerChecks.check(pin: pin, password: password) == .passed)
-        #expect(await eventually { arrived.all == expected }, "\(arrived.all)")
+        #expect(await eventually { replays == expected }, "\(replays)")
         try await settled()
-        #expect(arrived.all == expected, "once")
+        #expect(replays == expected, "once")
     }
 
     /// A lock during the hold, then an unlock with the PIN only that finds the vault held: the separate check that follows
@@ -154,11 +203,11 @@ import VettIDVault
         #expect(try await m.unlock(pin: pin) == .success)
         #expect(await eventually { m.phase == .unlocked && m.ownerChecks.ownerCheck?.state == .held })
         await m.listsRead?.value
-        #expect(arrived.all.isEmpty, "the unlock replays nothing")
+        #expect(replays.isEmpty, "the unlock replays nothing")
         #expect(try await m.ownerChecks.check(pin: pin, password: password) == .passed)
-        #expect(await eventually { arrived.all == expected }, "\(arrived.all)")
+        #expect(await eventually { replays == expected }, "\(replays)")
         try await settled()
-        #expect(arrived.all == expected, "once")
+        #expect(replays == expected, "once")
     }
 
     /// An unlock whose own check fails (a wrong password), then a separate passed check: that one replays.
@@ -175,11 +224,11 @@ import VettIDVault
         }
         m.ownerChecks.consumeUnlockCheckOutcome()
         await m.listsRead?.value
-        #expect(arrived.all.isEmpty, "the unlock replays nothing")
+        #expect(replays.isEmpty, "the unlock replays nothing")
         #expect(try await m.ownerChecks.check(pin: pin, password: password) == .passed)
-        #expect(await eventually { arrived.all == expected }, "\(arrived.all)")
+        #expect(await eventually { replays == expected }, "\(replays)")
         try await settled()
-        #expect(arrived.all == expected, "once")
+        #expect(replays == expected, "once")
     }
 
     /// A check passed while the vault was not held ends no hold: nothing is replayed.
@@ -187,10 +236,10 @@ import VettIDVault
         defer { phone.close() }
         let id = try await connected()
         let auth = try service.peerAsksAuthentication(id)
-        #expect(await eventually { arrived.all == ["connection.authenticate.requested:\(auth)"] }, "the live arrival")
+        #expect(await eventually { live == ["connection.authenticate.requested:\(auth)"] }, "the live arrival")
         #expect(try await m.ownerChecks.check(pin: pin, password: password) == .passed)
         try await settled()
-        #expect(arrived.all == ["connection.authenticate.requested:\(auth)"])
+        #expect(replays.isEmpty && live == ["connection.authenticate.requested:\(auth)"])
     }
 
     /// A vault without `pending.list` (`unsupported_type`, before 0.70.0) has no open asks to read: nothing is replayed.
@@ -205,7 +254,7 @@ import VettIDVault
         #expect(try await m.ownerChecks.check(pin: pin, password: password) == .passed)
         #expect(await eventually { m.feed.items.contains { $0.kind == "message.received" } })
         try await settled()
-        #expect(arrived.all.isEmpty, "\(arrived.all)")
+        #expect(replays.isEmpty, "\(replays)")
         #expect(!m.asksToNotify)
     }
 
@@ -220,7 +269,7 @@ import VettIDVault
         #expect(m.ownerChecks.unlockCheckOutcome == .passed)
         #expect(await eventually { m.feed.items.contains { $0.ref == auth } })
         try await settled()
-        #expect(arrived.all.isEmpty, "\(arrived.all)")
+        #expect(replays.isEmpty, "\(replays)")
     }
 
     /// An ask that arrived while locked and is still waiting is listed after the unlock, not notified (as before).
@@ -233,6 +282,6 @@ import VettIDVault
         #expect(await eventually { m.approvals.approvals.map(\.key).contains("auth:\(auth)") })
         #expect(await eventually { m.feed.items.contains { $0.ref == auth } })
         try await settled()
-        #expect(arrived.all.isEmpty, "\(arrived.all)")
+        #expect(replays.isEmpty, "\(replays)")
     }
 }

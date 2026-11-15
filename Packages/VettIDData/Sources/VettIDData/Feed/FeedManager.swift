@@ -144,7 +144,7 @@ public final class FeedManager: FeedRepository {
     /// except the asks still waiting when a passed check ends the held or due state (``replayWaitingAsks(_:)``).
     @ObservationIgnored public var onArrival: @MainActor (FeedItem) -> Void = { _ in }
     /// A waiting ask replayed after a passed check (``replayWaitingAsks(_:)``), to be posted as a new arrival (a fresh
-    /// alert, not an update); nil: ``onArrival``.
+    /// alert, not an update). Set by whoever takes ``onArrival`` (the app's notifier); nil is a wiring error.
     @ObservationIgnored public var onWaitingAsk: (@MainActor (FeedItem) -> Void)?
     /// The items after each change (a read, an event, a status set here or on another device, the clear): the
     /// notifications of items read, archived or deleted anywhere go (IOS-PLAN §6.7).
@@ -321,7 +321,8 @@ public final class FeedManager: FeedRepository {
         closeWaitingAsks()
         guard !gated(), load == .loaded else { return }
         for item in WaitingAsks.of(byID.values, approvals: approvals, now: now()) where !since.contains(item.itemID) {
-            if !FeedKinds.isHidden(item) { (onWaitingAsk ?? onArrival)(item) }
+            guard let onWaitingAsk else { return assertionFailure("onWaitingAsk is not set") }
+            if !FeedKinds.isHidden(item) { onWaitingAsk(item) }
         }
     }
 
