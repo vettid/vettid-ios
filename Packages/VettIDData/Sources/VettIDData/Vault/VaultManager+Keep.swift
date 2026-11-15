@@ -113,7 +113,7 @@ extension VaultManager {
     /// the session's keys (held only by the enclave and this phone) and answer this request's fresh id; the vault removes
     /// the old app and its session at a completed approval, so it cannot answer it any more.
     func keptEndCheck() async -> KeptEndCheck {
-        guard !backgrounded, !halted else { return .notChecked }
+        guard !inBackground, !halted else { return .notChecked }
         let began = moveFlags.book.lifecycle
         let limit = config.keptEndCheck
         let sleep = config.keptEndSleep
@@ -128,7 +128,7 @@ extension VaultManager {
         } catch {
             return .notChecked
         }
-        guard !Task.isCancelled, !backgrounded, !halted, began == moveFlags.book.lifecycle else { return .notChecked }
+        guard !Task.isCancelled, !inBackground, !halted, began == moveFlags.book.lifecycle else { return .notChecked }
         switch probe {
         case .listed: return .listed
         case .notListed: return .notListed

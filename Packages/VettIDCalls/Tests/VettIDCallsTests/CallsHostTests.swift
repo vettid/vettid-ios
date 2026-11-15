@@ -207,6 +207,25 @@ final class FakeAppVault: CallsAppVault {
         await waiter.value
     }
 
+    /// Your own hang-up in the background: the vault's collection is let go only once the hang-up is with the relay (bounded), not as
+    /// soon as the call is over on this phone.
+    @Test func theCollectionIsLetGoOnlyAfterTheHangUpIsWithTheRelay() async throws {
+        let h = host()
+        h.start()
+        vault.inner.setUnlocked(true)
+        await settle()
+        try await activeCall(h)
+        let gate = Gate()
+        vault.inner.gatewayFake.endGate = gate
+        let before = vault.holdsEnded
+        h.hangUp()
+        await clock.advance(by: 500)
+        #expect(vault.holdsEnded == before, "the hang-up is not with the relay yet")
+        gate.open()
+        await settle()
+        #expect(vault.holdsEnded > before, "let go once it is")
+    }
+
     @Test func aLockTellsTheVaultNoCallHoldsTheCollection() async {
         let h = host()
         h.start()

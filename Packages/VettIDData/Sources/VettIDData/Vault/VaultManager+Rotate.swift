@@ -99,6 +99,8 @@ extension VaultManager {
     /// A read of the alarm begins: it makes an older read's answer stale.
     func beginAlarmRead() -> Int {
         alarmGeneration += 1
+        // An alarm event older than the read (by more than the clocks' skew) is stale once it answers: it is dropped, not applied.
+        alarmEventAt = max(alarmEventAt ?? .distantPast, config.now().addingTimeInterval(-5))
         return alarmGeneration
     }
 

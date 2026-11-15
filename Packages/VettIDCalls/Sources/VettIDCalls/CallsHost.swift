@@ -65,6 +65,8 @@ package final class CallsRuntime {
         tasks.append(Task { @MainActor [weak controller] in
             for await t in transitions {
                 if case .live = t.state { continue }
+                // The hang-up of this call is with the relay first (bounded, as before a lock): the collection stops with the call.
+                await controller?.endCallBeforeLock()
                 // The vault's collection no longer needs to run on in the background (``VaultManager/holdCollection(_:)``).
                 notLive()
                 guard case .ended(let e) = t.state, !CallTexts.staysOpen(e.reason) else { continue }
@@ -153,7 +155,9 @@ public final class CallsHost {
         vault.collectionHoldEnded()
     }
 
-    /// Whether a call is live: the vault's collection goes on in the background meanwhile.
+    /// Whether a call is live: the vault's collection goes on in the background meanwhile. A ringing, unanswered incoming call counts
+    /// too (it holds the collection with no audio until it is answered or ends: iOS suspends the app soon anyway, and the hold ends with
+    /// the ring).
     package var callIsLive: Bool {
         if case .live(_)? = runtime?.controller.state { return true }
         return false

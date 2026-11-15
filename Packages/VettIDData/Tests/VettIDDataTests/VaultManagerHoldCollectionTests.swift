@@ -391,4 +391,110 @@ import VettIDDataTesting
         m.finishAlarmRead(CredentialInfo(exists: true, version: 1, key: nil, updatedAt: nil, alarm: nil), started: later)
         #expect(m.alarm == nil)
     }
+
+    // MARK: the held background is a background
+
+    /// In a background a call holds, nothing is read that nobody asked for (the quiet reads), as in any background.
+    @Test func noQuietReadWhileHeld() async throws {
+        defer { phone.close() }
+        try await openVault()
+        m.holdCollection { true }
+        await m.onBackground(budget: .seconds(2))
+        #expect(m.inBackground && !m.backgrounded, "in the background, with the collection held")
+        // The reads of the opening, which may still be on their way under load, are over once the count stays put.
+        var before = seen("connection.list")
+        for _ in 0..<40 {
+            try await Task.sleep(for: .milliseconds(100))
+            let now = seen("connection.list")
+            if now == before { break }
+            before = now
+        }
+        try? await m.connections.refresh(quietly: true)
+        #expect(seen("connection.list") == before, "no read in the background")
+        m.onForeground()
+        #expect(!m.inBackground)
+    }
+
+    /// The hold is decided at the start of the background's work, but the call may end during it: the collection then stops at the
+    /// work's end, as without a call.
+    @Test func aCallThatEndsDuringTheBackgroundWorkClosesTheConnectionAtItsEnd() async throws {
+        defer { phone.close() }
+        try await openVault()
+        var asked = 0
+        m.holdCollection {
+            asked += 1
+            return asked == 1
+        }
+        await m.onBackground(budget: .seconds(2))
+        #expect(m.session == nil && m.backgrounded && m.heldBackground == nil)
+    }
+
+    // MARK: the order
+
+    /// An older alarm event redelivered after a newer one was applied (the buffered one, at the foreground) or after a read is dropped:
+    /// the newest state wins.
+    @Test func anOlderHeldAlarmEventDoesNotBeatANewerBufferedOne() async throws {
+        defer { phone.close() }
+        service.leasesCollected = 60
+        try await openVault()
+        let raised = service.raiseCloneAlarm(told: false)
+        m.holdCollection { true }
+        await m.onBackground(budget: .seconds(2))
+        // The older event: held at the relay (frozen).
+        service.sendEvent("credential.alarm", #"{"alarm_id":"\#(raised)","state":"frozen"}"#)
+        #expect(await waitFor { service.mailboxCounts.leased >= 1 })
+        // The newer one, already acked, kept in memory (rotation required), and the vault says so too.
+        service.requireRotation()
+        let newer = Date().addingTimeInterval(60)
+        let sync = #"{"kind":"credential.alarm","alarm_id":"\#(raised)","state":"rotation_required"}"#
+        m.onEvent(VaultMessage(inner: Inner(id: "newer", type: "sync.event", ts: newer, body: Array(sync.utf8))))
+        m.onForeground()
+        #expect(await waitFor { m.alarm?.state == "rotation_required" }, "the newer state is applied")
+        service.endLeases()
+        try await Task.sleep(for: .milliseconds(500))
+        #expect(m.alarm?.state == "rotation_required", "the older event, redelivered, does not beat it")
+    }
+
+    // MARK: what is handled while held
+
+    /// What ends the session is not held: `device.unlinked` is acked and reaches the manager at once, not kept for the foreground.
+    @Test func deviceUnlinkedIsHandledWhileHeld() async throws {
+        defer { phone.close() }
+        service.leasesCollected = 60
+        try await heldBackground()
+        service.unlinkThisPhone(reason: "transferred")
+        #expect(await waitFor { service.mailboxCounts.leased == 0 }, "acked, not left for the foreground")
+        #expect(m.heldEvents.isEmpty && !m.eventsMissedWhileHeld, "and not kept in memory either")
+    }
+
+    @Test func vaultHeldIsAckedWhileHeld() async throws {
+        defer { phone.close() }
+        service.leasesCollected = 60
+        try await heldBackground()
+        service.sendEvent("vault.held", "{}")
+        #expect(await waitFor { service.mailboxCounts.leased == 0 }, "not left unacked")
+    }
+
+    /// `sync.event` is held outside the cap: with the cap of others full, it is still left unacked.
+    @Test func syncEventIsHeldOutsideTheCap() async throws {
+        defer { phone.close() }
+        service.leasesCollected = 60
+        try await heldBackground()
+        for i in 0..<40 { service.sendEvent("tag.changed", #"{"n":\#(i)}"#) }
+        service.sendEvent("sync.event", #"{"kind":"vault.release","release_number":9}"#)
+        func held() -> Int { m.session.map { d in d.device.mem.withLock { d.device.memory.heldIDs.count } } ?? -1 }
+        #expect(await waitFor(seconds: 20) { held() == 33 }, "32 others and the sync event: \(held())")
+    }
+
+    /// A sign-out while held clears what was kept: nothing is replayed after it.
+    @Test func aSignOutWhileHeldClearsWhatWasKept() async throws {
+        defer { phone.close() }
+        try await heldBackground()
+        m.onEvent(VaultMessage(inner: Inner(id: "x", type: "credential.alarm", ts: Date(), body: Array(alarm("a1").utf8))))
+        #expect(m.heldEvents.count == 1)
+        m.phase = .signedOut
+        #expect(m.heldEvents.isEmpty)
+        m.onForeground()
+        #expect(m.alarm == nil)
+    }
 }

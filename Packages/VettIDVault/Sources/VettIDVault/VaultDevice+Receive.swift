@@ -122,20 +122,21 @@ extension VaultDevice {
 
     /// Whether the event [inner] is left unacked now (``holdEvents(_:)``): not one a call of this device is waiting for
     /// (``awaitEvent(of:timeout:match:)``: a flow begun before the app left the foreground must not time out), and at most
-    /// ``maxHeldEvents`` different ones, so that the relay's window of unacked messages is not filled; one held before is held
+    /// ``maxHeldUnacked`` different ones, so that the relay's window of unacked messages is not filled; one held before is held
     /// again when it is redelivered. The rest are handed to the app, which keeps them in memory.
     func holdsEvent(_ inner: Inner) -> Bool {
         mem.withLock {
             guard let hold = memory.eventHold else { return false }
             guard hold(inner.type) else { return false }
-            if memory.awaited[inner.type, default: 0] > 0 { return false }
-            // What warns the member is always held, outside the cap: rare, and never to be lost with the process.
+            // What warns the member is always held, outside the cap and before any exemption: rare, and never to be lost with the
+            // process. (No type is both this and awaited by a flow of the device.)
             if Self.alwaysHeld(inner.type) {
                 memory.heldIDs.insert(inner.id)
                 return true
             }
+            if memory.awaited[inner.type, default: 0] > 0 { return false }
             if memory.heldIDs.contains(inner.id) { return true }
-            guard memory.heldIDs.count < Self.maxHeldEvents else { return false }
+            guard memory.heldIDs.count < Self.maxHeldUnacked else { return false }
             memory.heldIDs.insert(inner.id)
             return true
         }
@@ -150,8 +151,8 @@ extension VaultDevice {
     /// The hold ended: the cap counts afresh at the next one.
     public func holdEnded() { mem.withLock { memory.heldIDs.removeAll() } }
 
-    /// How many different events a hold leaves unacked: well within the relay's window of 64.
-    static let maxHeldEvents = 32
+    /// How many different events a hold leaves unacked: well within the relay's window of unacked messages (128, RELAY-PROTOCOL §6.4).
+    static let maxHeldUnacked = 32
 
     /// Leaves unacked the unsolicited vault events [hold] says to hold (it is asked with the event's type, from any thread): the
     /// relay keeps them and delivers them again after its lease, so that a process that ends meanwhile loses none. For a

@@ -15,7 +15,7 @@ extension VaultManager {
 
     /// The calls of a read nobody asked for: only over the session open now, while the vault is open and collecting.
     static func quietApi(_ ref: ManagerRef) throws -> VaultApi {
-        guard let m = ref.manager, m.phase == .unlocked, !m.backgrounded, let s = m.session else {
+        guard let m = ref.manager, m.phase == .unlocked, !m.inBackground, let s = m.session else {
             throw VaultFailure(.other, code: "session_dropped")
         }
         return try m.openApi(s)

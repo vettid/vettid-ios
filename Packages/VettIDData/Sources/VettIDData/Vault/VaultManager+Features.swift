@@ -58,7 +58,7 @@ extension VaultManager {
             // A read nobody asked for goes only over the session open now, while the vault is open and collecting: it
             // never opens one (in the background, after a lock).
             quietOps: {
-                guard let m = ref.manager, m.phase == .unlocked, !m.backgrounded, let s = m.session else {
+                guard let m = ref.manager, m.phase == .unlocked, !m.inBackground, let s = m.session else {
                     throw VaultFailure(.other, code: "session_dropped")
                 }
                 return try m.openApi(s)
@@ -78,7 +78,7 @@ extension VaultManager {
                 return try m.openApi(try await m.openSession())
             },
             quietOps: {
-                guard let m = ref.manager, m.phase == .unlocked, !m.backgrounded, let s = m.session else {
+                guard let m = ref.manager, m.phase == .unlocked, !m.inBackground, let s = m.session else {
                     throw VaultFailure(.other, code: "session_dropped")
                 }
                 return try m.openApi(s)
@@ -106,6 +106,7 @@ extension VaultManager {
     /// messages and their photos, the items and tags, the feed, the approvals' lists, History and the member's own profile).
     func forgetOpenLists() {
         clearHeldEvents()
+        alarmEventAt = nil
         forgetOwnProfile()
         forgetHeld()
         connections.forgetAuthentication()
