@@ -9,13 +9,30 @@ struct CallsNotShownLine: View {
     @Environment(\.vettIDColors) private var colors
 
     var body: some View {
-        Text(MessagesStrings.callsNotShown)
+        CallsNote(text: MessagesStrings.callsNotShown).accessibilityIdentifier("calls_not_shown")
+    }
+}
+
+/// "Calls may be out of date.": the list's last line, where the newest call would be (the list opens there; the same on both
+/// apps).
+struct CallsOutOfDateLine: View {
+    var body: some View {
+        CallsNote(text: MessagesStrings.callsOutOfDate).accessibilityIdentifier("calls_out_of_date")
+    }
+}
+
+/// A note about the calls, as a line of the list.
+private struct CallsNote: View {
+    @Environment(\.vettIDColors) private var colors
+    let text: String
+
+    var body: some View {
+        Text(text)
             .vettIDFont(.bodySmall)
             .foregroundStyle(colors.onSurfaceVariant)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, Spacing.gutter)
             .padding(.vertical, Spacing.xs)
-            .accessibilityIdentifier("calls_not_shown")
     }
 }
 

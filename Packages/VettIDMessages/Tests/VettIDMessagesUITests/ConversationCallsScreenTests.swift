@@ -41,6 +41,7 @@ import VettIDUI
         for (outcome, text) in said { #expect(MessagesStrings.callLine(call("k", outcome)) == text) }
         #expect(MessagesStrings.call == "Call")
         #expect(MessagesStrings.callsNotShown == "Some calls couldn't be shown.")
+        #expect(MessagesStrings.callsOutOfDate == "Calls may be out of date. VettID couldn't check them just now.")
     }
 
     /// A talked call says its duration as its two largest parts.
@@ -123,13 +124,25 @@ import VettIDUI
         }
     }
 
+    /// The note scrolls into view only when it comes, and only for a member at the end of the list.
+    @Test func theOutOfDateNoteComesIntoViewOnlyAtTheEnd() {
+        #expect(MessageList.showsOutOfDate(was: false, now: true, atEnd: true))
+        #expect(!MessageList.showsOutOfDate(was: false, now: true, atEnd: false), "reading older rows: the place stays")
+        #expect(!MessageList.showsOutOfDate(was: true, now: true, atEnd: true), "already up")
+        #expect(!MessageList.showsOutOfDate(was: true, now: false, atEnd: true), "gone")
+    }
+
     /// Every state of the conversation with calls is drawn (the screens' texts and presence on the simulator are the catalog's
     /// UI test: the accessibility tree of a hosted view is not built outside it).
     @Test func everyStateIsDrawn() {
         let calls = [call("k1", .missed), call("k2", .talked, outgoing: true, duration: 252), call("k3", .failed, outgoing: true)]
         var actions = ConversationActions()
         actions.onCall = {}
-        for s in [state(calls: calls, notShown: true), state(calls: calls, availability: .inCall), state(availability: .unavailable)] {
+        var outOfDate = state(calls: calls, notShown: true)
+        outOfDate.callsOutOfDate = true
+        for s in [
+            state(calls: calls, notShown: true), outOfDate, state(calls: calls, availability: .inCall), state(availability: .unavailable),
+        ] {
             let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
             window.rootViewController = UIHostingController(rootView: ConversationScreen(state: s, actions: actions).vettIDTheme())
             window.isHidden = false

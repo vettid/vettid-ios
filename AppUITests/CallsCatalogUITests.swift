@@ -49,10 +49,10 @@ final class CallsCatalogUITests: XCTestCase {
         // A conversation with call lines: every outcome and duration format, the note, and the Call action (hidden during a call).
         Case("conversation_calls", texts: ["Call, 4 min 12 s", "Call, 1 h 4 min", "Call, 12 s", "Call declined", "Call you declined",
                                            "Call not answered: busy", "Call not answered ·", "Missed call", "Call failed",
-                                           "Some calls couldn't be shown."],
-             controls: ["conversation_call", "calls_not_shown", "conversation_call_entry"]),
+                                           "Some calls couldn't be shown.", "Calls may be out of date. VettID couldn't check them just now."],
+             controls: ["conversation_call", "calls_not_shown", "calls_out_of_date", "conversation_call_entry"]),
         Case("conversation_in_call", texts: ["Missed call", "Call, 4 min 12 s"], controls: ["conversation_call_entry"],
-             absent: ["conversation_call", "calls_not_shown"]),
+             absent: ["conversation_call", "calls_not_shown", "calls_out_of_date"]),
     ]
 
     @MainActor

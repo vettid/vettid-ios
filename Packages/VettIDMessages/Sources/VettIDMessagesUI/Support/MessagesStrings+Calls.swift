@@ -12,6 +12,14 @@ extension MessagesStrings {
         String(localized: "messages_calls_not_shown", defaultValue: "Some calls couldn't be shown.", bundle: .module)
     }
 
+    /// A read of the history failed and the lines shown were kept (owner decision, Ground Control #11240 a; the same on both apps).
+    static var callsOutOfDate: String {
+        String(
+            localized: "messages_calls_out_of_date", defaultValue: "Calls may be out of date. VettID couldn't check them just now.",
+            bundle: .module
+        )
+    }
+
     /// A call's line: what became of it; "Call, <duration>" for one that was talked.
     static func callLine(_ call: ConversationCall) -> String {
         switch call.outcome {
