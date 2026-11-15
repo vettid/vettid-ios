@@ -147,8 +147,26 @@ import VettIDDataTesting
         #expect(await eventually { m.deviceSessionsKnown && m.deviceSessions["d1"] != nil })
     }
 
-    /// An event that comes while a read is on its way is newer than what the read answers.
+    /// An event that comes while a read is on its way is newer than what the read answers. No screen asks, so the event
+    /// starts no read of its own: only the rule can keep the session ended.
     @Test func anEventDuringAReadWins() async throws {
+        ops.devices = [("d1", at(30))]
+        let m = manager()
+        let gate = TestDeferred<Void>()
+        ops.devicesGate = gate
+        let read = Task { try await m.readDeviceSessions() }
+        #expect(await eventually { ops.calls.contains("deviceList") })
+        m.onEvent(event("sync.event", #"{"kind":"device.session","device_id":"d1"}"#))
+        gate.complete(())
+        try await read.value
+        #expect(m.deviceSessionReads == 1 && m.deviceSessionsKnown)
+        #expect(m.deviceSessions["d1"] == nil, "the read's answer does not bring the session back")
+        #expect(ops.calls.filter { $0 == "deviceList" }.count == 1)
+    }
+
+    /// A screen asks, so the event reads the list again: both reads are at the vault before either is answered, and the
+    /// answers may come in either order. Whichever does, the stale one never brings the session back.
+    @Test func aStaleReadNeverBringsBackAnEndedSession() async throws {
         ops.devices = [("d1", at(30))]
         let m = manager()
         let gate = TestDeferred<Void>()
@@ -159,13 +177,11 @@ import VettIDDataTesting
         #expect(await eventually { ops.calls.contains("deviceList") })
         ops.devices = []
         m.onEvent(event("sync.event", #"{"kind":"device.session","device_id":"d1"}"#))
-        // The event reads the list again (a screen asks); both reads are at the vault before either is answered, and the
-        // answers may come in either order: whichever does, the stale one never brings the session back.
         #expect(await eventually { ops.calls.filter { $0 == "deviceList" }.count == 2 })
         gate.complete(())
         try await read.value
         #expect(await eventually { m.deviceSessionsKnown })
-        #expect(m.deviceSessions["d1"] == nil, "the stale answer does not bring the session back")
+        #expect(m.deviceSessions["d1"] == nil)
         await Task.yield()
         #expect(m.deviceSessions["d1"] == nil)
     }
