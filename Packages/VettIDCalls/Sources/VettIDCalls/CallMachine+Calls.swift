@@ -61,8 +61,16 @@ extension CallMachine {
                     onSignal(s, e)
                 }
             }
-            // Ended by none of them, and not waiting for a glare's winner: it fails now.
-            if session === s, s.supersededBy == nil { finish(s, .failed, CallReason.failed) }
+            guard session === s else { return }
+            if s.supersededBy != nil {
+                // A glare it lost, whose winner's offer is not here yet: the offer comes in moments, or the call ends busy at
+                // the ring timer (``onTimer(_:_:)``), as a placed call's wait does.
+                timer(s, .ringOut, timings.minRing)
+                publish(s)
+            } else {
+                // Ended by none of them: it fails now.
+                finish(s, .failed, CallReason.failed)
+            }
         } else if let i = abandoned.firstIndex(of: seq) {
             abandoned.remove(at: i)
             sendEnd(callId, CallReason.hangup)

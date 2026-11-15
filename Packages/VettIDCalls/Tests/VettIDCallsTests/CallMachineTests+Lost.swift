@@ -82,4 +82,23 @@ extension CallMachineTests {
         #expect(signalling.sent.contains("answer(\(glareId))"))
         #expect(!hasSent(signalling, "end("), "nothing sent for the lost call")
     }
+
+    /// A held glare end, and the winner's offer never comes: the wait ends busy at the ring timer, with nothing sent.
+    @Test func aLostCallWaitingForAGlaresWinnerEndsBusyWhenItNeverComes() async throws {
+        let m = machine()
+        signalling.holdStart()
+        m.call("conn-1")
+        await runCurrent()
+        signalling.deliver(.end(callId: callId, reason: CallReason.busy, supersededBy: glareId))
+        await runCurrent()
+        signalling.startResult = { throw CallLostError(callId: callId) }
+        signalling.releaseStart()
+        await runCurrent()
+        let l = try live(m)
+        #expect(l.direction == .outgoing && l.callId == callId && l.phase == .calling, "the wait is shown")
+        await advance(CallTimings().minRing.wholeMilliseconds + 1_000)
+        await runCurrent()
+        #expect(try ended(m).reason == .busy)
+        #expect(!hasSent(signalling, "end("))
+    }
 }
