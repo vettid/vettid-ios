@@ -9,7 +9,8 @@ import VettIDDataTesting
 // swiftlint:disable line_length
 
 /// TEST ONLY. The vault calls of ``FeedManager``: the feed in memory, as vettid-vault's `features/feed` keeps it.
-final class FakeFeedOps: FeedOps, @unchecked Sendable {
+@MainActor
+final class FakeFeedOps: FeedOps {
     var items: [FeedItem] = []
     var seq: Int64 = 0
     var retention: Int?

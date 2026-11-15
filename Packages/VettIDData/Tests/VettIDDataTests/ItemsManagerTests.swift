@@ -29,7 +29,8 @@ final class TestLocked<Value>: @unchecked Sendable {
 
 /// TEST ONLY. The vault calls of ``ItemsManager``: every call recorded, answers set by the test; every member behind a
 /// lock. Mirrors the `Ops` of vettid-android's `ItemsManagerTest`.
-final class FakeItemOps: ItemOps, @unchecked Sendable {
+@MainActor
+final class FakeItemOps: ItemOps {
     @TestLocked var calls: [String] = []
     @TestLocked var pages: [ItemPage] = []
     @TestLocked var items: [String: Item] = [:]

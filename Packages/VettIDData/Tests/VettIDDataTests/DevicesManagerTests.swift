@@ -23,7 +23,8 @@ final class SelfIDBox {
     var value: String?
 }
 
-final class FakeDevicesOps: DevicesOps, @unchecked Sendable {
+@MainActor
+final class FakeDevicesOps: DevicesOps {
     var devices = (try? obj(#"{"devices":[]}"#))!
     var grantsAll = (try? obj(#"{"grants":[],"suspended":[]}"#))!
     var grantsByAgent: [String: JsonObject] = [:]

@@ -15,7 +15,8 @@ import VettIDCrypto
 @Suite struct ProfileManagerTests {
     nonisolated static let ik = [UInt8](repeating: 0x04, count: 32)
 
-    final class Ops: ProfileOps, @unchecked Sendable {
+    @MainActor
+    final class Ops: ProfileOps {
         var nameSets: [[String]] = []
         var error: String?
         var errorBody: String?

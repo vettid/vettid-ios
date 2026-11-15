@@ -10,7 +10,8 @@ import VettIDDataTesting
 
 /// TEST ONLY. The vault calls of ``MessagesManager``: a conversation per connection, in arrival order, paged as
 /// vettid-vault pages it (by count only); every call recorded.
-final class FakeMessageOps: MessageOps, @unchecked Sendable {
+@MainActor
+final class FakeMessageOps: MessageOps {
     private let lock = NSLock()
     private var recorded: [String] = []
     private var failures: [String: VaultOpError] = [:]

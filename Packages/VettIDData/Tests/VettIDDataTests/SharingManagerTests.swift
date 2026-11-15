@@ -10,7 +10,8 @@ import VettIDDataTesting
 
 /// TEST ONLY. The vault calls of ``SharingManager``: every call recorded, answers set by the test, every member behind a
 /// lock. Mirrors the `Ops` of vettid-android's `SharingManagerTest`.
-final class FakeSharingOps: SharingOps, @unchecked Sendable {
+@MainActor
+final class FakeSharingOps: SharingOps {
     @TestLocked var calls: [String] = []
     @TestLocked var tagPages: [TagPage] = []
     @TestLocked var rulePages: [String] = []

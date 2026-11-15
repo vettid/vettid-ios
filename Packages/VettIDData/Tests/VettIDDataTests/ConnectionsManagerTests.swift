@@ -9,7 +9,8 @@ import VettIDDataTesting
 // swiftlint:disable line_length
 
 /// TEST ONLY. The vault calls of ``ConnectionsManager``, answered from fixtures; every call recorded.
-final class FakeConnectionOps: ConnectionOps, @unchecked Sendable {
+@MainActor
+final class FakeConnectionOps: ConnectionOps {
     var calls: [String] = []
     var errors: [String: VaultOpError] = [:]
     /// Calls that always fail (`retry`).
