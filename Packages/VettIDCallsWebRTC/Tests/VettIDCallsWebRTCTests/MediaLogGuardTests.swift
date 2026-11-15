@@ -53,7 +53,7 @@ struct MediaLogGuardTests {
             }
             for name in MediaLogGuard.offences(in: text) { offenders.append("\(path): \(name)") }
             // A custom audio device sees the decrypted audio: only the factory's file (Debug-only code) and tests may name it.
-            let isTest = path.contains("Tests/")
+            let isTest = Self.isTestPath(path)
             let factoryFile = "Packages/VettIDCallsWebRTC/Sources/VettIDCallsWebRTC/WebRtcRuntime.swift"
             if !isTest {
                 // The factory's file may name it only inside its `#if DEBUG` blocks, which a Release build does not compile.
@@ -79,6 +79,25 @@ struct MediaLogGuardTests {
         #expect(MediaLogGuard.offencesOutsideTests(in: "let c = RTCConfiguration()").isEmpty)
     }
 
+    /// The test targets' files, by path from the repository root: a package's `Tests/` and the app's test targets. A source file
+    /// merely named like a test, or a `Tests` folder elsewhere, is not one.
+    static func isTestPath(_ path: String) -> Bool {
+        let parts = path.split(separator: "/")
+        let appTestTargets = ["AppTests", "AppUITests", "AppDevStackUITests"]
+        if let first = parts.first, appTestTargets.contains(String(first)), parts.count > 1 { return true }
+        return parts.count > 3 && parts[0] == "Packages" && parts[2] == "Tests"
+    }
+
+    @Test func onlyTheTestTargetsFilesCountAsTests() {
+        #expect(Self.isTestPath("Packages/VettIDCallsWebRTC/Tests/VettIDCallsWebRTCTests/FakeAudioDevice.swift"))
+        #expect(Self.isTestPath("AppTests/CallsTests.swift"))
+        #expect(Self.isTestPath("AppUITests/CallsCatalogUITests.swift"))
+        #expect(!Self.isTestPath("Packages/VettIDCallsWebRTC/Sources/VettIDCallsWebRTC/RuntimeTests.swift"))
+        #expect(!Self.isTestPath("Packages/VettIDData/Sources/VettIDDataTesting/Tests/Fake.swift"))
+        #expect(!Self.isTestPath("App/Tests/Mic.swift"))
+        #expect(!Self.isTestPath("AppTestsHelper.swift"))
+    }
+
     /// The factory's file may name the audio device type only inside `#if DEBUG`.
     @Test func theAudioDeviceTypeIsAllowedOnlyInsideADebugBlock() {
         let inside = "let a = 1\n#if DEBUG\nvar d: (any RTCAudioDevice)?\n#if os(iOS)\nlet x = 1\n#endif\n#endif\nlet b = 2\n"
@@ -89,6 +108,13 @@ struct MediaLogGuardTests {
         // A block of another condition is compiled in Release: the name there is refused.
         let release = "#if !DEBUG\nvar d: (any RTCAudioDevice)?\n#endif\n"
         #expect(!MediaLogGuard.offencesOutsideTests(in: MediaLogGuard.withoutDebugBlocks(release)).isEmpty)
+        // The `#else` (or `#elseif`) of a `#if DEBUG` is compiled in Release: a name there is refused, and nesting still counts.
+        for branch in ["#else", "#elseif os(macOS)"] {
+            let nested = "#if os(iOS)\nlet y = 1\n#else\nlet z = 1\n#endif\n"
+            let other = "#if DEBUG\nlet x = 1\n\(nested)\(branch)\nvar d: (any RTCAudioDevice)?\n#endif\n"
+            #expect(!MediaLogGuard.offencesOutsideTests(in: MediaLogGuard.withoutDebugBlocks(other)).isEmpty, "\(branch)")
+            #expect(!MediaLogGuard.withoutDebugBlocks(other).contains("let z = 1"), "a nested #else stays in the Debug block")
+        }
     }
 
     /// The scan reads the files that carry settings and project wiring, and does not skip another directory called "build".

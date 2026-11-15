@@ -46,10 +46,11 @@ extension WebRtcMediaCore {
         receiverCryptor = receiver
     }
 
-    /// Both directions' keys at index 0. Throws ``MediaNotEncryptedError`` for keys of a suite other than the cryptors'
-    /// (the cryptors are never remade; the call ends), and never sets a key after the receiver has failed to decrypt.
+    /// The size of each direction's key.
     static let directionKeySize = 32
 
+    /// Both directions' keys at index 0. Throws ``MediaNotEncryptedError`` for keys of a suite other than the cryptors'
+    /// (the cryptors are never remade; the call ends), and never sets a key after the receiver has failed to decrypt.
     func takeKeys(_ suite: MediaSuite, send: SecretBytes, receive: SecretBytes) throws {
         // Every way out, a throw included, wipes both copies.
         defer {
