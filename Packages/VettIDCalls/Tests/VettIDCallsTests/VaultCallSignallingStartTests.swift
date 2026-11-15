@@ -229,9 +229,12 @@ extension VaultCallSignallingTests {
     /// ends).
     @Test func aRememberedEndAlsoSaysTheCallIsLost() async throws {
         let s = await signalling()
-        let (call, error) = try await heldStartResult(s) { gateway.send(.ended(CallEnded(callId: callId, reason: "busy"))) }
+        let (call, error) = try await heldStartResult(s) {
+            gateway.send(.ended(CallEnded(callId: callId, reason: "busy", supersededBy: glareId)))
+        }
         #expect(destroyed(call))
-        #expect(error as? CallLostError == CallLostError(callId: callId))
+        // The end goes with it: the machine may not have it yet.
+        #expect(error as? CallLostError == CallLostError(callId: callId, end: .init(reason: "busy", supersededBy: glareId)))
         #expect(!endedHere)
     }
 

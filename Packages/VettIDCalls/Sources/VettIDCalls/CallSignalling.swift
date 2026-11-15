@@ -69,9 +69,26 @@ package struct CallRefusedError: Error, Equatable, Sendable, CustomStringConvert
 /// `call.start` placed [callId], but the call can no longer be made: it was ended, or an end for it may have been lost, while
 /// it was being started, and its key is gone. The machine ends it (``CallMachine``'s `lost`), with the reason the session calls for.
 package struct CallLostError: Error, Equatable, Sendable, CustomStringConvertible {
-    package let callId: String
+    /// The vault's `call.end` for the call, when it came while the call was being started and was remembered: the machine
+    /// may not have it yet (it is on its way to the machine) or at all (more events came than the machine holds).
+    package struct End: Equatable, Sendable {
+        package let reason: String
+        package let supersededBy: String?
 
-    package init(callId: String) { self.callId = callId }
+        package init(reason: String, supersededBy: String? = nil) {
+            self.reason = reason
+            self.supersededBy = supersededBy
+        }
+    }
+
+    package let callId: String
+    /// Nil: the end is not known (it may have been lost, or the call was ended here).
+    package let end: End?
+
+    package init(callId: String, end: End? = nil) {
+        self.callId = callId
+        self.end = end
+    }
 
     package var description: String { "call lost" }
 }

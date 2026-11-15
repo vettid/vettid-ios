@@ -141,8 +141,46 @@ extension CallMachineTests {
     @Test func aLostCallNoSessionKnowsIsEndedAtTheVault() async throws {
         let m = machine()
         await runCurrent()
-        m.post(.lost(seq: 999, callId: callId))
+        m.post(.lost(seq: 999, callId: callId, end: nil))
         await runCurrent()
         #expect(signalling.sent.filter { $0.hasPrefix("end") } == ["end(\(callId), failed)"])
+    }
+
+    /// The vault's end the signalling remembered is still on its way to the machine when the start says the call is lost: the
+    /// end it carries is what the call shows, nothing is sent, and the end landing after changes nothing.
+    @Test func aLostCallsRememberedEndCountsBeforeTheMachineHasIt() async throws {
+        let m = machine()
+        signalling.holdStart()
+        m.call("conn-1")
+        await runCurrent()
+        signalling.startResult = { throw CallLostError(callId: callId, end: .init(reason: CallReason.busy)) }
+        signalling.releaseStart()
+        await runCurrent()
+        #expect(try ended(m).reason == .busy)
+        signalling.deliver(.end(callId: callId, reason: CallReason.busy))
+        await runCurrent()
+        #expect(try ended(m).reason == .busy)
+        #expect(!hasSent(signalling, "end("))
+    }
+
+    /// The same with a glare's end, and the winner's offer held: the winner is answered, as for a placed call.
+    @Test func aLostCallsRememberedGlareEndAnswersTheHeldWinner() async throws {
+        let m = machine()
+        signalling.holdStart()
+        m.call("conn-1")
+        await runCurrent()
+        signalling.deliver(offer(glareId))
+        await runCurrent()
+        signalling.startResult = {
+            throw CallLostError(callId: callId, end: .init(reason: CallReason.busy, supersededBy: glareId))
+        }
+        signalling.releaseStart()
+        await runCurrent()
+        signalling.deliver(.end(callId: callId, reason: CallReason.busy, supersededBy: glareId))
+        await runCurrent()
+        let l = try live(m)
+        #expect(l.direction == .incoming && l.callId == glareId)
+        #expect(signalling.sent.contains("answer(\(glareId))"))
+        #expect(!hasSent(signalling, "end("))
     }
 }
