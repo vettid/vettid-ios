@@ -73,6 +73,38 @@ import VettIDVault
         #expect(due == ["here:false", "elsewhere:true", "here:true"])
     }
 
+    /// A value set again from within ``OwnerCheckManager/onHeldChange`` (nested) does not lose the pass being set.
+    @Test func aNestedSetKeepsThePass() async throws {
+        let ops = FakeOwnerCheckOps()
+        let m = manager(ops)
+        ops.status = #"{"state":"held","deadline":"2026-10-06T11:00:00Z","interval_seconds":86400,"hold":true}"#
+        try await m.refreshOwnerCheck()
+        var due: [String] = []
+        m.onReplayDue = { pass, stateEnded in due.append("\(pass):\(stateEnded)") }
+        m.onHeldChange = { held in if !held { m.onLockedHere() } } // saves the flags: a nested set of the same value
+        #expect(try await m.check(pin: "975310", password: "pw") == .passed)
+        #expect(due == ["here:true"])
+    }
+
+    /// Another device's check without a deadline (`sync.event{owner_check}` that says none): the passed deadline is not
+    /// kept, so the pass ends the gate (a due state known by the clock alone included); the status is read for the next.
+    @Test func aCheckEventWithoutADeadlineEndsTheGate() async throws {
+        let ops = FakeOwnerCheckOps()
+        let m = manager(ops)
+        ops.status = #"{"state":"ok","deadline":"2026-10-06T11:30:00Z","interval_seconds":86400,"hold":true}"#
+        try await m.refreshOwnerCheck()
+        #expect(m.ownerCheck?.gated(now) == true)
+        var due: [String] = []
+        m.onReplayDue = { pass, stateEnded in due.append("\(pass):\(stateEnded)") }
+        ops.status = #"{"state":"ok","deadline":"2026-10-07T12:00:00Z","interval_seconds":86400,"hold":true}"#
+        m.onEvent(event("sync.event", #"{"kind":"owner_check"}"#))
+        #expect(due == ["elsewhere:false"])
+        #expect(m.ownerCheck?.gated(now) == false)
+        for _ in 0..<200 where m.ownerCheck?.deadline == nil { try await Task.sleep(for: .milliseconds(5)) }
+        #expect(m.ownerCheck?.deadline == OwnerCheckManager.instant("2026-10-07T12:00:00Z"), "the status read for the next")
+        #expect(due.count == 1)
+    }
+
     /// A restart: the held view kept on the phone, then a status read that says ok, is no pass.
     @Test func aRestartThenAStatusReadIsNoPass() async throws {
         let ops = FakeOwnerCheckOps()

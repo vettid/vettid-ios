@@ -123,6 +123,9 @@ public final class ApprovalsManager: ApprovalsRepository {
     /// Told of each read of the open asks (`pending.list`, every page) that was applied: what it merged (the waiting asks'
     /// replay after a passed owner check, ANDROID-PLAN 0.1.132 Notifications 7).
     @ObservationIgnored var onOpenAsksRead: @MainActor (OpenAsksRead) -> Void = { _ in }
+    /// The reads of the approvals begun (``refreshApprovals(quietly:requests:covered:)``): each read's stamp, monotonic
+    /// whatever the clock does.
+    @ObservationIgnored private(set) var readsBegun = 0
     /// The batches whose first ask was withdrawn while others were open, by its `ref` (``batchAskClosed(_:)``).
     @ObservationIgnored var withdrawnBatches: [String: Set<String>] = [:]
     /// The asks closed as withdrawn (`decided{withdrawn: true}`), newest last, at most ``maxClosedAsks``, for a screen
@@ -477,6 +480,8 @@ public final class ApprovalsManager: ApprovalsRepository {
         let g = generation
         let since = changes
         let t = now()
+        readsBegun += 1
+        let stamp = readsBegun
         // Reads may overlap (the quiet one and the screen's): what was decided stays marked until no read that began before
         // it is on its way.
         readSinces.append(since)
@@ -514,7 +519,7 @@ public final class ApprovalsManager: ApprovalsRepository {
                 return Self.withItems(e, batched[p.key] ?? [])
             }
         }
-        onOpenAsksRead(merged(pending.result, at: t, since: since, changed: changed))
+        onOpenAsksRead(merged(pending.result, at: t, since: since, changed: changed, stamp: stamp))
         withdrawnBatchesListed()
         if let failure = requestsFailure ?? lists.failures.first { throw failure }
     }

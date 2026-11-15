@@ -65,4 +65,17 @@ extension OwnerCheckManager {
         unlockPin = nil
         pinEpoch += 1
     }
+
+    /// (Release R, ANDROID-PLAN "Other screens") Right after an unlock that cancelled a recovery: the owner check at once,
+    /// with the same entries, whatever the deadline, because it records that the member is present (§11.14.5). A check
+    /// that does not pass waits in ``unlockCheckOutcome``, and ``checkAfterCancel`` asks for the check screen.
+    func afterCancelledRecovery(pin: String, password: String) async {
+        markOpen()
+        forgetEstimate()
+        let r = await checkOutcome(pin: pin, password: password, holdOff: nil, forUnlock: true)
+        if r != .passed {
+            unlockCheckOutcome = r
+            checkAfterCancel = true
+        }
+    }
 }

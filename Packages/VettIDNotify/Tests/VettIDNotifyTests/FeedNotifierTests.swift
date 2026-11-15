@@ -299,6 +299,13 @@ import VettIDVault
         w.visible = .notifications
         w.notifier.replayed(item("a3", kind: "approval.pending", ref: "r3"))
         #expect(w.poster.shown["a3"] == nil, "not while the Notifications list is in front")
+        // One still posted stays as it is while it would not be posted again (the list, or its screen, in front).
+        let log = w.poster.log
+        w.notifier.replayed(ask)
+        #expect(w.poster.shown["a1"] != nil && w.poster.log == log)
+        w.visible = nil
+        w.notifier.replayed(ask)
+        #expect(Array(w.poster.log.suffix(2)) == ["remove:a1", "post:a1"])
     }
 
     /// ANDROID-PLAN §4 Notification modes 8: a notification posted before the process ended does not outlive the open vault.
