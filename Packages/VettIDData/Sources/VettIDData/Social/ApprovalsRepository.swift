@@ -77,7 +77,8 @@ public protocol ApprovalsRepository: ConnectionRequestsRepository {
     /// and the approval offered, only if it matches the hash (``CriticalUse/payloadVerified``).
     func loadCriticalUse(_ requestID: String) async throws
 
-    /// Opens the credential's unlock window with [password] and signs the challenge (§10.4).
+    /// Opens the credential's unlock window with [password] and signs the challenge (§10.4). Refused (``FailureKind/other``,
+    /// nothing sent) for a challenge that carries a document: that one is approved only with the document shown.
     func approveAuthentication(_ requestID: String, password: String) async throws
 
     /// Fetches the document of [request], a challenge that carries one, and checks it against what the vault said of it
@@ -87,8 +88,8 @@ public protocol ApprovalsRepository: ConnectionRequestsRepository {
 
     /// Opens the credential's unlock window with [password] and signs the challenge in the document form over [document],
     /// the document the screen showed whole. When the vault answers `document_not_fetched`, the document is fetched again:
-    /// the same bytes are approved again once, other bytes come back as ``DocumentApproval/changed(_:)`` to be shown from
-    /// the start (the request stays open).
+    /// the same bytes are approved again once; anything else comes back as ``DocumentApproval/changed(_:)``, nothing
+    /// approved and the request still open.
     func approveAuthentication(_ request: AuthenticationRequest, password: String, document: ApprovalDocument) async throws
         -> DocumentApproval
 

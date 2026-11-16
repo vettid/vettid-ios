@@ -46,9 +46,11 @@ public enum Jcs {
         out.append(UInt8(ascii: "}"))
     }
 
-    /// A plain JSON integer: digits only (``StrictJson`` already refuses a leading zero), at most 2^53 − 1.
+    /// A plain JSON integer: digits only, no leading zero, at most 2^53 − 1.
     public static func isInteger(_ raw: String) -> Bool {
-        guard !raw.isEmpty, raw.utf8.allSatisfy({ (0x30...0x39).contains($0) }), let n = UInt64(raw) else { return false }
+        guard !raw.isEmpty, raw.utf8.allSatisfy({ (0x30...0x39).contains($0) }), raw == "0" || !raw.hasPrefix("0"),
+              let n = UInt64(raw)
+        else { return false }
         return n <= StrictJson.maxSafeInteger
     }
 

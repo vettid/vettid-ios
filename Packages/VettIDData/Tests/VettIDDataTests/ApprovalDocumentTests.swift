@@ -95,6 +95,8 @@ import VettIDCrypto
         #expect(check(good, context: Self.ref(good) + " more") == .ref)
         #expect(check(good, context: Self.ref(good).uppercased()) == .ref)
         #expect(check(good, context: Self.ref(deepOK)) == .ref, "another document's reference")
+        // Bytes, not characters: a prepended mark (U+0600) before the reference does not hide it, as in the vault.
+        #expect(check(good, context: "x \u{0600}" + ApprovalDocument.ref(Bytes.sha256(Array(good.utf8)))) == nil)
     }
 
     @Test func aDocumentOfAnotherHashOrSizeOrEncodingIsNotShown() {

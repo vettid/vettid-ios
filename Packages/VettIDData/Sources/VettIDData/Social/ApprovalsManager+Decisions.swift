@@ -38,6 +38,11 @@ extension ApprovalsManager {
     private func pending(_ key: String) -> PendingApproval? { approvals.first { $0.key == key } }
 
     public func approveAuthentication(_ requestID: String, password: String) async throws {
+        // §10.4 "Approval documents": a challenge that carries a document is approved only from the screen that showed it
+        // (``approveAuthentication(_:password:document:)``), never without it.
+        if case .authentication(let r)? = pending("auth:\(requestID)"), r.hasDocument {
+            throw VaultFailure(.other, code: Self.documentNotShown)
+        }
         try await guarded { try await openUnlockWindow(password) }
         try await decide("auth:\(requestID)") { try await $0.authenticateApprove(requestID, documentSha256: nil) }
     }
@@ -49,6 +54,8 @@ extension ApprovalsManager {
         do {
             base64 = try await guarded { try await ops().authenticateDocument(request.requestID) }
         } catch let f as VaultFailure where f.kind == .notFound {
+            // The vault also answers not_found for a challenge without a document; this ask named one, so not_found
+            // means it ended, as for a decision.
             drop(key)
             throw f
         }
@@ -74,6 +81,8 @@ extension ApprovalsManager {
 
     /// The vault's answer to an approval with the hash of a document this device has not fetched (0.89.0).
     static let documentNotFetched = "document_not_fetched"
+    /// The app's own refusal to approve a challenge that carries a document without showing it (never sent to the vault).
+    static let documentNotShown = "document_not_shown"
 
     public func denyAuthentication(_ requestID: String) async throws {
         try await decide("auth:\(requestID)") { try await $0.authenticateDeny(requestID) }

@@ -44,9 +44,16 @@ final class FakeApprovalOps: ApprovalOps {
     /// A page after the first names the cursor it was asked for as `next`, so the listing never ends.
     var pendingStuck = false
 
+    /// A second failure for a call, thrown once ``errors`` has none left for it.
+    var failAgain: [String: VaultOpError] = [:]
+
     private func call(_ name: String) throws {
         calls.append(name)
-        if let e = errors.removeValue(forKey: name.components(separatedBy: ":")[0]) { throw e }
+        let key = name.components(separatedBy: ":")[0]
+        if let e = errors.removeValue(forKey: key) {
+            if let again = failAgain.removeValue(forKey: key) { errors[key] = again }
+            throw e
+        }
     }
 
     static func error(_ code: String) -> VaultOpError { VaultOpError(type: "x", code: code, detail: "", body: nil) }

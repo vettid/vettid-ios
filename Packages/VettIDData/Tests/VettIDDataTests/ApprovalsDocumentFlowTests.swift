@@ -101,7 +101,7 @@ import VettIDDataTesting
         #expect(ops.calls == ["authDocument:a1", approve, "authDocument:a1", approve] && m.approvals.isEmpty)
     }
 
-    @Test func notFetchedWithOtherBytesShowsThemFromTheStart() async throws {
+    @Test func notFetchedWithOtherBytesApprovesNothing() async throws {
         let (m, _) = manager()
         pending(m, challenge())
         ops.documents = [Self.b64(Self.doc), Self.b64(Self.other)]
@@ -111,6 +111,30 @@ import VettIDDataTesting
         // The other bytes are not the vault's announced hash: they fail the checks, and nothing more is approved.
         #expect(try await m.approveAuthentication(r, password: "pw", document: d) == .changed(.failure(.hash)))
         #expect(ops.calls.filter { $0.hasPrefix("authApprove") }.count == 1 && m.approvals.count == 1)
+    }
+
+    @Test func aSecondNotFetchedIsThrownAndKeepsTheAsk() async throws {
+        let (m, _) = manager()
+        pending(m, challenge())
+        ops.documents = [Self.b64(Self.doc)]
+        let r = try request(m)
+        guard case .success(let d) = try await m.authenticationDocument(r) else { throw CocoaError(.coderInvalidValue) }
+        ops.errors["authApprove"] = FakeApprovalOps.error("document_not_fetched")
+        ops.failAgain["authApprove"] = FakeApprovalOps.error("document_not_fetched")
+        await #expect(throws: VaultFailure.self) { _ = try await m.approveAuthentication(r, password: "pw", document: d) }
+        #expect(ops.calls.filter { $0.hasPrefix("authApprove") }.count == 2 && m.approvals.count == 1)
+    }
+
+    @Test func anAskThatEndedBeforeTheRefetchIsDropped() async throws {
+        let (m, _) = manager()
+        pending(m, challenge())
+        ops.documents = [Self.b64(Self.doc)]
+        let r = try request(m)
+        guard case .success(let d) = try await m.authenticationDocument(r) else { throw CocoaError(.coderInvalidValue) }
+        ops.errors["authApprove"] = FakeApprovalOps.error("document_not_fetched")
+        ops.errors["authDocument"] = FakeApprovalOps.error("not_found")
+        await #expect(throws: VaultFailure.self) { _ = try await m.approveAuthentication(r, password: "pw", document: d) }
+        #expect(ops.calls.filter { $0.hasPrefix("authApprove") }.count == 1 && m.approvals.isEmpty)
     }
 
     @Test func aRefusedApprovalLeavesTheAskOpen() async throws {
@@ -124,6 +148,23 @@ import VettIDDataTesting
             await #expect(throws: VaultFailure.self) { _ = try await m.approveAuthentication(r, password: "pw", document: d) }
             #expect(m.approvals.count == 1, "\(code)")
         }
+    }
+
+    @Test func aChallengeWithADocumentIsNeverApprovedWithoutIt() async throws {
+        let (m, unlocked) = manager()
+        pending(m, challenge(required: false))
+        await #expect(throws: VaultFailure.self) { try await m.approveAuthentication("a1", password: "pw") }
+        #expect(ops.calls.isEmpty && unlocked().isEmpty && m.approvals.count == 1)
+    }
+
+    @Test func aMalformedHashStillNamesADocument() async throws {
+        let (m, _) = manager()
+        pending(m, #"{"request_id":"a1","connection_id":"c1","purpose":"approval","context":"x","document_sha256":null,"document_size":\#(Self.doc.utf8.count),"exp":"\#(exp)"}"#)
+        let r = try request(m)
+        #expect(r.hasDocument && r.documentSha256 == "")
+        ops.documents = [Self.b64(Self.doc)]
+        #expect(try await m.authenticationDocument(r) == .failure(.hash))
+        await #expect(throws: VaultFailure.self) { try await m.approveAuthentication("a1", password: "pw") }
     }
 
     @Test func anApprovalWithoutADocumentSendsNoHash() async throws {

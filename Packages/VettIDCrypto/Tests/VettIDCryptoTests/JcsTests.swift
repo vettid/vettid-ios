@@ -34,6 +34,7 @@ import Testing
             #expect(throws: CryptoError.self) { try canonical(#"{"n":\#(n)}"#) }
         }
         #expect(try canonical(#"{"n":9007199254740991,"z":0}"#) == #"{"n":9007199254740991,"z":0}"#)
+        #expect(Jcs.isInteger("0") && !Jcs.isInteger("007") && !Jcs.isInteger(""))
     }
 
     @Test func theApprovalDocumentVector() throws {
@@ -43,7 +44,7 @@ import Testing
         let d = Array(SHA256.hash(data: document))
         #expect(d == (try v.hex("document_sha256_hex")))
         #expect(Base64s.encodeStd(d) == (try v.str("document_sha256_b64")))
-        #expect((try v.str("context")).hasSuffix(Bytes.hex(Array(d.prefix(8)))))
+        #expect(Array((try v.str("context")).utf8).suffix(16) == Array(Bytes.hex(Array(d.prefix(8))).utf8))
 
         // The document form: len(purpose) || purpose || d || m, under "vettid/vms/2/conn-auth-document".
         let m = try v.hex("message_document_hex")

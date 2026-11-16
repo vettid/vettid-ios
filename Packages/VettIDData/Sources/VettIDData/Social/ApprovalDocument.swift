@@ -66,7 +66,9 @@ public struct ApprovalDocument: Equatable, Sendable {
               onlyIntegers(.object(doc))
         else { return .failure(.shape) }
         guard let canonical = try? Jcs.canonical(.object(doc)), canonical == bytes else { return .failure(.canonical) }
-        guard let context, context.hasSuffix(ref(d)) else { return .failure(.ref) }
+        // As bytes, as the vault's strings.HasSuffix compares: a String suffix compares characters, and a character that
+        // joins the one before the reference (a prepended mark) would hide a reference the vault finds.
+        guard let context, Array(context.utf8).suffix(16) == Array(ref(d).utf8) else { return .failure(.ref) }
         return .success(ApprovalDocument(bytes: bytes, d: d, action: action, summary: summary, payload: payload))
     }
 
@@ -79,7 +81,8 @@ public struct ApprovalDocument: Equatable, Sendable {
             && a.utf8.allSatisfy { (0x61...0x7A).contains($0) || (0x30...0x39).contains($0) || $0 == 0x5F || $0 == 0x2E }
     }
 
-    /// Every number, at any depth, a plain integer within 2^53 − 1 (VAULT-MESSAGING 0.90.16 §10.4 check 2).
+    /// Every number, at any depth, a plain integer within 2^53 − 1 (§10.4 check 2: since 0.89.0 by §5.3's integers, said
+    /// outright for every depth in 0.90.16).
     static func onlyIntegers(_ v: JsonValue) -> Bool {
         switch v {
         case .number(let raw): Jcs.isInteger(raw)
@@ -94,7 +97,9 @@ public struct ApprovalDocument: Equatable, Sendable {
 public enum DocumentApproval: Equatable, Sendable {
     /// Signed in the document form; the request left the list.
     case approved
-    /// The vault had no record of this device fetching the document it showed, and fetching it again gave other bytes (or
-    /// bytes that fail the checks): the screen shows this from the start before Approve is enabled again.
+    /// The vault had no record of this device fetching the document it showed, and fetching it again did not give the same
+    /// bytes: nothing was approved, and the screen starts again from what this holds. Since a challenge's document is fixed
+    /// and checked against the hash the ask announced, other bytes always fail the checks, so in practice this is a
+    /// failure: "This request can't be shown", Deny only.
     case changed(Result<ApprovalDocument, ApprovalDocument.Failure>)
 }

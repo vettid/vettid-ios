@@ -162,15 +162,15 @@ public final class FakeApprovals: ApprovalsRepository {
         try decided("approveAuthentication", "auth:\(requestID)", requestID)
     }
 
-    /// What ``authenticationDocument(_:)`` answers (a failure when nil).
-    public var authDocument: Result<ApprovalDocument, ApprovalDocument.Failure>? = .failure(.hash)
+    /// What ``authenticationDocument(_:)`` answers.
+    public var authDocument: Result<ApprovalDocument, ApprovalDocument.Failure> = .failure(.hash)
     /// What ``approveAuthentication(_:password:document:)`` answers once the decision is made.
     public var documentApproval: DocumentApproval = .approved
 
     public func authenticationDocument(_ request: AuthenticationRequest) async throws
         -> Result<ApprovalDocument, ApprovalDocument.Failure> {
         try call("authenticationDocument", request.requestID)
-        return authDocument ?? .failure(.hash)
+        return authDocument
     }
 
     public func approveAuthentication(_ request: AuthenticationRequest, password: String, document: ApprovalDocument)
