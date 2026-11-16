@@ -22,8 +22,24 @@ extension VaultApi {
 
     /// `connection.authenticate.approve`: signs the challenge with the credential key; the unlock window must be open
     /// (`credential.unlock` first, else `credential_locked`). `not_found` for a request that ended.
-    public func authenticateApprove(_ requestID: String) async throws {
-        _ = try await approvalOp("connection.authenticate.approve", JsonBuilder().string("request_id", requestID))
+    /// (0.89.0 §10.4 "Approval documents") [documentSha256]: the hash of the document the app fetched and showed, so that the
+    /// vault signs the document form; `document_not_fetched` when this device has not fetched that document, `bad_request`
+    /// for another hash, `update_required` for none on a `document_required` challenge (the challenge stays open).
+    public func authenticateApprove(_ requestID: String, documentSha256: String?) async throws {
+        let b = JsonBuilder().string("request_id", requestID)
+        if let documentSha256 { b.string("document_sha256", documentSha256) }
+        _ = try await approvalOp("connection.authenticate.approve", b)
+    }
+
+    /// `connection.authenticate.document` (0.89.0): the challenge's document, standard base64, while `pending.list` would
+    /// list the ask for this device; `not_found` otherwise, and for a challenge without one. The vault records the fetch:
+    /// only a device that fetched the document can approve it in the document form.
+    public func authenticateDocument(_ requestID: String) async throws -> String {
+        let o = try await approvalOp("connection.authenticate.document", JsonBuilder().string("request_id", requestID))
+        guard let d = VaultJSON.string(o, "document") else {
+            throw VaultStateError(message: "connection.authenticate.document without document")
+        }
+        return d
     }
 
     /// `connection.authenticate.deny`: a decline (§10.4.1: it starts the cooldown).

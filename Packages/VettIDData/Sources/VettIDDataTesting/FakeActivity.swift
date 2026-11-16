@@ -162,6 +162,28 @@ public final class FakeApprovals: ApprovalsRepository {
         try decided("approveAuthentication", "auth:\(requestID)", requestID)
     }
 
+    /// What ``authenticationDocument(_:)`` answers (a failure when nil).
+    public var authDocument: Result<ApprovalDocument, ApprovalDocument.Failure>? = .failure(.hash)
+    /// What ``approveAuthentication(_:password:document:)`` answers once the decision is made.
+    public var documentApproval: DocumentApproval = .approved
+
+    public func authenticationDocument(_ request: AuthenticationRequest) async throws
+        -> Result<ApprovalDocument, ApprovalDocument.Failure> {
+        try call("authenticationDocument", request.requestID)
+        return authDocument ?? .failure(.hash)
+    }
+
+    public func approveAuthentication(_ request: AuthenticationRequest, password: String, document: ApprovalDocument)
+        async throws -> DocumentApproval {
+        lastPassword = password
+        guard documentApproval == .approved else {
+            try call("approveAuthenticationDocument", request.requestID)
+            return documentApproval
+        }
+        try decided("approveAuthenticationDocument", "auth:\(request.requestID)", request.requestID)
+        return .approved
+    }
+
     public func denyAuthentication(_ requestID: String) async throws {
         try decided("denyAuthentication", "auth:\(requestID)", requestID)
     }

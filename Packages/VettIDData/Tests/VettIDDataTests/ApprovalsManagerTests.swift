@@ -51,7 +51,15 @@ final class FakeApprovalOps: ApprovalOps {
 
     static func error(_ code: String) -> VaultOpError { VaultOpError(type: "x", code: code, detail: "", body: nil) }
 
-    func authenticateApprove(_ requestID: String) async throws { try call("authApprove:\(requestID)") }
+    func authenticateApprove(_ requestID: String, documentSha256: String?) async throws {
+        try call("authApprove:\(requestID)" + (documentSha256.map { ":\($0)" } ?? ""))
+    }
+    /// The documents `connection.authenticate.document` answers, in turn (the last one again once they run out).
+    var documents: [String] = []
+    func authenticateDocument(_ requestID: String) async throws -> String {
+        try call("authDocument:\(requestID)")
+        return documents.count > 1 ? documents.removeFirst() : documents.first ?? ""
+    }
     func authenticateDeny(_ requestID: String) async throws { try call("authDeny:\(requestID)") }
     func grantList() async throws -> JsonObject {
         try call("grantList")

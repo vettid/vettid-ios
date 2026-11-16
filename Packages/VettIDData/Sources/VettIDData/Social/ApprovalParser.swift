@@ -28,15 +28,24 @@ public enum ApprovalParser {
 
     /// `connection.authenticate.pending`: `{request_id, connection_id, context?, purpose?, match_code?, exp}`; a `purpose`
     /// other than `signin` or `approval` is read as absent (0.65.0), and a `match_code` that is not a string of 2 or 3
-    /// digits on a sign-in is ignored (0.79.0).
+    /// digits on a sign-in is ignored (0.79.0). (0.89.0) `document_sha256`, `document_size` and `document_required` are kept
+    /// whatever the purpose: a challenge that names a document is never approved without it, and a value the app cannot
+    /// use (a `document_size` that is not an integer) only makes the document fail its checks.
     public static func authentication(_ o: JsonObject, at: Date) -> AuthenticationRequest? {
         guard let id = VaultJSON.string(o, "request_id"), let conn = VaultJSON.string(o, "connection_id") else { return nil }
         let purpose = AuthenticationPurpose.of(VaultJSON.string(o, "purpose"))
-        return AuthenticationRequest(
+        var r = AuthenticationRequest(
             requestID: id, connectionID: conn, context: VaultJSON.string(o, "context"), receivedAt: at,
             exp: instant(VaultJSON.string(o, "exp")), purpose: purpose,
             matchCode: AuthenticationRequest.matchCode(VaultJSON.string(o, "match_code"), purpose: purpose)
         )
+        if o.has("document_sha256") {
+            // Present but not a string still names a document: it fails the hash check, never approves without it.
+            r.documentSha256 = VaultJSON.string(o, "document_sha256") ?? ""
+            r.documentSize = VaultJSON.int(o, "document_size").flatMap { Int(exactly: $0) }
+            r.documentRequired = VaultJSON.bool(o, "document_required") == true
+        }
+        return r
     }
 
     /// `grant.pending`, or an entry of `grant.list`'s `pending`: `{request_id, connection_id, items, uses, expires_in,

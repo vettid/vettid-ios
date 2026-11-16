@@ -103,6 +103,17 @@ public struct AuthenticationRequest: Equatable, Sendable {
     /// The number the sign-in screen shows too (0.79.0 §10.4 "Match code"), only on a sign-in and only when valid
     /// (``matchCode(_:purpose:)``); display only, never a proof that the screen is the real service.
     public var matchCode: String?
+    /// (0.89.0 §10.4 "Approval documents") On an approval challenge that carries a document: `document_sha256`, standard
+    /// base64 of its SHA-256, as the vault sent it (checked only against the fetched document, ``ApprovalDocument``).
+    /// Never the document itself, which `connection.authenticate.document` fetches.
+    public var documentSha256: String?
+    /// The document's byte length (`document_size`), when the vault gave a plain integer.
+    public var documentSize: Int?
+    /// `document_required: true`: an approval that does not sign the document cannot count.
+    public var documentRequired = false
+
+    /// Whether the challenge carries a document: it is approved only from the screen that shows it.
+    public var hasDocument: Bool { documentSha256 != nil }
 
     /// [raw] as a challenge's match code: exactly 2 or 3 ASCII digits, kept as written ("07" stays "07"), and only with
     /// `purpose: "signin"`. Anything else is ignored, not refused: the challenge is shown as one without a code. The code

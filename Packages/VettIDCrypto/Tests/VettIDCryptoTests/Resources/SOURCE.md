@@ -35,6 +35,10 @@ stop-and-report item, never a skip.
   vault-signed ICE configurations; last commit touching it 079cde77a4792f15812c5908d0fa51d68ee2313f, vettid-vault
   #67): copied 2026-11-10 from commit 4c8bab001d532676f8db5dacd40371d601b1f982 (`main`), for calls C1 part 1; the same
   hash as vettid-android's copy.
+- `connauth_document.json` (VAULT-MESSAGING 0.89.0 §10.4 "Approval documents"; last commit touching it
+  9f23d2c0cb23eb6fae04263213544e578186ff57, vettid-vault #262): copied 2026-11-16 from that commit. `JcsTests.swift`
+  checks its document's canonical form, hash and document-form signature; VettIDData's `ApprovalDocumentTests.swift`
+  reads the same file for the app's checks.
 - Each later PR adds the files it checks.
 
 To refresh: copy the files again from a newer vettid-vault commit, update the commits
@@ -47,6 +51,7 @@ above and the hashes below, and run `swift test --package-path Packages/VettIDCr
 a8d86c76b9469f26526f8238d41bd07a6b74fcce3da6035879fc5910c5f36427  attachment.json
 a890582a80e24cea9e10523f01f2f0040924aa47cd66cd8c442c0a1577e284b3  blob.json
 94cb55fca6b63e5983474a7b9715acd4f4d9ce8930a1a801d09efb9e73d54d01  calls.json
+eb5cda1bae3eadc90116f0eb615290701482fff8b03483cd5c288324cef5b496  connauth_document.json
 3ab4f20eebb3ec621e97d3b03705c8b3851312e99e227d423e8f0e6066887360  envelope_sealed.json
 8cbf6324c294e6c99011bd3bd5f875fcd329cbe7be1e354b7be06f3c03044827  envelope_session.json
 9b69503b507fd117ab3d6a66368cb60bb24e09286867921a6f473fb476fb0577  handshake.json

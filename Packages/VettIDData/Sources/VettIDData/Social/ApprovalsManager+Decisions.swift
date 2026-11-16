@@ -39,8 +39,41 @@ extension ApprovalsManager {
 
     public func approveAuthentication(_ requestID: String, password: String) async throws {
         try await guarded { try await openUnlockWindow(password) }
-        try await decide("auth:\(requestID)") { try await $0.authenticateApprove(requestID) }
+        try await decide("auth:\(requestID)") { try await $0.authenticateApprove(requestID, documentSha256: nil) }
     }
+
+    public func authenticationDocument(_ request: AuthenticationRequest) async throws
+        -> Result<ApprovalDocument, ApprovalDocument.Failure> {
+        let key = "auth:\(request.requestID)"
+        let base64: String
+        do {
+            base64 = try await guarded { try await ops().authenticateDocument(request.requestID) }
+        } catch let f as VaultFailure where f.kind == .notFound {
+            drop(key)
+            throw f
+        }
+        return ApprovalDocument.check(
+            base64, sha256: request.documentSha256, size: request.documentSize, context: request.context
+        )
+    }
+
+    public func approveAuthentication(_ request: AuthenticationRequest, password: String, document: ApprovalDocument)
+        async throws -> DocumentApproval {
+        try await guarded { try await openUnlockWindow(password) }
+        let key = "auth:\(request.requestID)"
+        do {
+            try await decide(key) { try await $0.authenticateApprove(request.requestID, documentSha256: document.sha256) }
+            return .approved
+        } catch let f as VaultFailure where f.kind == .vaultCode(Self.documentNotFetched) {
+            let again = try await authenticationDocument(request)
+            guard case .success(let fetched) = again, fetched == document else { return .changed(again) }
+            try await decide(key) { try await $0.authenticateApprove(request.requestID, documentSha256: fetched.sha256) }
+            return .approved
+        }
+    }
+
+    /// The vault's answer to an approval with the hash of a document this device has not fetched (0.89.0).
+    static let documentNotFetched = "document_not_fetched"
 
     public func denyAuthentication(_ requestID: String) async throws {
         try await decide("auth:\(requestID)") { try await $0.authenticateDeny(requestID) }
