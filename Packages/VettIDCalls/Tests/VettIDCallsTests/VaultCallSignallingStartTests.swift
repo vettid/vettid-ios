@@ -275,7 +275,9 @@ extension VaultCallSignallingTests {
         #expect(error as? CallLostError == CallLostError(callId: callId, end: .init(reason: "busy")))
     }
 
-    /// The other order: the vault's end first, then one made here. The vault's end is kept.
+    /// The other order: the vault's end first, then one made here. The vault's end is kept. This also passes without the rule
+    /// that fills in the vault's end over a local one (``theVaultsEndWinsOverALocalOneForTheSameCall`` pins that rule): it
+    /// guards against a second end overwriting an end already kept.
     @Test func aLocalEndAfterTheVaultsDoesNotReplaceIt() async throws {
         let s = await signalling()
         let (_, error) = try await heldStartResult(s) {

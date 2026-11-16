@@ -17,13 +17,9 @@ extension CallMachine {
         }
         s.enqueue { [self] in
             let sdp = try await engine.createOffer(suite: first)
-            // Ended while the offer was made (a hang-up, a lock): this start does not go, so there is no call to end, and its
-            // place among the abandoned starts is given back. Checked and counted in the same turn: from the count on, a lock
-            // waits for the start's answer (``startsInFlight``).
-            guard session === s, !Task.isCancelled else {
-                abandoned.removeAll { $0 == s.seq }
-                return
-            }
+            // Ended while the offer was made (a hang-up, a lock): this start does not go, so there is no call to end. Checked
+            // and counted in the same turn: from the count on, a lock waits for the start's answer (``startsInFlight``).
+            guard session === s, !Task.isCancelled else { return }
             startsInFlight += 1
             // Posted once the start has returned and after its answer's own message, whichever way it went (a refusal, an
             // error, nothing placed included): this lane waits for the start to its end, whatever cancels it.
@@ -38,6 +34,10 @@ extension CallMachine {
                 } catch let e as CallLostError {
                     post(.lost(seq: s.seq, callId: e.callId, end: e.end))
                 }
+                // Any other failure after the request may have left (no answer in time, a lost answer, one that does not
+                // verify) leaves the lane failed with no end sent here: `VaultApi.callStart` has already sent the durable `call.end{hangup}` for the call's id
+                // (VAULT-MESSAGING §10.10 "Placing a call") before this start returned. The lock gate lets it through, and a
+                // pending lock waits for it, though only for ``CallsController/lockWait``.
             }
         }
     }
@@ -53,9 +53,10 @@ extension CallMachine {
         }
     }
 
-    /// `call.start` placed a call that can no longer be made (``CallLostError``): it is ended at the vault, through
-    /// ``sendEnd(_:_:)`` like every end (a lock waits for it). The member's call shows it failed; one the member hung up while
-    /// the vault was answering is ended as hung up, as ``onPlaced(_:seq:call:atMs:)`` does.
+    /// `call.start` placed a call that can no longer be made (``CallLostError``). When the vault's end for it is known (held
+    /// here, or carried as [end]), the call shows that end (busy, declined, missed for a glare whose winner ended) and nothing
+    /// is sent. Otherwise it is ended at the vault through ``sendEnd(_:_:)`` like every end (a lock waits for it): the member's
+    /// call shows it failed, and one no session shows is ended as hung up (``lostUnshown(seq:callId:end:)``).
     func onLost(_ s: CallSession?, seq: Int, callId: String, end: CallLostError.End?) {
         guard let s, s.seq == seq else { return lostUnshown(seq: seq, callId: callId, end: end) }
         // The machine may hold the vault's own end for it among its early events (the oldest ``maxEarly`` of every kind, where
@@ -81,6 +82,7 @@ extension CallMachine {
         s.callId = callId
         // An offer held before the call had its id, that turns out to carry this very id, is no other call.
         if s.glareOffer?.callId == callId { s.glareOffer = nil }
+        forgetEndedGlareOffer(s, early)
         s.phase = .calling
         var ended: Set<String> = []
         for e in early {
@@ -100,7 +102,7 @@ extension CallMachine {
         if let by = s.supersededBy, endedWinners.contains(by) || endedEarly.contains(by) {
             // Lost to a call that has ended already: nothing to answer, nothing to wait for, and a late offer for the winner is
             // not rung (as for a placed call).
-            if !endedWinners.contains(by) { rememberEnded(by) }
+            rememberEnded(by)
             finish(s, .missed, nil)
         } else if s.supersededBy != nil {
             // The winner's offer is not here yet: it comes in moments, or the call ends busy at the ring timer (``onTimer(_:_:)``),
@@ -113,25 +115,17 @@ extension CallMachine {
         }
     }
 
-    /// A lost call no session shows: one the member hung up while the vault was answering is ended as hung up, as
-    /// ``onPlaced(_:seq:call:atMs:)`` does; one nobody knows (let go, the abandoned starts' list full) is ended all the same. Not
-    /// when the vault ended it already ([end] is its end).
+    /// A lost call no session shows (the member hung up while the vault was answering) is ended as hung up, as
+    /// ``onPlaced(_:seq:call:atMs:)`` ends a placed one. Not when the vault ended it already ([end] is its end).
     private func lostUnshown(seq: Int, callId: String, end: CallLostError.End?) {
-        if let i = abandoned.firstIndex(of: seq) {
-            abandoned.remove(at: i)
-            if end == nil { sendEnd(callId, CallReason.hangup) }
-        } else if end == nil {
-            sendEnd(callId, CallReason.failed)
-        }
+        if end == nil { sendEnd(callId, CallReason.hangup) }
     }
 
     func onPlaced(_ s: CallSession?, seq: Int, call: PlacedCall, atMs: Int64) {
         guard let s, s.seq == seq else {
-            // The member hung up while the vault was answering: the call exists there, so it is ended there.
-            if let i = abandoned.firstIndex(of: seq) {
-                abandoned.remove(at: i)
-                sendEnd(call.callId, CallReason.hangup)
-            }
+            // No session shows the call: the member hung up while the vault was answering. The call exists there, so it is
+            // ended there, as hung up, as a lost one is (``lostUnshown(seq:callId:end:)``).
+            sendEnd(call.callId, CallReason.hangup)
             return
         }
         let early = s.early
@@ -139,6 +133,7 @@ extension CallMachine {
         s.callId = call.callId
         // An offer held before the call had its id, that turns out to carry this very id, is no other call.
         if s.glareOffer?.callId == call.callId { s.glareOffer = nil }
+        forgetEndedGlareOffer(s, early)
         s.formTwo = call.formTwo
         s.phase = .calling
         s.canSendIce = true
@@ -156,6 +151,19 @@ extension CallMachine {
             } else if case .answer(let a) = e {
                 a.keys.wipe()
             }
+        }
+    }
+
+    /// A held glare offer whose own end is among the held events has ended, as ``onEnd`` treats one live: it is let go and
+    /// remembered before they are applied (or dropped, when the call ends before it has its id), so the glare's end does not
+    /// answer it (that end is applied before the winner's, which would then reach the answered call no more), the call is
+    /// missed when the winner's end is applied, and a call that ends otherwise does not ring it (``finish(_:_:_:)``).
+    func forgetEndedGlareOffer(_ s: CallSession, _ early: [SignalEvent]) {
+        guard let held = s.glareOffer else { return }
+        for case .end(let id, _, _) in early where id == held.callId {
+            s.glareOffer = nil
+            rememberEnded(id)
+            return
         }
     }
 

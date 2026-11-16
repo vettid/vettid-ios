@@ -137,13 +137,41 @@ extension CallMachineTests {
         #expect(!hasSent(signalling, "ringing("))
     }
 
-    /// No session knows the lost call (let go, the abandoned starts' list full): it is ended at the vault all the same.
+    /// No session knows the lost call (let go, the abandoned starts' list full): it is ended at the vault as hung up all the
+    /// same (VAULT-MESSAGING §10.10 "Placing a call").
     @Test func aLostCallNoSessionKnowsIsEndedAtTheVault() async throws {
         let m = machine()
         await runCurrent()
         m.post(.lost(seq: 999, callId: callId, end: nil))
         await runCurrent()
-        #expect(signalling.sent.filter { $0.hasPrefix("end") } == ["end(\(callId), failed)"])
+        #expect(signalling.sent.filter { $0.hasPrefix("end") } == ["end(\(callId), hangup)"])
+    }
+
+    /// Nine starts in a row, each hung up before the vault answered (more than the eight a list of them once held): whenever
+    /// each start is answered, placed or lost, its call is ended at the vault as hung up.
+    @Test func everyStartHungUpBeforeTheVaultAnsweredIsEndedWhenItIsAnswered() async throws {
+        for lost in [false, true] {
+            let s = FakeSignalling()
+            let m = machine(s)
+            var gates: [AsyncStream<Void>.Continuation] = []
+            for _ in 0..<9 {
+                s.holdStart()
+                m.call("conn-1")
+                await runCurrent()
+                gates.append(try #require(s.startGate))
+                m.hangUp()
+                await runCurrent()
+            }
+            s.startResult = lost ? { throw CallLostError(callId: callId) } : { PlacedCall(callId: callId, exp: at(45_000)) }
+            gates[0].yield()
+            await runCurrent()
+            #expect(s.sent.filter { $0.hasPrefix("end") } == ["end(\(callId), hangup)"], "lost \(lost): the oldest")
+            #expect(m.pendingEnds == 0)
+            for g in gates.dropFirst() { g.yield() }
+            await runCurrent()
+            #expect(s.sent.filter { $0.hasPrefix("end") } == Array(repeating: "end(\(callId), hangup)", count: 9), "lost \(lost)")
+            #expect(m.startsInFlight == 0 && m.pendingEnds == 0)
+        }
     }
 
     /// The vault's end the signalling remembered is still on its way to the machine when the start says the call is lost: the
@@ -274,5 +302,23 @@ extension CallMachineTests {
         await runCurrent()
         #expect(try ended(m).reason == .missed, "the ended winner's offer is not rung")
         #expect(!hasSent(signalling, "end(") && !hasSent(signalling, "ringing("))
+    }
+
+    /// The order a glare arrives in: the winner's offer, the glare's end, then the winner's own end, all held while the start
+    /// was answered. The winner has ended, so the call is missed and the winner is never answered.
+    @Test func aLostCallWhoseHeldGlareWinnerOfferedThenEndedIsMissed() async throws {
+        let m = machine()
+        signalling.holdStart()
+        m.call("conn-1")
+        await runCurrent()
+        signalling.deliver(offer(glareId))
+        signalling.deliver(.end(callId: callId, reason: CallReason.busy, supersededBy: glareId))
+        signalling.deliver(.end(callId: glareId, reason: CallReason.hangup))
+        await runCurrent()
+        signalling.startResult = { throw CallLostError(callId: callId) }
+        signalling.releaseStart()
+        await runCurrent()
+        #expect(try ended(m).reason == .missed)
+        #expect(!hasSent(signalling, "answer(") && !hasSent(signalling, "end("))
     }
 }
