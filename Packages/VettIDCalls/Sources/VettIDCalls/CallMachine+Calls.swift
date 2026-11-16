@@ -171,7 +171,7 @@ extension CallMachine {
         var ended: Set<String> = []
         for case .end(let id, _, _) in early { ended.insert(id) }
         for case .end(let id, let reason, let by?) in early
-        where id == callId && reason == CallReason.busy && ended.contains(by)
+        where id == callId && reason == CallReason.busy && (ended.contains(by) || hasEnded(by))
             && Array(by.utf8).lexicographicallyPrecedes(Array(callId.utf8)) {
             rememberEnded(by)
         }
