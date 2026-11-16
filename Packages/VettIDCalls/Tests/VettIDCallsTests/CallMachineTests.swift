@@ -298,11 +298,13 @@ struct StartFailure: Error {}
             ("decline", .declinedHere), ("something_new", .missed),
         ]
         let m = machine()
-        for (reason, end) in expected {
-            signalling.deliver(offer())
+        for (n, (reason, end)) in expected.enumerated() {
+            // A call of its own each time (call ids are never offered again).
+            let id = String(format: "01JB2Z6V9K3M4N5P6Q7R8S9%03d", n)
+            signalling.deliver(offer(id))
             await runCurrent()
             signalling.sent.removeAll()
-            signalling.deliver(.end(callId: callId, reason: reason))
+            signalling.deliver(.end(callId: id, reason: reason))
             await runCurrent()
             #expect(try ended(m).reason == end, "\(reason)")
             #expect(signalling.sent.isEmpty)

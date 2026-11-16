@@ -44,16 +44,16 @@ import VettIDCrypto
         )
     }
 
-    func incoming(_ connectionId: String = "conn-1") throws -> IncomingCall {
+    func incoming(_ connectionId: String = "conn-1", callId id: String = callId) throws -> IncomingCall {
         IncomingCall(
-            callId: callId, connectionId: connectionId, media: "audio", sdp: "v=0\r\n", exp: at(45_000), ringFor: 45,
-            ice: CallWire.IceConfig(callId: callId, exp: at(600_000), servers: []),
+            callId: id, connectionId: connectionId, media: "audio", sdp: "v=0\r\n", exp: at(45_000), ringFor: 45,
+            ice: CallWire.IceConfig(callId: id, exp: at(600_000), servers: []),
             negotiated: try CallMedia.Negotiated(chosen: .aes128Gcm, offered: [1]), ek: [UInt8](repeating: 0, count: 1216)
         )
     }
 
-    func offerEvent() -> CallEvent {
-        let body = #"{"connection_id":"conn-1","call_id":"\#(callId)"}"#
+    func offerEvent(_ id: String = callId) -> CallEvent {
+        let body = #"{"connection_id":"conn-1","call_id":"\#(id)"}"#
         return .offer(VaultMessage(inner: Inner(id: "01JB2Z6V9K3M4N5P6Q7R8S9T60", type: "call.offer", ts: t0, body: Array(body.utf8))))
     }
 

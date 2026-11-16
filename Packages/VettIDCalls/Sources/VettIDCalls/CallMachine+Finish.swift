@@ -23,6 +23,8 @@ extension CallMachine {
         release(s)
         let callId = s.callId
         if let tell, let callId { sendEnd(callId, tell) }
+        // An incoming call that rang here and has ended: its offer delivered again is not rung.
+        if s.direction == .incoming, let callId { rememberEndedOther(callId) }
         let duration = s.activeSince.map { Duration.rounded(seconds: clock.now().timeIntervalSince($0)) }
         if duration != nil { countPath(s) }
         setState(.ended(CallState.Ended(

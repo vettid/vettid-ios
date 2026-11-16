@@ -83,6 +83,7 @@ extension CallMachine {
         // An offer held before the call had its id, that turns out to carry this very id, is no other call.
         if s.glareOffer?.callId == callId { s.glareOffer = nil }
         forgetEndedGlareOffer(s, early)
+        rememberHeldWinners(early)
         s.phase = .calling
         var ended: Set<String> = []
         for e in early {
@@ -91,6 +92,8 @@ extension CallMachine {
             } else if case .end(let id, _, _) = e, session === s {
                 ended.insert(id)
                 onSignal(s, e)
+            } else if case .end = e {
+                afterReplay(e)
             }
         }
         return ended
@@ -101,8 +104,8 @@ extension CallMachine {
     private func settleLost(_ s: CallSession, endedEarly: Set<String>) {
         if let by = s.supersededBy, hasEnded(by) || endedEarly.contains(by) {
             // Lost to a call that has ended already: nothing to answer, nothing to wait for, and a late offer for the winner is
-            // not rung (as for a placed call). Seldom reached now: replaying the held ends finishes such a call as missed
-            // already (``lostGlare``), and only a carried glare end whose winner's end was held or remembered gets here.
+            // not rung (as for a placed call). Reached only by the glare end the start carried (applied after the replay),
+            // when the winner's own end was held but has since been pushed out of ``endedOthers`` by other calls' ends.
             rememberEnded(by)
             finish(s, .missed, nil)
         } else if s.supersededBy != nil {
@@ -135,6 +138,7 @@ extension CallMachine {
         // An offer held before the call had its id, that turns out to carry this very id, is no other call.
         if s.glareOffer?.callId == call.callId { s.glareOffer = nil }
         forgetEndedGlareOffer(s, early)
+        rememberHeldWinners(early)
         s.formTwo = call.formTwo
         s.phase = .calling
         s.canSendIce = true
@@ -149,9 +153,30 @@ extension CallMachine {
         for e in early {
             if session === s {
                 onSignal(s, e)
-            } else if case .answer(let a) = e {
-                a.keys.wipe()
+            } else {
+                afterReplay(e)
             }
+        }
+    }
+
+    /// Before a replay: a glare's winner whose own end is among the held events is remembered among the winners first, so
+    /// that the other calls' ends held with it cannot push it out before the glare's end is applied (``lostGlare``).
+    private func rememberHeldWinners(_ early: [SignalEvent]) {
+        var ended: Set<String> = []
+        for case .end(let id, _, _) in early { ended.insert(id) }
+        for case .end(_, _, let by?) in early where ended.contains(by) { rememberEnded(by) }
+    }
+
+    /// A held event left once the replay has finished the call, or handed the session to a glare's winner: an answer's keys
+    /// are wiped, and an end is still recorded, for the session it is for or as another call's (``endedOthers``).
+    private func afterReplay(_ e: SignalEvent) {
+        switch e {
+        case .answer(let a):
+            a.keys.wipe()
+        case .end(let id, _, _):
+            if let current = session, current.callId == id { onSignal(current, e) } else { rememberEndedOther(id) }
+        default:
+            break
         }
     }
 
