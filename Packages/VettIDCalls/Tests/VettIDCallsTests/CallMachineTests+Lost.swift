@@ -197,4 +197,82 @@ extension CallMachineTests {
         await runCurrent()
         #expect(m.startsInFlight == 0)
     }
+
+    // MARK: ends the vault already sent
+
+    /// The member hung up while the start was on its way, and the vault ended the call meanwhile: nothing more is sent.
+    @Test func anAbandonedLostCallTheVaultEndedSendsNothing() async throws {
+        let m = machine()
+        signalling.holdStart()
+        m.call("conn-1")
+        await runCurrent()
+        m.hangUp()
+        await runCurrent()
+        signalling.startResult = { throw CallLostError(callId: callId, end: .init(reason: CallReason.busy)) }
+        signalling.releaseStart()
+        await runCurrent()
+        #expect(!hasSent(signalling, "end("))
+    }
+
+    /// No session knows the lost call, and the vault ended it: nothing is sent.
+    @Test func aLostCallNoSessionKnowsTheVaultEndedSendsNothing() async throws {
+        let m = machine()
+        await runCurrent()
+        m.post(.lost(seq: 999, callId: callId, end: .init(reason: CallReason.busy)))
+        await runCurrent()
+        #expect(!hasSent(signalling, "end("))
+    }
+
+    /// The vault's decline is both held and carried: declined once, nothing sent.
+    @Test func aHeldAndCarriedDeclineShowsDeclined() async throws {
+        let m = machine()
+        signalling.holdStart()
+        m.call("conn-1")
+        await runCurrent()
+        signalling.deliver(.end(callId: callId, reason: CallReason.decline))
+        await runCurrent()
+        signalling.startResult = { throw CallLostError(callId: callId, end: .init(reason: CallReason.decline)) }
+        signalling.releaseStart()
+        await runCurrent()
+        #expect(try ended(m).reason == .declined)
+        #expect(!hasSent(signalling, "end("))
+    }
+
+    /// A carried glare end, the winner's offer not here: the call waits for it, then ends busy at the ring timer.
+    @Test func aCarriedGlareEndWithoutItsWinnerWaitsThenEndsBusy() async throws {
+        let m = machine()
+        signalling.holdStart()
+        m.call("conn-1")
+        await runCurrent()
+        signalling.startResult = {
+            throw CallLostError(callId: callId, end: .init(reason: CallReason.busy, supersededBy: glareId))
+        }
+        signalling.releaseStart()
+        await runCurrent()
+        #expect(try live(m).direction == .outgoing)
+        await advance(CallTimings().minRing.wholeMilliseconds + 1_000)
+        await runCurrent()
+        #expect(try ended(m).reason == .busy)
+        #expect(!hasSent(signalling, "end("))
+    }
+
+    /// The winner's own end is held, the glare's end carried: missed at once, and the winner's late offer is not rung.
+    @Test func aCarriedGlareEndWhoseWinnerEndedIsMissedAtOnce() async throws {
+        let m = machine()
+        signalling.holdStart()
+        m.call("conn-1")
+        await runCurrent()
+        signalling.deliver(.end(callId: glareId, reason: CallReason.hangup))
+        await runCurrent()
+        signalling.startResult = {
+            throw CallLostError(callId: callId, end: .init(reason: CallReason.busy, supersededBy: glareId))
+        }
+        signalling.releaseStart()
+        await runCurrent()
+        #expect(try ended(m).reason == .missed)
+        signalling.deliver(offer(glareId))
+        await runCurrent()
+        #expect(try ended(m).reason == .missed, "the ended winner's offer is not rung")
+        #expect(!hasSent(signalling, "end(") && !hasSent(signalling, "ringing("))
+    }
 }
