@@ -13,7 +13,8 @@
 #                     testStagingConnectAccept, testStagingConnectApprove, testStagingMessageSend,
 #                     testStagingMessageReceive, testStagingPhotoSend, testStagingPhotoReceive, testStagingInvite,
 #                     testStagingApproveRequest, testStagingRotate, testStagingSendAll, testStagingWaitMessage,
-#                     testStagingTransferIn, testStagingTransferOut, testStagingSignIn, testStagingLook or testStagingCheck
+#                     testStagingTransferIn, testStagingTransferOut, testStagingSignIn, testStagingLook, testStagingCheck,
+#                     testStagingCallPlace or testStagingCallAnswer
 #   --inputs <file>   a private file outside the repository (chmod 600) with lines NAME=value for
 #                     VETTID_STAGING_EMAIL, VETTID_STAGING_CODE, VETTID_STAGING_PIN, VETTID_STAGING_PASSWORD and, for
 #                     the connect tests, VETTID_STAGING_LINK and VETTID_STAGING_SAFETY_CODE, and for the message
@@ -140,7 +141,13 @@
 # testStagingApproveRequest also VETTID_STAGING_SAFETY_CODE; testStagingSendAll VETTID_STAGING_PEER_NAME,
 # VETTID_STAGING_MESSAGE and VETTID_STAGING_EXPECT; testStagingWaitMessage VETTID_STAGING_PEER_NAME and
 # VETTID_STAGING_EXPECT; testStagingSignIn VETTID_STAGING_MATCH_CODE, with VETTID_STAGING_SIGNIN_LOCK=1 optional;
-# testStagingCheck VETTID_STAGING_PEER_NAME. VETTID_STAGING_WAIT (seconds) is optional for
+# testStagingCheck, testStagingCallPlace and testStagingCallAnswer VETTID_STAGING_PEER_NAME (testStagingCallAnswer answers
+# only the app's own incoming call from that connection, nothing else); VETTID_STAGING_CALL_SECONDS (how long the active call
+# is held on both sides, 20 by default) and VETTID_STAGING_CALL_WAIT (how long testStagingCallAnswer waits for the call, 180
+# by default) are optional. The call tests leave the call screen and lock the vault whatever happens; if that cleanup fails
+# (the test stopped from outside), the vault may stay open: lock it with testStagingUnlockLock. Two-phone call: start testStagingCallAnswer on one phone, wait for its "CALL_STATE: waiting" line, then
+# start testStagingCallPlace (with --skip-build) on the other; each prints "CALL_STATE: <state>" lines (calling, ringing,
+# connecting, reconnecting, waiting, answered, microphone, microphone_blocked, active, held <s>, dropped <s>, ended, failed). VETTID_STAGING_WAIT (seconds) is optional for
 # testStagingWaitMessage (600), testStagingSendAll (300) and testStagingLook (10).
 #
 # Inputs of the transfer tests: testStagingTransferOut needs PIN and PASSWORD; testStagingTransferIn needs PIN and
@@ -156,7 +163,7 @@
 # them to the runner as <NAME>), never a command line or the build; xcodebuild's output is shown with them (the link
 # included, the connection's name, the message texts, and the keypad's digits) redacted, except the SAFETY_CODE,
 # CONNECT_STATE, MESSAGE_STATE, MESSAGE_RECEIVED, PHOTO_STATE, PHOTO_RECEIVED, PHOTO_VIEWER, INVITE_LINK,
-# TRANSFER_LINK (its value is then redacted from every later line), TRANSFER_STATE, TRANSFER_SIGNER, TRANSFER_AFTER, TRANSFER_OPERATOR, TRANSFER_SAS_UNCHECKED and ROTATE_STATE lines, which are printed with the code, the state or the answer alone; the result bundle is deleted, an interrupted run's too, unless --keep-result. The build
+# TRANSFER_LINK (its value is then redacted from every later line), TRANSFER_STATE, TRANSFER_SIGNER, TRANSFER_AFTER, TRANSFER_OPERATOR, TRANSFER_SAS_UNCHECKED, ROTATE_STATE and CALL_STATE lines, which are printed with the code, the state or the answer alone; the result bundle is deleted, an interrupted run's too, unless --keep-result. The build
 # and results live under ${XDG_CACHE_HOME:-~/Library/Caches}/vettid-ios/staging-ui-test (mode 700).
 #
 # Example (enrollment; the code was issued a minute ago and is in the private file):
@@ -180,7 +187,7 @@ NAMES=(VETTID_STAGING_EMAIL VETTID_STAGING_CODE VETTID_STAGING_PIN VETTID_STAGIN
 # The connect, message and photo tests' inputs: optional, never counted as missing for the others.
 OPTIONAL=(VETTID_STAGING_LINK VETTID_STAGING_TRANSFER_CODE VETTID_STAGING_TRANSFER_TIMEOUT VETTID_STAGING_SAFETY_CODE VETTID_STAGING_PEER_NAME VETTID_STAGING_MESSAGE VETTID_STAGING_EXPECT
   VETTID_STAGING_PHOTO_TIMEOUT VETTID_STAGING_PHOTO_EXISTING VETTID_STAGING_WAIT VETTID_STAGING_MATCH_CODE
-  VETTID_STAGING_SIGNIN_LOCK)
+  VETTID_STAGING_SIGNIN_LOCK VETTID_STAGING_CALL_SECONDS VETTID_STAGING_CALL_WAIT)
 ALL=("${NAMES[@]}" "${OPTIONAL[@]}")
 BUNDLE_ID=com.vettid.app.staging
 
@@ -207,13 +214,13 @@ case "${TEST}" in
   testStagingMessageSend|testStagingMessageReceive|testStagingPhotoSend|testStagingPhotoReceive) ;;
   testStagingInvite|testStagingApproveRequest|testStagingRotate|testStagingSendAll|testStagingWaitMessage) ;;
   testStagingTransferIn|testStagingTransferOut|testStagingSignIn) ;;
-  testStagingLook|testStagingCheck) ;;
+  testStagingLook|testStagingCheck|testStagingCallPlace|testStagingCallAnswer) ;;
   *) echo "--test must be testStagingEnroll, testStagingUnlockLock, testStagingApproveUpdate," \
        "testStagingApproveUpdateAtUnlock, testStagingCheckNow, testStagingWrongPinInPasswordChange," \
        "testStagingConnectAccept, testStagingConnectApprove, testStagingMessageSend, testStagingMessageReceive," \
        "testStagingPhotoSend, testStagingPhotoReceive, testStagingInvite, testStagingApproveRequest," \
        "testStagingRotate, testStagingSendAll, testStagingWaitMessage, testStagingTransferIn, testStagingTransferOut," \
-       "testStagingSignIn,"  \
+       "testStagingSignIn, testStagingCallPlace, testStagingCallAnswer,"  \
        "testStagingLook or testStagingCheck" >&2
      usage ;;
 esac
@@ -242,7 +249,8 @@ case "${TEST}" in
     NEEDED=(VETTID_STAGING_PIN VETTID_STAGING_PASSWORD VETTID_STAGING_PEER_NAME VETTID_STAGING_MESSAGE VETTID_STAGING_EXPECT) ;;
   testStagingSignIn) NEEDED=(VETTID_STAGING_PIN VETTID_STAGING_PASSWORD VETTID_STAGING_MATCH_CODE) ;;
   testStagingTransferIn) NEEDED=(VETTID_STAGING_PIN VETTID_STAGING_TRANSFER_CODE) ;;
-  testStagingCheck) NEEDED=(VETTID_STAGING_PIN VETTID_STAGING_PASSWORD VETTID_STAGING_PEER_NAME) ;;
+  testStagingCheck|testStagingCallPlace|testStagingCallAnswer)
+    NEEDED=(VETTID_STAGING_PIN VETTID_STAGING_PASSWORD VETTID_STAGING_PEER_NAME) ;;
   testStagingPhotoSend|testStagingPhotoReceive)
     NEEDED=(VETTID_STAGING_PIN VETTID_STAGING_PASSWORD VETTID_STAGING_PEER_NAME) ;;
   *) NEEDED=(VETTID_STAGING_PIN VETTID_STAGING_PASSWORD) ;;
@@ -391,6 +399,9 @@ xcodebuild test-without-building \
     if (/SIGNIN_AFTER_LOCK: (listed|missing)\s*$/) { $_ = "SIGNIN_AFTER_LOCK: $1\n"; next }
     if (/SIGNIN_STATE: ([a-z_]+)\s*$/) { $_ = "SIGNIN_STATE: $1\n"; next }
     if (/ROTATE_STATE: (done|failed|none)\s*$/) { $_ = "ROTATE_STATE: $1\n"; next }
+    if (/CALL_STATE: (waiting|answered|microphone|microphone_blocked|calling|ringing|connecting|reconnecting|active|ended|failed|(?:held|dropped) [0-9]+)\s*$/) {
+      $_ = "CALL_STATE: $1\n"; next
+    }
     if (/PHOTO_STATE: (none|sending|delivered|failed)\s*$/) { $_ = "PHOTO_STATE: $1\n"; next }
     if (/PHOTO_RECEIVED: (yes|no)\s*$/) { $_ = "PHOTO_RECEIVED: $1\n"; next }
     if (/PHOTO_VIEWER: (shown|failed|loading)\s*$/) { $_ = "PHOTO_VIEWER: $1\n"; next }

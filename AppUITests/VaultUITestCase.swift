@@ -262,7 +262,25 @@ class VaultUITestCase: XCTestCase {
     @MainActor
     func lock(_ app: XCUIApplication) {
         expect(app, "app_shell", timeout: Self.network)
-        // From Settings or a screen pushed over it: back arrows up to the screen with the account button.
+        // A due check covers the shell (it can come up after the unlock): its own "Lock vault" locks.
+        // (Looked for directly: the check's own notices must not end the wait, as they would in waitForAny.)
+        if waitUntil(timeout: 3, { shown(app)["owner_check"] != nil }), app.buttons["form_secondary"].exists {
+            tap(app.buttons["form_secondary"])
+        } else {
+            openAccountAndLock(app)
+        }
+        expect(app, "unlock", timeout: Self.network)
+        // "Locking…" until the vault confirms; only a confirmed lock passes (a vault left open keeps its host running,
+        // STAGING-TESTING §5).
+        if !waitUntil(timeout: Self.network, { shown(app)["unlock_lock_locking"] == nil }) {
+            return fail(app, "The lock was not confirmed within \(Int(Self.network)) s: the screen still says it is locking.")
+        }
+        if let why = failureText(in: shown(app)) { fail(app, "The lock was not confirmed: \(why)") }
+    }
+
+    /// The account sheet's "Lock vault", from Settings or a screen pushed over it (back arrows up to the account button).
+    @MainActor
+    private func openAccountAndLock(_ app: XCUIApplication) {
         let account = app.buttons["top_bar_account"]
         for _ in 0..<4 where !(account.waitForExistence(timeout: 2) && account.isHittable) {
             let back = app.buttons["top_bar_back"].firstMatch
@@ -271,13 +289,6 @@ class VaultUITestCase: XCTestCase {
         }
         tap(account)
         tap(app.buttons["account_lock_vault"])
-        expect(app, "unlock", timeout: Self.network)
-        // "Locking…" until the vault confirms; only a confirmed lock passes (a vault left open keeps its host running,
-        // STAGING-TESTING §5).
-        if !waitUntil(timeout: Self.network, { shown(app)["unlock_lock_locking"] == nil }) {
-            return fail(app, "The lock was not confirmed within \(Int(Self.network)) s: the screen still says it is locking.")
-        }
-        if let why = failureText(in: shown(app)) { fail(app, "The lock was not confirmed: \(why)") }
     }
 
     /// STAGING-TESTING §3 from the welcome screen of a fresh app: "Scan", the typed code with the member's address, "Is
