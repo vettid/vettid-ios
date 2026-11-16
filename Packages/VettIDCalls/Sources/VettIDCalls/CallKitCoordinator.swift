@@ -21,8 +21,8 @@ import Observation
 /// - When the machine stops (the stream of transitions ends) or ``stop()`` is called, an open CallKit call is reported ended
 ///   (`failed`) and the audio is let go: nothing stays "in call".
 ///
-/// **Backgrounding is not handled here.** The wiring (part 2, PR 5) owns it: either the `audio` / `voip` `UIBackgroundModes`, or
-/// ending the call when the app leaves the foreground. Until then a call does not survive the app being sent to the background.
+/// **Backgrounding is not handled here.** The app declares the `audio` and `voip` `UIBackgroundModes` (`voip` is also what
+/// CallKit requires before it accepts the provider): a live call keeps going when the app leaves the foreground.
 @MainActor
 @Observable
 package final class CallKitCoordinator: CallKitEvents {

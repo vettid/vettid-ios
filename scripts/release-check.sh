@@ -409,10 +409,10 @@ check_calls() {
   [[ -x "${app}/Frameworks/WebRTC.framework/WebRTC" ]] || problems+=("no Frameworks/WebRTC.framework/WebRTC (the media stack is not embedded)")
   text=$(/usr/libexec/PlistBuddy -c 'Print :NSMicrophoneUsageDescription' "${app}/Info.plist" 2>/dev/null || true)
   [[ "${text}" == "${MICROPHONE_TEXT}" ]] || problems+=("NSMicrophoneUsageDescription '${text}', expected '${MICROPHONE_TEXT}'")
-  # A live call keeps going when the app leaves the foreground (owner decision): the audio background mode, and nothing else
-  # (no voip: the app has no PushKit; no fetch, processing or location).
+  # Calls (owner decisions): audio, so that a live call keeps going when the app leaves the foreground, and voip, without
+  # which CallKit refuses the app's provider; nothing else (no fetch, processing or location).
   modes=$(plutil -extract UIBackgroundModes json -o - "${app}/Info.plist" 2>/dev/null | tr -d ' ' || true)
-  [[ "${modes}" == '["audio"]' ]] || problems+=("UIBackgroundModes ${modes:-none}, expected [\"audio\"] alone")
+  [[ "${modes}" == '["audio","voip"]' ]] || problems+=("UIBackgroundModes ${modes:-none}, expected [\"audio\",\"voip\"] alone")
   exe="${app}/$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "${app}/Info.plist" 2>/dev/null || true)"
   if [[ -f "${exe}" ]]; then
     # The calls' code is linked into the executable (the archives are stripped, but the names of the types the app uses stay in
@@ -435,7 +435,7 @@ check_calls() {
     printf '%s: %s\n' "${app}" "${problems[@]}" >&2
     return 1
   fi
-  echo "${app}: the calls are linked (WebRTC.framework embedded, the microphone text present, the audio background mode alone)"
+  echo "${app}: the calls are linked (WebRTC.framework embedded, the microphone text present, the audio and voip background modes alone)"
 }
 
 # The VettIDDevStack app and its UI tests are built for the simulator only: never an iPhone, a Mac or a headset.
@@ -891,9 +891,10 @@ PY
     uncall "${config}" "whose executable names no calls code" \
       "cp /usr/bin/true \"\$(plutil -extract CFBundleExecutable raw Info.plist)\"" \
       "no WebRtcMediaEngineFactory in the executable"
-    uncall "${config}" "without the audio background mode" "plutil -remove UIBackgroundModes Info.plist" "UIBackgroundModes none"
-    uncall "${config}" "with the voip background mode" "plutil -replace UIBackgroundModes -json '[\"audio\",\"voip\"]' Info.plist" "UIBackgroundModes [\"audio\",\"voip\"]"
+    uncall "${config}" "without any background mode" "plutil -remove UIBackgroundModes Info.plist" "UIBackgroundModes none"
+    uncall "${config}" "with only the audio background mode" "plutil -replace UIBackgroundModes -json '[\"audio\"]' Info.plist" "UIBackgroundModes [\"audio\"]"
     uncall "${config}" "with only the voip background mode" "plutil -replace UIBackgroundModes -json '[\"voip\"]' Info.plist" "UIBackgroundModes [\"voip\"]"
+    uncall "${config}" "with the fetch background mode too" "plutil -replace UIBackgroundModes -json '[\"audio\",\"voip\",\"fetch\"]' Info.plist" "UIBackgroundModes [\"audio\",\"voip\",\"fetch\"]"
     uncall "${config}" "with another microphone text" "plutil -replace NSMicrophoneUsageDescription -string 'VettID listens.' Info.plist" "NSMicrophoneUsageDescription 'VettID listens.'"
   done
   # The media engine's test hook: the selector that makes the stack's factory with a custom audio device, named in an executable.
