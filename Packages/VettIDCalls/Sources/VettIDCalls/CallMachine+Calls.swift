@@ -57,9 +57,10 @@ extension CallMachine {
         }
     }
 
-    /// `call.start` placed a call that can no longer be made (``CallLostError``): it is ended at the vault, through
-    /// ``sendEnd(_:_:)`` like every end (a lock waits for it). The member's call shows it failed; one the member hung up while
-    /// the vault was answering is ended as hung up, as ``onPlaced(_:seq:call:atMs:)`` does.
+    /// `call.start` placed a call that can no longer be made (``CallLostError``). When the vault's end for it is known (held
+    /// here, or carried as [end]), the call shows that end (busy, declined, missed for a glare whose winner ended) and nothing
+    /// is sent. Otherwise it is ended at the vault through ``sendEnd(_:_:)`` like every end (a lock waits for it): the member's
+    /// call shows it failed, and one no session shows is ended as hung up (``lostUnshown(seq:callId:end:)``).
     func onLost(_ s: CallSession?, seq: Int, callId: String, end: CallLostError.End?) {
         guard let s, s.seq == seq else { return lostUnshown(seq: seq, callId: callId, end: end) }
         // The machine may hold the vault's own end for it among its early events (the oldest ``maxEarly`` of every kind, where
