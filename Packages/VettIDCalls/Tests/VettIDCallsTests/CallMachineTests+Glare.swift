@@ -300,6 +300,45 @@ extension CallMachineTests {
         #expect(!hasSent(signalling, "answer(") && !hasSent(signalling, "ringing(") && !hasSent(signalling, "end("))
     }
 
+    /// The winner's end and the glare's end held while `call.start` was out, no offer held, then placed: missed at once, and
+    /// the winner's late offer is neither answered nor rung.
+    @Test func aWinnersEndHeldBeforeItsOfferWhileTheStartWasOutMakesTheGlareMissed() async throws {
+        signalling.holdStart()
+        let m = machine()
+        m.call("conn-1")
+        await runCurrent()
+        signalling.deliver(.end(callId: glareId, reason: CallReason.hangup))
+        signalling.deliver(.end(callId: callId, reason: CallReason.busy, supersededBy: glareId))
+        await runCurrent()
+        signalling.releaseStart()
+        await runCurrent()
+        #expect(try ended(m).reason == .missed)
+        signalling.deliver(offer(glareId))
+        await runCurrent()
+        #expect(try ended(m).reason == .missed)
+        #expect(!hasSent(signalling, "answer(") && !hasSent(signalling, "ringing(") && !hasSent(signalling, "end("))
+    }
+
+    /// Many other calls' ends (a mailbox replayed) do not push out a glare's ended winner: its offer delivered again is not
+    /// rung.
+    @Test func otherCallsEndsDoNotPushOutAnEndedWinner() async throws {
+        let m = machine()
+        try await placed(m)
+        signalling.deliver(offer(glareId))
+        signalling.deliver(.end(callId: glareId, reason: CallReason.hangup))
+        await runCurrent()
+        for n in 0..<(CallMachine.maxEndedWinners + 2) {
+            signalling.deliver(.end(callId: String(format: "01JB2Z6V9K3M4N5P6Q7R8S9%03d", n), reason: CallReason.hangup))
+        }
+        signalling.deliver(.end(callId: callId, reason: CallReason.decline))
+        await runCurrent()
+        #expect(try ended(m).reason == .declined)
+        signalling.deliver(offer(glareId))
+        await runCurrent()
+        #expect(try ended(m).reason == .declined, "the ended winner's offer is not rung")
+        #expect(!hasSent(signalling, "ringing("))
+    }
+
     /// Only the held offer's own end lets it go: with another call's end held, a refused start still rings it.
     @Test func aRefusedStartRingsTheHeldOfferWhenAnotherCallsEndIsHeld() async throws {
         let s = FakeSignalling()

@@ -60,7 +60,7 @@ extension CallMachine {
     }
 
     private func onOffer(_ s: CallSession?, _ offer: CallOffer) {
-        if endedWinners.contains(offer.callId) { return } // a glare's winner that already ended
+        if hasEnded(offer.callId) { return } // a glare's winner, or another call, that already ended
         guard let s else {
             ring(offer)
             return
@@ -96,10 +96,16 @@ extension CallMachine {
             } else {
                 finish(s, ended(s, reason), nil)
             }
-        } else if s.callId != callId {
-            rememberEnded(callId)
+        } else if s.callId != nil, s.callId != callId {
+            // Not while the call has no id: its own end may be among these (the early events full).
+            endedOthers.removeAll { $0 == callId }
+            endedOthers.append(callId)
+            if endedOthers.count > Self.maxEndedOthers { endedOthers.removeFirst() }
         }
     }
+
+    /// Whether the call [callId] is known to have ended here (``endedWinners``, ``endedOthers``).
+    func hasEnded(_ callId: String) -> Bool { endedWinners.contains(callId) || endedOthers.contains(callId) }
 
     func rememberEnded(_ callId: String) {
         guard !endedWinners.contains(callId) else { return }
@@ -127,7 +133,7 @@ extension CallMachine {
     private func lostGlare(_ s: CallSession, _ by: String?) {
         // The winner has ended already (its end came before the glare's): nothing to answer or wait for, as on the lost path
         // (``settleLost``).
-        if let by, endedWinners.contains(by) { return finish(s, .missed, nil) }
+        if let by, hasEnded(by) { return finish(s, .missed, nil) }
         s.supersededBy = by
         s.glareOffer = nil
         cancelTimer(s, .gather)

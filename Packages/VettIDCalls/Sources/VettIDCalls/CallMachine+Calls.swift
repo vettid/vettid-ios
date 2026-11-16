@@ -99,7 +99,7 @@ extension CallMachine {
     /// A lost call still shown once its ends are applied: a glare it lost waits for its winner (unless the winner ended), and
     /// one whose end is not known fails now.
     private func settleLost(_ s: CallSession, endedEarly: Set<String>) {
-        if let by = s.supersededBy, endedWinners.contains(by) || endedEarly.contains(by) {
+        if let by = s.supersededBy, hasEnded(by) || endedEarly.contains(by) {
             // Lost to a call that has ended already: nothing to answer, nothing to wait for, and a late offer for the winner is
             // not rung (as for a placed call).
             rememberEnded(by)

@@ -45,6 +45,10 @@ package final class CallMachine {
     /// Glare winners that ended while this device's lost call waited for them: an offer for one of them that still arrives
     /// (late, or delivered again) is not rung or answered. A few ids, memory only.
     @ObservationIgnored var endedWinners: [String] = []
+    /// Other calls whose end came while a session was here, with no offer for them held: their offer may still come after
+    /// (VAULT-MESSAGING §8.4 gives no order), and is then not rung or answered either. Kept apart from ``endedWinners`` so
+    /// that many of them (a mailbox replayed after a reconnect) cannot push a glare's ended winner out. Memory only.
+    @ObservationIgnored var endedOthers: [String] = []
     @ObservationIgnored private var loops: [Task<Void, Never>] = []
     @ObservationIgnored private var watchers: [Int: AsyncStream<CallTransition>.Continuation] = [:]
     @ObservationIgnored private var nextWatcher = 0
@@ -52,6 +56,7 @@ package final class CallMachine {
     static let maxPendingCandidates = 256
     static let maxEarly = 64
     static let maxEndedWinners = 8
+    static let maxEndedOthers = 32
 
     package init(
         signalling: any CallSignalling, engines: any MediaEngineFactory, clock: any CallClock = SystemCallClock(),
