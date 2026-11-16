@@ -38,6 +38,9 @@ extension CallMachine {
                 } catch let e as CallLostError {
                     post(.lost(seq: s.seq, callId: e.callId, end: e.end))
                 }
+                // Any other failure (no answer in time, a lost answer, one that does not verify) leaves the lane failed with
+                // no end sent here: `VaultApi.callStart` has already sent the durable `call.end{hangup}` for the call's id
+                // (VAULT-MESSAGING §10.10 "Placing a call"), which the lock gate lets through, before this start returned.
             }
         }
     }
@@ -127,11 +130,10 @@ extension CallMachine {
 
     func onPlaced(_ s: CallSession?, seq: Int, call: PlacedCall, atMs: Int64) {
         guard let s, s.seq == seq else {
-            // The member hung up while the vault was answering: the call exists there, so it is ended there.
-            if let i = abandoned.firstIndex(of: seq) {
-                abandoned.remove(at: i)
-                sendEnd(call.callId, CallReason.hangup)
-            }
+            // No session shows the call: the member hung up while the vault was answering, or it was let go otherwise (the
+            // abandoned starts' list full). The call exists there, so it is ended there, as hung up, as ``onLost`` ends one.
+            abandoned.removeAll { $0 == seq }
+            sendEnd(call.callId, CallReason.hangup)
             return
         }
         let early = s.early

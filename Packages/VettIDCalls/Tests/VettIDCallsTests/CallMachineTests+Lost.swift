@@ -146,6 +146,16 @@ extension CallMachineTests {
         #expect(signalling.sent.filter { $0.hasPrefix("end") } == ["end(\(callId), failed)"])
     }
 
+    /// A placed call no session knows (let go, the abandoned starts' list full) is ended at the vault as hung up, as a lost one
+    /// is ended all the same.
+    @Test func aPlacedCallNoSessionKnowsIsEndedAtTheVault() async throws {
+        let m = machine()
+        await runCurrent()
+        m.post(.placed(seq: 999, PlacedCall(callId: callId, exp: at(45_000)), atMs: 0))
+        await runCurrent()
+        #expect(signalling.sent.filter { $0.hasPrefix("end") } == ["end(\(callId), hangup)"])
+    }
+
     /// The vault's end the signalling remembered is still on its way to the machine when the start says the call is lost: the
     /// end it carries is what the call shows, nothing is sent, and the end landing after changes nothing.
     @Test func aLostCallsRememberedEndCountsBeforeTheMachineHasIt() async throws {
