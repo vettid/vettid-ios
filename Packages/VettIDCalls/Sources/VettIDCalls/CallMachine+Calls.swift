@@ -101,7 +101,8 @@ extension CallMachine {
     private func settleLost(_ s: CallSession, endedEarly: Set<String>) {
         if let by = s.supersededBy, hasEnded(by) || endedEarly.contains(by) {
             // Lost to a call that has ended already: nothing to answer, nothing to wait for, and a late offer for the winner is
-            // not rung (as for a placed call).
+            // not rung (as for a placed call). Seldom reached now: replaying the held ends finishes such a call as missed
+            // already (``lostGlare``), and only a carried glare end whose winner's end was held or remembered gets here.
             rememberEnded(by)
             finish(s, .missed, nil)
         } else if s.supersededBy != nil {

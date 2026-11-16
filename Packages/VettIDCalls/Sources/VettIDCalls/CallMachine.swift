@@ -43,11 +43,14 @@ package final class CallMachine {
     @ObservationIgnored var session: CallSession?
     @ObservationIgnored var nextSeq = 0
     /// Glare winners that ended while this device's lost call waited for them: an offer for one of them that still arrives
-    /// (late, or delivered again) is not rung or answered. A few ids, memory only.
+    /// (late, or delivered again) is not rung or answered. A few ids.
     @ObservationIgnored var endedWinners: [String] = []
-    /// Other calls whose end came while a session was here, with no offer for them held: their offer may still come after
-    /// (VAULT-MESSAGING §8.4 gives no order), and is then not rung or answered either. Kept apart from ``endedWinners`` so
-    /// that many of them (a mailbox replayed after a reconnect) cannot push a glare's ended winner out. Memory only.
+    /// Other calls whose end came while a session was here and was not its own (a call turned away as busy, or one whose
+    /// offer has not come yet: VAULT-MESSAGING §8.4 gives no order), including ends held while a start was out: an offer
+    /// for one of them that still arrives is not rung or answered either. Kept apart from ``endedWinners`` so that many of
+    /// them (a mailbox replayed after a reconnect) cannot push a glare's ended winner out. An end with no session at all is
+    /// not remembered. Both lists are memory only, and are kept across a lock on purpose: a call ended before it is ended
+    /// after.
     @ObservationIgnored var endedOthers: [String] = []
     @ObservationIgnored private var loops: [Task<Void, Never>] = []
     @ObservationIgnored private var watchers: [Int: AsyncStream<CallTransition>.Continuation] = [:]

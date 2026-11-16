@@ -96,12 +96,17 @@ extension CallMachine {
             } else {
                 finish(s, ended(s, reason), nil)
             }
-        } else if s.callId != nil, s.callId != callId {
-            // Not while the call has no id: its own end may be among these (the early events full).
-            endedOthers.removeAll { $0 == callId }
-            endedOthers.append(callId)
-            if endedOthers.count > Self.maxEndedOthers { endedOthers.removeFirst() }
+        } else if s.callId != callId {
+            // While the call has no id (the early events full), its own end may be among these: remembering it is harmless,
+            // since no offer for this device's own call comes here.
+            rememberEndedOther(callId)
         }
+    }
+
+    func rememberEndedOther(_ callId: String) {
+        endedOthers.removeAll { $0 == callId }
+        endedOthers.append(callId)
+        if endedOthers.count > Self.maxEndedOthers { endedOthers.removeFirst() }
     }
 
     /// Whether the call [callId] is known to have ended here (``endedWinners``, ``endedOthers``).
@@ -133,7 +138,11 @@ extension CallMachine {
     private func lostGlare(_ s: CallSession, _ by: String?) {
         // The winner has ended already (its end came before the glare's): nothing to answer or wait for, as on the lost path
         // (``settleLost``).
-        if let by, hasEnded(by) { return finish(s, .missed, nil) }
+        if let by, hasEnded(by) {
+            // Kept among the winners, where other calls' ends cannot push it out.
+            rememberEnded(by)
+            return finish(s, .missed, nil)
+        }
         s.supersededBy = by
         s.glareOffer = nil
         cancelTimer(s, .gather)
