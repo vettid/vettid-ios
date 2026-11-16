@@ -62,4 +62,30 @@ extension CallKitCoordinatorTests {
         await settle()
         #expect(kit.events.count == 1)
     }
+
+    /// An end reason is kept only while the call's report is on its way: none is left behind by calls whose report was
+    /// answered before or after they ended, or that were replaced.
+    @Test func noEndReasonOutlivesItsReport() async throws {
+        let c = coordinator(machine())
+        c.apply(state(.incoming, .incoming), seq: 0)
+        await settle()
+        c.apply(ended(.missed, .incoming), seq: 0)
+        await settle()
+        #expect(c.endReasons.isEmpty, "reported before it ended")
+        let gate = Gate()
+        kit.incomingGate = gate
+        c.apply(state(.incoming, .incoming), seq: 1)
+        await settle()
+        let second = try #require(kit.uuid)
+        c.apply(ended(.missed, .incoming), seq: 1)
+        await settle()
+        #expect(c.endReasons.count == 1, "kept while the report is on its way")
+        kit.incomingGate = nil
+        c.apply(state(.incoming, .incoming), seq: 2)
+        await settle()
+        gate.open()
+        await settle()
+        #expect(kit.events.contains(.ended(second, CallEnd.missed.callKitReason)), "the replaced call is told its own reason")
+        #expect(c.endReasons.isEmpty, "dropped when the report is answered")
+    }
 }

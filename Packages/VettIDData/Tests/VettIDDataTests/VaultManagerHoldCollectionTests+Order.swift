@@ -120,7 +120,9 @@ extension VaultManagerHoldCollectionTests {
             body: Array(#"{"connection_id":"c1","sas":"111111","profile":{"first_name":"Morgan","last_name":"Lee"}}"#.utf8)
         )))
         m.onEvent(old("connection.event", #"{"connection_id":"c1","event":"failed","reason":"declined"}"#, id: "d1"))
-        #expect(!m.connections.peerDeclines.isEmpty, "the notice is told")
+        #expect(m.connections.peerDeclines.map(\.requestID) == ["c1"], "the notice is told, for that request")
+        #expect(m.connections.peerDeclines.first?.outgoing == true)
+        #expect(!m.connections.requests.contains { $0.id == "c1" }, "the declined request is not shown as waiting")
     }
 
     /// A re-read that failed covers nothing: no mark is set, and the redelivered patch is applied, not ignored.
@@ -252,12 +254,14 @@ extension VaultManagerHoldCollectionTests {
     // MARK: the presenter
 
     /// The read at the foreground answers without a presenter; the redelivered alarm event, dropped as older, still gives it.
+    /// The event's state is an older one than the read's, so the state shown is the read's.
     @Test func aDroppedAlarmEventStillGivesItsPresenter() async throws {
         defer { phone.close() }
         try await openVault()
         let started = m.beginAlarmRead()
         let info = CredentialInfo(
-            exists: true, version: 1, key: nil, updatedAt: nil, alarm: CredentialAlarmInfo(alarmID: "a1", state: "frozen", at: nil)
+            exists: true, version: 1, key: nil, updatedAt: nil,
+            alarm: CredentialAlarmInfo(alarmID: "a1", state: CredentialAlarm.stateRotationRequired, at: nil)
         )
         m.finishAlarmRead(info, at: Date(), started: started)
         #expect(m.alarm?.alarmID == "a1" && m.alarm?.presenter == nil)
@@ -265,6 +269,7 @@ extension VaultManagerHoldCollectionTests {
         m.onEvent(VaultMessage(inner: Inner(
             id: "e1", type: "credential.alarm", ts: Date().addingTimeInterval(-60), body: Array(body.utf8)
         )))
-        #expect(m.alarm?.state == "frozen" && m.alarm?.presenter == "other", "the state follows the order; the presenter is the event's")
+        #expect(m.alarm?.state == CredentialAlarm.stateRotationRequired, "the older event's state is not applied")
+        #expect(m.alarm?.presenter == "other", "the presenter is the event's")
     }
 }

@@ -85,22 +85,27 @@ archive() {
 # Every status is checked by hand: callers run this on the left of `&&` or inside `if`, where errexit is off, so a failing
 # strings, file or cat must be returned, not ignored.
 bundle_text() {
-  local app=$1 f out
+  local app=$1 f out list rc=0
+  # The file list first, so that a find that fails is a failure, not a shorter list. One way out, so the list always goes.
+  list=$(mktemp) || return 1
+  find "${app}" -type f -print0 >"${list}" || { echo "${app}: find failed" >&2; rm -f "${list}"; return 1; }
   while IFS= read -r -d '' f; do
     if [[ "${f}" == "${app}"/Frameworks/WebRTC.framework/WebRTC ]]; then
       # The vendor's media stack (webrtc-sdk, checksum-pinned) holds the loopback address 127.0.0.1 in its strings, a line of its
       # own: that one line is set aside, and everything else it holds is scanned like the rest of the bundle (so a dev host or
       # a TEST marker added to it is refused).
-      out=$(strings -a "${f}") || { echo "${app}: strings failed on ${f#"${app}"/}" >&2; return 1; }
-      { grep -vxF '127.0.0.1' <<<"${out}" || [[ $? -eq 1 ]]; } || return 1
+      out=$(strings -a "${f}") || { echo "${app}: strings failed on ${f#"${app}"/}" >&2; rc=1; break; }
+      { grep -vxF '127.0.0.1' <<<"${out}" || [[ $? -eq 1 ]]; } || { rc=1; break; }
     elif file -b "${f}" | grep -q 'Mach-O'; then
-      strings -a "${f}" || { echo "${app}: strings failed on ${f#"${app}"/}" >&2; return 1; }
+      strings -a "${f}" || { echo "${app}: strings failed on ${f#"${app}"/}" >&2; rc=1; break; }
     elif [[ "${f}" == *.plist ]]; then
-      plutil -convert xml1 -o - "${f}" 2>/dev/null || cat "${f}" || return 1
+      plutil -convert xml1 -o - "${f}" 2>/dev/null || cat "${f}" || { rc=1; break; }
     else
-      cat "${f}" || { echo "${app}: cannot read ${f#"${app}"/}" >&2; return 1; }
+      cat "${f}" || { echo "${app}: cannot read ${f#"${app}"/}" >&2; rc=1; break; }
     fi
-  done < <(find "${app}" -type f -print0)
+  done <"${list}"
+  rm -f "${list}"
+  return "${rc}"
 }
 
 # check_app <app> <expected bundle id> <required...> -- <forbidden...>
@@ -412,21 +417,19 @@ check_calls() {
   if [[ -f "${exe}" ]]; then
     # The calls' code is linked into the executable (the archives are stripped, but the names of the types the app uses stay in
     # the Swift metadata) and the executable loads the media stack.
-    names=$(strings -a "${exe}")
-    grep -qF 'WebRtcMediaEngineFactory' <<<"${names}" || problems+=("no WebRtcMediaEngineFactory in the executable (the calls are not linked)")
+    local exe_strings hook
+    exe_strings=$(strings -a "${exe}")
+    grep -qF 'WebRtcMediaEngineFactory' <<<"${exe_strings}" || problems+=("no WebRtcMediaEngineFactory in the executable (the calls are not linked)")
     names=$(otool -L "${exe}")
     grep -qF '@rpath/WebRTC.framework/WebRTC' <<<"${names}" || problems+=("the executable does not load WebRTC.framework")
+    # The test hooks of the media engine (VettIDCallsWebRTC's testAudioDevice and testFactoryOptions, under #if DEBUG) are what
+    # call the stack's factory with a custom audio device: that selector (the stack defines it, so only a caller names it) is in
+    # no app but a Debug one.
+    for hook in 'initWithEncoderFactory:decoderFactory:audioDevice:'; do
+      grep -qF -- "${hook}" <<<"${exe_strings}" && problems+=("the executable calls the media stack's test audio device hook (${hook})")
+    done
   else
     problems+=("no executable")
-  fi
-  # The test hooks of the media engine (VettIDCallsWebRTC's testAudioDevice and testFactoryOptions, under #if DEBUG) are what call
-  # the stack's factory with a custom audio device: that selector (the stack defines it, so only a caller names it) is in no app
-  # but a Debug one.
-  if [[ -n "${names:-}" ]]; then
-    local hook
-    for hook in 'initWithEncoderFactory:decoderFactory:audioDevice:'; do
-      grep -qF -- "${hook}" <<<"$(strings -a "${exe}")" && problems+=("the executable calls the media stack's test audio device hook (${hook})")
-    done
   fi
   if [[ ${#problems[@]} -gt 0 ]]; then
     printf '%s: %s\n' "${app}" "${problems[@]}" >&2
