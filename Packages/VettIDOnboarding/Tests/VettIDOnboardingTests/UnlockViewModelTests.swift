@@ -4,37 +4,6 @@ import VettIDData
 import VettIDDataTesting
 @testable import VettIDOnboarding
 
-/// The countdowns' seconds, moved on only by the test (kotlinx-coroutines-test's virtual time).
-@MainActor
-final class ManualTicker {
-    private var waiters: [CheckedContinuation<Void, any Error>] = []
-
-    /// Isolated to the main actor, as the view model's countdowns are: a countdown's waiter is added before it suspends, with
-    /// no hop off the main actor between, so a second the test gives right after is never one it was not yet waiting for.
-    var tick: @Sendable () async throws -> Void {
-        { @MainActor [weak self] in try await self?.wait() }
-    }
-
-    private func wait() async throws {
-        try await withCheckedThrowingContinuation { waiters.append($0) }
-    }
-
-    /// [seconds] pass, one at a time, with what each one starts run.
-    func advance(_ seconds: Int, _ vm: UnlockViewModel) async { await advance(seconds) { await vm.settle() } }
-
-    func advance(_ seconds: Int, _ vm: OwnerCheckViewModel) async { await advance(seconds) { await vm.settle() } }
-
-    private func advance(_ seconds: Int, settle: () async -> Void) async {
-        for _ in 0..<seconds {
-            await settle()
-            let w = waiters
-            waiters = []
-            for c in w { c.resume() }
-            await settle()
-        }
-    }
-}
-
 /// Mirrors vettid-android `UnlockViewModelTest`, test for test (What's new comes with I1.8; the owner check's state is set
 /// directly here, and followed from its repository in ``theOwnerChecksStateIsFollowed()``).
 @MainActor
