@@ -14,7 +14,8 @@ public enum AcceptStep: Equatable, Sendable {
     /// This member approved; the inviter's approval is awaited.
     case approved
     case connected
-    /// This vault is already connected to the inviter (or has asked to connect).
+    /// This vault is already connected to the inviter (or has a request to it that the app does not hold: this member's own
+    /// pending request is followed instead, from ``waiting``).
     case exists
     /// The request ended without a connection.
     case ended
@@ -70,8 +71,9 @@ struct AcceptSources: Equatable, Sendable {
 /// Accept an invitation (VAULT-MESSAGING §6.4, 0.10.2/0.10.3): a pasted or opened link or a scanned code. The vault
 /// fetches the claim and runs the handshake; once it has, the safety code appears here (`connection.request.outgoing`)
 /// and the member compares it with the inviter's screen and approves or declines their own side. The connection is made
-/// once both have approved. A vault already connected to the inviter says so (`exists`). A scanned code is accepted at
-/// once; an opened link waits for the member. Mirrors vettid-android `AcceptViewModel` (this one lives as long as its
+/// once both have approved. A vault already connected to the inviter says so (`exists`); its own earlier request to the
+/// inviter still pending is followed instead. A scanned code is accepted at once; an opened link waits for the member.
+/// Mirrors vettid-android `AcceptViewModel` (this one lives as long as its
 /// screen, so a scanned code is sent once without a saved-state flag).
 @MainActor
 @Observable

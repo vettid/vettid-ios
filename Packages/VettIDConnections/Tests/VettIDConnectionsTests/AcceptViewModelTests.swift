@@ -110,6 +110,16 @@ import VettIDDataTesting
         #expect(m.state.step == .approved)
     }
 
+    /// `exists` with no active connection and no request of this member's for that connection (another one's is held): still
+    /// "already connected", after the requests were read again; nothing is followed.
+    @Test func anExistsWithoutItsRequestIsStillSaid() async {
+        fake.acceptResult = AcceptedConnection(connectionID: "conn-other", exists: true)
+        fake.requests = [Samples.outgoing("conn-new")]
+        let m = await model(input: Samples.link())
+        #expect(m.state.step == .exists && m.state.connectionID == "conn-other")
+        #expect(fake.calls.contains("refreshRequests"))
+    }
+
     @Test func theSafetyCodeComesWithTheHandshakeThenBothApprove() async {
         let m = await waiting()
         fake.requests = [Samples.outgoing(sas: nil, state: .waiting)]
