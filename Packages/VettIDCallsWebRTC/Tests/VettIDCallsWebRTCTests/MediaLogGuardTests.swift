@@ -118,26 +118,35 @@ struct MediaLogGuardTests {
         }
     }
 
-    /// A directive inside a block comment or a multi-line string is not one: it neither opens a block nor hides the Release
-    /// code after the real `#endif`. Directives that do not balance fail closed: the whole file is scanned.
-    @Test func directivesInCommentsAndStringsAreNotReadAndUnbalancedOnesFailClosed() {
+    /// Anything that can span lines (a block comment, a multi-line string, a raw string) could hide a directive or show a false
+    /// one, so a file that has one is scanned whole; so is a file whose directives do not balance. The balanced inputs here are
+    /// valid Swift (typechecked without DEBUG) that a lexer got wrong twice and so failed open.
+    @Test func whatCanSpanLinesAndUnbalancedDirectivesFailClosed() {
         let name = "var d: (any RTCAudioDevice)?"
-        let hidden = [
+        let failClosed = [
+            // A `#if` in a block comment, a nested one, a multi-line string.
             "#if DEBUG\n/*\n#if os(iOS)\n*/\nlet x = 1\n#endif\n\(name)\n",
             "#if DEBUG\n/* outer /* nested */\n#if os(iOS)\n*/\n#endif\n\(name)\n",
             "#if DEBUG\nlet s = \"\"\"\n#if os(iOS)\n\"\"\"\n#endif\n\(name)\n",
+            // A raw multi-line string holding a bare `"""`.
+            "#if DEBUG\nlet s = #\"\"\"\n\"\"\"\n\"\"\"#\n#endif\n\(name)\nlet u = #\"\"\"\n#endif\n\"\"\"#\n// \"\"\"\n",
+            // A raw one-line string whose `\` is no escape, before a real block comment.
+            "let c = #\"\\\"# /*\n#if DEBUG\n*/\n\(name)\nlet e = #\"\\\"# /*\n#endif\n*/\n",
+            // Quotes inside an interpolation.
+            "#if DEBUG\nlet a = \"\\(\"/*\")\"\n#endif\n\(name)\nlet b = \"\\(\"*/\")\"; let c = #\"\\\"# /*\n#endif\n*/\n",
+            // A `/*` inside a one-line string is enough (stricter than the compiler: safe).
+            "#if DEBUG\nlet a = \"/*\"\n\(name)\n#endif\n",
+            // Unbalanced.
+            "#if DEBUG\n\(name)\n", "#if DEBUG\n\(name)\n#endif\n#endif\n",
         ]
-        for text in hidden {
+        for text in failClosed {
+            #expect(MediaLogGuard.withoutDebugBlocks(text) == text, "\(text)")
             #expect(!MediaLogGuard.offencesOutsideTests(in: MediaLogGuard.withoutDebugBlocks(text)).isEmpty, "\(text)")
         }
-        // A `/*` or a `"""` inside a one-line string or after `//` opens nothing.
-        let quoted = "#if DEBUG\nlet a = \"\\\\\" + \"/*\" // \"\"\"\n\(name)\n#endif\nlet b = 2\n"
-        #expect(MediaLogGuard.offencesOutsideTests(in: MediaLogGuard.withoutDebugBlocks(quoted)).isEmpty)
-        #expect(MediaLogGuard.withoutDebugBlocks(quoted).contains("let b = 2"))
-        // Unbalanced: the name inside the Debug block is scanned too.
-        for text in ["#if DEBUG\n\(name)\n", "#if DEBUG\n\(name)\n#endif\n#endif\n", "#if DEBUG\n\(name)\n#endif\n/* open\n"] {
-            #expect(MediaLogGuard.withoutDebugBlocks(text) == text, "\(text)")
-        }
+        // With none of them, a `//` comment and a one-line string change nothing.
+        let plain = "#if DEBUG\nlet a = \"#if\" // #endif\n\(name)\n#endif\nlet b = 2\n"
+        #expect(MediaLogGuard.offencesOutsideTests(in: MediaLogGuard.withoutDebugBlocks(plain)).isEmpty)
+        #expect(MediaLogGuard.withoutDebugBlocks(plain).contains("let b = 2"))
     }
 
     /// The scan reads the files that carry settings and project wiring, and does not skip another directory called "build".

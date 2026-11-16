@@ -46,29 +46,30 @@ public enum MediaLogGuard {
     public static let forbiddenOutsideTests: [String] = ["RTCAudioDevice"]
 
     /// [text] without the lines from each `#if DEBUG` to its matching `#else`, `#elseif` or `#endif` (nesting counted): what a
-    /// Release build compiles of a file. A `#if` of another condition counts for nesting only. A directive is read only where
-    /// the compiler reads one: not inside a block comment (nested ones counted) or a multi-line string. Fails closed: a file
-    /// whose directives do not balance is returned whole, as if all of it were compiled in Release.
+    /// Release build compiles of a file. A `#if` of another condition counts for nesting only.
+    ///
+    /// Fails closed: the text is returned whole, as if all of it were compiled in Release, when its directives do not balance,
+    /// or when it has anything that can span lines and so hide a directive or show a false one: a block comment (`/*`), a
+    /// multi-line string (`"""`) or a raw string (`#"`), wherever the characters are. Without them every line starts in code,
+    /// so each directive line is one. (No lexer: one that gets two things wrong can still balance a file and fail open.)
     public static func withoutDebugBlocks(_ text: String) -> String {
+        if text.contains("/*") || text.contains("\"\"\"") || text.contains("#\"") { return text }
         var depth = 0
         var debugDepth: Int?
         var kept: [Substring] = []
-        var lexer = DirectiveLexer()
         for line in text.split(separator: "\n", omittingEmptySubsequences: false) {
-            let atCode = lexer.atCode
-            lexer.scan(line)
             let trimmed = line.trimmingCharacters(in: .whitespaces)
-            if atCode, trimmed.hasPrefix("#if") {
+            if trimmed.hasPrefix("#if") {
                 depth += 1
                 if debugDepth == nil, trimmed == "#if DEBUG" { debugDepth = depth }
                 continue
             }
-            if atCode, trimmed.hasPrefix("#else") {
+            if trimmed.hasPrefix("#else") {
                 // `#else` and `#elseif`: what follows at the same depth is compiled in Release.
                 if debugDepth == depth { debugDepth = nil }
                 continue
             }
-            if atCode, trimmed.hasPrefix("#endif") {
+            if trimmed.hasPrefix("#endif") {
                 if debugDepth == depth { debugDepth = nil }
                 depth -= 1
                 if depth < 0 { return text }
@@ -76,86 +77,7 @@ public enum MediaLogGuard {
             }
             if debugDepth == nil { kept.append(line) }
         }
-        guard depth == 0, !lexer.open else { return text }
-        return kept.joined(separator: "\n")
-    }
-
-    /// Where a line of Swift starts: in code, or inside a block comment (Swift nests them) or a multi-line string. Enough for
-    /// directives (which the compiler reads only in code); anything it gets wrong shows as unbalanced directives, which fail
-    /// closed.
-    struct DirectiveLexer {
-        private var comments = 0
-        private var multiline = false
-
-        var atCode: Bool { comments == 0 && !multiline }
-        /// A comment or a multi-line string not closed at the end of the file.
-        var open: Bool { !atCode }
-
-        mutating func scan(_ line: Substring) {
-            let c = Array(line.utf8)
-            var i = 0
-            var inString = false
-            while i < c.count {
-                if multiline {
-                    i = inMultiline(c, i)
-                } else if comments > 0 {
-                    i = inComment(c, i)
-                } else if inString {
-                    i = Self.inLiteral(c, i, &inString)
-                } else {
-                    guard let next = inCode(c, i, &inString) else { return }
-                    i = next
-                }
-            }
-        }
-
-        private mutating func inMultiline(_ c: [UInt8], _ i: Int) -> Int {
-            if Self.has(c, i, "\\") { return i + 2 }
-            if Self.has(c, i, "\"\"\"") {
-                multiline = false
-                return i + 3
-            }
-            return i + 1
-        }
-
-        private mutating func inComment(_ c: [UInt8], _ i: Int) -> Int {
-            if Self.has(c, i, "/*") {
-                comments += 1
-                return i + 2
-            }
-            if Self.has(c, i, "*/") {
-                comments -= 1
-                return i + 2
-            }
-            return i + 1
-        }
-
-        /// Nil: the rest of the line is a line comment.
-        private mutating func inCode(_ c: [UInt8], _ i: Int, _ inString: inout Bool) -> Int? {
-            if Self.has(c, i, "//") { return nil }
-            if Self.has(c, i, "/*") {
-                comments += 1
-                return i + 2
-            }
-            if Self.has(c, i, "\"\"\"") {
-                multiline = true
-                return i + 3
-            }
-            if Self.has(c, i, "\"") { inString = true }
-            return i + 1
-        }
-
-        /// Inside a one-line string literal: an escape is skipped, a quote ends it.
-        private static func inLiteral(_ c: [UInt8], _ i: Int, _ inString: inout Bool) -> Int {
-            if has(c, i, "\\") { return i + 2 }
-            if has(c, i, "\"") { inString = false }
-            return i + 1
-        }
-
-        private static func has(_ c: [UInt8], _ i: Int, _ s: String) -> Bool {
-            let b = Array(s.utf8)
-            return i >= 0 && i + b.count <= c.count && Array(c[i..<(i + b.count)]) == b
-        }
+        return depth == 0 ? kept.joined(separator: "\n") : text
     }
 
     /// The names of ``forbiddenOutsideTests`` in [text], a source file that is not a test.
