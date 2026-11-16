@@ -66,7 +66,7 @@ import VettIDDataTesting
             return (x.requestID, x)
         })
         #expect(byID["a2"]?.hasDocument == false && byID["a2"]?.documentRequired == false)
-        // A malformed hash still names a document (never approved without it); it can only fail the checks.
+        // A malformed hash still names a document; it can only fail the checks.
         #expect(byID["a3"]?.hasDocument == true && byID["a3"]?.documentSize == nil && byID["a3"]?.documentRequired == false)
     }
 
