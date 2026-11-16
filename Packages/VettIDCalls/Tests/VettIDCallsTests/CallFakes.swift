@@ -200,10 +200,11 @@ final class FakeEngines: MediaEngineFactory {
     // swiftlint:disable:next force_cast
     var last: FakeEngine { created.last as! FakeEngine }
 
-    /// The engine made last, once there is one: the machine makes it several task hops after a Call tap (the controller, the
-    /// microphone gate, the machine's inbox), which a fixed number of turns may not cover on a busy runner.
-    func made() async throws -> FakeEngine {
-        guard await eventually({ created.last is FakeEngine }) else { throw NoEngineMade() }
+    /// The engine made after the first [count] (``created``'s count before the call), once it exists: the machine makes it
+    /// several task hops after a Call tap (the controller, the microphone gate, the machine's inbox), which a fixed number of
+    /// turns may not cover on a busy runner.
+    func made(after count: Int) async throws -> FakeEngine {
+        guard await eventually({ created.count > count && created.last is FakeEngine }) else { throw NoEngineMade() }
         return last
     }
 }
@@ -211,7 +212,8 @@ final class FakeEngines: MediaEngineFactory {
 struct NoEngineMade: Error {}
 
 /// Yields until [condition] holds, in rounds of 400 turns up to 50 rounds (far more than any path here needs, on a busy runner
-/// too): true as soon as it does, false if it never does.
+/// too): true as soon as it does, false if it never does. It only yields: a step behind the test clock (a sleeper) needs
+/// `runCurrent()` or `advance(by:)` instead.
 @MainActor
 func eventually(_ condition: () -> Bool) async -> Bool {
     for _ in 0..<50 {
