@@ -185,6 +185,7 @@ package final class CallMachine {
         case .remoteApplied(let seq): if let s, s.seq == seq { s.remoteApplied = true }
         case .gathering(let seq): if let s, s.seq == seq, s.gathered == 0 { timer(s, .gather, timings.gather) }
         case .failed(let seq, let reason): if let s, s.seq == seq, s.supersededBy == nil { finish(s, reason, CallReason.failed) }
+        case .lost(let seq, let callId, let end): onLost(s, seq: seq, callId: callId, end: end)
         case .timer(let seq, let kind): if let s, s.seq == seq { onTimer(s, kind) }
         case .path(let seq, let relayed): if let s, s.seq == seq { s.relayed = relayed }
         }

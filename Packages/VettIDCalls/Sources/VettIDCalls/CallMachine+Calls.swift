@@ -24,6 +24,8 @@ extension CallMachine {
                     post(.placed(seq: s.seq, placed, atMs: clock.elapsedMs()))
                 } catch let e as CallRefusedError {
                     post(.failed(seq: s.seq, Self.refusal(e.code)))
+                } catch let e as CallLostError {
+                    post(.lost(seq: s.seq, callId: e.callId, end: e.end))
                 }
             }
         }
@@ -37,6 +39,54 @@ extension CallMachine {
         case "owner_check_required": .ownerCheckRequired
         case "unsupported_type": .notSupported
         default: .failed
+        }
+    }
+
+    /// `call.start` placed a call that can no longer be made (``CallLostError``): it is ended at the vault, through
+    /// ``sendEnd(_:_:)`` like every end (a lock waits for it). The member's call shows it failed; one the member hung up while
+    /// the vault was answering is ended as hung up, as ``onPlaced(_:seq:call:atMs:)`` does.
+    func onLost(_ s: CallSession?, seq: Int, callId: String, end: CallLostError.End?) {
+        if let s, s.seq == seq {
+            // The machine may hold the vault's own end for it among its early events (the oldest ``maxEarly`` of every kind,
+            // where the signalling remembers the newest ends): that end says how the call ended (`busy`, a glare's winner, the
+            // winner's own end), as for a placed call (``onPlaced(_:seq:call:atMs:)``). Nothing else held is of use: the call
+            // has no key, and its media never started.
+            let early = s.early
+            s.early.removeAll()
+            s.callId = callId
+            // An offer held before the call had its id, that turns out to carry this very id, is no other call.
+            if s.glareOffer?.callId == callId { s.glareOffer = nil }
+            s.phase = .calling
+            for e in early {
+                if case .answer(let a) = e {
+                    a.keys.wipe()
+                } else if case .end = e, session === s {
+                    onSignal(s, e)
+                }
+            }
+            guard session === s else { return }
+            // The vault's end the signalling remembered, which the machine may not have had yet (it may be on its way here, to
+            // land with no session) or at all: applied as it would have been, so a `busy` or a glare's end is what the call
+            // shows, and nothing is sent for it.
+            if let end, s.supersededBy == nil {
+                onSignal(s, .end(callId: callId, reason: end.reason, supersededBy: end.supersededBy))
+                guard session === s else { return }
+            }
+            if s.supersededBy != nil {
+                // A glare it lost, whose winner's offer is not here yet: the offer comes in moments, or the call ends busy at
+                // the ring timer (``onTimer(_:_:)``), as a placed call's wait does.
+                timer(s, .ringOut, timings.minRing)
+                publish(s)
+            } else {
+                // Its end is not known (it may have been lost): it fails now.
+                finish(s, .failed, CallReason.failed)
+            }
+        } else if let i = abandoned.firstIndex(of: seq) {
+            abandoned.remove(at: i)
+            sendEnd(callId, CallReason.hangup)
+        } else {
+            // No session knows it (it was let go, the list of abandoned starts was full): ended all the same, nothing else will.
+            sendEnd(callId, CallReason.failed)
         }
     }
 

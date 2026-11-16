@@ -20,6 +20,8 @@ enum CallMessage: Sendable {
     case remoteApplied(seq: Int)
     case gathering(seq: Int)
     case failed(seq: Int, CallEnd)
+    /// `call.start` placed [callId], but the call can no longer be made (``CallLostError``).
+    case lost(seq: Int, callId: String, end: CallLostError.End?)
     case timer(seq: Int, TimerKind)
     case path(seq: Int, relayed: Bool)
 }
