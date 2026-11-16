@@ -220,7 +220,14 @@ extension StagingTests {
     /// the vault can be locked: the call screen is a window of its own over the shell.
     @MainActor
     func leaveCall(_ app: XCUIApplication) {
-        guard shown(app)["call_screen"] != nil else { return }
+        // A microphone dialog (the calls window shows it with or without a call) is dismissed first, never confirmed: the
+        // blocked one's button opens Settings.
+        let alert = app.alerts.firstMatch
+        if alert.exists, [Self.microphoneBlockedTitle, Self.microphoneExplainTitle].contains(alert.label),
+           let dismiss = alert.buttons.allElementsBoundByIndex.first(where: { $0.identifier != "confirm_button" }) {
+            dismiss.tap()
+        }
+        guard anyElement(app, "call_screen").waitForExistence(timeout: 2) else { return }
         for id in ["call_hang_up", "call_decline"] where app.buttons[id].exists {
             app.buttons[id].tap()
             break

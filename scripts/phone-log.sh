@@ -38,12 +38,13 @@ chmod 700 "${DIR}"
 STAMP="$(date +%Y%m%d-%H%M%S)"
 TAR="${DIR}/${STAMP}.tar"
 ARCHIVE="${DIR}/${STAMP}.logarchive"
+# Nothing is left behind on a failure either (unless --keep).
+trap 'rm -f "${TAR}"; [[ ${KEEP} -eq 1 ]] || rm -rf "${ARCHIVE}"' EXIT
 idevicesyslog -u "${DEVICE}" archive "${TAR}" --age-limit "$((MINUTES * 60))" >/dev/null
 mkdir -p "${ARCHIVE}"
 tar -xf "${TAR}" -C "${ARCHIVE}"
-rm -f "${TAR}"
 # The full path, so that no shell function or builtin of the same name is used.
 status=0
 /usr/bin/log show --archive "${ARCHIVE}" --predicate "${PREDICATE}" --style compact || status=$?
-if [[ ${KEEP} -eq 1 ]]; then echo "archive kept: ${ARCHIVE}" >&2; else rm -rf "${ARCHIVE}"; fi
+if [[ ${KEEP} -eq 1 ]]; then echo "archive kept: ${ARCHIVE}" >&2; fi
 exit "${status}"
