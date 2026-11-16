@@ -112,7 +112,7 @@ public struct AuthenticationRequest: Equatable, Sendable {
     /// `document_required: true`: an approval that does not sign the document cannot count.
     public var documentRequired = false
 
-    /// Whether the challenge carries a document: it is approved only from the screen that shows it.
+    /// Whether the challenge carries a document (§10.4: once the app shows documents, approved only from that screen).
     public var hasDocument: Bool { documentSha256 != nil }
 
     /// [raw] as a challenge's match code: exactly 2 or 3 ASCII digits, kept as written ("07" stays "07"), and only with

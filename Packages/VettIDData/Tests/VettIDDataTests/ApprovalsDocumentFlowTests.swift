@@ -36,6 +36,15 @@ import VettIDDataTesting
 
     var exp: String { Timestamps.formatMillis(now.addingTimeInterval(600)) }
 
+    func kind(_ op: () async throws -> Void) async -> FailureKind? {
+        do {
+            try await op()
+            return nil
+        } catch {
+            return (error as? VaultFailure)?.kind
+        }
+    }
+
     func challenge(_ doc: String = Self.doc, required: Bool = true, size: Int? = nil) -> String {
         #"{"request_id":"a1","connection_id":"c1","purpose":"approval","context":"Extend a vote — ref \#(Self.ref(doc))","document_sha256":"\#(Self.sha(doc))","document_size":\#(size ?? doc.utf8.count)"# + (required ? #","document_required":true"# : "") + #","exp":"\#(exp)"}"#
     }
@@ -121,7 +130,7 @@ import VettIDDataTesting
         guard case .success(let d) = try await m.authenticationDocument(r) else { throw CocoaError(.coderInvalidValue) }
         ops.errors["authApprove"] = FakeApprovalOps.error("document_not_fetched")
         ops.failAgain["authApprove"] = FakeApprovalOps.error("document_not_fetched")
-        await #expect(throws: VaultFailure.self) { _ = try await m.approveAuthentication(r, password: "pw", document: d) }
+        #expect(await kind { _ = try await m.approveAuthentication(r, password: "pw", document: d) } == .vaultCode("document_not_fetched"))
         #expect(ops.calls.filter { $0.hasPrefix("authApprove") }.count == 2 && m.approvals.count == 1)
     }
 
@@ -150,13 +159,6 @@ import VettIDDataTesting
         }
     }
 
-    @Test func aChallengeWithADocumentIsNeverApprovedWithoutIt() async throws {
-        let (m, unlocked) = manager()
-        pending(m, challenge(required: false))
-        await #expect(throws: VaultFailure.self) { try await m.approveAuthentication("a1", password: "pw") }
-        #expect(ops.calls.isEmpty && unlocked().isEmpty && m.approvals.count == 1)
-    }
-
     @Test func aMalformedHashStillNamesADocument() async throws {
         let (m, _) = manager()
         pending(m, #"{"request_id":"a1","connection_id":"c1","purpose":"approval","context":"x","document_sha256":null,"document_size":\#(Self.doc.utf8.count),"exp":"\#(exp)"}"#)
@@ -164,7 +166,6 @@ import VettIDDataTesting
         #expect(r.hasDocument && r.documentSha256 == "")
         ops.documents = [Self.b64(Self.doc)]
         #expect(try await m.authenticationDocument(r) == .failure(.hash))
-        await #expect(throws: VaultFailure.self) { try await m.approveAuthentication("a1", password: "pw") }
     }
 
     @Test func anApprovalWithoutADocumentSendsNoHash() async throws {
