@@ -30,6 +30,10 @@ extension CallMachine {
         release(s)
         let callId = s.callId
         if let tell, let callId { sendEnd(callId, tell) }
+        // An incoming call that rang here and has ended: its offer delivered again is not rung. (Chosen; not in the spec.) That
+        // includes one still live at the vault until its `exp`: an answer CallKit refused (missed, nothing sent) or this
+        // device's ring timer run out; a redelivered offer for it does not ring here again.
+        if s.direction == .incoming, let callId { rememberEndedOther(callId) }
         let duration = s.activeSince.map { Duration.rounded(seconds: clock.now().timeIntervalSince($0)) }
         if duration != nil { countPath(s) }
         setState(.ended(CallState.Ended(

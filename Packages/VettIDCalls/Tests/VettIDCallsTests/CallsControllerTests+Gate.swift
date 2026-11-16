@@ -174,7 +174,9 @@ extension CallsControllerTests {
         await settle()
         c.dismiss()
         await settle()
-        vault.gatewayFake.send(offerEvent())
+        // A call of its own (call ids are never offered again).
+        vault.gatewayFake.incomingResult = { _ in try self.incoming(callId: otherId) }
+        vault.gatewayFake.send(offerEvent(otherId))
         await settle()
         guard case .live(let l) = c.state, l.phase == .incoming else { throw WrongState(state: c.state) }
         mic.requestGate?.open()

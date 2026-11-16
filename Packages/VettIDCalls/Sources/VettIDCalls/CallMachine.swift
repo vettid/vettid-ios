@@ -42,15 +42,17 @@ package final class CallMachine {
     @ObservationIgnored let inbox: AsyncStream<CallMessage>.Continuation
     @ObservationIgnored var session: CallSession?
     @ObservationIgnored var nextSeq = 0
-    /// Glare winners that ended while this device's lost call waited for them: an offer for one of them that still arrives
-    /// (late, or delivered again) is not rung or answered. A few ids.
+    /// Glare winners known to have ended: those that ended while this device's lost call waited for them, a held offer whose
+    /// own end was held too, and a winner whose end was held with this call's glare end (put here before a replay). An offer
+    /// for one of them that still arrives (late, or delivered again) is not rung or answered. A few ids.
     @ObservationIgnored var endedWinners: [String] = []
     /// Other calls whose end came while a session was here and was not its own (a call turned away as busy, or one whose
-    /// offer has not come yet: VAULT-MESSAGING §8.4 gives no order), including ends held while a start was out: an offer
-    /// for one of them that still arrives is not rung or answered either. Kept apart from ``endedWinners`` so that many of
-    /// them (a mailbox replayed after a reconnect) cannot push a glare's ended winner out. An end with no session at all is
-    /// not remembered. Both lists are memory only, and are kept across a lock on purpose: a call ended before it is ended
-    /// after.
+    /// offer has not come yet: VAULT-MESSAGING §8.4 gives no order), including ends held while a start was out (when the
+    /// call ends before its id, and those left once a replay has finished it), and incoming calls that rang here and ended:
+    /// an offer for one of them that still arrives is not rung or answered either. Kept apart from ``endedWinners`` so that
+    /// many of them (a mailbox replayed after a reconnect) cannot push a glare's ended winner out. An end that arrives when
+    /// there is no session at all is not remembered (the held ones a replay leaves are). Both lists are memory only, and are
+    /// kept across a lock on purpose: a call that ended before a lock is still ended after it.
     @ObservationIgnored var endedOthers: [String] = []
     @ObservationIgnored private var loops: [Task<Void, Never>] = []
     @ObservationIgnored private var watchers: [Int: AsyncStream<CallTransition>.Continuation] = [:]
