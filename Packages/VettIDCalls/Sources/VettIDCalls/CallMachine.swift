@@ -29,6 +29,9 @@ package final class CallMachine {
     package internal(set) var listenRestarts = 0
     /// `call.end` messages handed to the vault client and not yet with the relay.
     package internal(set) var pendingEnds = 0
+    /// `call.start`s sent whose answer this machine has not handled yet: a call one of them placed may still need its end (a call
+    /// ended here while its start was on its way, by a lock among others, is ended when the answer comes).
+    package internal(set) var startsInFlight = 0
 
     @ObservationIgnored let signalling: any CallSignalling
     @ObservationIgnored let engines: any MediaEngineFactory
@@ -186,6 +189,8 @@ package final class CallMachine {
         case .gathering(let seq): if let s, s.seq == seq, s.gathered == 0 { timer(s, .gather, timings.gather) }
         case .failed(let seq, let reason): if let s, s.seq == seq, s.supersededBy == nil { finish(s, reason, CallReason.failed) }
         case .lost(let seq, let callId, let end): onLost(s, seq: seq, callId: callId, end: end)
+        // After the start's own answer in the inbox: whatever end that answer called for is counted in ``pendingEnds`` by now.
+        case .startReturned: startsInFlight -= 1
         case .timer(let seq, let kind): if let s, s.seq == seq { onTimer(s, kind) }
         case .path(let seq, let relayed): if let s, s.seq == seq { s.relayed = relayed }
         }

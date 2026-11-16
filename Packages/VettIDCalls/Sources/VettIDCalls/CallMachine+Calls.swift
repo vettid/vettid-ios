@@ -19,6 +19,9 @@ extension CallMachine {
             let sdp = try await engine.createOffer(suite: first)
             // Not cancelled by a hang-up: once `call.start` may have left, its answer is needed to end the call.
             try await uncancellable { [self] in
+                startsInFlight += 1
+                // Posted after the answer, whichever way it went (a refusal, an error, nothing placed included).
+                defer { post(.startReturned) }
                 do {
                     let placed = try await signalling.start(connectionId: connectionId, sdp: sdp, suites: offered)
                     post(.placed(seq: s.seq, placed, atMs: clock.elapsedMs()))
