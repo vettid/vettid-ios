@@ -17,6 +17,7 @@ extension CallMachine {
         // of the call itself `call.start` may still bring is handled when it does (``onPlaced``, ``onLost``).
         forgetEndedGlareOffer(s, s.early)
         let held = s.glareOffer
+        let heldIce = s.glareIce
         release(s)
         let callId = s.callId
         if let tell, let callId { sendEnd(callId, tell) }
@@ -28,7 +29,11 @@ extension CallMachine {
         // The connection's own call that arrived while this one rang to it is not lost when this one ended another way (the
         // vault, the other side, a refusal of `call.start` such as `busy`, a failure): it rings. Never after this member's own
         // end, a lock's above all: a call rings only while the vault is open on this phone, and a lock would decline it unseen.
-        if let held, !s.memberEnded, clock.now() < held.exp { ring(held) }
+        if let held, !s.memberEnded, clock.now() < held.exp {
+            ring(held)
+            // Its candidates that came meanwhile wait for its answer, as a ringing call's own do.
+            if !heldIce.isEmpty, let rung = session, rung.callId == held.callId { onIce(rung, heldIce) }
+        }
     }
 
     /// A connected call ended: its path is counted, by the last one the stack reported (relayed, direct, or not said).
