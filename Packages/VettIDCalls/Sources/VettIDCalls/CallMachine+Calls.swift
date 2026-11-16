@@ -35,9 +35,9 @@ extension CallMachine {
                     post(.lost(seq: s.seq, callId: e.callId, end: e.end))
                 }
                 // Any other failure after the request may have left (no answer in time, a lost answer, one that does not
-                // verify) leaves the lane failed with no end sent here: `VaultApi.callStart` has already sent the durable `call.end{hangup}` for the call's id
-                // (VAULT-MESSAGING §10.10 "Placing a call") before this start returned. The lock gate lets it through, and a
-                // pending lock waits for it, though only for ``CallsController/lockWait``.
+                // verify) leaves the lane failed with no end sent here: `VaultApi.callStart` has already sent the durable
+                // `call.end{hangup}` for the call's id (VAULT-MESSAGING §10.10 "Placing a call") before this start returned.
+                // The lock gate lets it through, and a pending lock waits for it, though only for ``CallsController/lockWait``.
             }
         }
     }

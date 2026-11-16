@@ -268,6 +268,70 @@ extension CallMachineTests {
         #expect(!hasSent(signalling, "answer(") && !hasSent(signalling, "ringing(") && !hasSent(signalling, "end("))
     }
 
+    /// A second offer from the connection after the winner ended, then the glare's end: the call is missed at once, and the
+    /// second offer, held meanwhile, rings (it is a call of its own, not the ended winner).
+    @Test func aSecondOfferAfterTheWinnerEndedRingsWhenTheCallIsMissed() async throws {
+        let m = machine()
+        try await placed(m)
+        signalling.deliver(offer(glareId))
+        signalling.deliver(.end(callId: glareId, reason: CallReason.hangup))
+        signalling.deliver(offer(otherId))
+        signalling.deliver(.end(callId: callId, reason: CallReason.busy, supersededBy: glareId))
+        await runCurrent()
+        let l = try live(m)
+        #expect(l.direction == .incoming && l.callId == otherId && l.phase == .incoming)
+        #expect(!hasSent(signalling, "answer("))
+        #expect(signalling.sent.contains("ringing(\(otherId))"))
+    }
+
+    /// The winner's offer, its end and the glare's end, all held while `call.start` was out, then placed: missed at once.
+    @Test func aGlareWhoseWinnerEndedFirstWhileTheStartWasOutIsMissedAtOnce() async throws {
+        signalling.holdStart()
+        let m = machine()
+        m.call("conn-1")
+        await runCurrent()
+        signalling.deliver(offer(glareId))
+        signalling.deliver(.end(callId: glareId, reason: CallReason.hangup))
+        signalling.deliver(.end(callId: callId, reason: CallReason.busy, supersededBy: glareId))
+        await runCurrent()
+        signalling.releaseStart()
+        await runCurrent()
+        #expect(try ended(m).reason == .missed)
+        #expect(!hasSent(signalling, "answer(") && !hasSent(signalling, "ringing(") && !hasSent(signalling, "end("))
+    }
+
+    /// Only the held offer's own end lets it go: with another call's end held, a refused start still rings it.
+    @Test func aRefusedStartRingsTheHeldOfferWhenAnotherCallsEndIsHeld() async throws {
+        let s = FakeSignalling()
+        s.holdStart()
+        s.startResult = { throw CallRefusedError(code: "busy") }
+        let m = machine(s)
+        m.call("conn-1")
+        await runCurrent()
+        s.deliver(offer(glareId))
+        s.deliver(.end(callId: otherId, reason: CallReason.hangup))
+        await runCurrent()
+        s.releaseStart()
+        await runCurrent()
+        let l = try live(m)
+        #expect(l.direction == .incoming && l.callId == glareId && l.phase == .incoming)
+    }
+
+    /// (VAULT-MESSAGING §8.4: no order) The winner's end comes before its offer, and before the glare's end: the call is missed
+    /// at once, and the winner's late offer is neither answered nor rung.
+    @Test func aWinnersEndBeforeItsOfferMakesTheGlareMissedAndTheLateOfferIsNotAnswered() async throws {
+        let m = machine()
+        try await placed(m)
+        signalling.deliver(.end(callId: glareId, reason: CallReason.hangup))
+        signalling.deliver(.end(callId: callId, reason: CallReason.busy, supersededBy: glareId))
+        await runCurrent()
+        #expect(try ended(m).reason == .missed)
+        signalling.deliver(offer(glareId))
+        await runCurrent()
+        #expect(try ended(m).reason == .missed)
+        #expect(!hasSent(signalling, "answer(") && !hasSent(signalling, "ringing(") && !hasSent(signalling, "end("))
+    }
+
     /// X's end delivered twice while the lost glare waits changes nothing; the winner is still answered.
     @Test func aSecondEndOfTheLostCallChangesNothing() async throws {
         let m = machine()

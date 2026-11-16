@@ -137,8 +137,8 @@ extension CallMachineTests {
         #expect(!hasSent(signalling, "ringing("))
     }
 
-    /// No session knows the lost call (let go, the abandoned starts' list full): it is ended at the vault as hung up all the
-    /// same (VAULT-MESSAGING §10.10 "Placing a call").
+    /// No session knows the lost call (the member hung up while the vault was answering): it is ended at the vault as hung
+    /// up all the same (VAULT-MESSAGING §10.10 "Placing a call").
     @Test func aLostCallNoSessionKnowsIsEndedAtTheVault() async throws {
         let m = machine()
         await runCurrent()
@@ -229,7 +229,7 @@ extension CallMachineTests {
     // MARK: ends the vault already sent
 
     /// The member hung up while the start was on its way, and the vault ended the call meanwhile: nothing more is sent.
-    @Test func anAbandonedLostCallTheVaultEndedSendsNothing() async throws {
+    @Test func aHungUpLostCallTheVaultEndedSendsNothing() async throws {
         let m = machine()
         signalling.holdStart()
         m.call("conn-1")

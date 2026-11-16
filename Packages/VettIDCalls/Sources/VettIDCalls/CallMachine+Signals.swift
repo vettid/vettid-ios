@@ -71,7 +71,9 @@ extension CallMachine {
         // Otherwise: busy here. The vault rings every device, and this one is in another call.
     }
 
-    /// The vault's `call.end` for the call here, for its held glare offer, or for neither.
+    /// The vault's `call.end` for the call here, for its held glare offer, or for neither: a call ended before its offer came
+    /// (VAULT-MESSAGING §8.4 gives no order, and §10.10 "Glare" names either order of a glare's end and its winner's offer) is
+    /// remembered, so that its late offer is neither answered nor rung.
     private func onEnd(_ s: CallSession, callId: String, reason: String, supersededBy: String?) {
         if s.glareOffer?.callId == callId {
             // The connection's held offer ended (its caller hung up): it is no longer one to ring or answer, and an offer for
@@ -94,6 +96,8 @@ extension CallMachine {
             } else {
                 finish(s, ended(s, reason), nil)
             }
+        } else if s.callId != callId {
+            rememberEnded(callId)
         }
     }
 

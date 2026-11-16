@@ -62,11 +62,11 @@ package final class VaultCallSignalling: CallSignalling {
     /// One call at a time: anything beyond a few is left over from calls that ended without a word.
     private static let maxKept = 4
     /// Ids and the vault's ends, and only while a start is in flight. Unlike ``heldAnswers`` (which keeps the first ones: an
-    /// answer that overtook a start comes right after it), the newest are kept. Losing an older one is covered by
-    /// ``lostForStartsUpTo`` for its id, not for its end: if it was the started call's, the call is lost with no end, and shows
-    /// the end the machine holds for it among its early events if any, or else fails (and is ended `failed` at a vault that
-    /// ended it already, which ignores it). That takes more ends of other calls than this during one start, a mailbox replayed
-    /// after a reconnect.
+    /// answer that overtook a start comes right after it), the newest are kept. When an older one is dropped,
+    /// ``lostForStartsUpTo`` still covers its id but not its end. If it was the started call's, that call is lost without its
+    /// end: it shows the end the machine holds for it among its early events, if any, and otherwise fails (and is ended
+    /// `failed` at the vault, which has ended it already and ignores that). It takes more ends of other calls than this
+    /// during one start, as when a mailbox is replayed after a reconnect.
     private static let maxEndedKept = 16
     /// What reading the connections again may take inside the ordered flow of events.
     private static let refreshTimeout = Duration.seconds(3)
