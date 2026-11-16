@@ -61,7 +61,7 @@ package final class VaultCallSignalling: CallSignalling {
 
     /// One call at a time: anything beyond a few is left over from calls that ended without a word.
     private static let maxKept = 4
-    /// Ids only, and only while a start is in flight. Unlike ``heldAnswers`` (which keeps the first ones: an answer that overtook
+    /// Ids and the vault's ends, and only while a start is in flight. Unlike ``heldAnswers`` (which keeps the first ones: an answer that overtook
     /// a start comes right after it), the newest are kept, and losing an older one is covered by ``lostForStartsUpTo``.
     private static let maxEndedKept = 16
     /// What reading the connections again may take inside the ordered flow of events.
@@ -237,7 +237,10 @@ package final class VaultCallSignalling: CallSignalling {
     private func forget(_ callId: String, end: CallLostError.End? = nil) {
         if let call = take(placed: callId) {
             call.destroy()
-        } else if starting > 0, !endedWhileStarting.contains(where: { $0.callId == callId }) {
+        } else if starting > 0, let i = endedWhileStarting.firstIndex(where: { $0.callId == callId }) {
+            // Ended twice: the vault's end is what the call shows, over one made here (none).
+            if endedWhileStarting[i].end == nil { endedWhileStarting[i].end = end }
+        } else if starting > 0 {
             // The vault can end the call (`busy`) before its answer to `call.start` has been read here.
             endedWhileStarting.append((callId, end))
             if endedWhileStarting.count > Self.maxEndedKept {

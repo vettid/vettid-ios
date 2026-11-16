@@ -97,7 +97,7 @@ extension CallMachine {
         }
     }
 
-    private func rememberEnded(_ callId: String) {
+    func rememberEnded(_ callId: String) {
         endedWinners.append(callId)
         if endedWinners.count > Self.maxEndedWinners { endedWinners.removeFirst() }
     }

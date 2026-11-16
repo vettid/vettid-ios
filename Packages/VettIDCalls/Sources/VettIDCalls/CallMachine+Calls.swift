@@ -57,46 +57,70 @@ extension CallMachine {
     /// ``sendEnd(_:_:)`` like every end (a lock waits for it). The member's call shows it failed; one the member hung up while
     /// the vault was answering is ended as hung up, as ``onPlaced(_:seq:call:atMs:)`` does.
     func onLost(_ s: CallSession?, seq: Int, callId: String, end: CallLostError.End?) {
-        if let s, s.seq == seq {
-            // The machine may hold the vault's own end for it among its early events (the oldest ``maxEarly`` of every kind,
-            // where the signalling remembers the newest ends): that end says how the call ended (`busy`, a glare's winner, the
-            // winner's own end), as for a placed call (``onPlaced(_:seq:call:atMs:)``). Nothing else held is of use: the call
-            // has no key, and its media never started.
-            let early = s.early
-            s.early.removeAll()
-            s.callId = callId
-            // An offer held before the call had its id, that turns out to carry this very id, is no other call.
-            if s.glareOffer?.callId == callId { s.glareOffer = nil }
-            s.phase = .calling
-            for e in early {
-                if case .answer(let a) = e {
-                    a.keys.wipe()
-                } else if case .end = e, session === s {
-                    onSignal(s, e)
-                }
-            }
+        guard let s, s.seq == seq else { return lostUnshown(seq: seq, callId: callId, end: end) }
+        // The machine may hold the vault's own end for it among its early events (the oldest ``maxEarly`` of every kind, where
+        // the signalling remembers the newest ends): that end says how the call ended (`busy`, a glare's winner, the winner's own
+        // end), as for a placed call (``onPlaced(_:seq:call:atMs:)``). Nothing else held is of use: the call has no key, and its
+        // media never started.
+        let ended = replayHeldEnds(s, callId: callId)
+        guard session === s else { return }
+        // The vault's end the signalling remembered, which the machine may not have had yet (it may be on its way here, to land
+        // with no session) or at all: applied as it would have been, so a `busy` or a glare's end is what the call shows, and
+        // nothing is sent for it.
+        if let end, s.supersededBy == nil {
+            onSignal(s, .end(callId: callId, reason: end.reason, supersededBy: end.supersededBy))
             guard session === s else { return }
-            // The vault's end the signalling remembered, which the machine may not have had yet (it may be on its way here, to
-            // land with no session) or at all: applied as it would have been, so a `busy` or a glare's end is what the call
-            // shows, and nothing is sent for it.
-            if let end, s.supersededBy == nil {
-                onSignal(s, .end(callId: callId, reason: end.reason, supersededBy: end.supersededBy))
-                guard session === s else { return }
+        }
+        settleLost(s, endedEarly: ended)
+    }
+
+    /// The lost call takes its id and the ends held for it are applied; the calls they ended are returned.
+    private func replayHeldEnds(_ s: CallSession, callId: String) -> Set<String> {
+        let early = s.early
+        s.early.removeAll()
+        s.callId = callId
+        // An offer held before the call had its id, that turns out to carry this very id, is no other call.
+        if s.glareOffer?.callId == callId { s.glareOffer = nil }
+        s.phase = .calling
+        var ended: Set<String> = []
+        for e in early {
+            if case .answer(let a) = e {
+                a.keys.wipe()
+            } else if case .end(let id, _, _) = e, session === s {
+                ended.insert(id)
+                onSignal(s, e)
             }
-            if s.supersededBy != nil {
-                // A glare it lost, whose winner's offer is not here yet: the offer comes in moments, or the call ends busy at
-                // the ring timer (``onTimer(_:_:)``), as a placed call's wait does.
-                timer(s, .ringOut, timings.minRing)
-                publish(s)
-            } else {
-                // Its end is not known (it may have been lost): it fails now.
-                finish(s, .failed, CallReason.failed)
-            }
-        } else if let i = abandoned.firstIndex(of: seq) {
-            abandoned.remove(at: i)
-            sendEnd(callId, CallReason.hangup)
+        }
+        return ended
+    }
+
+    /// A lost call still shown once its ends are applied: a glare it lost waits for its winner (unless the winner ended), and
+    /// one whose end is not known fails now.
+    private func settleLost(_ s: CallSession, endedEarly: Set<String>) {
+        if let by = s.supersededBy, endedWinners.contains(by) || endedEarly.contains(by) {
+            // Lost to a call that has ended already: nothing to answer, nothing to wait for, and a late offer for the winner is
+            // not rung (as for a placed call).
+            if !endedWinners.contains(by) { rememberEnded(by) }
+            finish(s, .missed, nil)
+        } else if s.supersededBy != nil {
+            // The winner's offer is not here yet: it comes in moments, or the call ends busy at the ring timer (``onTimer(_:_:)``),
+            // as a placed call's wait does.
+            timer(s, .ringOut, timings.minRing)
+            publish(s)
         } else {
-            // No session knows it (it was let go, the list of abandoned starts was full): ended all the same, nothing else will.
+            // Its end is not known (it may have been lost): it fails now.
+            finish(s, .failed, CallReason.failed)
+        }
+    }
+
+    /// A lost call no session shows: one the member hung up while the vault was answering is ended as hung up, as
+    /// ``onPlaced(_:seq:call:atMs:)`` does; one nobody knows (let go, the abandoned starts' list full) is ended all the same. Not
+    /// when the vault ended it already ([end] is its end).
+    private func lostUnshown(seq: Int, callId: String, end: CallLostError.End?) {
+        if let i = abandoned.firstIndex(of: seq) {
+            abandoned.remove(at: i)
+            if end == nil { sendEnd(callId, CallReason.hangup) }
+        } else if end == nil {
             sendEnd(callId, CallReason.failed)
         }
     }
