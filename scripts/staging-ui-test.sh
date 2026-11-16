@@ -145,7 +145,7 @@
 # is held, 20 by default) and VETTID_STAGING_CALL_WAIT (how long testStagingCallAnswer waits for the call, 180 by default)
 # are optional. Two-phone call: start testStagingCallAnswer on one phone, wait for its "CALL_STATE: waiting" line, then
 # start testStagingCallPlace (with --skip-build) on the other; each prints "CALL_STATE: <state>" lines (calling, ringing,
-# connecting, reconnecting, waiting, answered, microphone, active, held <s>, dropped <s>, ended, failed). VETTID_STAGING_WAIT (seconds) is optional for
+# connecting, reconnecting, waiting, answered, microphone, microphone_blocked, active, held <s>, dropped <s>, ended, failed). VETTID_STAGING_WAIT (seconds) is optional for
 # testStagingWaitMessage (600), testStagingSendAll (300) and testStagingLook (10).
 #
 # Inputs of the transfer tests: testStagingTransferOut needs PIN and PASSWORD; testStagingTransferIn needs PIN and
@@ -396,7 +396,9 @@ xcodebuild test-without-building \
     if (/SIGNIN_AFTER_LOCK: (listed|missing)\s*$/) { $_ = "SIGNIN_AFTER_LOCK: $1\n"; next }
     if (/SIGNIN_STATE: ([a-z_]+)\s*$/) { $_ = "SIGNIN_STATE: $1\n"; next }
     if (/ROTATE_STATE: (done|failed|none)\s*$/) { $_ = "ROTATE_STATE: $1\n"; next }
-    if (/CALL_STATE: ([a-z]+(?: [0-9]+)?)\s*$/) { $_ = "CALL_STATE: $1\n"; next }
+    if (/CALL_STATE: (waiting|answered|microphone|microphone_blocked|calling|ringing|connecting|reconnecting|active|ended|failed|(?:held|dropped) [0-9]+)\s*$/) {
+      $_ = "CALL_STATE: $1\n"; next
+    }
     if (/PHOTO_STATE: (none|sending|delivered|failed)\s*$/) { $_ = "PHOTO_STATE: $1\n"; next }
     if (/PHOTO_RECEIVED: (yes|no)\s*$/) { $_ = "PHOTO_RECEIVED: $1\n"; next }
     if (/PHOTO_VIEWER: (shown|failed|loading)\s*$/) { $_ = "PHOTO_VIEWER: $1\n"; next }
