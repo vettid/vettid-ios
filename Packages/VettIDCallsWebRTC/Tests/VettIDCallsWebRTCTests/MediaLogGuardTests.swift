@@ -92,6 +92,7 @@ struct MediaLogGuardTests {
         #expect(Self.isTestPath("Packages/VettIDCallsWebRTC/Tests/VettIDCallsWebRTCTests/FakeAudioDevice.swift"))
         #expect(Self.isTestPath("AppTests/CallsTests.swift"))
         #expect(Self.isTestPath("AppUITests/CallsCatalogUITests.swift"))
+        #expect(Self.isTestPath("AppDevStackUITests/DevStackUITests.swift"))
         #expect(!Self.isTestPath("Packages/VettIDCallsWebRTC/Sources/VettIDCallsWebRTC/RuntimeTests.swift"))
         #expect(!Self.isTestPath("Packages/VettIDData/Sources/VettIDDataTesting/Tests/Fake.swift"))
         #expect(!Self.isTestPath("App/Tests/Mic.swift"))
@@ -115,6 +116,46 @@ struct MediaLogGuardTests {
             #expect(!MediaLogGuard.offencesOutsideTests(in: MediaLogGuard.withoutDebugBlocks(other)).isEmpty, "\(branch)")
             #expect(!MediaLogGuard.withoutDebugBlocks(other).contains("let z = 1"), "a nested #else stays in the Debug block")
         }
+    }
+
+    /// Anything that can span lines (a block comment, a multi-line string, a raw string, an extended regex), a carriage return, or a directive not
+    /// at the start of a line could hide a directive or show a false one, so a file that has one is scanned whole; so is a
+    /// file whose directives do not balance. The balanced inputs here are
+    /// valid Swift (typechecked without DEBUG) that a lexer got wrong twice and so failed open.
+    @Test func whatCanSpanLinesAndUnbalancedDirectivesFailClosed() {
+        let name = "var d: (any RTCAudioDevice)?"
+        let failClosed = [
+            // A `#if` in a block comment, a nested one, a multi-line string.
+            "#if DEBUG\n/*\n#if os(iOS)\n*/\nlet x = 1\n#endif\n\(name)\n",
+            "#if DEBUG\n/* outer /* nested */\n#if os(iOS)\n*/\n#endif\n\(name)\n",
+            "#if DEBUG\nlet s = \"\"\"\n#if os(iOS)\n\"\"\"\n#endif\n\(name)\n",
+            // A raw multi-line string holding a bare `"""`.
+            "#if DEBUG\nlet s = #\"\"\"\n\"\"\"\n\"\"\"#\n#endif\n\(name)\nlet u = #\"\"\"\n#endif\n\"\"\"#\n// \"\"\"\n",
+            // A raw one-line string whose `\` is no escape, before a real block comment.
+            "let c = #\"\\\"# /*\n#if DEBUG\n*/\n\(name)\nlet e = #\"\\\"# /*\n#endif\n*/\n",
+            // Quotes inside an interpolation.
+            "#if DEBUG\nlet a = \"\\(\"/*\")\"\n#endif\n\(name)\nlet b = \"\\(\"*/\")\"; let c = #\"\\\"# /*\n#endif\n*/\n",
+            // A `/*` inside a one-line string is enough (stricter than the compiler: safe).
+            "#if DEBUG\nlet a = \"/*\"\n\(name)\n#endif\n",
+            // An extended regex literal, in which `#` starts a comment: its `#if` and `#endif` lines are no directives.
+            "#if DEBUG\nlet q = 1\n#endif\nlet r1 = #/\n#if DEBUG\n/#\n\(name)\nlet r2 = #/\n#endif\n/#\n",
+            // A bare carriage return: a line break to the compiler (no DEBUG needed to hide the name).
+            "#if os(iOS)\r#endif\r\(name)\r#if os(iOS)\n#endif\n",
+            // Directives mid-line, after code.
+            "#if DEBUG\nlet q = 1; #endif\n\(name)\nlet r = 2; #if os(iOS)\n#endif\n",
+            // A directive's name in a one-line string or a `//` comment (stricter than the compiler: safe).
+            "#if DEBUG\nlet a = \"#if\" // #endif\n\(name)\n#endif\n",
+            // Unbalanced.
+            "#if DEBUG\n\(name)\n", "#if DEBUG\n\(name)\n#endif\n#endif\n",
+        ]
+        for text in failClosed {
+            #expect(MediaLogGuard.withoutDebugBlocks(text) == text, "\(text)")
+            #expect(!MediaLogGuard.offencesOutsideTests(in: MediaLogGuard.withoutDebugBlocks(text)).isEmpty, "\(text)")
+        }
+        // With none of them, a `//` comment and a one-line string change nothing.
+        let plain = "#if DEBUG\nlet a = \"x\" // a note\n\(name)\n#endif\nlet b = 2\n"
+        #expect(MediaLogGuard.offencesOutsideTests(in: MediaLogGuard.withoutDebugBlocks(plain)).isEmpty)
+        #expect(MediaLogGuard.withoutDebugBlocks(plain).contains("let b = 2"))
     }
 
     /// The scan reads the files that carry settings and project wiring, and does not skip another directory called "build".

@@ -47,30 +47,47 @@ public enum MediaLogGuard {
 
     /// [text] without the lines from each `#if DEBUG` to its matching `#else`, `#elseif` or `#endif` (nesting counted): what a
     /// Release build compiles of a file. A `#if` of another condition counts for nesting only.
+    ///
+    /// Fails closed: the text is returned whole, as if all of it were compiled in Release, when its directives do not balance,
+    /// or when the lines read here may not be the compiler's:
+    /// - it has anything that can span lines and so hide a directive or show a false one: a block comment (`/*`), a multi-line
+    ///   string (`"""`), a raw string (`#"`) or an extended regex literal (`#/`, where `#` starts a comment), wherever the
+    ///   characters are;
+    /// - it has a carriage return (a line break to the compiler, not to this split);
+    /// - a directive's name appears anywhere but at the start of a line (the compiler takes one mid-line, after code).
+    /// Without these every line starts in code and each directive is at the start of its own line. (No lexer: one that gets two
+    /// things wrong can still balance a file and fail open.)
     public static func withoutDebugBlocks(_ text: String) -> String {
+        for spanning in ["/*", "\"\"\"", "#\"", "#/", "\r"] where text.contains(spanning) { return text }
+        let named = text.matches(of: /#(if|elseif|else|endif)\b/).count
+        var read = 0
         var depth = 0
         var debugDepth: Int?
         var kept: [Substring] = []
         for line in text.split(separator: "\n", omittingEmptySubsequences: false) {
             let trimmed = line.trimmingCharacters(in: .whitespaces)
             if trimmed.hasPrefix("#if") {
+                read += 1
                 depth += 1
                 if debugDepth == nil, trimmed == "#if DEBUG" { debugDepth = depth }
                 continue
             }
             if trimmed.hasPrefix("#else") {
+                read += 1
                 // `#else` and `#elseif`: what follows at the same depth is compiled in Release.
                 if debugDepth == depth { debugDepth = nil }
                 continue
             }
             if trimmed.hasPrefix("#endif") {
+                read += 1
                 if debugDepth == depth { debugDepth = nil }
                 depth -= 1
+                if depth < 0 { return text }
                 continue
             }
             if debugDepth == nil { kept.append(line) }
         }
-        return kept.joined(separator: "\n")
+        return depth == 0 && read == named ? kept.joined(separator: "\n") : text
     }
 
     /// The names of ``forbiddenOutsideTests`` in [text], a source file that is not a test.
