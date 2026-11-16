@@ -118,7 +118,7 @@ struct MediaLogGuardTests {
         }
     }
 
-    /// Anything that can span lines (a block comment, a multi-line string, a raw string), a carriage return, or a directive not
+    /// Anything that can span lines (a block comment, a multi-line string, a raw string, an extended regex), a carriage return, or a directive not
     /// at the start of a line could hide a directive or show a false one, so a file that has one is scanned whole; so is a
     /// file whose directives do not balance. The balanced inputs here are
     /// valid Swift (typechecked without DEBUG) that a lexer got wrong twice and so failed open.
@@ -137,6 +137,8 @@ struct MediaLogGuardTests {
             "#if DEBUG\nlet a = \"\\(\"/*\")\"\n#endif\n\(name)\nlet b = \"\\(\"*/\")\"; let c = #\"\\\"# /*\n#endif\n*/\n",
             // A `/*` inside a one-line string is enough (stricter than the compiler: safe).
             "#if DEBUG\nlet a = \"/*\"\n\(name)\n#endif\n",
+            // An extended regex literal, in which `#` starts a comment: its `#if` and `#endif` lines are no directives.
+            "#if DEBUG\nlet q = 1\n#endif\nlet r1 = #/\n#if DEBUG\n/#\n\(name)\nlet r2 = #/\n#endif\n/#\n",
             // A bare carriage return: a line break to the compiler (no DEBUG needed to hide the name).
             "#if os(iOS)\r#endif\r\(name)\r#if os(iOS)\n#endif\n",
             // Directives mid-line, after code.
