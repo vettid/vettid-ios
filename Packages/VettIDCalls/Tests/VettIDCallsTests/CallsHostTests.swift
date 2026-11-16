@@ -162,13 +162,15 @@ final class FakeAppVault: CallsAppVault {
         gateway.send(.answer(VaultMessage(inner: Inner(
             id: "01JB2Z6V9K3M4N5P6Q7R8S9T61", type: "call.answer", ts: t0, body: Array(#"{"call_id":"\#(callId)"}"#.utf8)
         ))))
-        await settle()
-        let engine = engines.last
+        // Each step waits for the one before (bounded): the engine made, the answer applied to it, the call active.
+        let engine = try await engines.made()
+        guard await eventually({ engine.calls.contains("acceptAnswer") }) else { throw WrongState(state: h.uiState.call) }
         engine.emit(.connection(.connected))
         engine.emit(.cryptor(.send, .ok))
         engine.emit(.cryptor(.receive, .ok))
-        await settle()
-        guard case .live(let l) = h.uiState.call, l.phase == .active else { throw WrongState(state: h.uiState.call) }
+        guard await eventually({ if case .live(let l) = h.uiState.call { l.phase == .active } else { false } }) else {
+            throw WrongState(state: h.uiState.call)
+        }
     }
 
     /// At a lock the call screen goes with the first line (the vault counts as locked at once), before the unlock screen comes: it

@@ -199,6 +199,26 @@ final class FakeEngines: MediaEngineFactory {
 
     // swiftlint:disable:next force_cast
     var last: FakeEngine { created.last as! FakeEngine }
+
+    /// The engine made last, once there is one: the machine makes it several task hops after a Call tap (the controller, the
+    /// microphone gate, the machine's inbox), which a fixed number of turns may not cover on a busy runner.
+    func made() async throws -> FakeEngine {
+        guard await eventually({ created.last is FakeEngine }) else { throw NoEngineMade() }
+        return last
+    }
+}
+
+struct NoEngineMade: Error {}
+
+/// Yields until [condition] holds, in rounds of 400 turns up to 50 rounds (far more than any path here needs, on a busy runner
+/// too): true as soon as it does, false if it never does.
+@MainActor
+func eventually(_ condition: () -> Bool) async -> Bool {
+    for _ in 0..<50 {
+        if condition() { return true }
+        for _ in 0..<400 { await Task.yield() }
+    }
+    return condition()
 }
 
 /// Signalling that records what was sent and delivers what the test gives it.

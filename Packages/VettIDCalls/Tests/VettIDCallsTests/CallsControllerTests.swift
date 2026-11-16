@@ -69,13 +69,15 @@ import VettIDCrypto
         vault.gatewayFake.send(.answer(VaultMessage(inner: Inner(
             id: "01JB2Z6V9K3M4N5P6Q7R8S9T61", type: "call.answer", ts: t0, body: Array(#"{"call_id":"\#(callId)"}"#.utf8)
         ))))
-        await settle()
-        let engine = engines.last
+        // Each step waits for the one before (bounded): the engine made, the answer applied to it, the call active.
+        let engine = try await engines.made()
+        guard await eventually({ engine.calls.contains("acceptAnswer") }) else { throw WrongState(state: c.state) }
         engine.emit(.connection(.connected))
         engine.emit(.cryptor(.send, .ok))
         engine.emit(.cryptor(.receive, .ok))
-        await settle()
-        guard case .live(let l) = c.state, l.phase == .active else { throw WrongState(state: c.state) }
+        guard await eventually({ if case .live(let l) = c.state { l.phase == .active } else { false } }) else {
+            throw WrongState(state: c.state)
+        }
     }
 
     // MARK: availability
