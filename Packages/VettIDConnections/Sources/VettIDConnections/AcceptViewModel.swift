@@ -14,7 +14,8 @@ public enum AcceptStep: Equatable, Sendable {
     /// This member approved; the inviter's approval is awaited.
     case approved
     case connected
-    /// This vault is already connected to the inviter (or has asked to connect).
+    /// This vault is already connected to the inviter (or has a request to it that the app does not hold: this member's own
+    /// pending request is followed instead, from ``waiting``).
     case exists
     /// The request ended without a connection.
     case ended
@@ -70,8 +71,9 @@ struct AcceptSources: Equatable, Sendable {
 /// Accept an invitation (VAULT-MESSAGING §6.4, 0.10.2/0.10.3): a pasted or opened link or a scanned code. The vault
 /// fetches the claim and runs the handshake; once it has, the safety code appears here (`connection.request.outgoing`)
 /// and the member compares it with the inviter's screen and approves or declines their own side. The connection is made
-/// once both have approved. A vault already connected to the inviter says so (`exists`). A scanned code is accepted at
-/// once; an opened link waits for the member. Mirrors vettid-android `AcceptViewModel` (this one lives as long as its
+/// once both have approved. A vault already connected to the inviter says so (`exists`); its own earlier request to the
+/// inviter still pending is followed instead. A scanned code is accepted at once; an opened link waits for the member.
+/// Mirrors vettid-android `AcceptViewModel` (this one lives as long as its
 /// screen, so a scanned code is sent once without a saved-state flag).
 @MainActor
 @Observable
@@ -107,6 +109,16 @@ public final class AcceptViewModel {
     deinit {
         work.cancelAll()
         follows.cancelAll()
+    }
+
+    /// Whether [id] is only this member's outgoing request (no active connection yet).
+    static func pendingOnly(_ id: String, in s: AcceptSources) -> Bool {
+        let active = s.connections.contains { $0.id == id && $0.state == .active }
+        let pending = s.requests.contains { p in
+            if case .outgoing(let r) = p { return r.connectionID == id }
+            return false
+        }
+        return pending && !active
     }
 
     private func onSources(_ s: AcceptSources) {
@@ -162,6 +174,17 @@ public final class AcceptViewModel {
                 let r = try await connections.acceptInvite(text)
                 guard let self else { return }
                 if r.exists {
+                    // `exists` also answers a request that is not a connection yet (VAULT-MESSAGING §6.4: "already connected,
+                    // or has asked to connect"). This member's own request to the inviter still waiting is followed as a new one
+                    // would be (the code, then both approvals), not shown as a connection that is already there.
+                    let connected = connections.connections.contains { $0.id == r.connectionID && $0.state == .active }
+                    if !connected { try? await requests.refreshRequests() }
+                    if !connected, Self.pendingOnly(r.connectionID, in: sources) {
+                        state.step = .waiting
+                        state.connectionID = r.connectionID
+                        onSources(sources)
+                        return
+                    }
                     let c = connections.connections.first { $0.id == r.connectionID }
                     state.step = .exists
                     state.connectionID = r.connectionID
