@@ -118,8 +118,9 @@ struct MediaLogGuardTests {
         }
     }
 
-    /// Anything that can span lines (a block comment, a multi-line string, a raw string) could hide a directive or show a false
-    /// one, so a file that has one is scanned whole; so is a file whose directives do not balance. The balanced inputs here are
+    /// Anything that can span lines (a block comment, a multi-line string, a raw string), a carriage return, or a directive not
+    /// at the start of a line could hide a directive or show a false one, so a file that has one is scanned whole; so is a
+    /// file whose directives do not balance. The balanced inputs here are
     /// valid Swift (typechecked without DEBUG) that a lexer got wrong twice and so failed open.
     @Test func whatCanSpanLinesAndUnbalancedDirectivesFailClosed() {
         let name = "var d: (any RTCAudioDevice)?"
@@ -136,6 +137,12 @@ struct MediaLogGuardTests {
             "#if DEBUG\nlet a = \"\\(\"/*\")\"\n#endif\n\(name)\nlet b = \"\\(\"*/\")\"; let c = #\"\\\"# /*\n#endif\n*/\n",
             // A `/*` inside a one-line string is enough (stricter than the compiler: safe).
             "#if DEBUG\nlet a = \"/*\"\n\(name)\n#endif\n",
+            // A bare carriage return: a line break to the compiler (no DEBUG needed to hide the name).
+            "#if os(iOS)\r#endif\r\(name)\r#if os(iOS)\n#endif\n",
+            // Directives mid-line, after code.
+            "#if DEBUG\nlet q = 1; #endif\n\(name)\nlet r = 2; #if os(iOS)\n#endif\n",
+            // A directive's name in a one-line string or a `//` comment (stricter than the compiler: safe).
+            "#if DEBUG\nlet a = \"#if\" // #endif\n\(name)\n#endif\n",
             // Unbalanced.
             "#if DEBUG\n\(name)\n", "#if DEBUG\n\(name)\n#endif\n#endif\n",
         ]
@@ -144,7 +151,7 @@ struct MediaLogGuardTests {
             #expect(!MediaLogGuard.offencesOutsideTests(in: MediaLogGuard.withoutDebugBlocks(text)).isEmpty, "\(text)")
         }
         // With none of them, a `//` comment and a one-line string change nothing.
-        let plain = "#if DEBUG\nlet a = \"#if\" // #endif\n\(name)\n#endif\nlet b = 2\n"
+        let plain = "#if DEBUG\nlet a = \"x\" // a note\n\(name)\n#endif\nlet b = 2\n"
         #expect(MediaLogGuard.offencesOutsideTests(in: MediaLogGuard.withoutDebugBlocks(plain)).isEmpty)
         #expect(MediaLogGuard.withoutDebugBlocks(plain).contains("let b = 2"))
     }
