@@ -46,7 +46,7 @@ extension WebRtcMediaCore {
         receiverCryptor = receiver
     }
 
-    /// The size of each direction's key.
+    /// The size of each direction's key, in bytes.
     static let directionKeySize = 32
 
     /// Both directions' keys at index 0. Throws ``MediaNotEncryptedError`` for keys of a suite other than the cryptors'

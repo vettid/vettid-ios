@@ -92,6 +92,7 @@ struct MediaLogGuardTests {
         #expect(Self.isTestPath("Packages/VettIDCallsWebRTC/Tests/VettIDCallsWebRTCTests/FakeAudioDevice.swift"))
         #expect(Self.isTestPath("AppTests/CallsTests.swift"))
         #expect(Self.isTestPath("AppUITests/CallsCatalogUITests.swift"))
+        #expect(Self.isTestPath("AppDevStackUITests/DevStackUITests.swift"))
         #expect(!Self.isTestPath("Packages/VettIDCallsWebRTC/Sources/VettIDCallsWebRTC/RuntimeTests.swift"))
         #expect(!Self.isTestPath("Packages/VettIDData/Sources/VettIDDataTesting/Tests/Fake.swift"))
         #expect(!Self.isTestPath("App/Tests/Mic.swift"))
@@ -114,6 +115,28 @@ struct MediaLogGuardTests {
             let other = "#if DEBUG\nlet x = 1\n\(nested)\(branch)\nvar d: (any RTCAudioDevice)?\n#endif\n"
             #expect(!MediaLogGuard.offencesOutsideTests(in: MediaLogGuard.withoutDebugBlocks(other)).isEmpty, "\(branch)")
             #expect(!MediaLogGuard.withoutDebugBlocks(other).contains("let z = 1"), "a nested #else stays in the Debug block")
+        }
+    }
+
+    /// A directive inside a block comment or a multi-line string is not one: it neither opens a block nor hides the Release
+    /// code after the real `#endif`. Directives that do not balance fail closed: the whole file is scanned.
+    @Test func directivesInCommentsAndStringsAreNotReadAndUnbalancedOnesFailClosed() {
+        let name = "var d: (any RTCAudioDevice)?"
+        let hidden = [
+            "#if DEBUG\n/*\n#if os(iOS)\n*/\nlet x = 1\n#endif\n\(name)\n",
+            "#if DEBUG\n/* outer /* nested */\n#if os(iOS)\n*/\n#endif\n\(name)\n",
+            "#if DEBUG\nlet s = \"\"\"\n#if os(iOS)\n\"\"\"\n#endif\n\(name)\n",
+        ]
+        for text in hidden {
+            #expect(!MediaLogGuard.offencesOutsideTests(in: MediaLogGuard.withoutDebugBlocks(text)).isEmpty, "\(text)")
+        }
+        // A `/*` or a `"""` inside a one-line string or after `//` opens nothing.
+        let quoted = "#if DEBUG\nlet a = \"\\\\\" + \"/*\" // \"\"\"\n\(name)\n#endif\nlet b = 2\n"
+        #expect(MediaLogGuard.offencesOutsideTests(in: MediaLogGuard.withoutDebugBlocks(quoted)).isEmpty)
+        #expect(MediaLogGuard.withoutDebugBlocks(quoted).contains("let b = 2"))
+        // Unbalanced: the name inside the Debug block is scanned too.
+        for text in ["#if DEBUG\n\(name)\n", "#if DEBUG\n\(name)\n#endif\n#endif\n", "#if DEBUG\n\(name)\n#endif\n/* open\n"] {
+            #expect(MediaLogGuard.withoutDebugBlocks(text) == text, "\(text)")
         }
     }
 
