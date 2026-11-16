@@ -869,8 +869,8 @@ PY
       echo "self-test: ${config} refuses '${planted}' in the media stack's binary"
     done
   done
-  # The calls must not silently drop out: a copy of each app without the media stack, without the microphone text, with another
-  # text, or without the calls' code, must fail check_calls (and the unchanged one passes).
+  # The calls must not silently drop out: a copy of each app without the media stack, without the microphone or local network
+  # text, with another of either, or without the calls' code, must fail check_calls (and the unchanged one passes).
   uncall() {
     local config=$1 what=$2 command=$3 expected=$4 errors
     local copy="${OUT}/planted/${config}-calls/VettID.app"
