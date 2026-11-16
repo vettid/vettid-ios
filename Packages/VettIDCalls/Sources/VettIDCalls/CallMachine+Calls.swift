@@ -75,7 +75,9 @@ extension CallMachine {
         settleLost(s, endedEarly: ended)
     }
 
-    /// The lost call takes its id and the ends held for it are applied; the calls they ended are returned.
+    /// The lost call takes its id and the ends held for it are applied; the calls they ended are returned. Candidates of
+    /// another call (a glare's winner) are given to the session they are for: kept with the held offer, or applied to the
+    /// winner once it is answered. The lost call's own are of no use.
     private func replayHeldEnds(_ s: CallSession, callId: String) -> Set<String> {
         let early = s.early
         s.early.removeAll()
@@ -94,6 +96,8 @@ extension CallMachine {
                 onSignal(s, e)
             } else if case .end = e {
                 afterReplay(e)
+            } else if case .ice(let id, _) = e, id != callId, let current = session {
+                onSignal(current, e)
             }
         }
         return ended
@@ -184,6 +188,9 @@ extension CallMachine {
             // ``forgetEndedGlareOffer`` would have found first: an end for it here is not expected, and is applied all the
             // same should it come.
             if let current = session, current.callId == id { onSignal(current, e) } else { rememberEndedOther(id) }
+        case .ice:
+            // A glare's winner answered meanwhile (``takeGlare``): its candidates held with these are its own.
+            if let current = session { onSignal(current, e) }
         default:
             break
         }
@@ -261,6 +268,16 @@ extension CallMachine {
     }
 
     /// The other device's SDP is applied in the lane before this runs there: its candidates may follow.
+    /// The remote description is in: candidates go straight to the engine from now on, and those that came after
+    /// ``applyRemote(_:)`` took the waiting ones (while the offer or the answer was being applied) follow them.
+    func onRemoteApplied(_ s: CallSession) {
+        s.remoteApplied = true
+        guard !s.pendingRemote.isEmpty, let engine = s.engine else { return }
+        let late = s.pendingRemote
+        s.pendingRemote.removeAll()
+        s.enqueue { try await engine.addRemoteCandidates(late) }
+    }
+
     func applyRemote(_ s: CallSession) {
         guard let engine = s.engine else { return }
         let waiting = s.pendingRemote

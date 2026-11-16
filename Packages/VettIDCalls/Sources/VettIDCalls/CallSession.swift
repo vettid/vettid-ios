@@ -70,8 +70,16 @@ final class CallSession {
     /// call rings only while the vault is open and the member has just said no.
     var memberEnded = false
 
-    /// The connection's own offer that arrived while this outgoing call rang to it (a glare's winner, perhaps).
-    var glareOffer: CallOffer?
+    /// The connection's own offer that arrived while this outgoing call rang to it (a glare's winner, perhaps). Its candidates
+    /// kept so far go with it: another offer, or none, drops them.
+    var glareOffer: CallOffer? {
+        didSet { if glareOffer?.callId != oldValue?.callId { glareIce.removeAll() } }
+    }
+
+    /// Candidates for ``glareOffer``'s call that came while this call was the session: the caller sends them as soon as its own
+    /// start is placed, perhaps all before this device answers. Handed to that call's session when it is answered here (a
+    /// glare) or rings (this call ended otherwise). Bounded as ``pendingRemote`` is.
+    var glareIce: [CallCandidate] = []
 
     /// The last path the stack reported for this call (relayed or direct); nil while it has said nothing.
     var relayed: Bool?

@@ -30,7 +30,7 @@ extension CallMachine {
         case .answer(let a): onAnswerEvent(s, a)
         case .answerRejected(let callId):
             if let s, s.callId == callId, s.direction == .outgoing { finish(s, .notEncrypted, CallReason.failed) }
-        case .ice(let callId, let candidates): if let s, s.callId == callId { onIce(s, candidates) }
+        case .ice(let callId, let candidates): if let s { onIceEvent(s, callId, candidates) }
         case .end(let callId, let reason, let supersededBy):
             if let s { onEnd(s, callId: callId, reason: reason, supersededBy: supersededBy) }
         }
@@ -51,7 +51,18 @@ extension CallMachine {
         }
     }
 
-    private func onIce(_ s: CallSession, _ candidates: [CallCandidate]) {
+    /// The call's own candidates, or those of the call it lost a glare to (its offer held, or waited for), kept for that call
+    /// (``CallSession/glareIce``).
+    private func onIceEvent(_ s: CallSession, _ callId: String, _ candidates: [CallCandidate]) {
+        if s.callId == callId {
+            onIce(s, candidates)
+        } else if s.glareOffer?.callId == callId || (s.glareOffer == nil && s.supersededBy == callId),
+                  s.glareIce.count + candidates.count <= Self.maxPendingCandidates {
+            s.glareIce += candidates
+        }
+    }
+
+    func onIce(_ s: CallSession, _ candidates: [CallCandidate]) {
         if s.remoteApplied, let engine = s.engine {
             s.enqueue { try await engine.addRemoteCandidates(candidates) }
         } else if s.pendingRemote.count + candidates.count <= Self.maxPendingCandidates {
@@ -162,8 +173,12 @@ extension CallMachine {
     /// reach the machine at all (`callIncoming` refuses anything but one audio section), so a video winner is not answered:
     /// the lost call shows busy at its ring timer.
     private func takeGlare(_ s: CallSession, _ offer: CallOffer) {
+        let ice = s.glareIce
         release(s)
         let y = incoming(offer)
+        // The winner's candidates that came while this device's lost call was the session: waiting with the offer when it is
+        // answered, as a ringing call's own are.
+        if !ice.isEmpty { onIce(y, ice) }
         answerIncoming(y)
     }
 
