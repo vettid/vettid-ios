@@ -80,6 +80,8 @@ package final class CallMachine {
     /// its way is not ended either (a C2 vault ends unanswered calls itself; at S10 the callee's ring timer bounds it). The listening loop holds the machine until this is called.
     package func stop() {
         inbox.finish()
+        // No answer is handled from now on.
+        startsInFlight = 0
         for w in watchers.values { w.finish() }
         watchers.removeAll()
         for t in loops { t.cancel() }

@@ -17,6 +17,9 @@ extension CallMachine {
         }
         s.enqueue { [self] in
             let sdp = try await engine.createOffer(suite: first)
+            // Ended while the offer was made (a hang-up, a lock): no `call.start` goes, so there is no call to end. Past this
+            // point the start is counted (``startsInFlight``), so a lock waits for its answer.
+            guard session === s, !Task.isCancelled else { return }
             // Not cancelled by a hang-up: once `call.start` may have left, its answer is needed to end the call.
             try await uncancellable { [self] in
                 startsInFlight += 1

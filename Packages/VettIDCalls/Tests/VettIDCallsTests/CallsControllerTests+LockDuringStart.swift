@@ -76,4 +76,27 @@ extension CallsControllerTests {
         #expect(!vault.gatewayFake.asked.contains { $0.hasPrefix("end(") }, "nothing was placed: nothing to end")
         await waiter.value
     }
+
+    /// A lock while the offer is still being made: the call ends here and no `call.start` goes after the lock, so there is
+    /// nothing to end and nothing to wait for.
+    @Test func aLockWhileTheOfferIsMadeSendsNoStart() async throws {
+        let c = controller(FakeMicrophone(.granted))
+        await unlock()
+        let offer = Gate()
+        engines.offerGate = offer
+        vault.gatewayFake.startResult = { _, _ in try self.outgoing() }
+        c.call("conn-1")
+        await settle()
+        var done = false
+        let waiter = Task {
+            await c.endCallBeforeLock()
+            done = true
+        }
+        await clock.advance(by: 100)
+        #expect(done, "nothing is owed: no start went")
+        offer.open()
+        await clock.advance(by: 100)
+        #expect(!vault.gatewayFake.asked.contains { $0.hasPrefix("start(") }, "no start after the lock")
+        await waiter.value
+    }
 }

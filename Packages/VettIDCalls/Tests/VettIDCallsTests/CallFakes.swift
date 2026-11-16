@@ -112,10 +112,14 @@ final class FakeEngine: MediaEngine {
 
     func emit(_ e: MediaEvent) { channel.yield(e) }
 
+    /// While set, `createOffer` waits for it (the offer still being made).
+    var offerGate: Gate?
+
     func createOffer(suite: MediaSuite) async throws -> String {
         precondition(suites.contains(suite), "suite \(suite.id)")
         madeFor = suite
         calls.append("createOffer")
+        await offerGate?.wait()
         return "v=0\r\ns=offer\r\nm=audio 9 X 111\r\n"
     }
 
@@ -177,6 +181,8 @@ final class FakeEngines: MediaEngineFactory {
     private let make: () throws -> any MediaEngine
     var created: [any MediaEngine] = []
     var config: MediaConfig?
+    /// Given to each fake engine made from now on (``FakeEngine/offerGate``).
+    var offerGate: Gate?
 
     init(suites: [MediaSuite] = [.aes128Gcm], make: (() throws -> any MediaEngine)? = nil) {
         self.suites = suites
@@ -186,6 +192,7 @@ final class FakeEngines: MediaEngineFactory {
     func create(config: MediaConfig) throws -> any MediaEngine {
         self.config = config
         let e = try make()
+        if let f = e as? FakeEngine { f.offerGate = offerGate }
         created.append(e)
         return e
     }
