@@ -188,6 +188,27 @@ extension CallMachineTests {
         #expect(try ended(m).reason == .declined)
     }
 
+    /// The order a glare arrives in while `call.start` is out: the winner's offer, the glare's end, then the winner's own end.
+    /// Once the start is answered, the winner has ended: the call is missed, the winner is never answered, and its offer
+    /// delivered again is not rung.
+    @Test func aGlareWhoseHeldWinnerOfferedThenEndedWhileTheStartWasOutIsMissed() async throws {
+        signalling.holdStart()
+        let m = machine()
+        m.call("conn-1")
+        await runCurrent()
+        signalling.deliver(offer(glareId))
+        signalling.deliver(.end(callId: callId, reason: CallReason.busy, supersededBy: glareId))
+        signalling.deliver(.end(callId: glareId, reason: CallReason.hangup))
+        await runCurrent()
+        signalling.releaseStart()
+        await runCurrent()
+        #expect(try ended(m).reason == .missed)
+        signalling.deliver(offer(glareId))
+        await runCurrent()
+        #expect(try ended(m).reason == .missed, "the ended winner's offer is not rung")
+        #expect(!hasSent(signalling, "answer(") && !hasSent(signalling, "end(") && !hasSent(signalling, "ringing("))
+    }
+
     /// X's end delivered twice while the lost glare waits changes nothing; the winner is still answered.
     @Test func aSecondEndOfTheLostCallChangesNothing() async throws {
         let m = machine()

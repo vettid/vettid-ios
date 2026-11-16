@@ -285,4 +285,22 @@ extension CallMachineTests {
         #expect(try ended(m).reason == .missed, "the ended winner's offer is not rung")
         #expect(!hasSent(signalling, "end(") && !hasSent(signalling, "ringing("))
     }
+
+    /// The order a glare arrives in: the winner's offer, the glare's end, then the winner's own end, all held while the start
+    /// was answered. The winner has ended, so the call is missed and the winner is never answered.
+    @Test func aLostCallWhoseHeldGlareWinnerOfferedThenEndedIsMissed() async throws {
+        let m = machine()
+        signalling.holdStart()
+        m.call("conn-1")
+        await runCurrent()
+        signalling.deliver(offer(glareId))
+        signalling.deliver(.end(callId: callId, reason: CallReason.busy, supersededBy: glareId))
+        signalling.deliver(.end(callId: glareId, reason: CallReason.hangup))
+        await runCurrent()
+        signalling.startResult = { throw CallLostError(callId: callId) }
+        signalling.releaseStart()
+        await runCurrent()
+        #expect(try ended(m).reason == .missed)
+        #expect(!hasSent(signalling, "answer(") && !hasSent(signalling, "end("))
+    }
 }

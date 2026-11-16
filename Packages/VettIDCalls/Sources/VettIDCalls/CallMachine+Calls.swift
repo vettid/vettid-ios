@@ -84,6 +84,7 @@ extension CallMachine {
         s.callId = callId
         // An offer held before the call had its id, that turns out to carry this very id, is no other call.
         if s.glareOffer?.callId == callId { s.glareOffer = nil }
+        forgetEndedGlareOffer(s, early)
         s.phase = .calling
         var ended: Set<String> = []
         for e in early {
@@ -141,6 +142,7 @@ extension CallMachine {
         s.callId = call.callId
         // An offer held before the call had its id, that turns out to carry this very id, is no other call.
         if s.glareOffer?.callId == call.callId { s.glareOffer = nil }
+        forgetEndedGlareOffer(s, early)
         s.formTwo = call.formTwo
         s.phase = .calling
         s.canSendIce = true
@@ -158,6 +160,18 @@ extension CallMachine {
             } else if case .answer(let a) = e {
                 a.keys.wipe()
             }
+        }
+    }
+
+    /// A held glare offer whose own end is among the held events has ended, as ``onEnd`` treats one live: it is let go and
+    /// remembered before they are applied, so the glare's end does not answer it (that end is applied before the winner's,
+    /// which would then reach the answered call no more) and the call is missed when the winner's end is applied.
+    private func forgetEndedGlareOffer(_ s: CallSession, _ early: [SignalEvent]) {
+        guard let held = s.glareOffer else { return }
+        for case .end(let id, _, _) in early where id == held.callId {
+            s.glareOffer = nil
+            rememberEnded(id)
+            return
         }
     }
 
