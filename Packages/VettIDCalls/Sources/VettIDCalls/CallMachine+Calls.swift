@@ -164,9 +164,10 @@ extension CallMachine {
     }
 
     /// Before a replay: the winner of a glare this call [callId] lost, when the winner's own end is among the held events too
-    /// or it is already known to have ended here (``hasEnded(_:)``), is remembered among the winners first, so that the other calls' ends held with it cannot push it out before the
-    /// glare's end is applied (``lostGlare``). Only this call's own glare end counts, under the rule ``superseded`` applies
-    /// (`busy`, a lower winner): other calls' ends that name a winner do not fill the winners' list.
+    /// or it is already known to have ended here (``hasEnded(_:)``), is remembered among the winners first, so that the other
+    /// calls' ends held with it cannot push it out before the glare's end is applied (``lostGlare``). Only this call's own
+    /// glare end counts, under the rule ``superseded`` applies (`busy`, a lower winner): other calls' ends that name a winner
+    /// do not fill the winners' list.
     private func rememberHeldWinners(_ early: [SignalEvent], of callId: String) {
         var ended: Set<String> = []
         for case .end(let id, _, _) in early { ended.insert(id) }
