@@ -2,14 +2,15 @@ import Foundation
 import Testing
 @testable import VettID
 
-/// The calls in the app (CALLS-PLAN C1): in every configuration, over the vault that is open, with the audio background mode
-/// and no other.
+/// The calls in the app (CALLS-PLAN C1): in every configuration, over the vault that is open, with the audio and voip
+/// background modes and no other.
 @MainActor
 @Suite struct CallsWiringTests {
-    /// A live call keeps going when VettID leaves the foreground (owner decision #10740 a): `audio`, never `voip` or anything else.
-    @Test func theAppRunsInTheBackgroundOnlyForAudio() {
+    /// Calls (owner decisions #10740 a and #12192 a): `audio`, so that a live call keeps going when VettID leaves the
+    /// foreground, and `voip`, without which CallKit refuses the app's provider; nothing else.
+    @Test func theAppRunsInTheBackgroundOnlyForCalls() {
         let modes = Bundle.main.object(forInfoDictionaryKey: "UIBackgroundModes") as? [String]
-        #expect(modes == ["audio"])
+        #expect(modes == ["audio", "voip"])
     }
 
     @Test func theMicrophoneTextIsInEveryBuild() {
