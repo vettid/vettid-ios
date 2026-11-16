@@ -16,6 +16,9 @@ extension CallMachine {
         // A held offer whose own end is held too (the call ends before it had its id) has ended: it is not rung below. An end
         // of the call itself `call.start` may still bring is handled when it does (``onPlaced``, ``onLost``).
         forgetEndedGlareOffer(s, s.early)
+        // Other calls' ends held while the start was out are not dropped with the session: an offer that comes after one of
+        // them (VAULT-MESSAGING §8.4 gives no order) is not rung.
+        for case .end(let id, _, _) in s.early { rememberEndedOther(id) }
         let held = s.glareOffer
         // Its candidates: those kept with it, and those still held among the call's early events (a start refused or failed
         // replays nothing).

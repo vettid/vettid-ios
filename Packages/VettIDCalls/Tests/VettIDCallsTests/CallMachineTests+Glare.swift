@@ -268,6 +268,190 @@ extension CallMachineTests {
         #expect(!hasSent(signalling, "answer(") && !hasSent(signalling, "ringing(") && !hasSent(signalling, "end("))
     }
 
+    /// A second offer from the connection after the winner ended, then the glare's end: the call is missed at once, and the
+    /// second offer, held meanwhile, rings (it is a call of its own, not the ended winner).
+    @Test func aSecondOfferAfterTheWinnerEndedRingsWhenTheCallIsMissed() async throws {
+        let m = machine()
+        try await placed(m)
+        signalling.deliver(offer(glareId))
+        signalling.deliver(.end(callId: glareId, reason: CallReason.hangup))
+        signalling.deliver(offer(otherId))
+        signalling.deliver(.end(callId: callId, reason: CallReason.busy, supersededBy: glareId))
+        await runCurrent()
+        let l = try live(m)
+        #expect(l.direction == .incoming && l.callId == otherId && l.phase == .incoming)
+        #expect(!hasSent(signalling, "answer("))
+        #expect(signalling.sent.contains("ringing(\(otherId))"))
+    }
+
+    /// The winner's offer, its end and the glare's end, all held while `call.start` was out, then placed: missed at once.
+    @Test func aGlareWhoseWinnerEndedFirstWhileTheStartWasOutIsMissedAtOnce() async throws {
+        signalling.holdStart()
+        let m = machine()
+        m.call("conn-1")
+        await runCurrent()
+        signalling.deliver(offer(glareId))
+        signalling.deliver(.end(callId: glareId, reason: CallReason.hangup))
+        signalling.deliver(.end(callId: callId, reason: CallReason.busy, supersededBy: glareId))
+        await runCurrent()
+        signalling.releaseStart()
+        await runCurrent()
+        #expect(try ended(m).reason == .missed)
+        #expect(!hasSent(signalling, "answer(") && !hasSent(signalling, "ringing(") && !hasSent(signalling, "end("))
+    }
+
+    /// The winner's end and the glare's end held while `call.start` was out, no offer held, then placed: missed at once, and
+    /// the winner's late offer is neither answered nor rung.
+    @Test func aWinnersEndHeldBeforeItsOfferWhileTheStartWasOutMakesTheGlareMissed() async throws {
+        signalling.holdStart()
+        let m = machine()
+        m.call("conn-1")
+        await runCurrent()
+        signalling.deliver(.end(callId: glareId, reason: CallReason.hangup))
+        signalling.deliver(.end(callId: callId, reason: CallReason.busy, supersededBy: glareId))
+        await runCurrent()
+        signalling.releaseStart()
+        await runCurrent()
+        #expect(try ended(m).reason == .missed)
+        signalling.deliver(offer(glareId))
+        await runCurrent()
+        #expect(try ended(m).reason == .missed)
+        #expect(!hasSent(signalling, "answer(") && !hasSent(signalling, "ringing(") && !hasSent(signalling, "end("))
+    }
+
+    /// Many other calls' ends (a mailbox replayed) do not push out a glare's ended winner: its offer delivered again is not
+    /// rung.
+    @Test func otherCallsEndsDoNotPushOutAnEndedWinner() async throws {
+        let m = machine()
+        try await placed(m)
+        signalling.deliver(offer(glareId))
+        signalling.deliver(.end(callId: glareId, reason: CallReason.hangup))
+        await runCurrent()
+        for n in 0..<(CallMachine.maxEndedWinners + 2) {
+            signalling.deliver(.end(callId: endedId(n), reason: CallReason.hangup))
+        }
+        signalling.deliver(.end(callId: callId, reason: CallReason.decline))
+        await runCurrent()
+        #expect(try ended(m).reason == .declined)
+        signalling.deliver(offer(glareId))
+        await runCurrent()
+        #expect(try ended(m).reason == .declined, "the ended winner's offer is not rung")
+        #expect(!hasSent(signalling, "ringing("))
+    }
+
+    func endedId(_ n: Int) -> String { String(format: "01JB2Z6V9K3M4N5P6Q7R8S9%03d", n) }
+
+    /// A winner known only from another call's end is kept among the winners once the glare ends missed: later calls' many
+    /// ends do not push it out, and its offer delivered after them is not rung.
+    @Test func aWinnerFoundAmongOtherEndsIsKeptAmongTheWinners() async throws {
+        let m = machine()
+        try await placed(m)
+        signalling.deliver(.end(callId: glareId, reason: CallReason.hangup))
+        signalling.deliver(.end(callId: callId, reason: CallReason.busy, supersededBy: glareId))
+        await runCurrent()
+        #expect(try ended(m).reason == .missed)
+        #expect(m.endedWinners.contains(glareId))
+        try await placed(m)
+        for n in 0...CallMachine.maxEndedOthers { signalling.deliver(.end(callId: endedId(n), reason: CallReason.hangup)) }
+        signalling.deliver(.end(callId: callId, reason: CallReason.decline))
+        await runCurrent()
+        signalling.deliver(offer(glareId))
+        await runCurrent()
+        #expect(try ended(m).reason == .declined)
+        #expect(!hasSent(signalling, "ringing(") && !hasSent(signalling, "answer("))
+    }
+
+    /// Another call's end held while the start was out is remembered when the call ends before it has its id (refused, or
+    /// hung up): that call's offer coming after is not rung.
+    @Test func anEndHeldDuringAStartThatEndsIsRemembered() async throws {
+        for refused in [true, false] {
+            let s = FakeSignalling()
+            s.holdStart()
+            if refused { s.startResult = { throw CallRefusedError(code: "busy") } }
+            let m = machine(s)
+            m.call("conn-1")
+            await runCurrent()
+            s.deliver(.end(callId: glareId, reason: CallReason.hangup))
+            await runCurrent()
+            if refused { s.releaseStart() } else { m.hangUp() }
+            await runCurrent()
+            guard case .ended = m.state else { throw WrongState(state: m.state) }
+            s.deliver(offer(glareId))
+            await runCurrent()
+            guard case .ended = m.state else { throw WrongState(state: m.state) }
+            #expect(!hasSent(s, "ringing("), "refused \(refused)")
+            if !refused { s.releaseStart() }
+            await runCurrent()
+        }
+    }
+
+    /// Other calls' ends: the oldest goes past the bound, and one delivered again counts as the newest.
+    @Test func otherCallsEndsAreBoundedAndTheNewestKept() async throws {
+        let m = machine()
+        try await placed(m)
+        for n in 0...CallMachine.maxEndedOthers { signalling.deliver(.end(callId: endedId(n), reason: CallReason.hangup)) }
+        await runCurrent()
+        #expect(m.endedOthers.count == CallMachine.maxEndedOthers)
+        #expect(!m.endedOthers.contains(endedId(0)) && m.endedOthers.last == endedId(CallMachine.maxEndedOthers))
+        signalling.deliver(.end(callId: endedId(1), reason: CallReason.hangup))
+        await runCurrent()
+        #expect(m.endedOthers.count == CallMachine.maxEndedOthers && m.endedOthers.last == endedId(1))
+        #expect(m.endedOthers.filter { $0 == endedId(1) }.count == 1)
+    }
+
+    /// One delivered again is kept once, as the newest.
+    @Test func anOtherCallsEndDeliveredAgainIsKeptOnceAsTheNewest() async throws {
+        let m = machine()
+        try await placed(m)
+        for n in [1, 2, 1] { signalling.deliver(.end(callId: endedId(n), reason: CallReason.hangup)) }
+        await runCurrent()
+        #expect(m.endedOthers == [endedId(2), endedId(1)])
+    }
+
+    /// An end that comes once the start's held events are full is remembered all the same.
+    @Test func anEndPastTheFullHeldEventsIsRemembered() async throws {
+        signalling.holdStart()
+        let m = machine()
+        m.call("conn-1")
+        await runCurrent()
+        for _ in 0..<CallMachine.maxEarly { signalling.deliver(.ice(callId: endedId(999), candidates: [])) }
+        signalling.deliver(.end(callId: glareId, reason: CallReason.hangup))
+        await runCurrent()
+        #expect(m.endedOthers.contains(glareId))
+    }
+
+    /// Only the held offer's own end lets it go: with another call's end held, a refused start still rings it.
+    @Test func aRefusedStartRingsTheHeldOfferWhenAnotherCallsEndIsHeld() async throws {
+        let s = FakeSignalling()
+        s.holdStart()
+        s.startResult = { throw CallRefusedError(code: "busy") }
+        let m = machine(s)
+        m.call("conn-1")
+        await runCurrent()
+        s.deliver(offer(glareId))
+        s.deliver(.end(callId: otherId, reason: CallReason.hangup))
+        await runCurrent()
+        s.releaseStart()
+        await runCurrent()
+        let l = try live(m)
+        #expect(l.direction == .incoming && l.callId == glareId && l.phase == .incoming)
+    }
+
+    /// (VAULT-MESSAGING §8.4: no order) The winner's end comes before its offer, and before the glare's end: the call is missed
+    /// at once, and the winner's late offer is neither answered nor rung.
+    @Test func aWinnersEndBeforeItsOfferMakesTheGlareMissedAndTheLateOfferIsNotAnswered() async throws {
+        let m = machine()
+        try await placed(m)
+        signalling.deliver(.end(callId: glareId, reason: CallReason.hangup))
+        signalling.deliver(.end(callId: callId, reason: CallReason.busy, supersededBy: glareId))
+        await runCurrent()
+        #expect(try ended(m).reason == .missed)
+        signalling.deliver(offer(glareId))
+        await runCurrent()
+        #expect(try ended(m).reason == .missed)
+        #expect(!hasSent(signalling, "answer(") && !hasSent(signalling, "ringing(") && !hasSent(signalling, "end("))
+    }
+
     /// X's end delivered twice while the lost glare waits changes nothing; the winner is still answered.
     @Test func aSecondEndOfTheLostCallChangesNothing() async throws {
         let m = machine()

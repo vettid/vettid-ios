@@ -35,9 +35,9 @@ extension CallMachine {
                     post(.lost(seq: s.seq, callId: e.callId, end: e.end))
                 }
                 // Any other failure after the request may have left (no answer in time, a lost answer, one that does not
-                // verify) leaves the lane failed with no end sent here: `VaultApi.callStart` has already sent the durable `call.end{hangup}` for the call's id
-                // (VAULT-MESSAGING §10.10 "Placing a call") before this start returned. The lock gate lets it through, and a
-                // pending lock waits for it, though only for ``CallsController/lockWait``.
+                // verify) leaves the lane failed with no end sent here: `VaultApi.callStart` has already sent the durable
+                // `call.end{hangup}` for the call's id (VAULT-MESSAGING §10.10 "Placing a call") before this start returned.
+                // The lock gate lets it through, and a pending lock waits for it, though only for ``CallsController/lockWait``.
             }
         }
     }
@@ -103,9 +103,10 @@ extension CallMachine {
     /// A lost call still shown once its ends are applied: a glare it lost waits for its winner (unless the winner ended), and
     /// one whose end is not known fails now.
     private func settleLost(_ s: CallSession, endedEarly: Set<String>) {
-        if let by = s.supersededBy, endedWinners.contains(by) || endedEarly.contains(by) {
+        if let by = s.supersededBy, hasEnded(by) || endedEarly.contains(by) {
             // Lost to a call that has ended already: nothing to answer, nothing to wait for, and a late offer for the winner is
-            // not rung (as for a placed call).
+            // not rung (as for a placed call). Seldom reached now: replaying the held ends finishes such a call as missed
+            // already (``lostGlare``), and only a carried glare end whose winner's end was held or remembered gets here.
             rememberEnded(by)
             finish(s, .missed, nil)
         } else if s.supersededBy != nil {
