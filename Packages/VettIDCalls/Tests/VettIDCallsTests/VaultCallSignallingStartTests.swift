@@ -275,6 +275,17 @@ extension VaultCallSignallingTests {
         #expect(error as? CallLostError == CallLostError(callId: callId, end: .init(reason: "busy")))
     }
 
+    /// The other order: the vault's end first, then one made here. The vault's end is kept.
+    @Test func aLocalEndAfterTheVaultsDoesNotReplaceIt() async throws {
+        let s = await signalling()
+        let (_, error) = try await heldStartResult(s) {
+            gateway.send(.ended(CallEnded(callId: callId, reason: "busy")))
+            await settle()
+            try await s.end(callId: callId, reason: "hangup")
+        }
+        #expect(error as? CallLostError == CallLostError(callId: callId, end: .init(reason: "busy")))
+    }
+
     /// A start that fails with ends remembered: they are forgotten with it, and a later start of a call with the same id is kept.
     @Test func aStartThatFailsForgetsTheEndsAndTheNextStartIsKept() async throws {
         let s = await signalling()
