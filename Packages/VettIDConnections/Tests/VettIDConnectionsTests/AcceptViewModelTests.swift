@@ -96,6 +96,20 @@ import VettIDDataTesting
         #expect(!fake.calls.contains("refreshRequests"))
     }
 
+    /// `exists` for this member's own request that is not a connection yet (both approvals still to come): the request is
+    /// followed (the code, then the approvals), never shown as "already connected".
+    @Test func anExistingRequestIsFollowedNotSaidConnected() async {
+        fake.acceptResult = AcceptedConnection(connectionID: "conn-new", exists: true)
+        fake.requests = [Samples.outgoing(remote: true)]
+        let m = await model(input: Samples.link())
+        #expect(await until { m.state.step == .compare })
+        #expect(m.state.connectionID == "conn-new" && m.state.sas == "042817")
+        #expect(fake.calls.contains("refreshRequests"))
+        m.approve()
+        await m.settle()
+        #expect(m.state.step == .approved)
+    }
+
     @Test func theSafetyCodeComesWithTheHandshakeThenBothApprove() async {
         let m = await waiting()
         fake.requests = [Samples.outgoing(sas: nil, state: .waiting)]
