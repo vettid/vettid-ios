@@ -17,6 +17,17 @@ extension CallMachine {
         }
         s.enqueue { [self] in
             let sdp = try await engine.createOffer(suite: first)
+            // Ended while the offer was made (a hang-up, a lock): this start does not go, so there is no call to end, and its
+            // place among the abandoned starts is given back. Checked and counted in the same turn: from the count on, a lock
+            // waits for the start's answer (``startsInFlight``).
+            guard session === s, !Task.isCancelled else {
+                abandoned.removeAll { $0 == s.seq }
+                return
+            }
+            startsInFlight += 1
+            // Posted once the start has returned and after its answer's own message, whichever way it went (a refusal, an
+            // error, nothing placed included): this lane waits for the start to its end, whatever cancels it.
+            defer { post(.startReturned) }
             // Not cancelled by a hang-up: once `call.start` may have left, its answer is needed to end the call.
             try await uncancellable { [self] in
                 do {

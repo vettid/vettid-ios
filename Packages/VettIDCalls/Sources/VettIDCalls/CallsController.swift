@@ -314,11 +314,12 @@ package final class CallsController {
     package func endCallBeforeLock() async {
         let live = isLive
         // Nothing to end and no hang-up on its way: no wait. A hang-up still being sent is waited for also when the call itself
-        // is already over on this phone (the member hung up and locked at once).
-        if !live && machine.pendingEnds == 0 { return }
+        // is already over on this phone (the member hung up and locked at once), and so is a `call.start` still on its way: the
+        // call it places is ended when its answer comes, and that end must go before the lock too.
+        if !live && machine.pendingEnds == 0 && machine.startsInFlight == 0 { return }
         if live { machine.vaultLocking() }
         let deadline = clock.elapsedMs() + Self.lockWait.wholeMilliseconds
-        while isLive || machine.pendingEnds > 0 {
+        while isLive || machine.pendingEnds > 0 || machine.startsInFlight > 0 {
             if clock.elapsedMs() >= deadline { return }
             do { try await clock.sleep(for: Self.pollEvery) } catch { return }
         }

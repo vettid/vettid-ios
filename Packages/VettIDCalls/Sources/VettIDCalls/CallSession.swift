@@ -22,6 +22,8 @@ enum CallMessage: Sendable {
     case failed(seq: Int, CallEnd)
     /// `call.start` placed [callId], but the call can no longer be made (``CallLostError``).
     case lost(seq: Int, callId: String, end: CallLostError.End?)
+    /// A `call.start` returned, in any way: posted after its answer (``startsInFlight``).
+    case startReturned
     case timer(seq: Int, TimerKind)
     case path(seq: Int, relayed: Bool)
 }

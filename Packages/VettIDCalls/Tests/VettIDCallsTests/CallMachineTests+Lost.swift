@@ -183,4 +183,18 @@ extension CallMachineTests {
         #expect(signalling.sent.contains("answer(\(glareId))"))
         #expect(!hasSent(signalling, "end("))
     }
+
+    /// A start still on its way when the machine stops: the count is reset, and the start's late return leaves it at 0.
+    @Test func aStoppedMachineCountsNoStartInFlight() async throws {
+        let m = machine()
+        signalling.holdStart()
+        m.call("conn-1")
+        await runCurrent()
+        #expect(m.startsInFlight == 1)
+        m.stop()
+        #expect(m.startsInFlight == 0)
+        signalling.releaseStart()
+        await runCurrent()
+        #expect(m.startsInFlight == 0)
+    }
 }
