@@ -102,8 +102,10 @@ package final class CallsController {
     package static let unlockWait: Duration = .seconds(10)
     /// The longest ``endCallBeforeLock()`` waits for the hang-up to go (the lock hook's budget in the data layer is the same).
     package static let lockWait: Duration = .seconds(2)
-    private static let probeAttempts = 3
-    private static let probeRetry: Duration = .seconds(2)
+    /// How long the probe waits before each try again after a failed read (two, so three reads in all). Short: an offer that
+    /// came with the unlock waits for the probe's answer to ring, within ``unlockWait``, and a slow vault takes part of that
+    /// already for each read.
+    private static let probeRetries: [Duration] = [.milliseconds(500), .milliseconds(1500)]
     private static let pollEvery: Duration = .milliseconds(50)
     private static let unsupported = "unsupported_type"
 
@@ -354,7 +356,7 @@ package final class CallsController {
     /// not known, and a failure is tried again twice.
     private func probe(_ generation: Int) async {
         supported = nil
-        for attempt in 0..<Self.probeAttempts {
+        for attempt in 0...Self.probeRetries.count {
             do {
                 let list = try await vault.gateway.list(limit: Self.historyLimit)
                 guard !Task.isCancelled, generation == probeGeneration, openFlag.isOpen else { return }
@@ -369,8 +371,8 @@ package final class CallsController {
                 if e.code == Self.unsupported { supported = false }
                 return
             } catch {
-                if attempt + 1 == Self.probeAttempts { return }
-                do { try await clock.sleep(for: Self.probeRetry * (attempt + 1)) } catch { return }
+                guard attempt < Self.probeRetries.count else { return }
+                do { try await clock.sleep(for: Self.probeRetries[attempt]) } catch { return }
             }
         }
     }

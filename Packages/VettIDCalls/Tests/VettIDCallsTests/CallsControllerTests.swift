@@ -134,10 +134,10 @@ import VettIDCrypto
         let c = controller(FakeMicrophone(.granted))
         await unlock()
         #expect(c.availability == .unknown)
-        await clock.advance(by: 2000)
+        await clock.advance(by: 500)
         await settle()
         #expect(vault.gatewayFake.listCalls == 2)
-        await clock.advance(by: 4000)
+        await clock.advance(by: 1500)
         await settle()
         #expect(c.availability == .ready)
         #expect(vault.gatewayFake.listCalls == 3)
@@ -350,6 +350,28 @@ import VettIDCrypto
         gate.open()
         await clock.advance(by: 100)
         guard case .live(let l) = c.state, l.phase == .incoming else { throw WrongState(state: c.state) }
+    }
+
+    /// The offer that came with the unlock, while the probe's first reads fail: it rings once the probe answers, within two
+    /// seconds of retries, well inside the offer's wait for it (``CallsController/unlockWait``), which a slow vault also uses.
+    @Test func anOfferAtTheUnlockRingsSoonAfterTheProbesRetries() async throws {
+        var failures = 2
+        vault.gatewayFake.listResult = {
+            if failures > 0 {
+                failures -= 1
+                throw StartFailure()
+            }
+            return CallList(calls: [], skipped: 0)
+        }
+        vault.gatewayFake.incomingResult = { _ in try self.incoming() }
+        let c = controller(FakeMicrophone(.granted))
+        await unlock()
+        vault.gatewayFake.send(offerEvent())
+        await clock.advance(by: 1900)
+        #expect(c.state == .idle, "the second retry has not come yet")
+        await clock.advance(by: 200)
+        guard case .live(let l) = c.state, l.phase == .incoming else { throw WrongState(state: c.state) }
+        #expect(vault.gatewayFake.listCalls == 3)
     }
 
     @Test func anOfferWaitingForTheProbeDoesNotRingWhenTheAnswerIsNotInVault() async {
