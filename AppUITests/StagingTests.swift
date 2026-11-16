@@ -288,6 +288,11 @@ final class StagingTests: VaultUITestCase {
             return false
         }
         expect(app, "app_shell", timeout: Self.network)
+        // A check that falls due just after the unlock covers the shell (the vault reports it once open): passed the same way.
+        if waitUntil(timeout: 15, { shown(app)["owner_check"] != nil }) {
+            ownerCheck(app, pin: pin, password: password)
+            expect(app, "app_shell", timeout: Self.network)
+        }
         return true
     }
 

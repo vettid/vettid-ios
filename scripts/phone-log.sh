@@ -7,11 +7,12 @@
 #   --device <udid>    the iPhone's hardware UDID (`idevice_id -l`; not the CoreDevice identifier devicectl shows)
 #   --minutes <n>      how far back (10 by default)
 #   --predicate <p>    a `log show` predicate; by default the VettID app's own process
-#   --keep             keep the log archive (under ${XDG_CACHE_HOME:-~/Library/Caches}/vettid-ios/phone-log, mode 700)
+#   --keep             keep the log archive, the device's whole log for those minutes (under
+#                      ${XDG_CACHE_HOME:-~/Library/Caches}/vettid-ios/phone-log, mode 700)
 #
 # The lines are printed and the archive is deleted, unless --keep. A
-# phone's log holds more than the app's own lines (networks, other apps): keep the output private, and never paste it into an
-# issue, a PR or a chat. Needs idevicesyslog (libimobiledevice).
+# phone's log holds more than the app's own lines (networks, other apps): keep the output private, never paste it into an
+# issue, a PR or a chat, and run it yourself rather than through an agent (an agent's transcript is kept). Needs idevicesyslog (libimobiledevice).
 set -euo pipefail
 
 DEVICE=""
@@ -35,11 +36,12 @@ command -v idevicesyslog >/dev/null || { echo "idevicesyslog not found (brew ins
 DIR="${XDG_CACHE_HOME:-${HOME}/Library/Caches}/vettid-ios/phone-log"
 (umask 077; mkdir -p "${DIR}")
 chmod 700 "${DIR}"
-STAMP="$(date +%Y%m%d-%H%M%S)"
-TAR="${DIR}/${STAMP}.tar"
-ARCHIVE="${DIR}/${STAMP}.logarchive"
+# One directory per run (two phones read at once never share one).
+RUN="$(mktemp -d "${DIR}/$(date +%Y%m%d-%H%M%S).XXXXXX")"
+TAR="${RUN}/log.tar"
+ARCHIVE="${RUN}/log.logarchive"
 # Nothing is left behind on a failure either (unless --keep).
-trap 'rm -f "${TAR}"; [[ ${KEEP} -eq 1 ]] || rm -rf "${ARCHIVE}"' EXIT
+trap 'rm -f "${TAR}"; [[ ${KEEP} -eq 1 ]] || rm -rf "${RUN}"' EXIT
 idevicesyslog -u "${DEVICE}" archive "${TAR}" --age-limit "$((MINUTES * 60))" >/dev/null
 mkdir -p "${ARCHIVE}"
 tar -xf "${TAR}" -C "${ARCHIVE}"

@@ -141,9 +141,11 @@
 # testStagingApproveRequest also VETTID_STAGING_SAFETY_CODE; testStagingSendAll VETTID_STAGING_PEER_NAME,
 # VETTID_STAGING_MESSAGE and VETTID_STAGING_EXPECT; testStagingWaitMessage VETTID_STAGING_PEER_NAME and
 # VETTID_STAGING_EXPECT; testStagingSignIn VETTID_STAGING_MATCH_CODE, with VETTID_STAGING_SIGNIN_LOCK=1 optional;
-# testStagingCheck and testStagingCallPlace VETTID_STAGING_PEER_NAME; VETTID_STAGING_CALL_SECONDS (how long the active call
-# is held, 20 by default) and VETTID_STAGING_CALL_WAIT (how long testStagingCallAnswer waits for the call, 180 by default)
-# are optional. Two-phone call: start testStagingCallAnswer on one phone, wait for its "CALL_STATE: waiting" line, then
+# testStagingCheck, testStagingCallPlace and testStagingCallAnswer VETTID_STAGING_PEER_NAME (testStagingCallAnswer answers
+# only the app's own incoming call from that connection, nothing else); VETTID_STAGING_CALL_SECONDS (how long the active call
+# is held on both sides, 20 by default) and VETTID_STAGING_CALL_WAIT (how long testStagingCallAnswer waits for the call, 180
+# by default) are optional. The call tests leave the call screen and lock the vault whatever happens; if that cleanup fails
+# (the test stopped from outside), the vault may stay open: lock it with testStagingUnlockLock. Two-phone call: start testStagingCallAnswer on one phone, wait for its "CALL_STATE: waiting" line, then
 # start testStagingCallPlace (with --skip-build) on the other; each prints "CALL_STATE: <state>" lines (calling, ringing,
 # connecting, reconnecting, waiting, answered, microphone, microphone_blocked, active, held <s>, dropped <s>, ended, failed). VETTID_STAGING_WAIT (seconds) is optional for
 # testStagingWaitMessage (600), testStagingSendAll (300) and testStagingLook (10).
@@ -247,7 +249,8 @@ case "${TEST}" in
     NEEDED=(VETTID_STAGING_PIN VETTID_STAGING_PASSWORD VETTID_STAGING_PEER_NAME VETTID_STAGING_MESSAGE VETTID_STAGING_EXPECT) ;;
   testStagingSignIn) NEEDED=(VETTID_STAGING_PIN VETTID_STAGING_PASSWORD VETTID_STAGING_MATCH_CODE) ;;
   testStagingTransferIn) NEEDED=(VETTID_STAGING_PIN VETTID_STAGING_TRANSFER_CODE) ;;
-  testStagingCheck|testStagingCallPlace) NEEDED=(VETTID_STAGING_PIN VETTID_STAGING_PASSWORD VETTID_STAGING_PEER_NAME) ;;
+  testStagingCheck|testStagingCallPlace|testStagingCallAnswer)
+    NEEDED=(VETTID_STAGING_PIN VETTID_STAGING_PASSWORD VETTID_STAGING_PEER_NAME) ;;
   testStagingPhotoSend|testStagingPhotoReceive)
     NEEDED=(VETTID_STAGING_PIN VETTID_STAGING_PASSWORD VETTID_STAGING_PEER_NAME) ;;
   *) NEEDED=(VETTID_STAGING_PIN VETTID_STAGING_PASSWORD) ;;

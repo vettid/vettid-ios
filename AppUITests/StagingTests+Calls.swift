@@ -2,9 +2,10 @@ import XCTest
 
 /// Calls on staging between two phones (VAULT-MESSAGING §10.10): ``testStagingCallPlace`` calls the connection shown as
 /// `VETTID_STAGING_PEER_NAME` from its conversation; ``testStagingCallAnswer``, started on the other phone first, waits for
-/// that call (up to `VETTID_STAGING_CALL_WAIT` seconds, 180 by default) and answers it. Once the call is active, the caller
-/// holds it for `VETTID_STAGING_CALL_SECONDS` (20 by default), checking every second that it stays active, then hangs up; the
-/// answering side waits for that end. Each side reports on `CALL_STATE:` lines: `waiting`, `answered`, `microphone`, the
+/// that call (up to `VETTID_STAGING_CALL_WAIT` seconds, 180 by default) and answers only it: the app's own incoming screen
+/// with "<VETTID_STAGING_PEER_NAME> is calling", never a call of another kind (cellular, FaceTime, another app) or from
+/// someone else. Once the call is active, both sides hold it for `VETTID_STAGING_CALL_SECONDS` (20 by default), checking
+/// every second that it stays active; then the caller hangs up and the answering side waits for that end. Each side reports on `CALL_STATE:` lines: `waiting`, `answered`, `microphone`, the
 /// statuses the call screen showed on the way (`calling`, `ringing`, `connecting`, `reconnecting`), then `active`,
 /// `held <seconds>`, `dropped <seconds>`, `ended`, or `failed` (and `microphone_blocked` when the microphone is turned off for
 /// the app). Whatever happens, the call screen is left (hung up or declined, then closed) before the vault is locked. The
@@ -55,6 +56,7 @@ extension StagingTests {
     func testStagingCallAnswer() throws {
         let pin = try Self.pin()
         let password = try Self.input("VETTID_STAGING_PASSWORD")
+        let peer = try Self.input("VETTID_STAGING_PEER_NAME")
         let wait = try Self.seconds("VETTID_STAGING_CALL_WAIT", fallback: 180)
         let hold = try Self.seconds("VETTID_STAGING_CALL_SECONDS", fallback: 20)
 
@@ -62,24 +64,22 @@ extension StagingTests {
         guard openAtStart(app, pin: pin, password: password) else { return }
         continueAfterFailure = true
         print("CALL_STATE: waiting")
-        let callService = XCUIApplication(bundleIdentifier: "com.apple.InCallService")
         var answered = false
         _ = waitUntil(timeout: wait) {
+            let screen = shown(app)
             let inApp = app.buttons["call_answer"]
-            if inApp.exists, inApp.isHittable {
-                inApp.tap()
-                answered = true
-            } else if let accept = callKitAccept(callService) {
-                accept.tap()
-                answered = true
-            }
-            return answered
+            guard let status = screen["call_status"], Self.plain(status) == "\(peer) is calling", inApp.exists, inApp.isHittable
+            else { return false }
+            inApp.tap()
+            answered = true
+            return true
         }
         if answered {
             print("CALL_STATE: answered")
-            if callBecomesActive(app) {
-                // The caller holds the call, then hangs up: this side waits for that end (an unreadable snapshot is not one).
-                _ = waitUntil(timeout: hold + Self.callEnd + 15) { callActive(app) == false }
+            // Both sides hold the call (this one a little less, so the caller's hang-up comes after), then this side waits for
+            // that end (an unreadable snapshot is not one).
+            if callBecomesActive(app), holdCall(app, seconds: max(hold - 5, 1)) {
+                _ = waitUntil(timeout: Self.callEnd + 15) { callActive(app) == false }
                 callEnds(app)
             }
         } else {
@@ -90,16 +90,6 @@ extension StagingTests {
         lock(app)
     }
 
-    /// CallKit's own Accept, when the system shows the incoming call instead of the app's screen (its in-call service).
-    @MainActor
-    func callKitAccept(_ callService: XCUIApplication) -> XCUIElement? {
-        for label in ["Accept", "Answer"] {
-            let b = callService.buttons[label]
-            if b.exists, b.isHittable { return b }
-        }
-        return nil
-    }
-
     /// The microphone: the app's own explanation ("Allow"), then the system's permission prompt. False when the app shows the
     /// microphone turned off (iOS asks only once): that is reported and failed, and nothing is tapped (its button opens
     /// Settings).
@@ -107,11 +97,12 @@ extension StagingTests {
     func allowMicrophone(_ app: XCUIApplication) -> Bool {
         // The system's permission prompt is not always an alert element (iOS 27 shows a card): any SpringBoard button of
         // that label, while the prompt names the microphone.
+        // Only the prompt for this app's microphone ("Allow “VettID…” to access your microphone?"), and only its own buttons.
         let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
-        let asking = springboard.staticTexts.containing(NSPredicate(format: "label CONTAINS[c] %@", "microphone")).firstMatch
-        if asking.exists {
+        let question = NSPredicate(format: "label CONTAINS[c] %@ AND label CONTAINS[c] %@", "VettID", "access your microphone")
+        if springboard.staticTexts.matching(question).firstMatch.exists {
             for label in ["Allow", "OK"] {
-                let system = springboard.buttons[label]
+                let system = springboard.buttons[label].firstMatch
                 if system.exists, system.isHittable {
                     system.tap()
                     return true
@@ -178,21 +169,25 @@ extension StagingTests {
     }
 
     /// Keeps the active call for [seconds], checking every second that it stays active (two readable snapshots in a row
-    /// without it end the hold) and reporting a reconnect; false when it dropped.
+    /// without it end the hold, and so do three unreadable ones in a row) and reporting a reconnect; false when it dropped.
     @MainActor
     func holdCall(_ app: XCUIApplication, seconds: TimeInterval) -> Bool {
         let start = Date()
         var missing = 0
+        var unreadable = 0
         var reconnecting = false
         while Date().timeIntervalSince(start) < seconds {
             let screen = shown(app)
-            if !screen.isEmpty {
+            if screen.isEmpty {
+                unreadable += 1
+            } else {
+                unreadable = 0
                 missing = screen["call_encryption"] == nil ? missing + 1 : 0
                 let now = screen["call_status"] == "Reconnecting…"
                 if now, !reconnecting { print("CALL_STATE: reconnecting") }
                 reconnecting = now
             }
-            if missing >= 2 {
+            if missing >= 2 || unreadable >= 3 {
                 print("CALL_STATE: dropped \(Int(Date().timeIntervalSince(start)))")
                 fail(app, "The call stopped being active while it was held.")
                 return false
