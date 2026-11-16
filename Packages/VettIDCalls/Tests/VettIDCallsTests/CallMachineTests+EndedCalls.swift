@@ -78,6 +78,42 @@ extension CallMachineTests {
         #expect(!hasSent(signalling, "ringing("))
     }
 
+    /// The same on the lost path: the start lost with no end carried, the held decline finishes the call, and another call's
+    /// end held after it is still remembered.
+    @Test func endsHeldBehindTheOneThatFinishesALostCallAreRemembered() async throws {
+        signalling.holdStart()
+        signalling.startResult = { throw CallLostError(callId: callId) }
+        let m = machine()
+        m.call("conn-1")
+        await runCurrent()
+        signalling.deliver(.end(callId: callId, reason: CallReason.decline))
+        signalling.deliver(.end(callId: otherId, reason: CallReason.hangup))
+        await runCurrent()
+        signalling.releaseStart()
+        await runCurrent()
+        #expect(try ended(m).reason == .declined)
+        #expect(m.endedOthers.contains(otherId))
+        signalling.deliver(offer(otherId))
+        await runCurrent()
+        #expect(!hasSent(signalling, "ringing("))
+    }
+
+    /// Another call's glare end held with its winner's end (the member's other device lost a glare) does not put that
+    /// winner among this device's glare winners.
+    @Test func anotherCallsGlareEndDoesNotFillTheWinners() async throws {
+        signalling.holdStart()
+        let m = machine()
+        m.call("conn-1")
+        await runCurrent()
+        signalling.deliver(.end(callId: endedId(2), reason: CallReason.hangup))
+        signalling.deliver(.end(callId: endedId(5), reason: CallReason.busy, supersededBy: endedId(2)))
+        await runCurrent()
+        signalling.releaseStart()
+        await runCurrent()
+        #expect(!m.endedWinners.contains(endedId(2)))
+        #expect(m.endedOthers.contains(endedId(2)))
+    }
+
     /// The winner's end, then more other calls' ends than ``CallMachine/endedOthers`` keeps, then the glare's end, all held
     /// during the start; placed: missed at once, the winner kept among the winners, and its late offer not answered.
     @Test func aHeldWinnersEndIsNotPushedOutByTheOtherEndsHeldWithIt() async throws {

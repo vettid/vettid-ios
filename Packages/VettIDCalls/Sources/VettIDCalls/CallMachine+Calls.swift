@@ -83,7 +83,7 @@ extension CallMachine {
         // An offer held before the call had its id, that turns out to carry this very id, is no other call.
         if s.glareOffer?.callId == callId { s.glareOffer = nil }
         forgetEndedGlareOffer(s, early)
-        rememberHeldWinners(early)
+        rememberHeldWinners(early, of: callId)
         s.phase = .calling
         var ended: Set<String> = []
         for e in early {
@@ -138,7 +138,7 @@ extension CallMachine {
         // An offer held before the call had its id, that turns out to carry this very id, is no other call.
         if s.glareOffer?.callId == call.callId { s.glareOffer = nil }
         forgetEndedGlareOffer(s, early)
-        rememberHeldWinners(early)
+        rememberHeldWinners(early, of: call.callId)
         s.formTwo = call.formTwo
         s.phase = .calling
         s.canSendIce = true
@@ -159,12 +159,18 @@ extension CallMachine {
         }
     }
 
-    /// Before a replay: a glare's winner whose own end is among the held events is remembered among the winners first, so
-    /// that the other calls' ends held with it cannot push it out before the glare's end is applied (``lostGlare``).
-    private func rememberHeldWinners(_ early: [SignalEvent]) {
+    /// Before a replay: the winner of a glare this call [callId] lost, when the winner's own end is among the held events too,
+    /// is remembered among the winners first, so that the other calls' ends held with it cannot push it out before the
+    /// glare's end is applied (``lostGlare``). Only this call's own glare end counts, under the rule ``superseded`` applies
+    /// (`busy`, a lower winner): other calls' ends that name a winner do not fill the winners' list.
+    private func rememberHeldWinners(_ early: [SignalEvent], of callId: String) {
         var ended: Set<String> = []
         for case .end(let id, _, _) in early { ended.insert(id) }
-        for case .end(_, _, let by?) in early where ended.contains(by) { rememberEnded(by) }
+        for case .end(let id, let reason, let by?) in early
+        where id == callId && reason == CallReason.busy && ended.contains(by)
+            && Array(by.utf8).lexicographicallyPrecedes(Array(callId.utf8)) {
+            rememberEnded(by)
+        }
     }
 
     /// A held event left once the replay has finished the call, or handed the session to a glare's winner: an answer's keys
@@ -174,6 +180,9 @@ extension CallMachine {
         case .answer(let a):
             a.keys.wipe()
         case .end(let id, _, _):
+            // The session made meanwhile can only be a held offer rung or answered (``finish``, ``takeGlare``), whose own end
+            // ``forgetEndedGlareOffer`` would have found first: an end for it here is not expected, and is applied all the
+            // same should it come.
             if let current = session, current.callId == id { onSignal(current, e) } else { rememberEndedOther(id) }
         default:
             break
