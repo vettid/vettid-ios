@@ -209,6 +209,23 @@ extension CallMachineTests {
         #expect(!hasSent(signalling, "answer(") && !hasSent(signalling, "end(") && !hasSent(signalling, "ringing("))
     }
 
+    /// Not a glare: while `call.start` is out, the connection's offer, the vault's decline of this call, then the offer's own end.
+    /// The call shows declined, and the held offer, which has ended, is not rung after it.
+    @Test func aHeldOfferThatEndedWhileTheStartWasOutIsNotRungWhenTheCallEnds() async throws {
+        signalling.holdStart()
+        let m = machine()
+        m.call("conn-1")
+        await runCurrent()
+        signalling.deliver(offer(glareId))
+        signalling.deliver(.end(callId: callId, reason: CallReason.decline))
+        signalling.deliver(.end(callId: glareId, reason: CallReason.hangup))
+        await runCurrent()
+        signalling.releaseStart()
+        await runCurrent()
+        #expect(try ended(m).reason == .declined)
+        #expect(!hasSent(signalling, "ringing(") && !hasSent(signalling, "answer("))
+    }
+
     /// X's end delivered twice while the lost glare waits changes nothing; the winner is still answered.
     @Test func aSecondEndOfTheLostCallChangesNothing() async throws {
         let m = machine()

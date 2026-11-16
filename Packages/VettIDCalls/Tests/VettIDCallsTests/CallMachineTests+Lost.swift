@@ -137,23 +137,43 @@ extension CallMachineTests {
         #expect(!hasSent(signalling, "ringing("))
     }
 
-    /// No session knows the lost call (let go, the abandoned starts' list full): it is ended at the vault all the same.
+    /// No session knows the lost call (let go, the abandoned starts' list full): it is ended at the vault as hung up all the
+    /// same (VAULT-MESSAGING §10.10 "Placing a call").
     @Test func aLostCallNoSessionKnowsIsEndedAtTheVault() async throws {
         let m = machine()
         await runCurrent()
         m.post(.lost(seq: 999, callId: callId, end: nil))
         await runCurrent()
-        #expect(signalling.sent.filter { $0.hasPrefix("end") } == ["end(\(callId), failed)"])
+        #expect(signalling.sent.filter { $0.hasPrefix("end") } == ["end(\(callId), hangup)"])
     }
 
-    /// A placed call no session knows (let go, the abandoned starts' list full) is ended at the vault as hung up, as a lost one
-    /// is ended all the same.
-    @Test func aPlacedCallNoSessionKnowsIsEndedAtTheVault() async throws {
-        let m = machine()
-        await runCurrent()
-        m.post(.placed(seq: 999, PlacedCall(callId: callId, exp: at(45_000)), atMs: 0))
-        await runCurrent()
-        #expect(signalling.sent.filter { $0.hasPrefix("end") } == ["end(\(callId), hangup)"])
+    /// One start more than the abandoned starts' list holds, each hung up before the vault answered: the oldest is pushed out
+    /// of the list, and when its start is answered after all, placed or lost, the call is still ended at the vault as hung up.
+    @Test func aStartPushedOutOfTheAbandonedOnesIsEndedWhenItIsAnswered() async throws {
+        for lost in [false, true] {
+            let s = FakeSignalling()
+            let m = machine(s)
+            var gates: [AsyncStream<Void>.Continuation] = []
+            for _ in 0...CallMachine.maxAbandoned {
+                s.holdStart()
+                m.call("conn-1")
+                await runCurrent()
+                gates.append(try #require(s.startGate))
+                m.hangUp()
+                await runCurrent()
+            }
+            #expect(m.abandoned.count == CallMachine.maxAbandoned, "lost \(lost): the oldest pushed out")
+            s.startResult = lost ? { throw CallLostError(callId: callId) } : { PlacedCall(callId: callId, exp: at(45_000)) }
+            gates[0].yield()
+            await runCurrent()
+            #expect(s.sent.filter { $0.hasPrefix("end") } == ["end(\(callId), hangup)"], "lost \(lost)")
+            #expect(m.pendingEnds == 0)
+            #expect(m.abandoned.count == CallMachine.maxAbandoned, "lost \(lost): the others keep their places")
+            for g in gates.dropFirst() { g.yield() }
+            await runCurrent()
+            #expect(s.sent.filter { $0.hasPrefix("end") }.count == CallMachine.maxAbandoned + 1, "lost \(lost): every call ended")
+            #expect(m.abandoned.isEmpty && m.startsInFlight == 0)
+        }
     }
 
     /// The vault's end the signalling remembered is still on its way to the machine when the start says the call is lost: the

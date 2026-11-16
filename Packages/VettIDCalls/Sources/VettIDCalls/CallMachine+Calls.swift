@@ -40,7 +40,8 @@ extension CallMachine {
                 }
                 // Any other failure (no answer in time, a lost answer, one that does not verify) leaves the lane failed with
                 // no end sent here: `VaultApi.callStart` has already sent the durable `call.end{hangup}` for the call's id
-                // (VAULT-MESSAGING §10.10 "Placing a call"), which the lock gate lets through, before this start returned.
+                // (VAULT-MESSAGING §10.10 "Placing a call") before this start returned. The lock gate lets it through, and a
+                // pending lock waits for it, though only for ``CallsController/lockWait``.
             }
         }
     }
@@ -104,7 +105,7 @@ extension CallMachine {
         if let by = s.supersededBy, endedWinners.contains(by) || endedEarly.contains(by) {
             // Lost to a call that has ended already: nothing to answer, nothing to wait for, and a late offer for the winner is
             // not rung (as for a placed call).
-            if !endedWinners.contains(by) { rememberEnded(by) }
+            rememberEnded(by)
             finish(s, .missed, nil)
         } else if s.supersededBy != nil {
             // The winner's offer is not here yet: it comes in moments, or the call ends busy at the ring timer (``onTimer(_:_:)``),
@@ -117,22 +118,19 @@ extension CallMachine {
         }
     }
 
-    /// A lost call no session shows: one the member hung up while the vault was answering is ended as hung up, as
-    /// ``onPlaced(_:seq:call:atMs:)`` does; one nobody knows (let go, the abandoned starts' list full) is ended all the same. Not
-    /// when the vault ended it already ([end] is its end).
+    /// A lost call no session shows (the member hung up while the vault was answering, or it was let go otherwise: the abandoned
+    /// starts' list full) is ended as hung up, as ``onPlaced(_:seq:call:atMs:)`` ends a placed one. Not when the vault ended it
+    /// already ([end] is its end).
     private func lostUnshown(seq: Int, callId: String, end: CallLostError.End?) {
-        if let i = abandoned.firstIndex(of: seq) {
-            abandoned.remove(at: i)
-            if end == nil { sendEnd(callId, CallReason.hangup) }
-        } else if end == nil {
-            sendEnd(callId, CallReason.failed)
-        }
+        abandoned.removeAll { $0 == seq }
+        if end == nil { sendEnd(callId, CallReason.hangup) }
     }
 
     func onPlaced(_ s: CallSession?, seq: Int, call: PlacedCall, atMs: Int64) {
         guard let s, s.seq == seq else {
             // No session shows the call: the member hung up while the vault was answering, or it was let go otherwise (the
-            // abandoned starts' list full). The call exists there, so it is ended there, as hung up, as ``onLost`` ends one.
+            // abandoned starts' list full). The call exists there, so it is ended there, as hung up, as a lost one is
+            // (``lostUnshown(seq:callId:end:)``).
             abandoned.removeAll { $0 == seq }
             sendEnd(call.callId, CallReason.hangup)
             return
