@@ -150,6 +150,7 @@
 		EB2DE1A4E67EB0C6E529D097 /* StagingTests+Mesh.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9506AF3AA287477B16E8612D /* StagingTests+Mesh.swift */; };
 		EE153B169045F8CD2B23DBA6 /* VettIDCallsWebRTC in Frameworks */ = {isa = PBXBuildFile; productRef = CFE8540122E80FBA74BBF893 /* VettIDCallsWebRTC */; };
 		EEF954DC3356D2023F69D301 /* VettIDData in Frameworks */ = {isa = PBXBuildFile; productRef = D206CA22B8283CD5891C9982 /* VettIDData */; };
+		EFDA92E72F1C8EA5E1A396D4 /* StagingTests+Calls.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0410842ACE2A2F25A7F065F9 /* StagingTests+Calls.swift */; };
 		F077F37DBF3F3AD06699AED5 /* VettIDKeysTesting in Frameworks */ = {isa = PBXBuildFile; productRef = 3A78AA1376A65038AD0045E2 /* VettIDKeysTesting */; };
 		F1ADABC2B7218CFC0367D5AF /* VettIDSettings in Frameworks */ = {isa = PBXBuildFile; productRef = 68FCA0E7F927360E3D19644D /* VettIDSettings */; };
 		F21B6E1EA994ED4C1AC65DEE /* AppLockGate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5CBB4C9A8E482B333CED7362 /* AppLockGate.swift */; };
@@ -184,6 +185,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		0410842ACE2A2F25A7F065F9 /* StagingTests+Calls.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StagingTests+Calls.swift"; sourceTree = "<group>"; };
 		0A179D7136DE7C03261D8D10 /* CallsConversation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CallsConversation.swift; sourceTree = "<group>"; };
 		0FA837F1B3F48BDD0B340707 /* GalleryScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GalleryScreen.swift; sourceTree = "<group>"; };
 		0FE633DD8FFE64A6E2D63CF4 /* CallsWiringTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CallsWiringTests.swift; sourceTree = "<group>"; };
@@ -391,6 +393,7 @@
 				F2BB9E7DE7EE3AE9D616DC88 /* DebugUITests.xctestplan */,
 				CEAFD630960C3CA7D7885DEB /* GalleryScreenshots.swift */,
 				A34C0ED8CB57521C8F3EF6D6 /* StagingTests.swift */,
+				0410842ACE2A2F25A7F065F9 /* StagingTests+Calls.swift */,
 				A84B69E505CEC2E1129233E9 /* StagingTests+Connect.swift */,
 				9506AF3AA287477B16E8612D /* StagingTests+Mesh.swift */,
 				2D4DA90211D97D9417FAC02C /* StagingTests+Messages.swift */,
@@ -914,6 +917,7 @@
 				78B69B5985C2A90BE9CDE2E3 /* AutofillUITests.swift in Sources */,
 				28D9D7D72D09CA06F5EFEC00 /* CallsCatalogUITests.swift in Sources */,
 				91EB5DA7D60B53E6CE50FCE0 /* GalleryScreenshots.swift in Sources */,
+				EFDA92E72F1C8EA5E1A396D4 /* StagingTests+Calls.swift in Sources */,
 				27B46D91B919FFCEA4228483 /* StagingTests+Connect.swift in Sources */,
 				EB2DE1A4E67EB0C6E529D097 /* StagingTests+Mesh.swift in Sources */,
 				0E4BA253AB8E8655B797C7F6 /* StagingTests+Messages.swift in Sources */,
