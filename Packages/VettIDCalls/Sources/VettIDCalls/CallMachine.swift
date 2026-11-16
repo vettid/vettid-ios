@@ -184,7 +184,7 @@ package final class CallMachine {
         // A call that lost a glare has let its media go: what its engine still reports is of no use.
         case .media(let seq, let e): if let s, s.seq == seq, s.supersededBy == nil { onMedia(s, e) }
         case .answered(let seq): if let s, s.seq == seq { onAnswered(s) }
-        case .remoteApplied(let seq): if let s, s.seq == seq { s.remoteApplied = true }
+        case .remoteApplied(let seq): if let s, s.seq == seq { onRemoteApplied(s) }
         case .gathering(let seq): if let s, s.seq == seq, s.gathered == 0 { timer(s, .gather, timings.gather) }
         case .failed(let seq, let reason): if let s, s.seq == seq, s.supersededBy == nil { finish(s, reason, CallReason.failed) }
         case .lost(let seq, let callId, let end): onLost(s, seq: seq, callId: callId, end: end)
