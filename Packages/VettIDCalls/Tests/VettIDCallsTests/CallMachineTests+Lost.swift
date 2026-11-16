@@ -147,14 +147,14 @@ extension CallMachineTests {
         #expect(signalling.sent.filter { $0.hasPrefix("end") } == ["end(\(callId), hangup)"])
     }
 
-    /// One start more than the abandoned starts' list holds, each hung up before the vault answered: the oldest is pushed out
-    /// of the list, and when its start is answered after all, placed or lost, the call is still ended at the vault as hung up.
-    @Test func aStartPushedOutOfTheAbandonedOnesIsEndedWhenItIsAnswered() async throws {
+    /// Nine starts in a row, each hung up before the vault answered (more than the eight a list of them once held): whenever
+    /// each start is answered, placed or lost, its call is ended at the vault as hung up.
+    @Test func everyStartHungUpBeforeTheVaultAnsweredIsEndedWhenItIsAnswered() async throws {
         for lost in [false, true] {
             let s = FakeSignalling()
             let m = machine(s)
             var gates: [AsyncStream<Void>.Continuation] = []
-            for _ in 0...CallMachine.maxAbandoned {
+            for _ in 0..<9 {
                 s.holdStart()
                 m.call("conn-1")
                 await runCurrent()
@@ -162,17 +162,15 @@ extension CallMachineTests {
                 m.hangUp()
                 await runCurrent()
             }
-            #expect(m.abandoned.count == CallMachine.maxAbandoned, "lost \(lost): the oldest pushed out")
             s.startResult = lost ? { throw CallLostError(callId: callId) } : { PlacedCall(callId: callId, exp: at(45_000)) }
             gates[0].yield()
             await runCurrent()
-            #expect(s.sent.filter { $0.hasPrefix("end") } == ["end(\(callId), hangup)"], "lost \(lost)")
+            #expect(s.sent.filter { $0.hasPrefix("end") } == ["end(\(callId), hangup)"], "lost \(lost): the oldest")
             #expect(m.pendingEnds == 0)
-            #expect(m.abandoned.count == CallMachine.maxAbandoned, "lost \(lost): the others keep their places")
             for g in gates.dropFirst() { g.yield() }
             await runCurrent()
-            #expect(s.sent.filter { $0.hasPrefix("end") }.count == CallMachine.maxAbandoned + 1, "lost \(lost): every call ended")
-            #expect(m.abandoned.isEmpty && m.startsInFlight == 0)
+            #expect(s.sent.filter { $0.hasPrefix("end") } == Array(repeating: "end(\(callId), hangup)", count: 9), "lost \(lost)")
+            #expect(m.startsInFlight == 0 && m.pendingEnds == 0)
         }
     }
 

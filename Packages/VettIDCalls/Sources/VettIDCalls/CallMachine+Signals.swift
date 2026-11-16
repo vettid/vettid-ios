@@ -121,6 +121,9 @@ extension CallMachine {
     /// The winner's offer is not here yet: this call's media goes (the microphone is let go), its screen stays, and the offer
     /// is answered when it comes. Nothing is sent: the vault already ended this call.
     private func lostGlare(_ s: CallSession, _ by: String?) {
+        // The winner has ended already (its end came before the glare's): nothing to answer or wait for, as on the lost path
+        // (``settleLost``).
+        if let by, endedWinners.contains(by) { return finish(s, .missed, nil) }
         s.supersededBy = by
         s.glareOffer = nil
         cancelTimer(s, .gather)

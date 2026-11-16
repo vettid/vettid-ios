@@ -13,15 +13,13 @@ extension CallMachine {
     /// Ends the call here; [tell] is the `call.end` reason for the vault, or nil when nothing is to be sent.
     func finish(_ s: CallSession, _ reason: CallEnd, _ tell: String?) {
         guard session === s else { return }
+        // A held offer whose own end is held too (the call ends before it had its id) has ended: it is not rung below. An end
+        // of the call itself `call.start` may still bring is handled when it does (``onPlaced``, ``onLost``).
+        forgetEndedGlareOffer(s, s.early)
         let held = s.glareOffer
         release(s)
         let callId = s.callId
         if let tell, let callId { sendEnd(callId, tell) }
-        if s.direction == .outgoing && callId == nil {
-            // `call.start` may still be answered: the call it placed is ended when it is (``onPlaced``).
-            abandoned.append(s.seq)
-            if abandoned.count > Self.maxAbandoned, let low = abandoned.min() { abandoned.removeAll { $0 == low } }
-        }
         let duration = s.activeSince.map { Duration.rounded(seconds: clock.now().timeIntervalSince($0)) }
         if duration != nil { countPath(s) }
         setState(.ended(CallState.Ended(

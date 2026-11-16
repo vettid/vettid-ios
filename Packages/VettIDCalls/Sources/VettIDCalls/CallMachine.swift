@@ -42,8 +42,6 @@ package final class CallMachine {
     @ObservationIgnored let inbox: AsyncStream<CallMessage>.Continuation
     @ObservationIgnored var session: CallSession?
     @ObservationIgnored var nextSeq = 0
-    /// Outgoing calls the member hung up before the vault had answered `call.start`: ended as soon as it does.
-    @ObservationIgnored var abandoned: [Int] = []
     /// Glare winners that ended while this device's lost call waited for them: an offer for one of them that still arrives
     /// (late, or delivered again) is not rung or answered. A few ids, memory only.
     @ObservationIgnored var endedWinners: [String] = []
@@ -52,7 +50,6 @@ package final class CallMachine {
     @ObservationIgnored private var nextWatcher = 0
 
     static let maxPendingCandidates = 256
-    static let maxAbandoned = 8
     static let maxEarly = 64
     static let maxEndedWinners = 8
 

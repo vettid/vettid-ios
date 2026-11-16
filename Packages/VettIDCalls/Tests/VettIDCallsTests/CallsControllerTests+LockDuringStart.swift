@@ -97,7 +97,6 @@ extension CallsControllerTests {
         offer.open()
         await clock.advance(by: 100)
         #expect(!vault.gatewayFake.asked.contains { $0.hasPrefix("start(") }, "no start after the lock")
-        #expect(c.machine.abandoned.isEmpty, "the start that did not go keeps no place among the abandoned ones")
         await waiter.value
     }
 

@@ -223,7 +223,49 @@ extension CallMachineTests {
         signalling.releaseStart()
         await runCurrent()
         #expect(try ended(m).reason == .declined)
+        signalling.deliver(offer(glareId))
+        await runCurrent()
+        #expect(try ended(m).reason == .declined, "the ended offer delivered again is not rung")
         #expect(!hasSent(signalling, "ringing(") && !hasSent(signalling, "answer("))
+    }
+
+    /// A held offer that ended before `call.start` was refused (`busy`) or failed: it is not rung when the call ends, nor when
+    /// it is delivered again.
+    @Test func aRefusedOrFailedStartDoesNotRingAHeldOfferThatEnded() async throws {
+        for refused in [true, false] {
+            let s = FakeSignalling()
+            s.holdStart()
+            s.startResult = refused ? { throw CallRefusedError(code: "busy") } : { throw CallSecurityError("call.start") }
+            let m = machine(s)
+            m.call("conn-1")
+            await runCurrent()
+            s.deliver(offer(glareId))
+            s.deliver(.end(callId: glareId, reason: CallReason.hangup))
+            await runCurrent()
+            s.releaseStart()
+            await runCurrent()
+            guard case .ended = m.state else { throw WrongState(state: m.state) }
+            s.deliver(offer(glareId))
+            await runCurrent()
+            guard case .ended = m.state else { throw WrongState(state: m.state) }
+            #expect(!hasSent(s, "ringing(") && !hasSent(s, "answer("), "refused \(refused)")
+        }
+    }
+
+    /// The winner's offer and its own end come before the glare's end (live, the call placed): the call is missed at once,
+    /// not shown calling until the ring timer, and the winner's offer delivered again is not rung.
+    @Test func aGlareWhoseWinnerEndedBeforeTheGlaresEndIsMissedAtOnce() async throws {
+        let m = machine()
+        try await placed(m)
+        signalling.deliver(offer(glareId))
+        signalling.deliver(.end(callId: glareId, reason: CallReason.hangup))
+        signalling.deliver(.end(callId: callId, reason: CallReason.busy, supersededBy: glareId))
+        await runCurrent()
+        #expect(try ended(m).reason == .missed)
+        signalling.deliver(offer(glareId))
+        await runCurrent()
+        #expect(try ended(m).reason == .missed)
+        #expect(!hasSent(signalling, "answer(") && !hasSent(signalling, "ringing(") && !hasSent(signalling, "end("))
     }
 
     /// X's end delivered twice while the lost glare waits changes nothing; the winner is still answered.
