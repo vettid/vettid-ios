@@ -191,8 +191,10 @@ package final class CallMachine {
         case .gathering(let seq): if let s, s.seq == seq, s.gathered == 0 { timer(s, .gather, timings.gather) }
         case .failed(let seq, let reason): if let s, s.seq == seq, s.supersededBy == nil { finish(s, reason, CallReason.failed) }
         case .lost(let seq, let callId, let end): onLost(s, seq: seq, callId: callId, end: end)
-        // After the start's own answer in the inbox: whatever end that answer called for is counted in ``pendingEnds`` by now.
-        case .startReturned: startsInFlight -= 1
+        // After the start's own answer in the inbox (placed, refused, lost): whatever end that answer called for is counted in
+        // ``pendingEnds`` by now. After a start that threw another error it comes before the lane's own failure, which owes no
+        // end. Never below 0: one handled after ``stop()`` reset the count.
+        case .startReturned: startsInFlight = max(startsInFlight - 1, 0)
         case .timer(let seq, let kind): if let s, s.seq == seq { onTimer(s, kind) }
         case .path(let seq, let relayed): if let s, s.seq == seq { s.relayed = relayed }
         }
