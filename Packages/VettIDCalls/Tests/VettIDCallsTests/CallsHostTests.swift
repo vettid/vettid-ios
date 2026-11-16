@@ -157,18 +157,22 @@ final class FakeAppVault: CallsAppVault {
             let keys = CallKeys(suite: .aes128Gcm, send: filled(32, 5), receive: filled(32, 6))
             return AcceptedCall(callId: callId, sdp: "v=0\r\ns=answer\r\n", keys: keys)
         }
+        let before = engines.created.count
         h.call("conn-1")
-        await settle()
+        // The engine made and the start asked before the answer comes (an answer with no start in flight is dropped, as one
+        // from the vault would be); then the answer applied to the engine, then the call active. Each wait is bounded.
+        let engine = try await engines.made(after: before)
+        guard await eventually({ gateway.asked.contains { $0.hasPrefix("start(") } }) else { throw WrongState(state: h.uiState.call) }
         gateway.send(.answer(VaultMessage(inner: Inner(
             id: "01JB2Z6V9K3M4N5P6Q7R8S9T61", type: "call.answer", ts: t0, body: Array(#"{"call_id":"\#(callId)"}"#.utf8)
         ))))
-        await settle()
-        let engine = engines.last
+        guard await eventually({ engine.calls.contains("acceptAnswer") }) else { throw WrongState(state: h.uiState.call) }
         engine.emit(.connection(.connected))
         engine.emit(.cryptor(.send, .ok))
         engine.emit(.cryptor(.receive, .ok))
-        await settle()
-        guard case .live(let l) = h.uiState.call, l.phase == .active else { throw WrongState(state: h.uiState.call) }
+        guard await eventually({ if case .live(let l) = h.uiState.call { l.phase == .active } else { false } }) else {
+            throw WrongState(state: h.uiState.call)
+        }
     }
 
     /// At a lock the call screen goes with the first line (the vault counts as locked at once), before the unlock screen comes: it
