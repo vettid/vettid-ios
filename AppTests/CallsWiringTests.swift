@@ -13,6 +13,12 @@ import Testing
         #expect(modes == ["audio", "voip"])
     }
 
+    /// The local network text (owner decision #12588 a): iOS asks before a call's direct path to a phone on the same network.
+    @Test func theLocalNetworkTextIsInEveryBuild() {
+        let text = Bundle.main.object(forInfoDictionaryKey: "NSLocalNetworkUsageDescription") as? String
+        #expect(text == "VettID connects calls directly to the other phone when you're on the same network.")
+    }
+
     @Test func theMicrophoneTextIsInEveryBuild() {
         let text = Bundle.main.object(forInfoDictionaryKey: "NSMicrophoneUsageDescription") as? String
         #expect(text == "VettID uses the microphone only during calls, so the person you're talking to can hear you.")
