@@ -435,7 +435,7 @@ check_calls() {
     printf '%s: %s\n' "${app}" "${problems[@]}" >&2
     return 1
   fi
-  echo "${app}: the calls are linked (WebRTC.framework embedded, the microphone text present, the audio background mode alone)"
+  echo "${app}: the calls are linked (WebRTC.framework embedded, the microphone text present, the audio and voip background modes alone)"
 }
 
 # The VettIDDevStack app and its UI tests are built for the simulator only: never an iPhone, a Mac or a headset.
