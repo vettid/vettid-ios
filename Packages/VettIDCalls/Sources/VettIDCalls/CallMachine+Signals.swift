@@ -51,11 +51,13 @@ extension CallMachine {
         }
     }
 
-    /// The call's own candidates, or its held glare offer's, kept for that call (``CallSession/glareIce``).
+    /// The call's own candidates, or those of the call it lost a glare to (its offer held, or waited for), kept for that call
+    /// (``CallSession/glareIce``).
     private func onIceEvent(_ s: CallSession, _ callId: String, _ candidates: [CallCandidate]) {
         if s.callId == callId {
             onIce(s, candidates)
-        } else if s.glareOffer?.callId == callId, s.glareIce.count + candidates.count <= Self.maxPendingCandidates {
+        } else if s.glareOffer?.callId == callId || (s.glareOffer == nil && s.supersededBy == callId),
+                  s.glareIce.count + candidates.count <= Self.maxPendingCandidates {
             s.glareIce += candidates
         }
     }

@@ -97,4 +97,61 @@ extension CallMachineTests {
         #expect(engines.last.calls.filter { $0.hasPrefix("addRemoteCandidates") } == ["addRemoteCandidates(1)"])
         #expect(m2.session?.pendingRemote.isEmpty == true)
     }
+
+    /// A start refused (`busy`) while the connection's offer and its candidates were held: the offer rings with them.
+    @Test func aRefusedStartRingsTheHeldOfferWithItsHeldCandidates() async throws {
+        let s = FakeSignalling()
+        s.holdStart()
+        s.startResult = { throw CallRefusedError(code: "busy") }
+        let m = machine(s)
+        m.call("conn-1")
+        await runCurrent()
+        s.deliver(offer(glareId))
+        s.deliver(.ice(callId: glareId, candidates: [candidate(1), candidate(2)]))
+        await runCurrent()
+        s.releaseStart()
+        await runCurrent()
+        #expect(try live(m).phase == .incoming && live(m).callId == glareId)
+        #expect(m.session?.pendingRemote.count == 2)
+    }
+
+    /// Another offer from the connection takes the held one's place: the first one's candidates go; the same offer delivered
+    /// again keeps them.
+    @Test func aHeldOfferReplacedByAnotherDropsItsCandidates() async throws {
+        let m = machine()
+        try await placed(m)
+        signalling.deliver(offer(glareId))
+        signalling.deliver(.ice(callId: glareId, candidates: [candidate(1)]))
+        signalling.deliver(offer(glareId))
+        await runCurrent()
+        #expect(m.session?.glareIce.count == 1, "the same offer again keeps them")
+        signalling.deliver(offer(otherId))
+        await runCurrent()
+        #expect(m.session?.glareOffer?.callId == otherId)
+        #expect(m.session?.glareIce.isEmpty == true)
+    }
+
+    /// Kept no further than a call's own waiting candidates are.
+    @Test func aHeldOffersCandidatesAreBounded() async throws {
+        let m = machine()
+        try await placed(m)
+        signalling.deliver(offer(glareId))
+        let many = (1...CallMachine.maxPendingCandidates).map(candidate)
+        signalling.deliver(.ice(callId: glareId, candidates: many))
+        signalling.deliver(.ice(callId: glareId, candidates: [candidate(1)]))
+        await runCurrent()
+        #expect(m.session?.glareIce.count == CallMachine.maxPendingCandidates)
+    }
+
+    /// The glare's end came before the winner's offer: the winner's candidates in between are kept and go with its answer.
+    @Test func aGlareWinnersCandidatesBeforeItsOfferReachItsAnsweredCall() async throws {
+        let m = machine()
+        try await placed(m)
+        signalling.deliver(.end(callId: callId, reason: CallReason.busy, supersededBy: glareId))
+        signalling.deliver(.ice(callId: glareId, candidates: [candidate(1)]))
+        signalling.deliver(offer(glareId))
+        await runCurrent()
+        #expect(try live(m).callId == glareId)
+        #expect(engines.last.calls.filter { $0.hasPrefix("addRemoteCandidates") } == ["addRemoteCandidates(1)"])
+    }
 }

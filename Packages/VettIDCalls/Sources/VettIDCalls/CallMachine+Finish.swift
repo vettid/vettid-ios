@@ -17,7 +17,13 @@ extension CallMachine {
         // of the call itself `call.start` may still bring is handled when it does (``onPlaced``, ``onLost``).
         forgetEndedGlareOffer(s, s.early)
         let held = s.glareOffer
-        let heldIce = s.glareIce
+        // Its candidates: those kept with it, and those still held among the call's early events (a start refused or failed
+        // replays nothing).
+        var heldIce = s.glareIce
+        if let held {
+            for case .ice(let id, let candidates) in s.early where id == held.callId { heldIce += candidates }
+            heldIce = Array(heldIce.prefix(Self.maxPendingCandidates))
+        }
         release(s)
         let callId = s.callId
         if let tell, let callId { sendEnd(callId, tell) }
