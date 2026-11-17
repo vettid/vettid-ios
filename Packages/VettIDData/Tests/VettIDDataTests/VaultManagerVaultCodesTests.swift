@@ -26,8 +26,11 @@ import VettIDDataTesting
         _ = try await m.redeemSetupCode(.secret(service.secret))
         try await m.enroll(pin: pin) { _ in }
         try await m.createCredential(password: password, backup: true, pin: pin) { _ in }
+        let alarmReads = service.requestsSeen.filter { $0 == "credential.version" }.count
         try await m.finishSetup()
         #expect(m.phase == .unlocked)
+        // The opening's own read of the alarm (`credential.version`) first, so a refusal a test sets up answers the test's request.
+        #expect(await eventually { service.requestsSeen.filter { $0 == "credential.version" }.count > alarmReads })
     }
 
     /// `credential_required{no_holder}` to the daily check: the root screen, nothing erased; "Try again" leaves it (the
