@@ -99,6 +99,24 @@ import VettIDVault
         #expect(page.entries.map(\.kind).prefix(1) == ["grant.denied"] && page.searchSent == false)
     }
 
+    /// While the vault is behind its release (owner decision 2026-11-17) an ask's feed event, which only changes a list, is not
+    /// taken; once the vault is no longer behind, the lists are read and it is there.
+    @Test func anAskWhileBehindIsReadOnceTheVaultIsNoLongerBehind() async throws {
+        defer { phone.close() }
+        let id = try await connected()
+        #expect(await eventually { !m.releaseUpdate.checking })
+        let before = feed.items.count
+        service.listsRelease4 = true
+        await m.releaseUpdate.refreshOffer()
+        #expect(m.releaseUpdate.behind)
+        _ = try service.peerAsksForItems(id, [AskedItem(ref: "01JITEM000000000000000000A", label: "Passport")])
+        try await Task.sleep(for: .milliseconds(500))
+        #expect(feed.items.count == before, "not taken while behind")
+        service.listsRelease4 = false
+        await m.releaseUpdate.refreshOffer()
+        #expect(await eventually { feed.items.count == before + 1 }, "read once no longer behind")
+    }
+
     /// Locked, the feed and every approval are dropped from memory (nothing of them is written to the phone); the unlock
     /// reads the vault's lists again, and from a vault without `pending.list` (before VAULT-MESSAGING 0.70.0) what only an
     /// event brought (a member authentication) does not come back. While a lock is pending nothing is taken in or sent.

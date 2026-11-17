@@ -29,14 +29,21 @@ public final class ReleaseUpdateManager: ReleaseUpdateRepository {
     public private(set) var offerKnown = false
     /// The vault opened and the manifest has not been read since (``vaultOpened()``).
     public private(set) var checking = false
-    /// Told when ``behind`` changes: the vault manager reads the lists again when it ends with the vault open.
+    /// Told when ``behind`` changes (not by ``clear()``): the vault manager reads the lists when it ends with the vault open.
     @ObservationIgnored public var onBehindChange: (@MainActor (Bool) -> Void)?
     @ObservationIgnored private var lastBehind = false
+    /// Counts the openings and the clears: a manifest read begun before the latest of them neither ends its check nor sets
+    /// an offer.
+    @ObservationIgnored private var generation = 0
+    /// The next read while a check failed (``retryChecking(_:)``).
+    @ObservationIgnored private var retry: Task<Void, Never>?
+    /// Between reads while a check fails: 2, 5, 15 and 30 seconds, then every minute.
+    nonisolated static let checkRetries: [Int64] = [2, 5, 15, 30, 60]
 
     /// No release but the current one is used (owner decision 2026-11-17): the vault is not on the newest `active` release
     /// of the manifest this phone trusts. An offer counts only for the release the vault is on now: one read before the
-    /// vault moved does not. While this holds, the vault's features take no event and read nothing
-    /// (``VaultManager/featuresGated()``), and they are read again when it ends.
+    /// vault moved does not. While this holds, the vault's features take no event that only changes a list
+    /// (``VaultManager/featuresGated()``), and their lists are read when it ends.
     public var behind: Bool {
         guard let o = offer else { return false }
         return o.current.number == ops.releaseNumber()
@@ -44,12 +51,20 @@ public final class ReleaseUpdateManager: ReleaseUpdateRepository {
 
     /// What the member sees and what can reach them: only the update and the ways to leave the vault, no call and no
     /// notification. While the vault is ``behind``, and also while the manifest is first read after an opening
-    /// (``checking``), so that nothing of the open app shows before the release is known. When the manifest cannot be read,
-    /// the app goes on as before (chosen; the unlock's own checks of the release still apply).
+    /// (``checking``), so that nothing of the open app shows before the release is known (the lists read meanwhile are
+    /// neither shown nor acted on). A manifest that
+    /// cannot be read or checked keeps the check, read again with a backoff until it is (owner decision 2026-11-17: fail
+    /// closed); meanwhile only the ways to leave the vault are open.
     public var required: Bool { checking || behind }
 
     /// The vault opened (an unlock, the end of onboarding, a start while open): ``required`` until the manifest is read.
-    public func vaultOpened() { checking = true }
+    public func vaultOpened() {
+        generation += 1
+        retry?.cancel()
+        retry = nil
+        checking = true
+        noteBehind()
+    }
 
     private func noteBehind() {
         let now = behind
@@ -71,12 +86,48 @@ public final class ReleaseUpdateManager: ReleaseUpdateRepository {
     }
 
     public func refreshOffer() async {
-        do {
-            offer = try await ops.offer()
-            offerKnown = true
-        } catch {
-            // The last offer stays (it counts only for the release the vault is on, ``required``).
+        let begun = generation
+        let read: ReleaseUpdateOffer??
+        do { read = .some(try await ops.offer()) } catch { read = nil }
+        // Begun before the latest opening or clear: that one's own read decides.
+        guard begun == generation else { return }
+        guard let read else {
+            // A failed read keeps the last offer (it counts only for the release the vault is on, ``behind``); during the
+            // check it is tried again, the check kept.
+            if checking { retryChecking(begun) }
+            return
         }
+        offer = read
+        offerKnown = true
+        checking = false
+        noteBehind()
+    }
+
+    /// The check's read failed: read again after the next wait, unless an opening or a clear came meanwhile.
+    private func retryChecking(_ begun: Int) {
+        guard retry == nil else { return }
+        let waits = Self.checkRetries
+        let sleep = self.sleep
+        retry = Task { [weak self] in
+            var attempt = 0
+            while let self, self.checking, self.generation == begun, !Task.isCancelled {
+                do { try await sleep(.seconds(waits[min(attempt, waits.count - 1)])) } catch { return }
+                guard self.checking, self.generation == begun else { return }
+                attempt += 1
+                await self.refreshOfferOnce(begun)
+            }
+            self?.retry = nil
+        }
+    }
+
+    /// One read of the check's retry.
+    private func refreshOfferOnce(_ begun: Int) async {
+        let read: ReleaseUpdateOffer?
+        // (Not `try?`: a read that answered "nothing newer" is not a failed one.)
+        do { read = try await ops.offer() } catch { return }
+        guard begun == generation else { return }
+        offer = read
+        offerKnown = true
         checking = false
         noteBehind()
     }
@@ -100,7 +151,11 @@ public final class ReleaseUpdateManager: ReleaseUpdateRepository {
         checking = false
         progress = nil
         dismissal = nil
-        noteBehind()
+        generation += 1
+        retry?.cancel()
+        retry = nil
+        // Nothing is told: the vault is being wiped or forgotten, and no list is to be read for it.
+        lastBehind = false
     }
 
     public var pinGeneration: Int { ops.pinGeneration() }

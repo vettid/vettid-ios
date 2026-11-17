@@ -78,6 +78,7 @@ import VettIDDataTesting
         await m.releaseUpdate.refreshOffer()
         #expect(!m.releaseUpdate.required && !m.releaseUpdate.behind)
         #expect(await eventually { service.requestsSeen.dropFirst(before).contains("connection.list") }, "the lists once lifted")
+        #expect(await eventually { service.requestsSeen.dropFirst(before).contains("item.list") }, "the gated items with them")
     }
 
     /// While the vault is behind, an authentication's verdict still reaches the connections: a changed key is in no list a
@@ -89,6 +90,33 @@ import VettIDDataTesting
         #expect(m.releaseUpdate.behind)
         service.sendEvent("connection.authenticate.result", #"{"connection_id":"c1","authenticated":true,"key_changed":true}"#)
         #expect(await eventually { m.connections.authentication["c1"]?.keyChanged == true })
+    }
+
+    /// A wipe of the phone while the vault is behind reads no list on its way out.
+    @Test func aWipeWhileBehindReadsNoList() async throws {
+        defer { phone.close() }
+        try await setUp()
+        await m.releaseUpdate.refreshOffer()
+        #expect(m.releaseUpdate.behind)
+        // The opening's own read of the lists is over first: only what the wipe starts is counted.
+        await m.listsRead?.value
+        let before = service.requestsSeen.count
+        try await m.eraseThisPhone()
+        try await Task.sleep(for: .milliseconds(300))
+        #expect(!service.requestsSeen.dropFirst(before).contains("connection.list"))
+        #expect(!m.releaseUpdate.required)
+    }
+
+    /// The vault's release no longer listed while a newer active one is: behind, offered as one that has ended (owner
+    /// decision 2026-11-17).
+    @Test func aReleaseTheManifestNoLongerListsIsBehind() async throws {
+        defer { phone.close() }
+        try await setUp()
+        service.delistsRelease3 = true
+        await m.releaseUpdate.refreshOffer()
+        let offer = try #require(m.releaseUpdate.offer)
+        #expect(offer.current.number == 3 && offer.target.number == 4 && offer.kind == .ended)
+        #expect(m.releaseUpdate.behind && m.releaseUpdate.required)
     }
 
     /// Without a newer release, nothing is required or gated.

@@ -169,4 +169,14 @@ public struct StartingScreen: View {
 
     public var body: some View { FullScreenProgress(OnboardingStrings.rootStarting) }
 }
+
+/// The open vault while its release is read, and read again until that succeeds (owner decision 2026-11-17: nothing of the
+/// vault before its release is known): the unlock screen's own "Checking your vault's software".
+public struct ReleaseCheckingScreen: View {
+    public init() {}
+
+    public var body: some View {
+        FullScreenProgress(OnboardingStrings.unlockChecking).accessibilityIdentifier("release_checking")
+    }
+}
 #endif

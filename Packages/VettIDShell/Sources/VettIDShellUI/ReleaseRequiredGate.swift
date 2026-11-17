@@ -8,7 +8,8 @@ import VettIDUI
 
 /// No release but the current one is used (owner decision 2026-11-17): the open vault is not on the newest `active`
 /// release (``ReleaseUpdateManager/behind``), so instead of the shell the member sees the update ("Approve and update", with
-/// no way back) and only the ways to leave the vault: the account
+/// no way back), or while its release is read and read again until that succeeds ([checking]), "Checking your vault's
+/// software"; with either, only the ways to leave the vault: the account
 /// sheet (where "Lock vault" is), Help, and Delete vault (to enroll anew when the update cannot complete). The clone alarm
 /// and the relay's refusal of the vault's key stay above it, with their screens. Nothing else of the shell is reachable,
 /// no list is read or takes the events that only change it, and no call starts or rings (``ReleaseUpdateManager/required``);
@@ -20,6 +21,7 @@ public struct ReleaseRequiredGate: View {
     private let vault: any VaultRepository
     private let account: any AccountRepository
     private let credential: any CredentialRepository
+    private let checking: Bool
     private let onOpenPortal: @MainActor () -> Void
     @State private var path: [Leave] = []
     @State private var showsAccount = false
@@ -33,9 +35,10 @@ public struct ReleaseRequiredGate: View {
 
     public init(
         updates: any ReleaseUpdateRepository, ownerCheck: (any OwnerCheckRepository)?, notes: any ReleaseNotesRepository,
-        vault: any VaultRepository, account: any AccountRepository, credential: any CredentialRepository,
+        vault: any VaultRepository, account: any AccountRepository, credential: any CredentialRepository, checking: Bool,
         onOpenPortal: @escaping @MainActor () -> Void
     ) {
+        self.checking = checking
         self.updates = updates
         self.ownerCheck = ownerCheck
         self.notes = notes
@@ -47,7 +50,7 @@ public struct ReleaseRequiredGate: View {
 
     public var body: some View {
         NavigationStack(path: $path) {
-            ReleaseUpdateRoute(updates: updates, ownerCheck: ownerCheck, notes: notes, onBack: nil)
+            main
                 .safeAreaInset(edge: .top, spacing: 0) { banners }
                 .safeAreaInset(edge: .bottom, spacing: 0) { leaveRow }
                 .toolbar(.hidden, for: .navigationBar)
@@ -70,6 +73,14 @@ public struct ReleaseRequiredGate: View {
                 onSharedProfile: nil,
                 onOpenPortal: onOpenPortal
             )
+        }
+    }
+
+    @ViewBuilder private var main: some View {
+        if checking {
+            ReleaseCheckingScreen()
+        } else {
+            ReleaseUpdateRoute(updates: updates, ownerCheck: ownerCheck, notes: notes, onBack: nil)
         }
     }
 

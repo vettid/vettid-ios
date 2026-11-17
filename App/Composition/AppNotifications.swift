@@ -116,7 +116,7 @@ final class AppNotifications: NSObject, UNUserNotificationCenterDelegate {
     /// The shell is shown: the vault open, no check after a cancelled recovery, the check not past its deadline at [now], and
     /// no update required first (owner decision 2026-11-17: then only the update is shown).
     static func shellOpen(
-        unlocked: Bool, checkAfterCancel: Bool, check: OwnerCheckView?, now: Date, releaseRequired: Bool = false
+        unlocked: Bool, checkAfterCancel: Bool, check: OwnerCheckView?, now: Date, releaseRequired: Bool
     ) -> Bool {
         unlocked && !checkAfterCancel && !OwnerCheckGate.of(check, now: now).gated && !releaseRequired
     }

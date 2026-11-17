@@ -32,20 +32,40 @@ extension ReleaseUpdateManagerTests {
         await m.refreshOffer()
         #expect(m.required)
         ops.release = 5
+        // A read that fails outside a check keeps the old offer, which gates nothing.
         ops.offerFailures = 1
-        m.vaultOpened()
         await m.refreshOffer()
         #expect(m.offer == offer && !m.checking)
         #expect(!m.required && !m.behind)
+        // Nor after an opening whose read answers with it.
+        m.vaultOpened()
+        await m.refreshOffer()
+        #expect(!m.checking && !m.required && !m.behind)
     }
 
-    /// A manifest that cannot be read after the opening ends the check: the app goes on (chosen).
-    @Test func aFailedFirstReadEndsTheCheck() async {
+    /// Fail closed (owner decision 2026-11-17): a manifest that cannot be read after the opening keeps the check, and it is
+    /// read again after 2, 5 and 15 seconds, until a read answers.
+    @Test func aFailedCheckIsKeptAndReadAgainWithABackoff() async {
+        let ops = Ops()
+        let sleeps = Sleeps()
+        let m = manager(ops, sleeps)
+        m.vaultOpened()
+        ops.offerFailures = 3
+        await m.refreshOffer()
+        #expect(m.checking && m.required, "kept after a failed read")
+        #expect(await eventually { !m.checking })
+        #expect(!m.required && sleeps.all == [2, 5, 15])
+    }
+
+    /// A new opening ends the retries of the one before: its own read decides.
+    @Test func anOpeningEndsTheRetriesOfTheOneBefore() async {
         let ops = Ops()
         let m = manager(ops)
         m.vaultOpened()
         ops.offerFailures = 1
         await m.refreshOffer()
+        #expect(m.checking)
+        m.clear()
         #expect(!m.checking && !m.required)
     }
 }

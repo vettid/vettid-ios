@@ -130,7 +130,8 @@ extension VaultManager {
             // The device's lock gate holds what may not go while a lock is pending (``setFlushGate``).
             await s.device.flushOutbox()
             // The events a held background did not handle (no list, feed or approval was touched in the background): read again now.
-            if catchUp, phase == .unlocked, !releaseUpdate.behind, let s = try? await openSession() {
+            if catchUp, phase == .unlocked, let s = try? await openSession() {
+                // (While the vault is behind no list is read: they are read when it no longer is, ``followBehind``.)
                 // The lists are read as of now (the vault's time): what comes back from the relay older than this, after its lease, is
                 // covered by the read of its list (``supersededByReread(_:)``). Each list's mark is set the moment that list's read
                 // answered and was applied, not when the others are over: a failed one, one the vault does not have, and one a lock or a
