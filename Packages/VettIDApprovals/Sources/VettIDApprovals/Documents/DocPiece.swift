@@ -37,7 +37,7 @@ public struct DocPiece: Equatable, Sendable {
     public static let continues = " ↳"
 
     /// The raw view's closing punctuation, kept with what it closes past the bound.
-    static let closingPunctuation: Set<String> = ["\"", "\",", "]", "}", "],", "},", ","]
+    static let closingPunctuation: Set<String> = ["\"", "]", "}", ","]
 
     /// How many characters the piece draws.
     public var length: Int { tokens.reduce(0) { $0 + Self.length($1) } }

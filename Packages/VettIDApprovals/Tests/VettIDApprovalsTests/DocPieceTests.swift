@@ -70,12 +70,17 @@ import Testing
             #expect(pieces.last?.tokens.suffix(3) == [.close, .punct("\""), .punct(",")])
         }
         #expect(carried > 0, "the opening was carried over at least once")
-        // A string that ends in an escape exactly at a forced cut leaves no empty isolate either.
-        let tight = DocPiece.raw(Self.line(String(repeating: "x", count: 30) + #"""#), max: 30)
-        for p in tight {
-            for (i, t) in p.tokens.enumerated() where t == .open {
-                #expect(i + 1 < p.tokens.count && p.tokens[i + 1] != .close)
+        // Deep lines whose string is a single escape reach the forced cut (the indent fills the piece): no empty isolate,
+        // and the escape whole.
+        for (depth, max) in [(13, 30), (3, 10)] {
+            let line = DocumentPresentation.RawLine(depth: depth, key: nil, value: .string(ShownText("\"", escaped: true)), comma: false)
+            let pieces = DocPiece.raw(line, max: max)
+            for p in pieces {
+                for (i, t) in p.tokens.enumerated() where t == .open {
+                    #expect(i + 1 < p.tokens.count && p.tokens[i + 1] != .close, "an empty isolate at depth \(depth)")
+                }
             }
+            #expect(contents(pieces) == #"\""#, "the escape whole at depth \(depth)")
         }
     }
 
@@ -88,6 +93,10 @@ import Testing
             #expect(ShownText(String(Character(u))).runs == [.marker(v)], "U+\(String(v, radix: 16))")
         }
         #expect(glue > 10)
+        // A few by value: Malayalam dot reph, Sharada and Kirat signs (Unicode 15), and a Unicode 16 one where known.
+        for v: UInt32 in [0x0D4E, 0x111C2, 0x11A3A, 0x11D46] {
+            #expect(ShownText(String(Character(Unicode.Scalar(v)!)) + "a").runs.first == .marker(v), "U+\(String(v, radix: 16))")
+        }
         for v: UInt32 in [0x21B3, 0x21AA, 0x2937, 0x21B4, 0x2BA1, 0x2514, 0x2570, 0x21B5, 0x23CE, 0x27A5, 0x2935, 0x221F, 0x2517] {
             #expect(ShownText("a" + String(Character(Unicode.Scalar(v)!)) + "b").runs == [.text("a"), .marker(v), .text("b")])
         }

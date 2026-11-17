@@ -180,29 +180,56 @@ struct ApprovalDocumentDrawingTests {
         window.isHidden = true
     }
 
-    /// The limit measured: single texts of growing height, each sampled at its last screenful. Logs where the phone
-    /// stops drawing; a text just under ``DocumentRows/maxRowPixels`` is drawn.
+    /// The limit measured. A real document row (a value's piece, its fill and clip, at the largest text size) sized to 95
+    /// to 99% of ``DocumentRows/maxRowPixels`` is drawn at its top, middle and end. Then single texts of growing height,
+    /// logged where the phone stops drawing them, which must be past the limit.
     @Test func theRowLimitIsUnderWhatThePhoneDraws() async throws {
         let scale = UIScreen.main.scale
-        let probe = UIHostingController(rootView: Text("line 0 budget").font(.body).dynamicTypeSize(.accessibility5))
-        let lineHeight = probe.sizeThatFits(in: CGSize(width: 390, height: 1_000)).height
-        var blankFrom: CGFloat?
-        for target in [CGFloat(DocumentRows.maxRowPixels - 300), 170_000, 250_000, 400_000, 600_000, 850_000] {
-            let lines = Int(target / scale / lineHeight)
-            let text = Text((0..<lines).map { "line \($0) budget" }.joined(separator: "\n")).font(.body)
-            let (window, scroll) = try host(text)
-            try await Task.sleep(for: .milliseconds(800))
-            scroll.setContentOffset(CGPoint(x: 0, y: scroll.contentSize.height - scroll.bounds.height), animated: false)
-            try await Task.sleep(for: .milliseconds(600))
-            let (dark, light) = pixels(window)
-            let tall = scroll.contentSize.height * scale
-            print("DOC_LIMIT: a text \(Int(tall)) px tall, its last screenful: \(dark) dark, \(light) light samples")
-            if dark < 100, blankFrom == nil { blankFrom = tall }
-            if target < DocumentRows.maxRowPixels { #expect(dark > 500, "just under the limit: drawn") }
-            window.isHidden = true
+        let width = UIScreen.main.bounds.width - 2 * Spacing.xl
+        func row(_ lines: Int) -> some View {
+            let text = ShownText((0..<lines).map { "line \($0) budget" }.joined(separator: "\n"), lineBreaks: true)
+            let piece = DocPiece.value(text, max: .max)[0]
+            return ValuePiece(first: true, last: true) { DocPieceView(pieces: [piece], raw: false) }.clipped()
+                .vettIDTheme(.light).dynamicTypeSize(.accessibility5)
         }
-        print("DOC_LIMIT: blank from \(blankFrom.map { "\(Int($0)) px" } ?? "beyond the largest tried")")
-        #expect(blankFrom.map { $0 > DocumentRows.maxRowPixels } ?? true)
+        func pixels(_ lines: Int) -> CGFloat {
+            UIHostingController(rootView: row(lines)).sizeThatFits(in: CGSize(width: width, height: .greatestFiniteMagnitude)).height * scale
+        }
+        // Lines for 97% of the limit, by halving.
+        var lo = 1, hi = 20_000
+        while lo < hi {
+            let mid = (lo + hi) / 2
+            if pixels(mid) < DocumentRows.maxRowPixels * 0.97 { lo = mid + 1 } else { hi = mid }
+        }
+        let tall = pixels(lo)
+        print("DOC_LIMIT: a document row of \(lo) lines, \(Int(tall)) px (limit \(Int(DocumentRows.maxRowPixels)))")
+        #expect(tall >= DocumentRows.maxRowPixels * 0.95 && tall <= DocumentRows.maxRowPixels * 0.99)
+        let (window, scroll) = try host(row(lo))
+        try await Task.sleep(for: .milliseconds(800))
+        for at in [0.0, 0.5, 1.0] {
+            scroll.setContentOffset(CGPoint(x: 0, y: (scroll.contentSize.height - scroll.bounds.height) * at), animated: false)
+            try await Task.sleep(for: .milliseconds(600))
+            let (dark, light) = self.pixels(window)
+            print("DOC_LIMIT: that row at \(at): \(dark) dark, \(light) light samples")
+            #expect(dark > 500 && light > 500, "the row just under the limit drawn at \(at)")
+        }
+        window.isHidden = true
+        // Where one text stops drawing.
+        var blankFrom: CGFloat?
+        for target in [CGFloat(100_000), 170_000, 250_000, 400_000] {
+            let lines = (0..<Int(target / scale / 40)).map { "line \($0) budget" }.joined(separator: "\n")
+            let (w, sc) = try host(Text(lines).font(.body))
+            try await Task.sleep(for: .milliseconds(800))
+            sc.setContentOffset(CGPoint(x: 0, y: sc.contentSize.height - sc.bounds.height), animated: false)
+            try await Task.sleep(for: .milliseconds(600))
+            let (dark, _) = self.pixels(w)
+            let px = sc.contentSize.height * scale
+            print("DOC_LIMIT: one text \(Int(px)) px tall, its last screenful: \(dark) dark samples")
+            if dark < 100, blankFrom == nil { blankFrom = px }
+            w.isHidden = true
+        }
+        print("DOC_LIMIT: one text blank from \(blankFrom.map { "\(Int($0)) px" } ?? "beyond the largest tried")")
+        #expect(blankFrom.map { $0 > DocumentRows.maxRowPixels * 2 } ?? true, "the limit is far under where the phone stops drawing")
     }
 
     /// The negative control: the layout this replaces, one text of 65 KB, is drawn blank on the phone. If a later iOS

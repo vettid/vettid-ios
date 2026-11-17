@@ -11,6 +11,7 @@ import VettIDUI
 /// (Approve waits for it).
 struct ApprovalDocumentView: View, Equatable {
     @Environment(\.vettIDColors) private var colors
+    @Environment(\.dynamicTypeSize) private var typeSize
     let step: DocumentStep
     /// Counts the documents shown: the same document shown again is followed again from nothing seen.
     var generation = 0
@@ -23,6 +24,8 @@ struct ApprovalDocumentView: View, Equatable {
     let onSeenWhole: @MainActor (String, Int) -> Void
     /// TEST ONLY: each row's height in pixels as it is measured.
     var onRowPixels: (@MainActor (CGFloat) -> Void)?
+    /// TEST ONLY: the document is held (the notice shows).
+    var onHeld: (@MainActor () -> Void)?
     /// A row is too tall to be drawn even at the smallest cutting: the document cannot be approved here, and the screen
     /// says so.
     @State private var tooTall = false
@@ -60,8 +63,24 @@ struct ApprovalDocumentView: View, Equatable {
     }
 
     /// A row too tall to be drawn: cut again smaller, or, at the smallest cutting, say so.
-    private func rowTooTall() {
-        if cutting.max > Self.smallestPiece { shrink += 1 } else { tooTall = true }
+    /// A row too tall to be drawn, reported by rows of [reported] cutting: cut again smaller, or, at the smallest
+    /// cutting, say so. A report from rows of an earlier cutting (several in one pass) is stale and changes nothing, so
+    /// the smallest cutting is always laid out before the screen says so.
+    private func rowTooTall(_ reported: Cutting) {
+        guard reported == cutting else { return }
+        if cutting.max > Self.smallestPiece {
+            shrink += 1
+        } else if !tooTall {
+            tooTall = true
+            onHeld?()
+        }
+    }
+
+    /// The usual cutting again, nothing held: on another document, VoiceOver turned on or off, another text size or
+    /// visible height.
+    private func resetCutting() {
+        shrink = 0
+        tooTall = false
     }
 
     /// How a document is cut into rows: characters and kept line breaks to a piece, raw pieces to a row.
@@ -90,12 +109,14 @@ struct ApprovalDocumentView: View, Equatable {
                 NoticeCard(.warning, title: ApprovalsStrings.docCantShow, announce: .polite)
                     .accessibilityIdentifier("document_cant_show")
             case .shown(let d, let p):
-                DocumentRows(rows: rows(p), onSeenWhole: { onSeenWhole(d.sha256, generation) }, onTooTall: rowTooTall,
-                             onRowPixels: onRowPixels, fitScreen: voiceOver)
+                let cut = cutting
+                DocumentRows(rows: rows(p), onSeenWhole: { onSeenWhole(d.sha256, generation) }, onTooTall: { rowTooTall(cut) },
+                             onRowPixels: onRowPixels, fitScreen: voiceOver, onScreenHeight: { _ in resetCutting() })
                     // Another document, the same shown again, or another cutting is another view: its coverage starts
                     // again (rows of one cutting are not rows of another).
                     .id(RowsID(sha256: d.sha256, generation: generation, cutting: cutting))
-                if tooTall {
+                // Never beside an enabled Approve: once the document has been seen whole, nothing is held.
+                if tooTall, !seen {
                     // Never silent: a row a phone would draw blank is never counted as seen, so Approve stays off.
                     NoticeCard(.warning, title: ApprovalsStrings.docTooTall, message: ApprovalsStrings.docTooTallBody, announce: .polite)
                         .accessibilityIdentifier("document_too_tall")
@@ -107,10 +128,9 @@ struct ApprovalDocumentView: View, Equatable {
         }
         .padding(.top, Spacing.l)
         // Another document starts from the usual cutting.
-        .onChange(of: generation) {
-            shrink = 0
-            tooTall = false
-        }
+        .onChange(of: generation) { resetCutting() }
+        .onChange(of: voiceOver) { resetCutting() }
+        .onChange(of: typeSize) { resetCutting() }
     }
 
     /// The document as rows, each small: the parts under their labels, and every value of any length in pieces
@@ -174,19 +194,30 @@ struct DocumentRows: View {
     /// With VoiceOver, a row taller than the visible area is too tall as well: moving from one element to the next would
     /// leave part of it never on screen.
     var fitScreen = false
+    /// The scroll view's visible height changed (rotation, the keyboard): the cutting starts again.
+    var onScreenHeight: @MainActor (CGFloat) -> Void = { _ in }
     @State private var seen: Set<Int> = []
+    @State private var screen: CGFloat = 0
 
-    /// The tallest a row may be, in pixels, and still count as seen. An iPhone 15 draws a single text 177,000 pixels tall
-    /// and one of 315,000 blank (the app's ``ApprovalDocumentDrawingTests`` measure it); a row over this is
+    /// The tallest a row may be, in pixels, and still count as seen. An iPhone 15 draws a document's row of 48,000 pixels
+    /// to its end and a single text of 315,000 blank (the app's ``ApprovalDocumentDrawingTests`` measure it); a row over
+    /// this, far under both and so also for smaller phones, is
     /// never seen, so a document that could draw blank is never approved (fail closed): it is cut again smaller, and at
     /// the smallest cutting the screen says so. Rows are cut far below it.
-    static let maxRowPixels: CGFloat = 100_000
+    static let maxRowPixels: CGFloat = 50_000
 
     var body: some View {
         LazyVStack(alignment: .leading, spacing: 0) {
             ForEach(rows.indices, id: \.self) { i in
                 rows[i].clipped()
-                    .modifier(RowSeen(onWhole: { rowSeen(i) }, onTooTall: onTooTall, onPixels: onRowPixels, fitScreen: fitScreen))
+                    .modifier(RowSeen(
+                        onWhole: { rowSeen(i) }, onTooTall: onTooTall, onPixels: onRowPixels, fitScreen: fitScreen,
+                        onScreen: { h in
+                            guard abs(h - screen) > 1 else { return }
+                            if screen > 0 { onScreenHeight(h) }
+                            screen = h
+                        }
+                    ))
             }
         }
     }
@@ -205,7 +236,11 @@ struct RowSeen: ViewModifier {
     var onTooTall: @MainActor () -> Void = {}
     var onPixels: (@MainActor (CGFloat) -> Void)?
     var fitScreen = false
+    var onScreen: @MainActor (CGFloat) -> Void = { _ in }
     @State private var coverage = SeenCoverage()
+    /// The row holds the document's text (a value's piece, raw lines), not the app's own words: only such a row must
+    /// fit the screen under VoiceOver (``ContentRow``).
+    @State private var content = false
 
     struct Seen: Equatable {
         var visible: ClosedRange<CGFloat>?
@@ -222,21 +257,27 @@ struct RowSeen: ViewModifier {
         return Seen(visible: top <= bottom ? top...bottom : nil, height: h, screen: b.height)
     }
 
-    func body(content: Content) -> some View {
-        content.background(
+    func body(content row: Content) -> some View {
+        row.onPreferenceChange(ContentRow.self) { content = $0 }.background(
             GeometryReader { g in
                 Color.clear.onChange(of: Self.seen(g), initial: true) { _, now in
                     let pixels = now.height * scale
                     onPixels?(pixels)
-                    guard pixels <= DocumentRows.maxRowPixels, !fitScreen || now.screen == 0 || now.height <= now.screen else {
-                        return onTooTall()
-                    }
+                    if now.screen > 0 { onScreen(now.screen) }
+                    guard pixels <= DocumentRows.maxRowPixels, !(fitScreen && content) || now.screen == 0 || now.height <= now.screen
+                    else { return onTooTall() }
                     coverage.saw(now.visible, height: now.height)
                     if coverage.whole { onWhole() }
                 }
             }
         )
     }
+}
+
+/// Set by a row that holds the document's text, read by its ``RowSeen``.
+struct ContentRow: PreferenceKey {
+    static let defaultValue = false
+    static func reduce(value: inout Bool, nextValue: () -> Bool) { value = value || nextValue() }
 }
 
 /// The rows of each part of a document, built from ``DocPiece``s of at most [max] characters.
@@ -259,7 +300,10 @@ struct DocRows {
     func value(_ t: ShownText) -> [AnyView] {
         let pieces = DocPiece.value(t, max: max, maxBreaks: maxBreaks)
         return pieces.indices.map { i in
-            AnyView(ValuePiece(first: i == 0, last: i == pieces.count - 1) { DocPieceView(pieces: [pieces[i]], raw: false) })
+            AnyView(
+                ValuePiece(first: i == 0, last: i == pieces.count - 1) { DocPieceView(pieces: [pieces[i]], raw: false) }
+                    .preference(key: ContentRow.self, value: true)
+            )
         }
     }
 
@@ -331,6 +375,7 @@ struct DocRows {
             AnyView(
                 ValuePiece(first: i == 0, last: i == rows.count - 1) { DocPieceView(pieces: rows[i], raw: true) }
                     .environment(\.layoutDirection, .leftToRight)
+                    .preference(key: ContentRow.self, value: true)
             )
         }
     }
