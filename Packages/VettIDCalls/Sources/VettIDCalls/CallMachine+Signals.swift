@@ -32,7 +32,13 @@ extension CallMachine {
             if let s, s.callId == callId, s.direction == .outgoing { finish(s, .notEncrypted, CallReason.failed) }
         case .ice(let callId, let candidates): if let s { onIceEvent(s, callId, candidates) }
         case .end(let callId, let reason, let supersededBy):
-            if let s { onEnd(s, callId: callId, reason: reason, supersededBy: supersededBy) }
+            if let s {
+                onEnd(s, callId: callId, reason: reason, supersededBy: supersededBy)
+            } else {
+                // No session: a call that ended before its offer came (VAULT-MESSAGING §8.4 gives no order); its offer coming
+                // after is not rung (call ids are unique, §10.10).
+                rememberEndedOther(callId)
+            }
         }
     }
 

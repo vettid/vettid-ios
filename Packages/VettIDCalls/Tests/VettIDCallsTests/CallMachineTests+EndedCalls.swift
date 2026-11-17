@@ -203,4 +203,41 @@ extension CallMachineTests {
         await runCurrent()
         #expect(m.endedOthers.contains(glareId))
     }
+
+    /// An idle phone gets a call's end before its offer (VAULT-MESSAGING §8.4 gives no order): the offer coming after is not
+    /// rung, and nothing is sent.
+    @Test func anEndWithNoSessionIsRememberedAndItsLateOfferNotRung() async throws {
+        let m = machine()
+        await runCurrent()
+        signalling.deliver(.end(callId: otherId, reason: CallReason.hangup))
+        await runCurrent()
+        #expect(m.endedOthers.contains(otherId))
+        signalling.deliver(offer(otherId))
+        await runCurrent()
+        guard case .idle = m.state else { throw WrongState(state: m.state) }
+        #expect(signalling.sent.isEmpty)
+    }
+
+    /// The winner's end came while the phone was idle; then this phone's call was placed and lost a glare to it, with more
+    /// other calls' ends held than are kept: the winner, already ended, is kept among the winners before the replay, and the
+    /// call is missed at once.
+    @Test func aWinnerEndedBeforeTheCallIsKeptAmongTheWinnersBeforeTheReplay() async throws {
+        let m = machine()
+        await runCurrent()
+        signalling.deliver(.end(callId: glareId, reason: CallReason.hangup))
+        await runCurrent()
+        signalling.holdStart()
+        m.call("conn-1")
+        await runCurrent()
+        for n in 0...CallMachine.maxEndedOthers { signalling.deliver(.end(callId: endedId(n), reason: CallReason.hangup)) }
+        signalling.deliver(.end(callId: callId, reason: CallReason.busy, supersededBy: glareId))
+        await runCurrent()
+        signalling.releaseStart()
+        await runCurrent()
+        #expect(try ended(m).reason == .missed)
+        #expect(m.endedWinners.contains(glareId))
+        signalling.deliver(offer(glareId))
+        await runCurrent()
+        #expect(!hasSent(signalling, "answer(") && !hasSent(signalling, "ringing("))
+    }
 }
