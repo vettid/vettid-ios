@@ -327,12 +327,14 @@ struct RawDocumentView: View {
     let lines: [DocumentPresentation.RawLine]
 
     static let chunk = 40
+    static let voiceOverLines = 2000
 
     var body: some View {
         let style = DocumentStyle(colors)
         // With VoiceOver, one element to a line: moving from one to the next brings each on screen in turn, so the
-        // coverage has no gap and each line is read with its level.
-        let chunk = voiceOver ? 1 : Self.chunk
+        // coverage has no gap and each line is read with its level. Not past ``voiceOverLines`` lines, which would be as
+        // many views: there the blocks stay, and scrolling over them completes the coverage.
+        let chunk = voiceOver && lines.count <= Self.voiceOverLines ? 1 : Self.chunk
         ValueBlock {
             ForEach(Array(stride(from: 0, to: lines.count, by: chunk)), id: \.self) { start in
                 let part = lines[start..<min(start + chunk, lines.count)]
