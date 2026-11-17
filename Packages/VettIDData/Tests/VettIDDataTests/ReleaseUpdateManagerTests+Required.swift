@@ -5,12 +5,12 @@ import Testing
 /// When the update is required (owner decision 2026-11-17), over the same fake operations.
 extension ReleaseUpdateManagerTests {
     /// Required (owner decision 2026-11-17): from the opening until the manifest is read (checking), then while an offer for
-    /// the release the vault is on is listed (behind); a change of behind is told once.
+    /// the release the vault is on is listed (behind); a change of the features held is told once.
     @Test func requiredFromTheOpeningWhileAnOfferForTheVaultsReleaseIsListed() async {
         let ops = Ops()
         let m = manager(ops)
         var told: [Bool] = []
-        m.onBehindChange = { told.append($0) }
+        m.onHoldsChange = { told.append($0) }
         #expect(!m.required)
         m.vaultOpened()
         #expect(m.required && m.checking && !m.behind)
@@ -57,8 +57,8 @@ extension ReleaseUpdateManagerTests {
         #expect(!m.required && sleeps.all == [2, 5, 15])
     }
 
-    /// A new opening ends the retries of the one before: its own read decides.
-    @Test func anOpeningEndsTheRetriesOfTheOneBefore() async {
+    /// A clear (a wipe) ends the retries.
+    @Test func aClearEndsTheRetries() async {
         let ops = Ops()
         let m = manager(ops)
         m.vaultOpened()
@@ -67,5 +67,55 @@ extension ReleaseUpdateManagerTests {
         #expect(m.checking)
         m.clear()
         #expect(!m.checking && !m.required)
+    }
+
+    /// While a check whose read failed goes on, the features are held (told), and released once a read answers.
+    @Test func aFailedCheckHoldsTheFeaturesUntilARead() async {
+        let ops = Ops()
+        let m = manager(ops)
+        var told: [Bool] = []
+        m.onHoldsChange = { told.append($0) }
+        m.vaultOpened()
+        #expect(!m.holdsFeatures, "a check that has not failed runs the opening's reads")
+        ops.offerFailures = 1
+        await m.refreshOffer()
+        #expect(m.checkFailed && m.holdsFeatures)
+        #expect(m.checkFailure == .network, "what failed, for the checking screen")
+        #expect(await eventually { !m.checking })
+        #expect(!m.holdsFeatures && !m.checkFailed)
+        #expect(told == [true, false])
+    }
+
+    /// A lock (the vault no longer open) ends the check and its retries: nothing is read for a vault that is not open.
+    @Test func aCloseEndsTheCheckAndItsRetries() async {
+        let ops = Ops()
+        let m = manager(ops)
+        m.vaultOpened()
+        ops.offerFailures = 100
+        await m.refreshOffer()
+        #expect(m.checking && m.checkFailed)
+        m.vaultClosed()
+        #expect(!m.checking && !m.required && !m.holdsFeatures)
+        let reads = ops.reads
+        await Task.yield()
+        for _ in 0..<50 { await Task.yield() }
+        #expect(ops.reads == reads, "no read after the close")
+    }
+
+    /// A read begun before an opening does not end that opening's check: its own read decides.
+    @Test func aReadInFlightAcrossAnOpeningDoesNotEndItsCheck() async {
+        let ops = Ops()
+        let m = manager(ops)
+        let (gate, open) = AsyncStream.makeStream(of: Void.self)
+        ops.duringRead = { for await _ in gate { return } }
+        let early = Task { await m.refreshOffer() }
+        #expect(await eventually { ops.reads == 1 })
+        m.vaultOpened()
+        open.yield()
+        await early.value
+        #expect(m.checking, "the earlier read leaves the new check")
+        ops.duringRead = nil
+        await m.refreshOffer()
+        #expect(!m.checking)
     }
 }

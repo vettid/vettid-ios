@@ -119,6 +119,24 @@ import VettIDDataTesting
         #expect(m.releaseUpdate.behind && m.releaseUpdate.required)
     }
 
+    /// Fail closed: an opening whose check cannot fetch the manifest (it went offline after the unlock's own read) keeps
+    /// the check and holds the features (the votes' site work included) while it is read again; once it answers, the app
+    /// opens.
+    @Test func aCheckThatCannotReadTheManifestHoldsTheFeatures() async throws {
+        defer { phone.close() }
+        try await setUp()
+        service.listsRelease4 = false
+        #expect(await eventually { !m.releaseUpdate.checking })
+        service.manifestOffline = true
+        m.releaseUpdate.vaultOpened()
+        await m.releaseUpdate.refreshOffer()
+        #expect(m.releaseUpdate.checkFailed)
+        #expect(m.releaseUpdate.required && m.releaseUpdate.holdsFeatures && m.featuresGated() && m.votes.held())
+        service.manifestOffline = false
+        #expect(await eventually(within: .seconds(10)) { !m.releaseUpdate.checking }, "read again after 2 seconds")
+        #expect(!m.releaseUpdate.required && !m.featuresGated() && !m.votes.held())
+    }
+
     /// Without a newer release, nothing is required or gated.
     @Test func theCurrentReleaseIsNotGated() async throws {
         defer { phone.close() }

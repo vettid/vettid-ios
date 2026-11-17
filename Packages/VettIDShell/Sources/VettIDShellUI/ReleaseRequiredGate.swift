@@ -22,6 +22,8 @@ public struct ReleaseRequiredGate: View {
     private let account: any AccountRepository
     private let credential: any CredentialRepository
     private let checking: Bool
+    private let checkFailure: FailureKind?
+    private let onTryAgain: @MainActor () -> Void
     private let onOpenPortal: @MainActor () -> Void
     @State private var path: [Leave] = []
     @State private var showsAccount = false
@@ -36,9 +38,12 @@ public struct ReleaseRequiredGate: View {
     public init(
         updates: any ReleaseUpdateRepository, ownerCheck: (any OwnerCheckRepository)?, notes: any ReleaseNotesRepository,
         vault: any VaultRepository, account: any AccountRepository, credential: any CredentialRepository, checking: Bool,
+        checkFailure: FailureKind?, onTryAgain: @escaping @MainActor () -> Void,
         onOpenPortal: @escaping @MainActor () -> Void
     ) {
         self.checking = checking
+        self.checkFailure = checkFailure
+        self.onTryAgain = onTryAgain
         self.updates = updates
         self.ownerCheck = ownerCheck
         self.notes = notes
@@ -78,7 +83,7 @@ public struct ReleaseRequiredGate: View {
 
     @ViewBuilder private var main: some View {
         if checking {
-            ReleaseCheckingScreen()
+            ReleaseCheckingScreen(failure: checkFailure, onTryAgain: onTryAgain)
         } else {
             ReleaseUpdateRoute(updates: updates, ownerCheck: ownerCheck, notes: notes, onBack: nil)
         }

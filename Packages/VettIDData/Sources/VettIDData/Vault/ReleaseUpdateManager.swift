@@ -29,9 +29,14 @@ public final class ReleaseUpdateManager: ReleaseUpdateRepository {
     public private(set) var offerKnown = false
     /// The vault opened and the manifest has not been read since (``vaultOpened()``).
     public private(set) var checking = false
-    /// Told when ``behind`` changes (not by ``clear()``): the vault manager reads the lists when it ends with the vault open.
-    @ObservationIgnored public var onBehindChange: (@MainActor (Bool) -> Void)?
-    @ObservationIgnored private var lastBehind = false
+    /// The check's last read failed, and how (it is read again, ``retryChecking(_:)``): the checking screen says it.
+    public private(set) var checkFailure: FailureKind?
+    /// The check's read failed at least once.
+    public var checkFailed: Bool { checkFailure != nil }
+    /// Told when ``holdsFeatures`` changes (not by ``clear()`` or ``vaultClosed()``): the vault manager reads the lists when
+    /// it ends with the vault open.
+    @ObservationIgnored public var onHoldsChange: (@MainActor (Bool) -> Void)?
+    @ObservationIgnored private var lastHolds = false
     /// Counts the openings and the clears: a manifest read begun before the latest of them neither ends its check nor sets
     /// an offer.
     @ObservationIgnored private var generation = 0
@@ -57,20 +62,37 @@ public final class ReleaseUpdateManager: ReleaseUpdateRepository {
     /// closed); meanwhile only the ways to leave the vault are open.
     public var required: Bool { checking || behind }
 
+    /// The vault's features take no event that only changes a list and read nothing (``VaultManager/featuresGated()``):
+    /// while the vault is ``behind``, and while a check whose read failed goes on (``checkFailed``: it may last). During a
+    /// check that has not failed, the opening's own reads run as before, shown and acted on only once it ends.
+    public var holdsFeatures: Bool { behind || (checking && checkFailed) }
+
     /// The vault opened (an unlock, the end of onboarding, a start while open): ``required`` until the manifest is read.
     public func vaultOpened() {
         generation += 1
         retry?.cancel()
         retry = nil
         checking = true
+        checkFailure = nil
         noteBehind()
     }
 
+    /// The vault is no longer open (a lock, a sign-out): the check ends and is not read again; the next opening checks anew.
+    /// Nothing is told: nothing is read for a vault that is not open.
+    public func vaultClosed() {
+        generation += 1
+        retry?.cancel()
+        retry = nil
+        checking = false
+        checkFailure = nil
+        lastHolds = holdsFeatures
+    }
+
     private func noteBehind() {
-        let now = behind
-        guard now != lastBehind else { return }
-        lastBehind = now
-        onBehindChange?(now)
+        let now = holdsFeatures
+        guard now != lastHolds else { return }
+        lastHolds = now
+        onHoldsChange?(now)
     }
     public private(set) var progress: UpdateProgress?
     public private(set) var dismissal: ReleaseDismissal?
@@ -88,18 +110,27 @@ public final class ReleaseUpdateManager: ReleaseUpdateRepository {
     public func refreshOffer() async {
         let begun = generation
         let read: ReleaseUpdateOffer??
-        do { read = .some(try await ops.offer()) } catch { read = nil }
+        var failure: FailureKind = .network
+        do { read = .some(try await ops.offer()) } catch {
+            read = nil
+            failure = (error as? VaultFailure)?.kind ?? .network
+        }
         // Begun before the latest opening or clear: that one's own read decides.
         guard begun == generation else { return }
         guard let read else {
             // A failed read keeps the last offer (it counts only for the release the vault is on, ``behind``); during the
-            // check it is tried again, the check kept.
-            if checking { retryChecking(begun) }
+            // check it is tried again, the check kept, and the features held meanwhile.
+            if checking {
+                checkFailure = failure
+                noteBehind()
+                retryChecking(begun)
+            }
             return
         }
         offer = read
         offerKnown = true
         checking = false
+        checkFailure = nil
         noteBehind()
     }
 
@@ -116,7 +147,8 @@ public final class ReleaseUpdateManager: ReleaseUpdateRepository {
                 attempt += 1
                 await self.refreshOfferOnce(begun)
             }
-            self?.retry = nil
+            // Only this check's own handle: a newer one's stays.
+            if let self, self.generation == begun { self.retry = nil }
         }
     }
 
@@ -124,11 +156,15 @@ public final class ReleaseUpdateManager: ReleaseUpdateRepository {
     private func refreshOfferOnce(_ begun: Int) async {
         let read: ReleaseUpdateOffer?
         // (Not `try?`: a read that answered "nothing newer" is not a failed one.)
-        do { read = try await ops.offer() } catch { return }
+        do { read = try await ops.offer() } catch {
+            if begun == generation { checkFailure = (error as? VaultFailure)?.kind ?? .network }
+            return
+        }
         guard begun == generation else { return }
         offer = read
         offerKnown = true
         checking = false
+        checkFailure = nil
         noteBehind()
     }
 
@@ -149,13 +185,14 @@ public final class ReleaseUpdateManager: ReleaseUpdateRepository {
         offer = nil
         offerKnown = false
         checking = false
+        checkFailure = nil
         progress = nil
         dismissal = nil
         generation += 1
         retry?.cancel()
         retry = nil
         // Nothing is told: the vault is being wiped or forgotten, and no list is to be read for it.
-        lastBehind = false
+        lastHolds = false
     }
 
     public var pinGeneration: Int { ops.pinGeneration() }

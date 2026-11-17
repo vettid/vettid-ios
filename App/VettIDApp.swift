@@ -340,7 +340,9 @@ struct AppRoot: View {
                     // notifications said is taken away, as when the app is covered.
                     ReleaseRequiredGate(
                         updates: vault.releaseUpdate, ownerCheck: vault.ownerChecks, notes: releaseNotes, vault: vault,
-                        account: vault, credential: vault, checking: screen == .releaseCheck
+                        account: vault, credential: vault, checking: screen == .releaseCheck,
+                        checkFailure: vault.releaseUpdate.checkFailure,
+                        onTryAgain: { Task { await vault.releaseUpdate.refreshOffer() } }
                     ) { openPortal() }
                     .environment(\.accountDeletionURL, AccountDeletion.url(origin: environment.apiOrigin))
                     .onAppear { notifications?.covered() }

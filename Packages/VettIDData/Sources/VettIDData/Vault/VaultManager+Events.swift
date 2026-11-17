@@ -334,7 +334,7 @@ extension VaultManager {
             connections.onEvent(m)
             devicesEvent(m)
             // Those that only change a list wait for the move: every list is read when it is made (``followBehind``).
-            if !releaseUpdate.behind {
+            if !releaseUpdate.holdsFeatures {
                 messages.onEvent(m)
                 attachments.onEvent(m)
                 items.onEvent(m)

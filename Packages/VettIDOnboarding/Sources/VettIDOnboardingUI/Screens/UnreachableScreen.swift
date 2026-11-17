@@ -171,12 +171,36 @@ public struct StartingScreen: View {
 }
 
 /// The open vault while its release is read, and read again until that succeeds (owner decision 2026-11-17: nothing of the
-/// vault before its release is known): the unlock screen's own "Checking your vault's software".
+/// vault before its release is known): the unlock screen's own "Checking your vault's software". Once a read has failed
+/// ([failure]), what failed (the release list not loaded, or not verified) and "Try again", which reads at once; the
+/// reads go on by themselves meanwhile. Mirrors vettid-android's checking screen.
 public struct ReleaseCheckingScreen: View {
-    public init() {}
+    let failure: FailureKind?
+    let onTryAgain: @MainActor () -> Void
+
+    public init(failure: FailureKind?, onTryAgain: @escaping @MainActor () -> Void) {
+        self.failure = failure
+        self.onTryAgain = onTryAgain
+    }
+
+    /// A list that did not verify says so; any other failure is the list not loaded.
+    static func message(_ f: FailureKind) -> String {
+        (f == .manifest ? FailureKind.manifest : FailureKind.manifestUnavailable).message
+    }
 
     public var body: some View {
-        FullScreenProgress(OnboardingStrings.unlockChecking).accessibilityIdentifier("release_checking")
+        VStack(spacing: Spacing.l) {
+            if let failure {
+                NoticeCard(.warning, title: OnboardingStrings.unlockEnclaveTitle, message: Self.message(failure), announce: .polite) {
+                    Button(OnboardingStrings.releaseUpdateRetry, action: onTryAgain)
+                        .accessibilityIdentifier("release_checking_retry")
+                }
+                .accessibilityIdentifier("release_checking_failed")
+                .padding(.horizontal, Spacing.l)
+            }
+            FullScreenProgress(OnboardingStrings.unlockChecking)
+        }
+        .accessibilityIdentifier("release_checking")
     }
 }
 #endif

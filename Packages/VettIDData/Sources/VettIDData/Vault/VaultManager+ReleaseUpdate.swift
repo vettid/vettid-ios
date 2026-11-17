@@ -96,20 +96,26 @@ extension VaultManager {
     /// The offer for the vault as this phone knows it: the release it last unlocked into, in the manifest it trusts (the
     /// published one or the installed canary manifest, §11.10.1), and the newest `active` release.
     func releaseOffer() async throws -> ReleaseUpdateOffer? {
-        try await guarded {
+        try await guarded { () -> ReleaseUpdateOffer? in
             guard let s = try await storedSession(), s.device.deviceID != nil else { return nil }
             let st = s.device.altState
-            guard st.releaseNumber != 0 else { return nil }
+            // A release this phone never recorded cannot be checked: the check holds and is read again (fail closed).
+            guard st.releaseNumber != 0 else { throw VaultFailure(.other, code: Self.codeReleaseUnchecked) }
             let m = try await s.alt.manifest(seen: st.manifestSerial)
             await pruneMoveMarker(m)
             let sealed = (st.release.isEmpty ? nil : m.byPcr0(st.release)) ?? m.byNumber(st.releaseNumber)
             let newest = m.newest()
-            // A release the manifest no longer lists while a newer active one is listed is behind it (owner decision
-            // 2026-11-17): offered as one that has ended (`removed`), so the update is required.
-            let current = sealed.flatMap { $0.number == st.releaseNumber ? Self.view($0) : nil }
-                ?? newest.flatMap { $0.number > st.releaseNumber && sealed == nil ? Self.unlisted(st) : nil }
-            let between = current.flatMap { c in
-                newest.map { n in m.releases.filter { $0.number > c.number && $0.number < n.number }.map(Self.view) }
+            // The release the manifest lists for the vault, with its number. One it does not list as recorded (unlisted, or
+            // its PCR0 under another number) while a newer active one is listed is behind it (owner decision 2026-11-17):
+            // offered as one that has ended (`removed`), so the update is required. With nothing newer, it cannot be checked:
+            // the check holds and is read again (fail closed).
+            let listed = sealed.flatMap { $0.number == st.releaseNumber ? Self.view($0) : nil }
+            let newer = newest.map { $0.number > st.releaseNumber } ?? false
+            guard let current = listed ?? (newer ? Self.unlisted(st) : nil) else {
+                throw VaultFailure(.other, code: Self.codeReleaseUnchecked)
+            }
+            let between = newest.map { n in
+                m.releases.filter { $0.number > current.number && $0.number < n.number }.map(Self.view)
             } ?? []
             return ReleaseUpdateOffer.of(sealed: current, newest: newest.map(Self.view), between: between)
         }
@@ -118,12 +124,13 @@ extension VaultManager {
     /// Nothing of the vault's features is read, shown or acted on: the owner check is past its deadline (§3.6.3), or the vault
     /// must first move to the current release (``ReleaseUpdateManager/required``; owner decision 2026-11-17).
     func featuresGated() -> Bool {
-        ownerChecks.ownerCheck?.gated(config.now()) == true || releaseUpdate.behind
+        ownerChecks.ownerCheck?.gated(config.now()) == true || releaseUpdate.holdsFeatures
     }
 
-    /// While the vault is behind no list is read (``refreshListsQuietly(onAnswered:)``) and none takes the events that only
-    /// change it (``onEvent(_:)``). When it no longer is, with the vault open and not being deleted (the vault moved, or the
-    /// manifest stopped listing the newer release), every list is read as after an unlock, the votes site work with it.
+    /// While the features are held (the vault behind, or its release not yet checked after a failed read) no list is read
+    /// (``refreshListsQuietly(onAnswered:)``) and none takes the events that only change it (``onEvent(_:)``). When they no
+    /// longer are, with the vault open and not being deleted (the vault moved, the release checked, or the manifest stopped
+    /// listing the newer release), every list is read as after an unlock, the votes site work with it.
     static func releaseUpdateManager(_ ref: ManagerRef) -> ReleaseUpdateManager {
         let updates = ReleaseUpdateManager(ops: VaultReleaseUpdateOps(ref: ref))
         followBehind(updates, ref)
@@ -131,11 +138,14 @@ extension VaultManager {
     }
 
     private static func followBehind(_ updates: ReleaseUpdateManager, _ ref: ManagerRef) {
-        updates.onBehindChange = { behind in
-            guard !behind, let m = ref.manager, m.phase == .unlocked, m.deletion == nil else { return }
+        updates.onHoldsChange = { holds in
+            guard !holds, let m = ref.manager, m.phase == .unlocked, m.deletion == nil else { return }
             m.refreshListsQuietly()
         }
     }
+
+    /// The vault's release could not be checked against the manifest (``releaseOffer()``).
+    static let codeReleaseUnchecked = "release_unchecked"
 
     /// The vault's release as the phone recorded it, when the manifest does not list it.
     static func unlisted(_ st: AltState) -> ReleaseView {
