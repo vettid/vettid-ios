@@ -8,8 +8,9 @@ import VettIDVault
 public protocol ApprovalOps: Sendable {
     /// [documentSha256]: the hash of the document this device fetched and showed (0.89.0 §10.4 "Approval documents").
     func authenticateApprove(_ requestID: String, documentSha256: String?) async throws
-    /// `connection.authenticate.document` (0.89.0): the challenge's document, standard base64.
-    func authenticateDocument(_ requestID: String) async throws -> String
+    /// `connection.authenticate.document` (0.89.0): the challenge's document, standard base64; nil when the answer has no
+    /// `document` string.
+    func authenticateDocument(_ requestID: String) async throws -> String?
     func authenticateDeny(_ requestID: String) async throws
     func grantList() async throws -> JsonObject
     func grantDecide(_ requestID: String, approve: Bool, choice: GrantChoice) async throws -> JsonObject
@@ -78,7 +79,8 @@ public protocol ApprovalsRepository: ConnectionRequestsRepository {
     func loadCriticalUse(_ requestID: String) async throws
 
     /// Opens the credential's unlock window with [password] and signs the challenge (§10.4), sending no document hash: the
-    /// purpose form, as an app before 0.89.0 approves. While `approval_document` is not in `device.features` this is how a
+    /// purpose form, as an app before 0.89.0 approves; a `document_required` one is refused (`update_required`) before
+    /// the unlock window opens. While `approval_document` is not in `device.features` this is how a
     /// challenge with a document is approved too; the screen that shows documents brings the refusal with it.
     func approveAuthentication(_ requestID: String, password: String) async throws
 

@@ -55,11 +55,12 @@ public struct ApprovalDocument: Equatable, Sendable {
         guard bytes.count <= maxBytes, let size, bytes.count == size else { return .failure(.size) }
         let d = Array(SHA256.hash(data: bytes))
         guard let sha256, let expected = try? Base64s.decodeStd(sha256, 32), expected == d else { return .failure(.hash) }
-        return checkBytes(bytes, d: d, context: context)
+        return checkBytes(bytes, context: context)
     }
 
-    /// The checks on the decoded bytes (the vault's 2 to 4), for bytes whose hash [d] is already known to be the one asked.
-    static func checkBytes(_ bytes: [UInt8], d: [UInt8], context: String?) -> Result<ApprovalDocument, Failure> {
+    /// The checks on the decoded bytes (the vault's 2 to 4).
+    static func checkBytes(_ bytes: [UInt8], context: String?) -> Result<ApprovalDocument, Failure> {
+        let d = Array(SHA256.hash(data: bytes))
         guard let doc = try? StrictJson.parseObject(bytes, maxDepth: maxDepth), doc.members.count == 3,
               case .string(_, let action)? = doc["action"], case .string(_, let summary)? = doc["summary"],
               case .object(let payload)? = doc["payload"], validAction(action), summary.utf8.count <= maxSummary,
@@ -81,8 +82,7 @@ public struct ApprovalDocument: Equatable, Sendable {
             && a.utf8.allSatisfy { (0x61...0x7A).contains($0) || (0x30...0x39).contains($0) || $0 == 0x5F || $0 == 0x2E }
     }
 
-    /// Every number, at any depth, a plain integer within 2^53 − 1 (§10.4 check 2: since 0.89.0 by §5.3's integers, said
-    /// outright for every depth in 0.90.16).
+    /// Every number, at any depth, a plain integer within 2^53 − 1 (VAULT-MESSAGING 0.90.16 §10.4 check 2).
     static func onlyIntegers(_ v: JsonValue) -> Bool {
         switch v {
         case .number(let raw): Jcs.isInteger(raw)

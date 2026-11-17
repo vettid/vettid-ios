@@ -41,6 +41,9 @@ import VettIDCrypto
             context: try v.string("context")
         )
         guard case .success(let d) = r else { throw CocoaError(.coderInvalidValue) }
+        // The challenge as the service sent it carries exactly these bytes.
+        let challenge = try StrictJson.parseObject(try v.string("challenge_body"))
+        #expect(try challenge.base64("document") == Array(doc.utf8))
         #expect(d.bytes == Array(doc.utf8) && d.sha256 == sha)
         #expect(d.action == "proposal.create" && d.summary == "Adopt the 2027 budget")
         #expect(d.payload.members.map(\.name) == ["binding", "choices", "closes_at", "opens_at", "outage_rule", "quorum", "removed_may_vote", "text", "title"])
@@ -85,6 +88,8 @@ import VettIDCrypto
             (#"{"action": "a","payload":{},"summary":""}"#, .canonical),
             (#"{"action":"a","payload":{},"summary":"\u0041"}"#, .canonical),
             (#"{"action":"a","payload":{},"summary":"\/"}"#, .canonical),
+            (#"{"action":"a","payload":{},"summary":"\u001F"}"#, .canonical),
+            (#"{"action":"a","payload":{},"summary":"\u007f"}"#, .canonical),
             ("\u{FEFF}" + good, .shape),
             (good + " ", .canonical),
         ]

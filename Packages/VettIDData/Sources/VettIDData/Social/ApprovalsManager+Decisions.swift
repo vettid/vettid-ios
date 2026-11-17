@@ -38,22 +38,32 @@ extension ApprovalsManager {
     private func pending(_ key: String) -> PendingApproval? { approvals.first { $0.key == key } }
 
     public func approveAuthentication(_ requestID: String, password: String) async throws {
+        // A document_required challenge cannot count without its document: refused here as the vault would refuse it
+        // (`update_required`), before the unlock window is opened for nothing.
+        if case .authentication(let r)? = pending("auth:\(requestID)"), r.documentRequired {
+            throw VaultFailure(.vaultCode(Self.updateRequired))
+        }
         try await guarded { try await openUnlockWindow(password) }
         try await decide("auth:\(requestID)") { try await $0.authenticateApprove(requestID, documentSha256: nil) }
     }
 
     public func authenticationDocument(_ request: AuthenticationRequest) async throws
         -> Result<ApprovalDocument, ApprovalDocument.Failure> {
+        // Only a challenge that names a document is asked for one: for any other the vault answers not_found, which would
+        // drop a live ask.
+        guard request.hasDocument else { return .failure(.hash) }
         let key = "auth:\(request.requestID)"
-        let base64: String
+        let answer: String?
         do {
-            base64 = try await guarded { try await ops().authenticateDocument(request.requestID) }
+            answer = try await guarded { try await ops().authenticateDocument(request.requestID) }
         } catch let f as VaultFailure where f.kind == .notFound {
             // The vault also answers not_found for a challenge without a document; this ask named one, so not_found
             // means it ended, as for a decision.
             drop(key)
             throw f
         }
+        // An answer without a `document` string is no document.
+        guard let base64 = answer else { return .failure(.encoding) }
         return ApprovalDocument.check(
             base64, sha256: request.documentSha256, size: request.documentSize, context: request.context
         )
@@ -61,6 +71,10 @@ extension ApprovalsManager {
 
     public func approveAuthentication(_ request: AuthenticationRequest, password: String, document: ApprovalDocument)
         async throws -> DocumentApproval {
+        // Only the document this request announced, before anything is opened or sent.
+        guard request.hasDocument, document.sha256 == request.documentSha256 else {
+            throw VaultFailure(.other, code: Self.documentMismatch)
+        }
         try await guarded { try await openUnlockWindow(password) }
         let key = "auth:\(request.requestID)"
         do {
@@ -76,6 +90,10 @@ extension ApprovalsManager {
 
     /// The vault's answer to an approval with the hash of a document this device has not fetched (0.89.0).
     static let documentNotFetched = "document_not_fetched"
+    /// The vault's answer to an approval without the document of a `document_required` challenge (0.89.0).
+    static let updateRequired = "update_required"
+    /// The app's own refusal of a document that is not the one its request announced (never sent to the vault).
+    static let documentMismatch = "document_mismatch"
 
     public func denyAuthentication(_ requestID: String) async throws {
         try await decide("auth:\(requestID)") { try await $0.authenticateDeny(requestID) }
