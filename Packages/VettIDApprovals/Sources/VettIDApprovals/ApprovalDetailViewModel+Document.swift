@@ -31,6 +31,7 @@ extension ApprovalDetailViewModel {
     /// [checked] in place of whatever document the screen showed: it is shown from the start, not yet seen whole.
     func show(_ checked: Result<ApprovalDocument, ApprovalDocument.Failure>, context: String?) {
         local.documentSeen = nil
+        local.documentGeneration += 1
         switch checked {
         case .success(let d):
             local.document = DocumentPresentation(d, context: context).map { .shown(d, $0) } ?? .unshowable(.shape)

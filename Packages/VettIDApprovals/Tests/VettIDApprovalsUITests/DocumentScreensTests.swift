@@ -150,31 +150,37 @@ import VettIDUI
 
     @Test func theRawViewKeepsStringsApartFromNumbers() throws {
         guard case .shown(_, let p) = Self.shown(Self.unknown), case .raw(let lines) = p.request else { throw CocoaError(.coderInvalidValue) }
-        let pieces = lines.map(RawDocumentView.spoken)
-        let spoken = pieces.map(Spoken.plain)
+        let pieces = lines.flatMap { DocPiece.raw($0) }
+        let spoken = pieces.map { Spoken.plain(Spoken.of($0, raw: true)) }
         #expect(spoken.first == "level 1, {")
-        #expect(spoken.contains(#"level 3, "amount": "10", text"#) && spoken.contains(#"level 3, "count": 10"#))
-        #expect(spoken.contains("level 3, \"note\": \"⟨U+202E⟩evil\", text"))
-        // The quotation marks and the marker are the app's symbols (always spoken as punctuation), the key and the string
-        // the document's content: content that says "level 2", a quotation mark or a marker is heard and brailled as
-        // content, between the app's own marks.
-        let note = try #require(pieces.first { Spoken.plain($0).hasPrefix("level 3, \"note") })
-        #expect(note == [
-            .app("level 3, "), .symbol("\""), .content("note"), .symbol("\""), .app(": "),
-            .app(""), .symbol("\""), .symbol("⟨U+202E⟩"), .content("evil"), .symbol("\""), .app(", text"),
+        #expect(spoken.contains(#"level 3, "amount": "10","#) && spoken.contains(#"level 3, "count": 10,"#))
+        #expect(spoken.contains(#"level 3, "note": "⟨U+202E⟩evil","#))
+        // The quotation marks, the punctuation and the marker are the app's symbols (always spoken as punctuation), the
+        // key and the string the document's content: content that says "level 2", a quotation mark or a marker is heard
+        // and brailled as content, between the app's own marks.
+        let note = try #require(pieces.first { Spoken.plain(Spoken.of($0, raw: true)).hasPrefix(#"level 3, "note"#) })
+        let words = Spoken.of(note, raw: true)
+        #expect(words == [
+            .app("level 3, "), .symbol("\""), .content("note"), .symbol("\": "), .symbol("\""), .symbol("⟨U+202E⟩"),
+            .content("evil"), .symbol("\""), .symbol(","),
         ])
-        let a = Spoken.attributed(note)
+        let a = Spoken.attributed(words)
         for run in a.runs {
             let text = String(a[run.range].characters)
-            // Adjacent pieces of one kind join into one run (the quotation mark and the marker after it).
             let isContent = text == "note" || text == "evil"
-            let isApp = text.contains("level") || text == ": " || text == ", text"
+            let isApp = text.contains("level")
             #expect((run.accessibilitySpeechAdjustedPitch != nil) == isContent, "pitch on \(text)")
             #expect((run.accessibilitySpeechIncludesPunctuation == true) == (!isContent && !isApp), "punctuation on \(text)")
         }
-        // Escaped content cannot close its quotes: a string's own quotation mark is spoken escaped, inside the app's.
+        // Escaped content cannot close its quotes: a string's own quotation mark is read escaped, inside the app's.
         let sneaky = DocumentPresentation.RawLine(depth: 1, key: ShownText("k", escaped: true), value: .string(ShownText(#"x", "y"#, escaped: true)), comma: false)
-        #expect(Spoken.plain(RawDocumentView.spoken(sneaky)) == #"level 2, "k": "x\", \"y", text"#)
+        #expect(Spoken.plain(Spoken.of(DocPiece.raw(sneaky)[0], raw: true)) == #"level 2, "k": "x\", \"y""#)
+        // A value's later piece is read as continued, between quotation marks: never as a value of its own.
+        let value = DocPiece.value(ShownText("Yes " + String(repeating: "no ", count: 100)))
+        #expect(Spoken.plain(Spoken.of(value[0], raw: false)).hasPrefix(#""Yes "#))
+        #expect(Spoken.plain(Spoken.of(value[1], raw: false)).hasPrefix("↳ \""))
+        // A value's own quotation marks are read escaped.
+        #expect(Spoken.plain(Spoken.of(DocPiece.value(ShownText(#"a"b\c"#))[0], raw: false)) == #""a\"b\\c""#)
     }
 
     @Test func theTitlesAreTheSpecs() {

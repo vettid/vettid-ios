@@ -254,7 +254,7 @@ struct DecisionContent: View {
             // An approval's document (§10.4), before the password and Approve; Approve waits for its end on screen.
             if case .authentication(let x) = approval, x.hasDocument, let step = state.document {
                 ApprovalDocumentView(
-                    step: step, name: state.connectionName, seen: state.documentToApprove != nil,
+                    step: step, generation: state.documentGeneration, name: state.connectionName, seen: state.documentToApprove != nil,
                     onRetry: actions.onRetryDocument, onSeenWhole: actions.onDocumentShownWhole
                 )
                 .equatable()

@@ -2380,17 +2380,6 @@
         }
       }
     },
-    "approvals_doc_text_spoken": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@, text"
-          }
-        }
-      }
-    },
     "approvals_doc_ballots": {
       "extractionState": "manual",
       "localizations": {

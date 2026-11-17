@@ -104,32 +104,44 @@ public struct ShownText: Equatable, Sendable {
             if !text.isEmpty { runs.append(.text(String(text))) }
             text = String.UnicodeScalarView()
         }
-        for scalar in s.unicodeScalars {
-            let isBreak = scalar == "\n"
-            breaks = isBreak ? breaks + 1 : 0
-            let isMark = [.nonspacingMark, .enclosingMark].contains(scalar.properties.generalCategory)
-            marks = isMark ? marks + 1 : 0
-            // A combining mark with no base of its own in this run (at the start, or after a marker or a line break)
-            // would combine with what the app draws before it (a quotation mark, a marker): a marker itself; a spacing
-            // mark (Mc) as well.
-            let p = scalar.properties
-            let baseless = (isMark || p.isGraphemeExtend || p.generalCategory == .spacingMark) && text.isEmpty
-            if isBreak, lineBreaks, breaks <= 2 {
-                flush()
-                runs.append(.lineBreak)
-            } else if isBreak || Self.marked(scalar) || (isMark && marks > 2) || baseless {
-                flush()
-                runs.append(.marker(scalar.value))
-            } else if escaped, scalar == "\"" || scalar == "\\" {
-                text.append("\\")
-                text.append(scalar)
-            } else {
-                text.append(scalar)
+        func marker(_ scalar: Unicode.Scalar) {
+            flush()
+            runs.append(.marker(scalar.value))
+        }
+        // Character by character, so that no character (grapheme cluster) is drawn with more than ``maxClusterScalars``
+        // code points: past them, each is a marker (chosen; not in the spec). A cluster has no length limit of its own
+        // (a run of Hangul leading jamo, a base with thousands of marks), and one that long would be one text too tall to
+        // draw.
+        for ch in s {
+            for (k, scalar) in ch.unicodeScalars.enumerated() {
+                let isBreak = scalar == "\n"
+                breaks = isBreak ? breaks + 1 : 0
+                let p = scalar.properties
+                // Every combining or spacing mark counts in the row (Mn, Me, Mc, any other grapheme extender).
+                let isMark = [.nonspacingMark, .enclosingMark, .spacingMark].contains(p.generalCategory) || p.isGraphemeExtend
+                marks = isMark ? marks + 1 : 0
+                // A mark with no base of its own in this run (at the start, or after a marker or a line break) would
+                // combine with what the app draws before it (a quotation mark, a marker): a marker itself.
+                let baseless = isMark && text.isEmpty
+                if isBreak, lineBreaks, breaks <= 2 {
+                    flush()
+                    runs.append(.lineBreak)
+                } else if isBreak || Self.marked(scalar) || (isMark && marks > 2) || baseless || k >= Self.maxClusterScalars {
+                    marker(scalar)
+                } else if escaped, scalar == "\"" || scalar == "\\" {
+                    text.append("\\")
+                    text.append(scalar)
+                } else {
+                    text.append(scalar)
+                }
             }
         }
         flush()
         self.runs = runs
     }
+
+    /// At most this many code points to a character drawn as itself.
+    public static let maxClusterScalars = 8
 
     /// The characters always shown as markers: control (Cc, U+0085 included) and format (Cf, the bidirectional controls
     /// among them) characters, line and paragraph separators (Zl, Zp), private-use and unassigned code points (Co, Cn: a

@@ -103,6 +103,23 @@ import VettIDDataTesting
         #expect(s.documentToApprove == document && s.canApprove())
     }
 
+    /// The same document shown again (a restart that fetched the same bytes) is followed again from nothing seen: a new
+    /// generation for the screen, and Approve off until it has all been on screen again.
+    @Test func theSameDocumentShownAgainIsFollowedAgain() async {
+        let m = await model()
+        m.setPassword("pw")
+        m.documentShownWhole(document.sha256)
+        let before = m.state.documentGeneration
+        fake.documentApproval = .changed(.success(document))
+        m.approve()
+        await m.settle()
+        #expect(m.state.documentGeneration == before + 1 && m.state.documentSeen == nil && !m.state.done)
+        m.setPassword("pw")
+        #expect(!m.state.canApprove())
+        m.documentShownWhole(document.sha256)
+        #expect(m.state.canApprove())
+    }
+
     @Test func aReportAboutAnotherDocumentCountsForNothing() async {
         let m = await model()
         m.setPassword("pw")
