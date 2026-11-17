@@ -109,8 +109,9 @@ extension CallMachine {
     private func settleLost(_ s: CallSession, endedEarly: Set<String>) {
         if let by = s.supersededBy, hasEnded(by) || endedEarly.contains(by) {
             // Lost to a call that has ended already: nothing to answer, nothing to wait for, and a late offer for the winner is
-            // not rung (as for a placed call). Reached only by the glare end the start carried (applied after the replay),
-            // when the winner's own end was held but has since been pushed out of ``endedOthers`` by other calls' ends.
+            // not rung (as for a placed call). The winners' rule normally settles this before the replay
+            // (``rememberHeldWinners(_:of:carried:)``), and ``lostGlare`` finishes the call; this stays as a safety net for a
+            // winner whose end was held but is no longer among the ended calls when the glare's end is applied.
             rememberEnded(by)
             finish(s, .missed, nil)
         } else if s.supersededBy != nil {
