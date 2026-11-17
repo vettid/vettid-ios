@@ -94,8 +94,14 @@ struct ApprovalDocumentDrawingTests {
         window.isHidden = true
     }
 
-    /// Samples what the screen shows at points through [view]'s height; every sample has text on it.
-    private func sampled(_ view: some View, _ name: String, last: Double = 0.97) async throws {
+    /// Samples what the screen shows at points through a document's height; every sample has at least [ink] samples of
+    /// ink on it. Logs the tallest row measured; it is under ``DocumentRows/maxRowPixels``, so every row can count as seen
+    /// (or the screen says the document can't be shown at this text size).
+    private func sampled(_ step: DocumentStep, _ name: String, last: Double = 0.97, ink: Int = 500) async throws {
+        final class Tallest { var pixels: CGFloat = 0 }
+        let tallest = Tallest()
+        let view = ApprovalDocumentView(step: step, name: nil, seen: true, onRetry: {}, onSeenWhole: { _, _ in },
+                                        onRowPixels: { tallest.pixels = max(tallest.pixels, $0) })
         let t0 = Date()
         let (window, scroll) = try host(view)
         print("DOC_TIMING: \(name) laid out in \(Int(Date().timeIntervalSince(t0) * 1000)) ms")
@@ -108,8 +114,11 @@ struct ApprovalDocumentDrawingTests {
             try await Task.sleep(for: .seconds(hold))
             let (dark, light) = pixels(window)
             print("DOC_DRAWN: \(name) at \(at) of \(Int(scroll.contentSize.height)) pt: \(dark) dark, \(light) light samples")
-            #expect(dark > 100 && light > 500, "\(name) drawn at \(at)")
+            #expect(dark > ink && light > 500, "\(name) drawn at \(at)")
         }
+        print("DOC_ROWS: \(name) tallest row \(Int(tallest.pixels)) px (limit \(Int(DocumentRows.maxRowPixels)))")
+        // Every row can be seen: none over the limit (a taller one is cut again smaller, and these never need it).
+        #expect(tallest.pixels > 0 && tallest.pixels <= DocumentRows.maxRowPixels, "\(name)'s rows can all be seen")
         window.isHidden = true
     }
 
@@ -117,12 +126,12 @@ struct ApprovalDocumentDrawingTests {
 
     @Test func aLongMotionIsDrawnToItsEnd() async throws {
         let motion = #"{"action":"proposal.create","payload":{"binding":true,"choices":[],"closes_at":2,"opens_at":1,"outage_rule":"","quorum":{"min_ballots":1,"text":""},"removed_may_vote":false,"text":"\#(Self.words)","title":"t"},"summary":""}"#
-        try await sampled(ApprovalDocumentView(step: try Self.shown(motion), name: nil, seen: true, onRetry: {}, onSeenWhole: { _, _ in }), "motion", last: 0.9)
+        try await sampled(try Self.shown(motion), "motion", last: 0.9)
     }
 
     @Test func aLongRawStringIsDrawnToItsEnd() async throws {
         let raw = #"{"action":"x","payload":{"s":"\#(Self.words)"},"summary":""}"#
-        try await sampled(ApprovalDocumentView(step: try Self.shown(raw), name: nil, seen: true, onRetry: {}, onSeenWhole: { _, _ in }), "raw")
+        try await sampled(try Self.shown(raw), "raw")
     }
 
     /// The shapes a service could choose to defeat the cuts: no white space at all, nothing but markers, one character of
@@ -134,9 +143,14 @@ struct ApprovalDocumentDrawingTests {
         let widest = String(repeating: "\u{FDFD}", count: 21_000)
         let cjk = String(repeating: "\u{6F22}", count: 21_000)
         let syllables = String(repeating: "\u{1100}\u{1100}\u{1100}\u{1100}\u{1161}\u{1161}\u{11A8}\u{11A8}", count: 2_700)
-        for (name, s) in [("unbroken", unbroken), ("markers", markers), ("jamo", jamo), ("widest", widest), ("cjk", cjk), ("syllables", syllables)] {
+        // Ink per shape: U+FDFD is one sparse calligraphic glyph (blank reads 0).
+        let shapes = [
+            ("unbroken", unbroken, 500), ("markers", markers, 500), ("jamo", jamo, 500), ("widest", widest, 200),
+            ("cjk", cjk, 500), ("syllables", syllables, 500),
+        ]
+        for (name, s, ink) in shapes {
             let doc = #"{"action":"x","payload":{"s":"\#(s)"},"summary":""}"#
-            try await sampled(ApprovalDocumentView(step: try Self.shown(doc), name: nil, seen: true, onRetry: {}, onSeenWhole: { _, _ in }), name)
+            try await sampled(try Self.shown(doc), name, ink: ink)
         }
     }
 
@@ -164,6 +178,31 @@ struct ApprovalDocumentDrawingTests {
         print("DOC_SEEN: \(box.seen) report(s) after scrolling down")
         #expect(box.seen == 1, "scrolled down to the end")
         window.isHidden = true
+    }
+
+    /// The limit measured: single texts of growing height, each sampled at its last screenful. Logs where the phone
+    /// stops drawing; a text just under ``DocumentRows/maxRowPixels`` is drawn.
+    @Test func theRowLimitIsUnderWhatThePhoneDraws() async throws {
+        let scale = UIScreen.main.scale
+        let probe = UIHostingController(rootView: Text("line 0 budget").font(.body).dynamicTypeSize(.accessibility5))
+        let lineHeight = probe.sizeThatFits(in: CGSize(width: 390, height: 1_000)).height
+        var blankFrom: CGFloat?
+        for target in [CGFloat(DocumentRows.maxRowPixels - 300), 170_000, 250_000, 400_000, 600_000, 850_000] {
+            let lines = Int(target / scale / lineHeight)
+            let text = Text((0..<lines).map { "line \($0) budget" }.joined(separator: "\n")).font(.body)
+            let (window, scroll) = try host(text)
+            try await Task.sleep(for: .milliseconds(800))
+            scroll.setContentOffset(CGPoint(x: 0, y: scroll.contentSize.height - scroll.bounds.height), animated: false)
+            try await Task.sleep(for: .milliseconds(600))
+            let (dark, light) = pixels(window)
+            let tall = scroll.contentSize.height * scale
+            print("DOC_LIMIT: a text \(Int(tall)) px tall, its last screenful: \(dark) dark, \(light) light samples")
+            if dark < 100, blankFrom == nil { blankFrom = tall }
+            if target < DocumentRows.maxRowPixels { #expect(dark > 500, "just under the limit: drawn") }
+            window.isHidden = true
+        }
+        print("DOC_LIMIT: blank from \(blankFrom.map { "\(Int($0)) px" } ?? "beyond the largest tried")")
+        #expect(blankFrom.map { $0 > DocumentRows.maxRowPixels } ?? true)
     }
 
     /// The negative control: the layout this replaces, one text of 65 KB, is drawn blank on the phone. If a later iOS

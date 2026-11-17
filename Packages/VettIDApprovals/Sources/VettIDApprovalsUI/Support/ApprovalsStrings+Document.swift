@@ -121,6 +121,18 @@ extension ApprovalsStrings {
         )
     }
 
+    static var docTooTall: String {
+        String(localized: "approvals_doc_too_tall", defaultValue: "This request can't be shown at this text size", bundle: .module)
+    }
+
+    static var docTooTallBody: String {
+        String(
+            localized: "approvals_doc_too_tall_body",
+            defaultValue: "Choose a smaller text size in Settings, then open the request again. You can deny it now.",
+            bundle: .module
+        )
+    }
+
     /// VoiceOver: a raw view's line's nesting level ("level 2").
     static func docLevelSpoken(_ n: Int) -> String {
         String(localized: "approvals_doc_level_spoken", defaultValue: "level \(n)", bundle: .module)

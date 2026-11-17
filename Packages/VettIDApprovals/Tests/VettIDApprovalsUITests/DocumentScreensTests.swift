@@ -152,8 +152,8 @@ import VettIDUI
     @Test func aRowTallerThanIsSafeIsNeverSeen() async throws {
         final class Box { var seen = 0 }
         let box = Box()
-        let tall = AnyView(Color.gray.frame(height: DocumentRows.maxRowHeight + 500))
-        let (window, scroll) = try host(DocumentRows(rows: [tall]) { box.seen += 1 })
+        let tall = AnyView(Color.gray.frame(height: DocumentRows.maxRowPixels))
+        let (window, scroll) = try host(DocumentRows(rows: [tall], onSeenWhole: { box.seen += 1 }))
         await settle()
         var y: CGFloat = 0
         while y < scroll.contentSize.height - scroll.bounds.height {
@@ -166,23 +166,63 @@ import VettIDUI
         window.isHidden = true
     }
 
-    /// With VoiceOver's cutting, a piece fits on the screen at the largest text size, so moving from one element to the
-    /// next brings every part on screen: wide script, and kept line breaks.
-    @Test func voiceOversPiecesFitOnTheScreen() {
-        let cutting = ApprovalDocumentView(step: .loading, voiceOver: true, name: nil, seen: false, onRetry: {}, onSeenWhole: { _, _ in }).cutting
+    /// With VoiceOver, a row taller than the visible area is cut again smaller: at some cutting (at worst the smallest),
+    /// every piece fits in the visible area at the largest text size, so moving from one element to the next brings every
+    /// part on screen. Wide script, the widest glyph, kept line breaks, raw pieces at depth 15.
+    @Test func voiceOversPiecesFitOnTheScreen() async throws {
+        let (window, scroll) = try host(Color.clear.frame(height: 10))
+        await settle()
+        let visible = scroll.bounds.height
+        window.isHidden = true
         let samples = [
-            ShownText(String(repeating: "\u{6F22}", count: 300)),
+            ShownText(String(repeating: "\u{6F22}", count: 300)), ShownText(String(repeating: "\u{FDFD}", count: 300)),
             ShownText(Array(repeating: "a", count: 100).joined(separator: "\n\n"), lineBreaks: true),
             ShownText(String(repeating: "W", count: 300)),
         ]
-        for t in samples {
-            for piece in DocPiece.value(t, max: cutting.max, maxBreaks: cutting.maxBreaks) {
-                let h = UIHostingController(rootView: ValuePiece(first: true, last: true) { DocPieceView(pieces: [piece], raw: false) }
+        func tallest(_ cutting: ApprovalDocumentView.Cutting) -> CGFloat {
+            var pieces = samples.flatMap { DocPiece.value($0, max: cutting.max, maxBreaks: cutting.maxBreaks).map { ($0, false) } }
+            for t in samples.prefix(2) {
+                let line = DocumentPresentation.RawLine(depth: 15, key: ShownText("k", escaped: true), value: .string(t), comma: false)
+                pieces += DocPiece.raw(line, max: cutting.max).map { ($0, true) }
+            }
+            return pieces.map { piece, raw in
+                UIHostingController(rootView: ValuePiece(first: true, last: true) { DocPieceView(pieces: [piece], raw: raw) }
                     .vettIDTheme(.light).dynamicTypeSize(.accessibility5))
                     .sizeThatFits(in: CGSize(width: 390, height: 10_000)).height
-                #expect(h < 700, "a piece \(Int(h)) pt tall")
-            }
+            }.max() ?? 0
         }
+        var fits: Int?
+        for shrink in 0...6 where fits == nil {
+            let cutting = ApprovalDocumentView.cutting(voiceOver: true, shrink: shrink)
+            let h = tallest(cutting)
+            print("VOICEOVER_FIT: pieces of \(cutting.max): tallest \(Int(h)) pt in \(Int(visible)) pt")
+            if h < visible { fits = shrink }
+            if cutting.max == ApprovalDocumentView.smallestPiece { break }
+        }
+        #expect(fits != nil, "no cutting fits the screen")
+    }
+
+    /// Turning VoiceOver on or off is another cutting, so the rows are another view and their coverage starts again.
+    @Test func aVoiceOverToggleIsAnotherCutting() {
+        let off = ApprovalDocumentView(step: .loading, voiceOver: false, name: nil, seen: false, onRetry: {}, onSeenWhole: { _, _ in })
+        let on = ApprovalDocumentView(step: .loading, voiceOver: true, name: nil, seen: false, onRetry: {}, onSeenWhole: { _, _ in })
+        #expect(off.cutting != on.cutting && off != on)
+        #expect(ApprovalDocumentView.RowsID(sha256: "a", generation: 1, cutting: off.cutting)
+            != ApprovalDocumentView.RowsID(sha256: "a", generation: 1, cutting: on.cutting))
+    }
+
+    /// A row too tall to be drawn is never seen, and the rows are told so (the screen cuts again, then says so).
+    @Test func aRowTooTallIsSaid() async throws {
+        final class Box { var tall = false }
+        let box = Box()
+        let tall = AnyView(Color.gray.frame(height: DocumentRows.maxRowPixels))
+        let (window, _) = try host(DocumentRows(rows: [tall], onSeenWhole: {}, onTooTall: { box.tall = true }))
+        // The cutting halves on each report, down to the smallest piece.
+        #expect(ApprovalDocumentView.cutting(voiceOver: false, shrink: 1).max == 100)
+        #expect(ApprovalDocumentView.cutting(voiceOver: false, shrink: 9).max == ApprovalDocumentView.smallestPiece)
+        await settle()
+        #expect(box.tall)
+        window.isHidden = true
     }
 
     @Test func theRawViewKeepsStringsApartFromNumbers() throws {
@@ -216,7 +256,8 @@ import VettIDUI
         let value = DocPiece.value(ShownText("Yes " + String(repeating: "no ", count: 100)))
         #expect(Spoken.plain(Spoken.of(value[0], raw: false)).hasPrefix(#""Yes "#))
         #expect(Spoken.plain(Spoken.of(value[1], raw: false)).hasPrefix("↳ \""))
-        // A value's own quotation marks are read escaped.
+        // A value's own quotation marks are read escaped, a quotation mark that carries a mark too.
+        #expect(Spoken.plain(Spoken.of(DocPiece.value(ShownText("a\"\u{0301}b"))[0], raw: false)) == "\"a\\\"\u{0301}b\"")
         #expect(Spoken.plain(Spoken.of(DocPiece.value(ShownText(#"a"b\c"#))[0], raw: false)) == #""a\"b\\c""#)
     }
 

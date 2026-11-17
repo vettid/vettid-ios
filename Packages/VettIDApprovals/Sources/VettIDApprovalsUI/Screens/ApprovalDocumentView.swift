@@ -21,20 +21,51 @@ struct ApprovalDocumentView: View, Equatable {
     let onRetry: @MainActor () -> Void
     /// The whole of the document of that hash, in that generation, has been on screen.
     let onSeenWhole: @MainActor (String, Int) -> Void
+    /// TEST ONLY: each row's height in pixels as it is measured.
+    var onRowPixels: (@MainActor (CGFloat) -> Void)?
+    /// A row is too tall to be drawn even at the smallest cutting: the document cannot be approved here, and the screen
+    /// says so.
+    @State private var tooTall = false
+    /// Times the cutting was halved because a row was too tall to be drawn: rows are cut again, smaller, before the
+    /// screen ever gives up (``smallestPiece``).
+    @State private var shrink = 0
+
+    /// The fewest characters a piece is cut to.
+    static let smallestPiece = 10
 
     /// What it shows: the screen's one-second countdown does not lay a large document out again (`.equatable()`).
     nonisolated static func == (a: Self, b: Self) -> Bool {
         a.step == b.step && a.generation == b.generation && a.voiceOver == b.voiceOver && a.name == b.name && a.seen == b.seen
     }
 
+    /// What makes the rows another view.
+    struct RowsID: Hashable {
+        var sha256: String
+        var generation: Int
+        var cutting: Cutting
+    }
+
     /// The cutting: with VoiceOver, pieces small enough (in characters and kept line breaks) that each fits on the screen
     /// at the largest text size, so moving from one element to the next brings every part on screen.
-    var cutting: Cutting {
-        voiceOver ? Cutting(max: 30, maxBreaks: 4, perRow: 1) : Cutting(max: ShownText.pieceCharacters, maxBreaks: .max, perRow: 20)
+    var cutting: Cutting { Self.cutting(voiceOver: voiceOver, shrink: shrink) }
+
+    static func cutting(voiceOver: Bool, shrink: Int) -> Cutting {
+        let base = voiceOver
+            ? Cutting(max: 30, maxBreaks: 4, perRow: 1) : Cutting(max: ShownText.pieceCharacters, maxBreaks: .max, perRow: 20)
+        guard shrink > 0 else { return base }
+        return Cutting(
+            max: Swift.max(base.max >> shrink, smallestPiece), maxBreaks: Swift.max(Swift.min(base.maxBreaks, 8) >> shrink, 1),
+            perRow: Swift.max(base.perRow >> shrink, 1)
+        )
+    }
+
+    /// A row too tall to be drawn: cut again smaller, or, at the smallest cutting, say so.
+    private func rowTooTall() {
+        if cutting.max > Self.smallestPiece { shrink += 1 } else { tooTall = true }
     }
 
     /// How a document is cut into rows: characters and kept line breaks to a piece, raw pieces to a row.
-    struct Cutting {
+    struct Cutting: Hashable {
         var max: Int
         var maxBreaks: Int
         var perRow: Int
@@ -59,17 +90,27 @@ struct ApprovalDocumentView: View, Equatable {
                 NoticeCard(.warning, title: ApprovalsStrings.docCantShow, announce: .polite)
                     .accessibilityIdentifier("document_cant_show")
             case .shown(let d, let p):
-                DocumentRows(rows: rows(p)) { onSeenWhole(d.sha256, generation) }
+                DocumentRows(rows: rows(p), onSeenWhole: { onSeenWhole(d.sha256, generation) }, onTooTall: rowTooTall,
+                             onRowPixels: onRowPixels, fitScreen: voiceOver)
                     // Another document, the same shown again, or another cutting is another view: its coverage starts
                     // again (rows of one cutting are not rows of another).
-                    .id("\(d.sha256) \(generation) \(cutting.max)")
-                if !seen {
+                    .id(RowsID(sha256: d.sha256, generation: generation, cutting: cutting))
+                if tooTall {
+                    // Never silent: a row a phone would draw blank is never counted as seen, so Approve stays off.
+                    NoticeCard(.warning, title: ApprovalsStrings.docTooTall, message: ApprovalsStrings.docTooTallBody, announce: .polite)
+                        .accessibilityIdentifier("document_too_tall")
+                } else if !seen {
                     Text(ApprovalsStrings.docReadToEnd).vettIDFont(.bodyMedium).foregroundStyle(colors.onSurfaceVariant)
                         .accessibilityIdentifier("document_read_to_end")
                 }
             }
         }
         .padding(.top, Spacing.l)
+        // Another document starts from the usual cutting.
+        .onChange(of: generation) {
+            shrink = 0
+            tooTall = false
+        }
     }
 
     /// The document as rows, each small: the parts under their labels, and every value of any length in pieces
@@ -128,16 +169,24 @@ struct ApprovalDocumentView: View, Equatable {
 struct DocumentRows: View {
     let rows: [AnyView]
     let onSeenWhole: @MainActor () -> Void
+    var onTooTall: @MainActor () -> Void = {}
+    var onRowPixels: (@MainActor (CGFloat) -> Void)?
+    /// With VoiceOver, a row taller than the visible area is too tall as well: moving from one element to the next would
+    /// leave part of it never on screen.
+    var fitScreen = false
     @State private var seen: Set<Int> = []
 
-    /// The tallest a row may be and still count as seen: a row taller than a phone is known to draw is never seen, so a
-    /// document that could draw blank is never approved (fail closed). Rows are cut far below it.
-    static let maxRowHeight: CGFloat = 4_000
+    /// The tallest a row may be, in pixels, and still count as seen. An iPhone 15 draws a single text 177,000 pixels tall
+    /// and one of 315,000 blank (the app's ``ApprovalDocumentDrawingTests`` measure it); a row over this is
+    /// never seen, so a document that could draw blank is never approved (fail closed): it is cut again smaller, and at
+    /// the smallest cutting the screen says so. Rows are cut far below it.
+    static let maxRowPixels: CGFloat = 100_000
 
     var body: some View {
         LazyVStack(alignment: .leading, spacing: 0) {
             ForEach(rows.indices, id: \.self) { i in
-                rows[i].modifier(RowSeen { rowSeen(i) })
+                rows[i].clipped()
+                    .modifier(RowSeen(onWhole: { rowSeen(i) }, onTooTall: onTooTall, onPixels: onRowPixels, fitScreen: fitScreen))
             }
         }
     }
@@ -151,28 +200,39 @@ struct DocumentRows: View {
 
 /// Says once that the whole of a row has been on screen in the enclosing scroll view.
 struct RowSeen: ViewModifier {
+    @Environment(\.displayScale) private var scale
     let onWhole: @MainActor () -> Void
+    var onTooTall: @MainActor () -> Void = {}
+    var onPixels: (@MainActor (CGFloat) -> Void)?
+    var fitScreen = false
     @State private var coverage = SeenCoverage()
 
     struct Seen: Equatable {
         var visible: ClosedRange<CGFloat>?
         var height: CGFloat
+        /// The scroll view's visible height.
+        var screen: CGFloat
     }
 
     /// The part of the row on screen, in its own coordinates; none without a scroll view to measure against.
     static func seen(_ g: GeometryProxy) -> Seen {
         let h = g.size.height
-        guard let b = g.bounds(of: .scrollView) else { return Seen(visible: nil, height: h) }
+        guard let b = g.bounds(of: .scrollView) else { return Seen(visible: nil, height: h, screen: 0) }
         let top = max(b.minY, 0), bottom = min(b.maxY, h)
-        return Seen(visible: top <= bottom ? top...bottom : nil, height: h)
+        return Seen(visible: top <= bottom ? top...bottom : nil, height: h, screen: b.height)
     }
 
     func body(content: Content) -> some View {
         content.background(
             GeometryReader { g in
                 Color.clear.onChange(of: Self.seen(g), initial: true) { _, now in
+                    let pixels = now.height * scale
+                    onPixels?(pixels)
+                    guard pixels <= DocumentRows.maxRowPixels, !fitScreen || now.screen == 0 || now.height <= now.screen else {
+                        return onTooTall()
+                    }
                     coverage.saw(now.visible, height: now.height)
-                    if coverage.whole, now.height <= DocumentRows.maxRowHeight { onWhole() }
+                    if coverage.whole { onWhole() }
                 }
             }
         )
@@ -370,8 +430,10 @@ struct DocumentStyle {
     var marker: Color
     var markerFill: Color
     var stringFill: Color
+    var continuation: Color
 
     init(_ colors: VettIDColors) {
+        continuation = colors.primary.color
         marker = colors.error.color
         markerFill = colors.error.color.opacity(0.14)
         stringFill = colors.secondaryContainer.color
@@ -409,6 +471,9 @@ struct DocPieceView: View {
     static let fsi = "\u{2068}"
     static let pdi = "\u{2069}"
 
+    // One case per kind of token.
+    // swiftlint:disable cyclomatic_complexity
+
     /// A piece as drawn. A raw view's line starts with a left-to-right mark, so its base direction is left-to-right
     /// whatever its isolates hold; its keys and strings sit on their fill inside their isolates.
     static func attributed(_ p: DocPiece, _ style: DocumentStyle, raw: Bool) -> AttributedString {
@@ -416,6 +481,14 @@ struct DocPieceView: View {
         var isolated = false
         for t in p.tokens {
             switch t {
+            case .punct(let s) where s == DocPiece.continued || s == DocPiece.continues:
+                // The app's continuation mark, in a style of its own (no text can draw it: it is a marker there); after
+                // a white space, without another.
+                let after = out.characters.last?.isWhitespace == true
+                var a = AttributedString(after ? s.trimmingCharacters(in: .whitespaces) + (s == DocPiece.continued ? " " : "") : s)
+                a.foregroundColor = style.continuation
+                a.inlinePresentationIntent = .stronglyEmphasized
+                out += a
             case .punct(let s), .literal(let s): out += AttributedString(s)
             case .indent(let n): out += AttributedString(String(repeating: "  ", count: n))
             case .open:
@@ -441,79 +514,7 @@ struct DocPieceView: View {
         }
         return out
     }
-}
-
-/// What VoiceOver reads on this screen, and what a braille display shows. The separation does not rest on pitch: the
-/// document's text is read between quotation marks (the ones drawn, or spoken ones where none is drawn), with its own
-/// `"` and `\` escaped, so no text can close them; those marks, the markers and the app's punctuation are spoken as
-/// punctuation; the document's text has a pitch of its own as well, a cue only.
-enum Spoken: Equatable {
-    /// The app's words, at the usual pitch.
-    case app(String)
-    /// The app's punctuation and markers, always spoken (and shown in braille) as punctuation.
-    case symbol(String)
-    /// The document's own text.
-    case content(String)
-
-    /// The pitch of the document's text. UIKit's scale is 0 to 2 with 1 the usual pitch, SwiftUI's -1 to 1 with 0; 0.5
-    /// differs from the usual on either.
-    static let contentPitch = 0.5
-
-    /// What a piece reads: a raw line's level first; a value's text with its `"` and `\` escaped (a raw view's already are).
-    static func of(_ p: DocPiece, raw: Bool) -> [Spoken] {
-        var out: [Spoken] = p.level.map { [.app(ApprovalsStrings.docLevelSpoken($0) + ", ")] } ?? []
-        for t in p.tokens {
-            switch t {
-            case .punct(let s): out.append(.symbol(s))
-            case .spokenQuote: out.append(.symbol("\""))
-            case .content(let s): out.append(.content(raw ? s : escaped(s)))
-            case .literal(let s): out.append(.app(s))
-            case .marker(let v): out.append(.symbol(ShownText.marker(v)))
-            case .lineBreak: out.append(.app("\n"))
-            case .indent, .open, .close: break
-            }
-        }
-        return out
-    }
-
-    /// Code point by code point, as ``ShownText`` escapes the raw view: a `"` or `\\` that carries a mark is escaped too.
-    static func escaped(_ s: String) -> String {
-        var out = String.UnicodeScalarView()
-        for scalar in s.unicodeScalars {
-            if scalar == "\"" || scalar == "\\" { out.append("\\") }
-            out.append(scalar)
-        }
-        return String(out)
-    }
-
-    static func plain(_ pieces: [Spoken]) -> String {
-        pieces.map { p in
-            switch p {
-            case .app(let s), .symbol(let s), .content(let s): s
-            }
-        }.joined()
-    }
-
-    /// One attributed text: never a chain of concatenated texts, whose depth grows with the document.
-    static func attributed(_ pieces: [Spoken]) -> AttributedString {
-        var out = AttributedString()
-        for p in pieces {
-            switch p {
-            case .app(let s): out += AttributedString(s)
-            case .symbol(let s):
-                var a = AttributedString(s)
-                a.accessibilitySpeechIncludesPunctuation = true
-                out += a
-            case .content(let s):
-                var a = AttributedString(s)
-                a.accessibilitySpeechAdjustedPitch = contentPitch
-                out += a
-            }
-        }
-        return out
-    }
-
-    static func text(_ pieces: [Spoken]) -> Text { Text(attributed(pieces)) }
+    // swiftlint:enable cyclomatic_complexity
 }
 
 /// A time of a form: in the member's time zone, then in UTC, each with its zone named.

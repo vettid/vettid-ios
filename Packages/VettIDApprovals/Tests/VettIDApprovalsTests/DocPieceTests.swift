@@ -51,20 +51,48 @@ import Testing
         }
     }
 
-    /// A cut never leaves an empty isolate: a key that fills a piece carries the value's opening quotation mark and
-    /// isolate to the next; closing punctuation of up to 3 stays with what it closes.
+    /// A cut never leaves an empty isolate: where a key fills a piece, the value's opening quotation mark and isolate
+    /// go on to the next piece, which starts `↳ "`; closing punctuation stays with what it closes.
     @Test func aCutLeavesNoEmptyIsolateAndKeepsClosingPunctuation() {
-        let key = String(repeating: "k", count: 186)
-        let line = DocumentPresentation.RawLine(
-            depth: 1, key: ShownText(key, escaped: true), value: .string(ShownText("v", escaped: true)), comma: true
-        )
-        let pieces = DocPiece.raw(line)
-        for p in pieces {
+        var carried = 0
+        for n in 180...200 {
+            let line = DocumentPresentation.RawLine(
+                depth: 1, key: ShownText(String(repeating: "k", count: n), escaped: true),
+                value: .string(ShownText("\u{202E}" + String(repeating: "v", count: 50), escaped: true)), comma: true
+            )
+            let pieces = DocPiece.raw(line)
+            for p in pieces {
+                for (i, t) in p.tokens.enumerated() where t == .open {
+                    #expect(i + 1 < p.tokens.count && p.tokens[i + 1] != .close, "an empty isolate at \(n)")
+                }
+            }
+            if pieces.count > 1, pieces[1].tokens.prefix(3) == [.punct(DocPiece.continued), .punct("\""), .open] { carried += 1 }
+            #expect(pieces.last?.tokens.suffix(3) == [.close, .punct("\""), .punct(",")])
+        }
+        #expect(carried > 0, "the opening was carried over at least once")
+        // A string that ends in an escape exactly at a forced cut leaves no empty isolate either.
+        let tight = DocPiece.raw(Self.line(String(repeating: "x", count: 30) + #"""#), max: 30)
+        for p in tight {
             for (i, t) in p.tokens.enumerated() where t == .open {
-                #expect(i + 1 < p.tokens.count && p.tokens[i + 1] != .close, "an empty isolate")
+                #expect(i + 1 < p.tokens.count && p.tokens[i + 1] != .close)
             }
         }
-        #expect(pieces.last?.tokens.suffix(3) == [.close, .punct("\""), .punct(",")])
+    }
+
+    @Test func gluingContinuationAndModifierCharactersAreMarkers() {
+        // Every scalar that forms one character with a following backslash (Prepend, of this system's Unicode) is a marker.
+        var glue = 0
+        for v in UInt32(0x20)...0x2FFFF {
+            guard let u = Unicode.Scalar(v), ShownText.gluesForward(u) else { continue }
+            glue += 1
+            #expect(ShownText(String(Character(u))).runs == [.marker(v)], "U+\(String(v, radix: 16))")
+        }
+        #expect(glue > 10)
+        for v: UInt32 in [0x21B3, 0x21AA, 0x2937, 0x21B4, 0x2BA1, 0x2514, 0x2570, 0x21B5, 0x23CE, 0x27A5, 0x2935, 0x221F, 0x2517] {
+            #expect(ShownText("a" + String(Character(Unicode.Scalar(v)!)) + "b").runs == [.text("a"), .marker(v), .text("b")])
+        }
+        #expect(ShownText("\u{1F3FD}x").runs == [.marker(0x1F3FD), .text("x")], "a skin tone with no base")
+        #expect(ShownText("\u{1F44D}\u{1F3FD}").runs == [.text("\u{1F44D}\u{1F3FD}")], "with its base")
     }
 
     @Test func noCutFallsInsideAMarkerOrAnEscape() {

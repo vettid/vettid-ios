@@ -52,9 +52,8 @@ extension ApprovalDetailViewModel {
     /// counts for nothing).
     /// [generation]: the ``ApprovalDetailState/documentGeneration`` the screen showed it in; a report from an earlier
     /// showing counts for nothing either.
-    public func documentShownWhole(_ sha256: String, generation: Int? = nil) {
-        guard case .shown(let d, _)? = local.document, d.sha256 == sha256, generation.map({ $0 == local.documentGeneration }) ?? true
-        else { return }
+    public func documentShownWhole(_ sha256: String, generation: Int) {
+        guard case .shown(let d, _)? = local.document, d.sha256 == sha256, generation == local.documentGeneration else { return }
         local.documentSeen = d.sha256
     }
 

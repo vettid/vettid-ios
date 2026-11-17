@@ -36,6 +36,9 @@ public struct DocPiece: Equatable, Sendable {
     public static let continued = "↳ "
     public static let continues = " ↳"
 
+    /// The raw view's closing punctuation, kept with what it closes past the bound.
+    static let closingPunctuation: Set<String> = ["\"", "\",", "]", "}", "],", "},", ","]
+
     /// How many characters the piece draws.
     public var length: Int { tokens.reduce(0) { $0 + Self.length($1) } }
 
@@ -156,7 +159,8 @@ public struct DocPiece: Equatable, Sendable {
             n = cur.reduce(0) { $0 + DocPiece.length($1) }
         }
 
-        mutating func add(_ token: Token) {
+        /// One case per kind of token, and the cut of a text in place.
+        mutating func add(_ token: Token) { // swiftlint:disable:this cyclomatic_complexity
             switch token {
             case .open: inIsolate = true
             case .close: inIsolate = false
@@ -164,8 +168,8 @@ public struct DocPiece: Equatable, Sendable {
             }
             guard case .content(let s) = token else {
                 let len = DocPiece.length(token)
-                // Closing punctuation of up to 3 (`",`, `]`, `},`) stays with what it closes.
-                let closing = if case .punct = token { len <= 3 } else { false }
+                // Closing punctuation stays with what it closes.
+                let closing = if case .punct(let p) = token { DocPiece.closingPunctuation.contains(p) } else { false }
                 if len > 0, n + len > max, !fresh, !closing { close() }
                 cur.append(token)
                 n += len
@@ -191,8 +195,10 @@ public struct DocPiece: Equatable, Sendable {
                     cut = Self.insideEscape(rest, at: limit) ? rest.index(after: limit) : limit
                 }
                 cur.append(.content(String(rest[..<cut])))
+                n += rest[..<cut].count
                 rest = rest[cut...]
-                close()
+                // Nothing left of the string after a forced cut: the piece goes on (its isolate closes as it ends).
+                if !rest.isEmpty { close() }
             }
         }
 

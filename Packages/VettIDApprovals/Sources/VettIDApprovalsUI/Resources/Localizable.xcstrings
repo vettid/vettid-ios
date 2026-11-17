@@ -2413,6 +2413,28 @@
           }
         }
       }
+    },
+    "approvals_doc_too_tall": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This request can't be shown at this text size"
+          }
+        }
+      }
+    },
+    "approvals_doc_too_tall_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose a smaller text size in Settings, then open the request again. You can deny it now."
+          }
+        }
+      }
     }
   },
   "version": "1.0"

@@ -36,7 +36,7 @@ import VettIDDataTesting
         m.approve()
         await m.settle()
         #expect(!fake.calls.contains { $0.hasPrefix("approve") })
-        m.documentShownWhole(document.sha256)
+        m.documentShownWhole(document.sha256, generation: m.state.documentGeneration)
         #expect(m.state.canApprove() && m.state.documentToApprove == document)
         m.approve()
         await m.settle()
@@ -48,7 +48,7 @@ import VettIDDataTesting
         let m = await model()
         #expect(m.state.document == .unshowable(.hash))
         m.setPassword("pw")
-        m.documentShownWhole(document.sha256)
+        m.documentShownWhole(document.sha256, generation: m.state.documentGeneration)
         #expect(!m.state.canApprove())
         m.deny()
         await m.settle()
@@ -68,7 +68,7 @@ import VettIDDataTesting
     @Test func aChangedDocumentIsShownFromTheStartAndNothingIsApproved() async {
         let m = await model()
         m.setPassword("pw")
-        m.documentShownWhole(document.sha256)
+        m.documentShownWhole(document.sha256, generation: m.state.documentGeneration)
         fake.documentApproval = .changed(.failure(.hash))
         m.approve()
         await m.settle()
@@ -81,7 +81,7 @@ import VettIDDataTesting
     @Test func anAskNoLongerHeldIsStillApprovedOnlyOverItsDocument() async {
         let m = await model()
         m.setPassword("pw")
-        m.documentShownWhole(document.sha256)
+        m.documentShownWhole(document.sha256, generation: m.state.documentGeneration)
         fake.listed = []
         #expect(m.state.approval != nil && m.state.canApprove())
         m.approve()
@@ -108,7 +108,7 @@ import VettIDDataTesting
     @Test func theSameDocumentShownAgainIsFollowedAgain() async {
         let m = await model()
         m.setPassword("pw")
-        m.documentShownWhole(document.sha256)
+        m.documentShownWhole(document.sha256, generation: m.state.documentGeneration)
         let before = m.state.documentGeneration
         fake.documentApproval = .changed(.success(document))
         m.approve()
@@ -116,14 +116,21 @@ import VettIDDataTesting
         #expect(m.state.documentGeneration == before + 1 && m.state.documentSeen == nil && !m.state.done)
         m.setPassword("pw")
         #expect(!m.state.canApprove())
-        m.documentShownWhole(document.sha256)
+        m.documentShownWhole(document.sha256, generation: m.state.documentGeneration)
         #expect(m.state.canApprove())
+    }
+
+    @Test func aReportFromAnEarlierShowingCountsForNothing() async {
+        let m = await model()
+        m.setPassword("pw")
+        m.documentShownWhole(document.sha256, generation: m.state.documentGeneration - 1)
+        #expect(!m.state.canApprove() && m.state.documentSeen == nil)
     }
 
     @Test func aReportAboutAnotherDocumentCountsForNothing() async {
         let m = await model()
         m.setPassword("pw")
-        m.documentShownWhole("another hash")
+        m.documentShownWhole("another hash", generation: m.state.documentGeneration)
         #expect(!m.state.canApprove() && m.state.documentSeen == nil)
     }
 
@@ -142,7 +149,7 @@ import VettIDDataTesting
 
     @Test func aRequestThatNamesAnotherDocumentIsFetchedAgain() async {
         let m = await model()
-        m.documentShownWhole(document.sha256)
+        m.documentShownWhole(document.sha256, generation: m.state.documentGeneration)
         var changed = request
         changed.documentSha256 = "bmV3"
         fake.authDocument = .failure(.hash)
