@@ -129,6 +129,11 @@ extension ApprovalsStrings {
         String(localized: "approvals_doc_text_spoken", defaultValue: "\(value), text", bundle: .module)
     }
 
+    /// VoiceOver: a raw view's line's nesting level ("level 2").
+    static func docLevelSpoken(_ n: Int) -> String {
+        String(localized: "approvals_doc_level_spoken", defaultValue: "level \(n)", bundle: .module)
+    }
+
     /// Quorum's ballots: "1 ballot", "10 ballots".
     static func docBallots(_ n: Int) -> String {
         String(localized: "approvals_doc_ballots", defaultValue: "\(n) ballots", bundle: .module)

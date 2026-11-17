@@ -42,6 +42,50 @@ import Testing
         #expect(markers(ShownText("e\u{0301}\u{0302}a\u{0301}\u{0302}")).isEmpty)
     }
 
+    @Test func noTextCanSpellAMarkerOrDecorateTheAppsOwnCharacters() {
+        // The brackets a marker is drawn with are markers themselves.
+        #expect(ShownText("\u{27E8}U+202E\u{27E9}").runs == [.marker(0x27E8), .text("U+202E"), .marker(0x27E9)])
+        // A combining mark with no base in its run would combine with a quotation mark or a marker drawn before it.
+        #expect(ShownText("\u{0338}x").runs == [.marker(0x0338), .text("x")])
+        #expect(ShownText("\u{202E}\u{20DD}x").runs == [.marker(0x202E), .marker(0x20DD), .text("x")])
+        #expect(ShownText("a\n\u{0301}", lineBreaks: true).runs == [.text("a"), .lineBreak, .marker(0x0301)])
+    }
+
+    @Test func aRawStringShowsItsQuotesAndBackslashesEscaped() {
+        let s = #"ann", "amount": 10 \ x"#
+        #expect(ShownText(s, escaped: true).runs == [.text(#"ann\", \"amount\": 10 \\ x"#)])
+        #expect(ShownText(s).runs == [.text(s)], "only in the raw view")
+    }
+
+    @Test func coverageCountsOnlyWhatWasSeenFromTheTopWithoutAGap() {
+        var c = SeenCoverage()
+        c.saw(0...300, height: 1000)
+        #expect(!c.whole && c.seenTo == 300)
+        // A jump past the middle (to the password field below) does not count.
+        c.saw(700...1000, height: 1000)
+        #expect(!c.whole && c.seenTo == 300)
+        c.saw(250...600, height: 1000)
+        c.saw(600...1000, height: 1000)
+        #expect(c.whole)
+        // Another height (a new text size, a document shown again) starts again from the top.
+        var d = SeenCoverage()
+        d.saw(0...500, height: 1000)
+        d.saw(400...1000, height: 1200)
+        #expect(!d.whole && d.seenTo == 0)
+        d.saw(nil, height: 1200)
+        #expect(!d.whole)
+        // A document that fits is seen at once; a part that starts below the top first is not.
+        var e = SeenCoverage()
+        e.saw(0...200, height: 200)
+        #expect(e.whole)
+        var f = SeenCoverage()
+        f.saw(1...200, height: 200)
+        #expect(f.whole, "within a point")
+        var g = SeenCoverage()
+        g.saw(5...200, height: 200)
+        #expect(!g.whole)
+    }
+
     @Test func lineBreaksAreKeptOnlyWhereTheFieldKeepsThem() {
         #expect(ShownText("a\nb").runs == [.text("a"), .marker(0x0A), .text("b")])
         #expect(ShownText("a\nb", lineBreaks: true).runs == [.text("a"), .lineBreak, .text("b")])
@@ -50,7 +94,7 @@ import Testing
     }
 
     @Test func theVectorsVoteIsShownInItsForm() throws {
-        let p = DocumentPresentation(DocumentSamples.checked(DocumentSamples.proposal), context: "ctx")
+        let p = try #require(DocumentPresentation(DocumentSamples.checked(DocumentSamples.proposal), context: "ctx"))
         #expect(p.asked == .known(.proposalCreate) && p.context == ShownText("ctx") && p.summary == ShownText("Adopt the 2027 budget"))
         guard case .proposal(let f) = p.request else { throw CocoaError(.coderInvalidValue) }
         #expect(f.title == ShownText("Adopt the 2027 budget"))
@@ -64,12 +108,12 @@ import Testing
     static let good = #"{"binding":false,"choices":[],"closes_at":0,"opens_at":253402300799,"outage_rule":"","quorum":{"min_ballots":0,"text":""},"removed_may_vote":true,"text":"","title":""}"#
 
     @Test func anEmptyMotionOrQuorumTextIsNoneNotAValue() throws {
-        let p = DocumentPresentation(DocumentSamples.checked(Self.proposal(Self.good)), context: nil)
+        let p = try #require(DocumentPresentation(DocumentSamples.checked(Self.proposal(Self.good)), context: nil))
         guard case .proposal(let f) = p.request else { throw CocoaError(.coderInvalidValue) }
         #expect(f.text == nil && f.quorumText == nil && f.choices.isEmpty && f.opensAt == DocumentPresentation.maxTime && p.context == nil)
     }
 
-    @Test func aPayloadThatDoesNotMatchItsFormExactlyIsShownWhole() {
+    @Test func aPayloadThatDoesNotMatchItsFormExactlyIsShownWhole() throws {
         let mismatched = [
             Self.good.replacingOccurrences(of: #""binding":false,"#, with: ""), // missing
             Self.good.replacingOccurrences(of: #""binding":false,"#, with: #""binding":false,"extra":1,"#), // extra
@@ -81,7 +125,7 @@ import Testing
             Self.good.replacingOccurrences(of: #""text":""}"#, with: #""text":null}"#),
         ]
         for payload in mismatched {
-            let p = DocumentPresentation(DocumentSamples.checked(Self.proposal(payload)), context: nil)
+            let p = try #require(DocumentPresentation(DocumentSamples.checked(Self.proposal(payload)), context: nil))
             guard case .raw(let lines) = p.request else { Issue.record("a form for \(payload)"); continue }
             #expect(lines.first == .init(depth: 0, key: nil, value: .open(.object), comma: false))
         }
@@ -89,18 +133,18 @@ import Testing
 
     @Test func voteExtendHasItsForm() throws {
         let doc = #"{"action":"vote.extend","payload":{"closes_at":1796720400,"outage":{"from":1,"source":"relay","to":2},"proposal_id":"p1"},"summary":"Extend"}"#
-        let p = DocumentPresentation(DocumentSamples.checked(doc), context: nil)
+        let p = try #require(DocumentPresentation(DocumentSamples.checked(doc), context: nil))
         #expect(p.asked == .known(.voteExtend))
         #expect(p.request == .extend(.init(proposalID: ShownText("p1"), closesAt: 1_796_720_400, outageFrom: 1, outageTo: 2, outageSource: ShownText("relay"))))
         let other = doc.replacingOccurrences(of: #""to":2"#, with: #""to":2,"by":"x""#)
-        guard case .raw = DocumentPresentation(DocumentSamples.checked(other), context: nil).request else {
+        guard case .raw = try #require(DocumentPresentation(DocumentSamples.checked(other), context: nil)).request else {
             throw CocoaError(.coderInvalidValue)
         }
     }
 
     @Test func aKnownActionWithoutAFormAndAnUnknownOneAreShownWhole() throws {
         let add = #"{"action":"admin_set.add","payload":{"n":10,"s":"10","t":true,"u":"true","z":null,"a":[],"o":{}},"summary":"Add Ann"}"#
-        let p = DocumentPresentation(DocumentSamples.checked(add), context: nil)
+        let p = try #require(DocumentPresentation(DocumentSamples.checked(add), context: nil))
         #expect(p.asked == .known(.adminSetAdd))
         guard case .raw(let lines) = p.request else { throw CocoaError(.coderInvalidValue) }
         let key = { (s: String) in ShownText(s) }
@@ -120,7 +164,7 @@ import Testing
             .init(depth: 0, key: nil, value: .close(.object), comma: false),
         ])
         let unknown = #"{"action":"treasury.spend","payload":{"k":["\#u{202E}evil",1]},"summary":"Spend"}"#
-        let u = DocumentPresentation(DocumentSamples.checked(unknown), context: nil)
+        let u = try #require(DocumentPresentation(DocumentSamples.checked(unknown), context: nil))
         #expect(u.asked == .unknown("treasury.spend"))
         guard case .raw(let raw) = u.request else { throw CocoaError(.coderInvalidValue) }
         #expect(raw.contains(.init(depth: 3, key: nil, value: .string(ShownText("\u{202E}evil")), comma: true)))

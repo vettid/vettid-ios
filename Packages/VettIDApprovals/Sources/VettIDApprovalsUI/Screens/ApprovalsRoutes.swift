@@ -112,7 +112,7 @@ public struct ApprovalDetailRoute: View {
         a.onDismissEndFailure = { m.dismissEndFailure() }
         a.onForgetSecrets = { m.forgetSecrets() }
         a.onRetryDocument = { m.retryDocument() }
-        a.onDocumentShownWhole = { m.documentShownWhole() }
+        a.onDocumentShownWhole = { m.documentShownWhole($0) }
         return a
     }
 }

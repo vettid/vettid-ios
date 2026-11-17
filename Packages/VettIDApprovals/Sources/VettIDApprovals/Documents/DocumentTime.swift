@@ -6,10 +6,13 @@ public enum DocumentTime {
     /// [seconds] in [zone] (the member's) and in UTC, each with its zone named, for [locale].
     public static func shown(_ seconds: Int64, zone: TimeZone = .current, locale: Locale = .current) -> (local: String, utc: String) {
         let date = Date(timeIntervalSince1970: TimeInterval(seconds))
-        let withSeconds = seconds % 60 != 0
         let utc = TimeZone(identifier: "UTC") ?? zone
+        // Seconds in each zone's own reading (a zone with an offset of seconds, as before 1972, differs from UTC's).
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = zone
+        let localSeconds = calendar.component(.second, from: date) != 0
         // The UTC line names its zone "UTC" (a formatter would say "GMT").
-        return (format(date, zone, locale, withSeconds), format(date, utc, locale, withSeconds, zoneName: false) + " UTC")
+        return (format(date, zone, locale, localSeconds), format(date, utc, locale, seconds % 60 != 0, zoneName: false) + " UTC")
     }
 
     private static func format(_ date: Date, _ zone: TimeZone, _ locale: Locale, _ withSeconds: Bool, zoneName: Bool = true) -> String {

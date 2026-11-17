@@ -36,7 +36,7 @@ import VettIDDataTesting
         m.approve()
         await m.settle()
         #expect(!fake.calls.contains { $0.hasPrefix("approve") })
-        m.documentShownWhole()
+        m.documentShownWhole(document.sha256)
         #expect(m.state.canApprove() && m.state.documentToApprove == document)
         m.approve()
         await m.settle()
@@ -48,7 +48,7 @@ import VettIDDataTesting
         let m = await model()
         #expect(m.state.document == .unshowable(.hash))
         m.setPassword("pw")
-        m.documentShownWhole()
+        m.documentShownWhole(document.sha256)
         #expect(!m.state.canApprove())
         m.deny()
         await m.settle()
@@ -68,7 +68,7 @@ import VettIDDataTesting
     @Test func aChangedDocumentIsShownFromTheStartAndNothingIsApproved() async {
         let m = await model()
         m.setPassword("pw")
-        m.documentShownWhole()
+        m.documentShownWhole(document.sha256)
         fake.documentApproval = .changed(.failure(.hash))
         m.approve()
         await m.settle()
@@ -81,11 +81,46 @@ import VettIDDataTesting
     @Test func anAskNoLongerHeldIsStillApprovedOnlyOverItsDocument() async {
         let m = await model()
         m.setPassword("pw")
+        m.documentShownWhole(document.sha256)
         fake.listed = []
-        #expect(m.state.approval != nil && !m.state.canApprove())
+        #expect(m.state.approval != nil && m.state.canApprove())
         m.approve()
         await m.settle()
-        #expect(!fake.calls.contains("approveAuthentication:a1"))
+        #expect(fake.calls.last == "approveAuthenticationDocument:a1" && !fake.calls.contains("approveAuthentication:a1"))
+    }
+
+    @Test func aReportAboutAnotherDocumentCountsForNothing() async {
+        let m = await model()
+        m.setPassword("pw")
+        m.documentShownWhole("another hash")
+        #expect(!m.state.canApprove() && m.state.documentSeen == nil)
+    }
+
+    @Test func onlyDenyIsOfferedWhileNoDocumentIsShown() async {
+        fake.fail["authenticationDocument"] = VaultFailure(.noResponse)
+        let m = await model()
+        #expect(m.state.onlyDeny)
+        fake.authDocument = .failure(.size)
+        m.retryDocument()
+        await m.settle()
+        #expect(m.state.onlyDeny)
+        fake.authDocument = .success(document)
+        let shown = await model()
+        #expect(!shown.state.onlyDeny)
+    }
+
+    @Test func aRequestThatNamesAnotherDocumentIsFetchedAgain() async {
+        let m = await model()
+        m.documentShownWhole(document.sha256)
+        var changed = request
+        changed.documentSha256 = "bmV3"
+        fake.authDocument = .failure(.hash)
+        fake.listed = [.authentication(changed)]
+        await m.settle()
+        try? await Task.sleep(for: .milliseconds(50))
+        await m.settle()
+        #expect(fake.calls.filter { $0 == "authenticationDocument:a1" }.count == 2)
+        #expect(m.state.document == .unshowable(.hash) && m.state.documentSeen == nil && !m.state.canApprove())
     }
 
     @Test func aRequestWithoutADocumentIsApprovedAsBefore() async {

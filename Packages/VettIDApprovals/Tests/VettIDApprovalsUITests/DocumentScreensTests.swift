@@ -31,11 +31,12 @@ import VettIDUI
 
     static func shown(_ doc: String) -> DocumentStep {
         let d = checked(doc)
-        return .shown(d, DocumentPresentation(d, context: "Approve on Example Service: New vote: Adopt the 2027 budget (full text attached) — ref " + ApprovalDocument.ref(d.d)))
+        // swiftlint:disable:next force_unwrapping
+        return .shown(d, DocumentPresentation(d, context: "Approve on Example Service: New vote: Adopt the 2027 budget (full text attached) — ref " + ApprovalDocument.ref(d.d))!)
     }
 
     func view(_ step: DocumentStep, seen: Bool = false) -> some View {
-        ApprovalDocumentView(step: step, name: "Example Service", seen: seen, onRetry: {}, onSeenWhole: {})
+        ApprovalDocumentView(step: step, name: "Example Service", seen: seen, onRetry: {}, onSeenWhole: { _ in })
     }
 
     private func height(_ view: some View) -> CGFloat {
@@ -49,11 +50,24 @@ import VettIDUI
         }
     }
 
+    /// The largest documents (65,536 bytes) stay drawable, so that Deny stays in reach: a string of 65,000 markers, and an
+    /// array of 32,000 elements, each rendered within a few seconds.
+    @Test func theLargestDocumentsRender() {
+        let head = #"{"action":"x","payload":{"s":""#, tail = #""},"summary":""}"#
+        let markers = head + String(repeating: "\u{7F}", count: 65_536 - head.utf8.count - tail.utf8.count) + tail
+        let zeros = #"{"action":"x","payload":{"a":["# + Array(repeating: "0", count: 32_700).joined(separator: ",") + #"]},"summary":""}"#
+        for doc in [markers, zeros] {
+            let start = Date()
+            #expect(height(view(Self.shown(doc), seen: true)) > 0)
+            #expect(Date().timeIntervalSince(start) < 20)
+        }
+    }
+
     @Test func theRawViewKeepsStringsApartFromNumbers() throws {
         guard case .shown(_, let p) = Self.shown(Self.unknown), case .raw(let lines) = p.request else { throw CocoaError(.coderInvalidValue) }
         let spoken = lines.map(RawDocumentView.spoken)
-        #expect(spoken.contains("amount: 10, text") && spoken.contains("count: 10"))
-        #expect(spoken.contains { $0.hasPrefix("note:") && $0.contains("code point U+202E") })
+        #expect(spoken.contains("level 2, amount: 10, text") && spoken.contains("level 2, count: 10"))
+        #expect(spoken.contains { $0.hasPrefix("level 2, note:") && $0.contains("code point U+202E") })
     }
 
     @Test func theTitlesAreTheSpecs() {

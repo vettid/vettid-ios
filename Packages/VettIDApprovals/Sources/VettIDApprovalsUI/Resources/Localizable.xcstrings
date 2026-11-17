@@ -2424,6 +2424,17 @@
           }
         }
       }
+    },
+    "approvals_doc_level_spoken": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "level %lld"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

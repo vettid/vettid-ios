@@ -93,6 +93,14 @@ public struct ApprovalDetailState: Equatable, Sendable, CustomStringConvertible,
     /// The hash of the document whose whole the screen has shown: Approve is enabled only for that document.
     public var documentSeen: String?
 
+    /// A challenge with a document that is not shown (loading, failed, can't be shown): only Deny is offered, with no
+    /// password field and no Approve (§10.4 "offers only Deny").
+    public var onlyDeny: Bool {
+        guard case .authentication(let x)? = approval, x.hasDocument else { return false }
+        if case .shown? = document { return false }
+        return true
+    }
+
     /// The document shown and checked, when it has all been on screen: the only one an approval signs.
     public var documentToApprove: ApprovalDocument? {
         guard case .shown(let d, _)? = document, documentSeen == d.sha256 else { return nil }
@@ -433,7 +441,10 @@ public final class ApprovalDetailViewModel {
             switch a {
             case .connection(.incoming(let r)): try await repo.approveConnection(r.pendingID)
             case .connection(.outgoing(let r)): try await repo.approveOutgoing(r.connectionID)
-            case .authentication(let x) where x.hasDocument: try await self?.approveOverDocument(x, s, password: pw)
+            case .authentication(let x) where x.hasDocument:
+                // Never a success without the approval: a model that went sends nothing and does not count as decided.
+                guard let self else { throw CancellationError() }
+                try await approveOverDocument(x, s, password: pw)
             case .authentication(let x): try await repo.approveAuthentication(x.requestID, password: pw)
             case .grant(let g):
                 let idx = s.grantIndexes

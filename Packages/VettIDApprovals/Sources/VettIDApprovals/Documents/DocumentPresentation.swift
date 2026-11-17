@@ -92,7 +92,8 @@ public struct DocumentPresentation: Equatable, Sendable {
     /// The latest time a form shows: 9999-12-31 23:59:59 UTC.
     public static let maxTime: Int64 = 253_402_300_799
 
-    public init(_ d: ApprovalDocument, context: String?) {
+    /// Nil only if the checked bytes no longer parse (they always do: they passed the same parser).
+    public init?(_ d: ApprovalDocument, context: String?) {
         asked = KnownAction(rawValue: d.action).map(Asked.known) ?? .unknown(d.action)
         self.context = context.map { ShownText($0) }
         summary = ShownText(d.summary)
@@ -101,8 +102,10 @@ public struct DocumentPresentation: Equatable, Sendable {
             request = .proposal(f)
         } else if known == .voteExtend, let f = Self.extend(d.payload) {
             request = .extend(f)
+        } else if let lines = Self.raw(d) {
+            request = .raw(lines)
         } else {
-            request = .raw(Self.raw(d))
+            return nil
         }
     }
 
@@ -177,22 +180,19 @@ public struct DocumentPresentation: Equatable, Sendable {
     // MARK: - The raw view
 
     /// The whole document, in its (canonical) order.
-    static func raw(_ d: ApprovalDocument) -> [RawLine] {
+    static func raw(_ d: ApprovalDocument) -> [RawLine]? {
+        // The document's own object (`action`, `payload` and `summary` in canonical order): the checked bytes parse again
+        // exactly as they did. Never the payload alone in its place.
+        guard let o = try? StrictJson.parseObject(d.bytes, maxDepth: ApprovalDocument.maxDepth) else { return nil }
         var lines: [RawLine] = []
-        appendLines(.object(rawObject(d)), key: nil, depth: 0, comma: false, to: &lines)
+        appendLines(.object(o), key: nil, depth: 0, comma: false, to: &lines)
         return lines
     }
 
-    /// The document's own object: `action`, `payload` and `summary` in canonical order.
-    private static func rawObject(_ d: ApprovalDocument) -> JsonObject {
-        // The checked bytes parse again exactly as they did (they are strict and canonical).
-        (try? StrictJson.parseObject(d.bytes, maxDepth: ApprovalDocument.maxDepth)) ?? d.payload
-    }
-
     private static func appendLines(_ v: JsonValue, key: String?, depth: Int, comma: Bool, to lines: inout [RawLine]) {
-        let k = key.map { ShownText($0) }
+        let k = key.map { ShownText($0, escaped: true) }
         switch v {
-        case .string(_, let s): lines.append(RawLine(depth: depth, key: k, value: .string(ShownText(s)), comma: comma))
+        case .string(_, let s): lines.append(RawLine(depth: depth, key: k, value: .string(ShownText(s, escaped: true)), comma: comma))
         case .number(let raw): lines.append(RawLine(depth: depth, key: k, value: .number(raw), comma: comma))
         case .bool(_, let b): lines.append(RawLine(depth: depth, key: k, value: .bool(b), comma: comma))
         case .null: lines.append(RawLine(depth: depth, key: k, value: .null, comma: comma))

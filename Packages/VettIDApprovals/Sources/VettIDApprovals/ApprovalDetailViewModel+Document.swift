@@ -4,10 +4,15 @@ import VettIDData
 /// The approval screen's document (VAULT-MESSAGING 0.89.0 §10.4 "Approval documents"): fetched and checked when the screen
 /// first holds the request, shown, approvable once it has all been on screen, and approved only over itself.
 extension ApprovalDetailViewModel {
-    /// A member authentication that carries a document (0.89.0 §10.4): it is fetched and checked once, when the screen
-    /// first holds the request.
+    /// A member authentication that carries a document (0.89.0 §10.4): it is fetched and checked when the screen first
+    /// holds the request, and again if the request it holds comes to name another document than the one shown.
     func loadDocument() {
-        guard local.document == nil, case .authentication(let x)? = local.approval, x.hasDocument else { return }
+        guard case .authentication(let x)? = local.approval, x.hasDocument else { return }
+        switch local.document {
+        case nil: break
+        case .shown(let d, _)? where d.sha256 != x.documentSha256: break
+        default: return
+        }
         local.document = .loading
         let repo = repo
         work.launch { [weak self] in
@@ -24,7 +29,8 @@ extension ApprovalDetailViewModel {
     func show(_ checked: Result<ApprovalDocument, ApprovalDocument.Failure>, context: String?) {
         local.documentSeen = nil
         switch checked {
-        case .success(let d): local.document = .shown(d, DocumentPresentation(d, context: context))
+        case .success(let d):
+            local.document = DocumentPresentation(d, context: context).map { .shown(d, $0) } ?? .unshowable(.shape)
         case .failure(let f): local.document = .unshowable(f)
         }
     }
@@ -36,9 +42,11 @@ extension ApprovalDetailViewModel {
         loadDocument()
     }
 
-    /// The screen has shown the whole of the document it shows now (its end came on screen): Approve may be enabled.
-    public func documentShownWhole() {
-        guard case .shown(let d, _)? = local.document else { return }
+    /// The screen has shown the whole of the document whose hash is [sha256], from its top to its end without a gap
+    /// (``SeenCoverage``): Approve may be enabled, for that document only (a report about a document no longer shown
+    /// counts for nothing).
+    public func documentShownWhole(_ sha256: String) {
+        guard case .shown(let d, _)? = local.document, d.sha256 == sha256 else { return }
         local.documentSeen = d.sha256
     }
 

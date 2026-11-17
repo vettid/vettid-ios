@@ -36,7 +36,8 @@ public struct DecisionActions {
     public var onForgetSecrets: @MainActor () -> Void = {}
     /// An approval's document (VAULT-MESSAGING 0.89.0 §10.4): its fetch again after a failure, and its end on screen.
     public var onRetryDocument: @MainActor () -> Void = {}
-    public var onDocumentShownWhole: @MainActor () -> Void = {}
+    /// The whole of the document of that hash has been on screen.
+    public var onDocumentShownWhole: @MainActor (String) -> Void = { _ in }
 
     public init() {}
 }
@@ -191,7 +192,7 @@ public struct ApprovalDetailScreen: View {
         FormScaffold(
             title: ApprovalTexts.title(a, name: state.connectionName),
             message: ApprovalTexts.body(a, name: state.connectionName),
-            primaryLabel: ApprovalTexts.approveLabel(a),
+            primaryLabel: state.onlyDeny ? nil : ApprovalTexts.approveLabel(a),
             primaryEnabled: state.canApprove(at: now),
             busy: state.busy,
             secondaryLabel: ApprovalTexts.denyLabel(a),
@@ -257,7 +258,7 @@ struct DecisionContent: View {
                     onRetry: actions.onRetryDocument, onSeenWhole: actions.onDocumentShownWhole
                 )
             }
-            if state.needs == .password {
+            if state.needs == .password, !state.onlyDeny {
                 SecretField(
                     ApprovalsStrings.password, text: Binding(get: { state.password }, set: { actions.onPassword($0) }),
                     supporting: ApprovalsStrings.passwordHint, onSubmit: actions.onApprove

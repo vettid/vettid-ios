@@ -7,14 +7,15 @@ import VettIDUI
 /// An approval's document on its screen (VAULT-MESSAGING 0.89.0 §10.4 "Approval documents", "What the app shows"): what
 /// is asked, the service's description, its summary and the request, each under the app's own label and each value in a
 /// block of its own that looks clearly different from the labels; or "This request can't be shown" when the document
-/// failed its checks. When the end of the document comes on screen, the model is told (Approve waits for it).
+/// failed its checks. Once the whole of the document has been on screen, from its top down without a gap, the model is
+/// told (Approve waits for it).
 struct ApprovalDocumentView: View {
     @Environment(\.vettIDColors) private var colors
     let step: DocumentStep
     let name: String?
     let seen: Bool
     let onRetry: @MainActor () -> Void
-    let onSeenWhole: @MainActor () -> Void
+    let onSeenWhole: @MainActor (String) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: Spacing.m) {
@@ -34,17 +35,12 @@ struct ApprovalDocumentView: View {
             case .unshowable:
                 NoticeCard(.warning, title: ApprovalsStrings.docCantShow, announce: .polite)
                     .accessibilityIdentifier("document_cant_show")
-            case .shown(_, let p):
-                shown(p)
-                // The end of the document: once it has been on screen, the whole has (the screen opens at its top).
-                Color.clear.frame(height: 1)
-                    .onGeometryChange(for: Bool.self) { proxy in
-                        guard let visible = proxy.bounds(of: .scrollView) else { return false }
-                        return visible.intersects(proxy.frame(in: .local))
-                    } action: { onScreen in
-                        if onScreen { onSeenWhole() }
-                    }
-                    .accessibilityHidden(true)
+            case .shown(let d, let p):
+                DocumentCoverage(sha256: d.sha256, onSeenWhole: onSeenWhole) {
+                    VStack(alignment: .leading, spacing: Spacing.m) { shown(p) }
+                }
+                // Another document is another view: its coverage starts again from its top.
+                .id(d.sha256)
                 if !seen {
                     Text(ApprovalsStrings.docReadToEnd).vettIDFont(.bodyMedium).foregroundStyle(colors.onSurfaceVariant)
                         .accessibilityIdentifier("document_read_to_end")
@@ -55,7 +51,7 @@ struct ApprovalDocumentView: View {
     }
 
     @ViewBuilder private func shown(_ p: DocumentPresentation) -> some View {
-        Section(ApprovalsStrings.docAsked) {
+        DocSection(ApprovalsStrings.docAsked) {
             switch p.asked {
             case .known(let a): ValueBlock { Text(Self.title(a)).vettIDFont(.bodyLarge) }
             case .unknown(let action):
@@ -66,16 +62,16 @@ struct ApprovalDocumentView: View {
             }
         }
         if let context = p.context {
-            Section(ApprovalsStrings.docDescription) {
+            DocSection(ApprovalsStrings.docDescription) {
                 ValueBlock { ShownTextView(text: context) }
                 Text(ApprovalsStrings.docDescriptionNote).vettIDFont(.bodyMedium).foregroundStyle(colors.onSurfaceVariant)
             }
         }
-        Section(ApprovalsStrings.docSummary) { ValueBlock { ShownTextView(text: p.summary) } }
+        DocSection(ApprovalsStrings.docSummary) { ValueBlock { ShownTextView(text: p.summary) } }
         switch p.request {
-        case .proposal(let f): Section(ApprovalsStrings.docRequest) { ProposalFormView(form: f) }
-        case .extend(let f): Section(ApprovalsStrings.docRequest) { ExtendFormView(form: f) }
-        case .raw(let lines): Section(ApprovalsStrings.docDetails) { RawDocumentView(lines: lines) }
+        case .proposal(let f): DocSection(ApprovalsStrings.docRequest) { ProposalFormView(form: f) }
+        case .extend(let f): DocSection(ApprovalsStrings.docRequest) { ExtendFormView(form: f) }
+        case .raw(let lines): DocSection(ApprovalsStrings.docDetails) { RawDocumentView(lines: lines) }
         }
     }
 
@@ -92,8 +88,42 @@ struct ApprovalDocumentView: View {
     }
 }
 
+/// Follows which part of [content] is on screen in the enclosing scroll view (``SeenCoverage``) and says once that the
+/// whole of it has been, from its top down without a gap: a jump past its middle does not count, and a change of its
+/// height (another text size) starts again. When there is no scroll view to measure against, nothing is ever seen.
+struct DocumentCoverage<Content: View>: View {
+    let sha256: String
+    let onSeenWhole: @MainActor (String) -> Void
+    @ViewBuilder let content: () -> Content
+    @State private var coverage = SeenCoverage()
+
+    struct Seen: Equatable {
+        var visible: ClosedRange<CGFloat>?
+        var height: CGFloat
+    }
+
+    static func seen(_ g: GeometryProxy) -> Seen {
+        let h = g.size.height
+        guard let b = g.bounds(of: .scrollView) else { return Seen(visible: nil, height: h) }
+        let top = max(b.minY, 0), bottom = min(b.maxY, h)
+        return Seen(visible: top <= bottom ? top...bottom : nil, height: h)
+    }
+
+    var body: some View {
+        content().background(
+            GeometryReader { g in
+                Color.clear.onChange(of: Self.seen(g), initial: true) { _, now in
+                    let before = coverage.whole
+                    coverage.saw(now.visible, height: now.height)
+                    if coverage.whole, !before { onSeenWhole(sha256) }
+                }
+            }
+        )
+    }
+}
+
 /// A part of the document under the app's own label: the label as a heading, the value blocks below it.
-private struct Section<Content: View>: View {
+private struct DocSection<Content: View>: View {
     @Environment(\.vettIDColors) private var colors
     let label: String
     @ViewBuilder let content: () -> Content
@@ -137,29 +167,55 @@ private struct FieldLabel: View {
     }
 }
 
-/// A ``ShownText``: plain text (never markup, no links), wrapped and never cut, its markers in a style of their own so
-/// that no string can imitate one; VoiceOver reads a marker as its code point.
+/// How the document's texts are drawn: a marker in a monospaced, boxed style of its own (a fill behind it, not only a
+/// colour), so that it is told from text by its shape too.
+struct DocumentStyle {
+    var marker: Color
+    var markerFill: Color
+    /// The fill behind a raw view's string, so that its content is told from the punctuation around it.
+    var stringFill: Color
+
+    init(_ colors: VettIDColors) {
+        marker = colors.error.color
+        markerFill = colors.error.color.opacity(0.14)
+        stringFill = colors.secondaryContainer.color
+    }
+
+    /// [t] as one attributed run list: text as itself, kept line breaks, markers in their style. Adjacent runs of one
+    /// style coalesce, so a document of 65,536 markers stays one text.
+    func attributed(_ t: ShownText, fill: Color? = nil) -> AttributedString {
+        var out = AttributedString()
+        for run in t.runs {
+            switch run {
+            case .text(let s):
+                var a = AttributedString(s)
+                if let fill { a.backgroundColor = fill }
+                out += a
+            case .lineBreak: out += AttributedString("\n")
+            case .marker(let v):
+                var a = AttributedString(ShownText.marker(v))
+                a.font = .system(.body, design: .monospaced)
+                a.foregroundColor = marker
+                a.backgroundColor = markerFill
+                out += a
+            }
+        }
+        return out
+    }
+}
+
+/// A ``ShownText``: plain text (never markup, no links), wrapped and never cut, its markers in a style of their own;
+/// VoiceOver reads a marker as its code point.
 struct ShownTextView: View {
     @Environment(\.vettIDColors) private var colors
     let text: ShownText
 
     var body: some View {
-        Self.text(text, markerColor: colors.error)
+        Text(DocumentStyle(colors).attributed(text))
             .vettIDFont(.bodyLarge)
             .fixedSize(horizontal: false, vertical: true)
             .textSelection(.disabled)
             .accessibilityLabel(Self.spoken(text))
-    }
-
-    static func text(_ t: ShownText, markerColor: some ShapeStyle) -> Text {
-        t.runs.reduce(Text(verbatim: "")) { acc, run in
-            switch run {
-            case .text(let s): acc + Text(verbatim: s)
-            case .lineBreak: acc + Text(verbatim: "\n")
-            case .marker(let v):
-                acc + Text(verbatim: ShownText.marker(v)).font(.system(.body, design: .monospaced)).foregroundStyle(markerColor)
-            }
-        }
     }
 
     static func spoken(_ t: ShownText) -> String {
@@ -188,7 +244,6 @@ private struct TimeValue: View {
 }
 
 private struct ProposalFormView: View {
-    @Environment(\.vettIDColors) private var colors
     let form: DocumentPresentation.ProposalForm
 
     var body: some View {
@@ -211,10 +266,9 @@ private struct ProposalFormView: View {
                 .accessibilityElement(children: .combine)
             }
             field(ApprovalsStrings.docFieldQuorum) {
-                ValueBlock {
-                    Text(ApprovalsStrings.docBallots(Int(clamping: form.quorumBallots))).vettIDFont(.bodyLarge)
-                    if let text = form.quorumText { ShownTextView(text: text) }
-                }
+                // The app's own count, then the service's text in a block of its own.
+                Text(ApprovalsStrings.docBallots(Int(clamping: form.quorumBallots))).vettIDFont(.bodyLarge)
+                if let text = form.quorumText { ValueBlock { ShownTextView(text: text) } }
             }
             field(nil) {
                 ValueBlock { Text(form.binding ? ApprovalsStrings.docBinding : ApprovalsStrings.docAdvisory).vettIDFont(.bodyLarge) }
@@ -259,22 +313,31 @@ private struct ExtendFormView: View {
 }
 
 /// The raw view (§10.4): the document as a tree, one member or element to a line, indented by depth, its base direction
-/// left-to-right. Each key and each string is its own isolate (U+2068 … U+2069), with the quotation marks, punctuation and
-/// numbers outside every isolate, so right-to-left text in one string cannot move a neighboring key, value, number or
-/// bracket; a string keeps its quotation marks, so "10" and 10 never look the same.
+/// left-to-right. Each key and each string is its own isolate (U+2068 … U+2069) on a fill of its own, with the quotation
+/// marks, punctuation and numbers outside every isolate, so right-to-left text in one string cannot move a neighboring
+/// key, value, number or bracket; a string keeps its quotation marks and shows its own `"` and `\` escaped, so "10" and 10
+/// never look the same and no string can draw another member. The indent is spaces, so a wrapped line starts at the left
+/// edge, never at a member's place. The lines are drawn in blocks of ``chunk``, each one text, so that the largest
+/// document stays a few hundred views.
 struct RawDocumentView: View {
     @Environment(\.vettIDColors) private var colors
     let lines: [DocumentPresentation.RawLine]
 
+    static let chunk = 40
+
     var body: some View {
+        let style = DocumentStyle(colors)
         ValueBlock {
-            ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
-                Self.text(line, markerColor: colors.error)
-                    .font(.system(.callout, design: .monospaced))
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.leading, CGFloat(min(line.depth, 16)) * 12)
-                    .accessibilityLabel(Self.spoken(line))
+            ForEach(Array(stride(from: 0, to: lines.count, by: Self.chunk)), id: \.self) { start in
+                let part = lines[start..<min(start + Self.chunk, lines.count)]
+                Text(part.enumerated().reduce(into: AttributedString()) { out, e in
+                    if e.offset > 0 { out += AttributedString("\n") }
+                    out += Self.attributed(e.element, style)
+                })
+                .font(.system(.callout, design: .monospaced))
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityLabel(part.map(Self.spoken).joined(separator: "\n"))
             }
         }
         .environment(\.layoutDirection, .leftToRight)
@@ -284,30 +347,29 @@ struct RawDocumentView: View {
     static let fsi = "\u{2068}"
     static let pdi = "\u{2069}"
 
-    /// A string's text inside its own isolate (its markers stay inside: a marker is text, not a control).
-    private static func isolated(_ t: ShownText, markerColor: some ShapeStyle) -> Text {
-        Text(verbatim: fsi) + ShownTextView.text(t, markerColor: markerColor) + Text(verbatim: pdi)
+    /// A key's or string's text inside its own isolate, on the string fill.
+    private static func isolated(_ t: ShownText, _ style: DocumentStyle) -> AttributedString {
+        AttributedString(fsi) + style.attributed(t, fill: style.stringFill) + AttributedString(pdi)
     }
 
-    static func text(_ line: DocumentPresentation.RawLine, markerColor: some ShapeStyle) -> Text {
+    static func attributed(_ line: DocumentPresentation.RawLine, _ style: DocumentStyle) -> AttributedString {
         // A left-to-right mark first: the line's base direction is left-to-right whatever its isolates hold.
-        var parts = [Text(verbatim: lrm)]
-        if let key = line.key {
-            parts += [Text(verbatim: "\""), isolated(key, markerColor: markerColor), Text(verbatim: "\": ")]
-        }
+        var t = AttributedString(lrm + String(repeating: "  ", count: line.depth))
+        if let key = line.key { t += AttributedString("\"") + isolated(key, style) + AttributedString("\": ") }
         switch line.value {
-        case .string(let s): parts += [Text(verbatim: "\""), isolated(s, markerColor: markerColor), Text(verbatim: "\"")]
-        case .number(let n): parts.append(Text(verbatim: n))
-        case .bool(let b): parts.append(Text(verbatim: b ? "true" : "false"))
-        case .null: parts.append(Text(verbatim: "null"))
-        case .open(let c): parts.append(Text(verbatim: c == .object ? "{" : "["))
-        case .close(let c): parts.append(Text(verbatim: c == .object ? "}" : "]"))
-        case .empty(let c): parts.append(Text(verbatim: c == .object ? "{}" : "[]"))
+        case .string(let s): t += AttributedString("\"") + isolated(s, style) + AttributedString("\"")
+        case .number(let n): t += AttributedString(n)
+        case .bool(let b): t += AttributedString(b ? "true" : "false")
+        case .null: t += AttributedString("null")
+        case .open(let c): t += AttributedString(c == .object ? "{" : "[")
+        case .close(let c): t += AttributedString(c == .object ? "}" : "]")
+        case .empty(let c): t += AttributedString(c == .object ? "{}" : "[]")
         }
-        if line.comma { parts.append(Text(verbatim: ",")) }
-        return parts.dropFirst().reduce(parts[0], +)
+        if line.comma { t += AttributedString(",") }
+        return t
     }
 
+    /// What VoiceOver reads for a line: its level, then its key and value, a string said to be text.
     static func spoken(_ line: DocumentPresentation.RawLine) -> String {
         let key = line.key.map { ShownTextView.spoken($0) + ": " } ?? ""
         let value = switch line.value {
@@ -319,7 +381,7 @@ struct RawDocumentView: View {
         case .close(let c): c == .object ? "}" : "]"
         case .empty(let c): c == .object ? "{}" : "[]"
         }
-        return key + value
+        return ApprovalsStrings.docLevelSpoken(line.depth) + ", " + key + value
     }
 }
 #endif

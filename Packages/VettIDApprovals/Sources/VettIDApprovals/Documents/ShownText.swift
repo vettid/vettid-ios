@@ -35,8 +35,10 @@ public struct ShownText: Equatable, Sendable {
     public var isEmpty: Bool { runs.isEmpty }
 
     /// [s] cleaned. [lineBreaks]: the field keeps line breaks (Motion and Quorum's text): at most two LF in a row are
-    /// kept, a third and later in a row are markers; elsewhere every LF is a marker.
-    public init(_ s: String, lineBreaks: Bool = false) {
+    /// kept, a third and later in a row are markers; elsewhere every LF is a marker. [escaped]: a string of the raw view,
+    /// whose `"` and `\` are shown escaped as JSON writes them (`\"`, `\\`), so that no string can close its own quotes
+    /// and draw what looks like another member (chosen; not in the spec).
+    public init(_ s: String, lineBreaks: Bool = false, escaped: Bool = false) {
         var runs: [Run] = []
         var text = String.UnicodeScalarView()
         var breaks = 0
@@ -50,12 +52,18 @@ public struct ShownText: Equatable, Sendable {
             breaks = isBreak ? breaks + 1 : 0
             let isMark = [.nonspacingMark, .enclosingMark].contains(scalar.properties.generalCategory)
             marks = isMark ? marks + 1 : 0
+            // A combining mark with no base of its own in this run (at the start, or after a marker or a line break)
+            // would combine with what the app draws before it (a quotation mark, a marker): a marker itself.
+            let baseless = isMark && text.isEmpty
             if isBreak, lineBreaks, breaks <= 2 {
                 flush()
                 runs.append(.lineBreak)
-            } else if isBreak || Self.marked(scalar) || (isMark && marks > 2) {
+            } else if isBreak || Self.marked(scalar) || (isMark && marks > 2) || baseless {
                 flush()
                 runs.append(.marker(scalar.value))
+            } else if escaped, scalar == "\"" || scalar == "\\" {
+                text.append("\\")
+                text.append(scalar)
             } else {
                 text.append(scalar)
             }
@@ -68,8 +76,10 @@ public struct ShownText: Equatable, Sendable {
     /// among them) characters, line and paragraph separators (Zl, Zp), private-use and unassigned code points (Co, Cn: a
     /// character newer than this system's Unicode data is unassigned to it), any other Default_Ignorable_Code_Point (the
     /// Hangul fillers, the variation selectors, U+FE0F and the joiners among them), and every space separator (Zs) but
-    /// U+0020.
+    /// U+0020. Also (chosen; not in the spec) the brackets markers are drawn with, U+27E8 and U+27E9, so that no text can
+    /// spell a marker, however it is styled.
     static func marked(_ scalar: Unicode.Scalar) -> Bool {
+        if scalar == "\u{27E8}" || scalar == "\u{27E9}" { return true }
         let p = scalar.properties
         switch p.generalCategory {
         case .control, .format, .lineSeparator, .paragraphSeparator, .privateUse, .unassigned, .surrogate: return true
