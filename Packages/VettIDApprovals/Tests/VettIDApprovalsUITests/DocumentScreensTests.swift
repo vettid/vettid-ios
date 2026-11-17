@@ -91,8 +91,8 @@ import VettIDUI
         return Hosted(window: window, vc: vc, scroll: try #require(find(vc.view)))
     }
 
-    static func root(_ content: some View) -> AnyView {
-        AnyView(ScrollView { content.padding(Spacing.xl) }.vettIDTheme(.light).dynamicTypeSize(.accessibility5))
+    static func root(_ content: some View, size: DynamicTypeSize = .accessibility5) -> AnyView {
+        AnyView(ScrollView { content.padding(Spacing.xl) }.vettIDTheme(.light).dynamicTypeSize(size))
     }
 
     /// Scrolls from the top to the end, half a screen at a time (the end read again at each step).
@@ -182,7 +182,7 @@ import VettIDUI
     @Test func aRowTallerThanIsSafeIsNeverSeen() async throws {
         final class Box { var seen = 0 }
         let box = Box()
-        let tall = AnyView(Color.gray.frame(height: DocumentRows.maxRowPixels / UIScreen.main.scale + 1))
+        let tall = DocRow(Color.gray.frame(height: DocumentRows.maxRowPixels / UIScreen.main.scale + 1))
         let (window, scroll) = try host(DocumentRows(rows: [tall], onSeenWhole: { box.seen += 1 }))
         await settle()
         var y: CGFloat = 0
@@ -234,24 +234,33 @@ import VettIDUI
 
     final class Reports {
         var seen = 0
+        /// Times the notice came on, and whether it shows now.
         var held = 0
+        var showing = false
     }
 
-    func document(_ doc: String, voiceOver: Bool, generation: Int = 1, name: String? = nil, _ r: Reports) -> ApprovalDocumentView {
+    func document(
+        _ doc: String, voiceOver: Bool, generation: Int = 1, name: String? = nil, seen: Bool = false, _ r: Reports
+    ) -> ApprovalDocumentView {
         ApprovalDocumentView(
-            step: Self.shown(doc), generation: generation, voiceOver: voiceOver, name: name, seen: false, onRetry: {},
-            onSeenWhole: { _, _ in r.seen += 1 }, onHeld: { r.held += 1 }
+            step: Self.shown(doc), generation: generation, voiceOver: voiceOver, name: name, seen: seen, onRetry: {},
+            onSeenWhole: { _, _ in r.seen += 1 },
+            onNotice: { shows in
+                if shows { r.held += 1 }
+                r.showing = shows
+            }
         )
     }
+
+    static let widest = #"{"action":"x","payload":{"s":"\#(String(repeating: "\u{FDFD}", count: 300))"},"summary":""}"#
 
     /// The chain on screen: a row too tall cuts the document again, from nothing seen, down to the smallest cutting; there
     /// the document is held, never seen whatever is scrolled; a new generation starts again from the usual cutting.
     @Test func aDocumentTooTallIsCutAgainThenHeldAndANewOneStartsAgain() async throws {
         // VoiceOver's rule (a content row must fit the visible area), in a window too short for even the smallest pieces
         // of the widest glyph.
-        let doc = #"{"action":"x","payload":{"s":"\#(String(repeating: "\u{FDFD}", count: 300))"},"summary":""}"#
         let r = Reports()
-        let (window, scroll) = try host(document(doc, voiceOver: true, r), height: 200)
+        let (window, scroll) = try host(document(Self.widest, voiceOver: true, r), height: 200)
         await settle()
         await settle()
         await scrollThrough(scroll)
@@ -266,24 +275,107 @@ import VettIDUI
         h2.window.isHidden = true
     }
 
-    /// Turning VoiceOver on or off on screen starts the coverage again: what was seen under one cutting counts for nothing
-    /// under the other.
+    /// Turning VoiceOver on or off on screen starts the coverage again: all but the last screen seen under one cutting,
+    /// then only the last screen under the other, reports nothing.
     @Test func aVoiceOverToggleOnScreenStartsCoverageAgain() async throws {
         let doc = #"{"action":"x","payload":{"s":"\#(Array(repeating: "budget", count: 400).joined(separator: " "))"},"summary":""}"#
         let r = Reports()
         let h = try hostVC(document(doc, voiceOver: false, r))
-        let (window, vc, scroll) = (h.window, h.vc, h.scroll)
         await settle()
-        // Half way down under one cutting, then the other cutting: nothing reported until scrolled through again.
-        scroll.setContentOffset(CGPoint(x: 0, y: (scroll.contentSize.height - scroll.bounds.height) / 2), animated: false)
+        var y = -h.scroll.adjustedContentInset.top
+        let end = h.scroll.contentSize.height - h.scroll.bounds.height
+        while y < end - h.scroll.bounds.height {
+            y += h.scroll.bounds.height / 2
+            h.scroll.setContentOffset(CGPoint(x: 0, y: min(y, end - h.scroll.bounds.height)), animated: false)
+            try? await Task.sleep(for: .milliseconds(80))
+        }
         await settle()
-        vc.rootView = Self.root(document(doc, voiceOver: true, r))
+        #expect(r.seen == 0, "not yet the last screen")
+        h.vc.rootView = Self.root(document(doc, voiceOver: true, r))
         await settle()
-        scroll.setContentOffset(CGPoint(x: 0, y: scroll.contentSize.height - scroll.bounds.height), animated: false)
+        h.scroll.setContentOffset(CGPoint(x: 0, y: h.scroll.contentSize.height - h.scroll.bounds.height), animated: false)
         await settle()
-        #expect(r.seen == 0, "nothing carried over from the other cutting")
-        await scrollThrough(scroll)
+        #expect(r.seen == 0, "the other cutting's coverage counts for nothing")
+        await scrollThrough(h.scroll)
         #expect(r.seen == 1)
+        h.window.isHidden = true
+    }
+
+    /// The held state is cleared on the same screen: by another document, another text size, VoiceOver turned off, a
+    /// visible area it now fits.
+    @Test func aHeldDocumentIsClearedOnTheSameScreen() async throws {
+        let r = Reports()
+        let h = try hostVC(document(Self.widest, voiceOver: true, r), height: 200)
+        await settle()
+        await scrollThrough(h.scroll)
+        #expect(r.held == 1 && r.showing)
+        // Another document: cleared, then held again from the usual cutting (it is still too tall here).
+        h.vc.rootView = Self.root(document(Self.widest, voiceOver: true, generation: 2, r))
+        await settle()
+        await scrollThrough(h.scroll)
+        #expect(r.held == 2 && r.showing)
+        // Another text size: cleared, and held again.
+        h.vc.rootView = Self.root(document(Self.widest, voiceOver: true, generation: 2, r), size: .accessibility4)
+        await settle()
+        await scrollThrough(h.scroll)
+        #expect(r.held == 3 && r.showing)
+        // VoiceOver off: its fit rule no longer applies; cleared, not held again.
+        h.vc.rootView = Self.root(document(Self.widest, voiceOver: false, generation: 2, r), size: .accessibility4)
+        await settle()
+        await scrollThrough(h.scroll)
+        #expect(!r.showing && r.held == 3)
+        h.window.isHidden = true
+    }
+
+    /// A window that grows to fit clears the held state.
+    @Test func aHeldDocumentIsClearedWhenTheScreenGrows() async throws {
+        let r = Reports()
+        let h = try hostVC(document(Self.widest, voiceOver: true, r), height: 200)
+        await settle()
+        await scrollThrough(h.scroll)
+        #expect(r.showing)
+        h.window.frame = CGRect(x: 0, y: 0, width: 390, height: 844)
+        h.vc.view.setNeedsLayout()
+        h.vc.view.layoutIfNeeded()
+        await settle()
+        await settle()
+        #expect(!r.showing)
+        h.window.isHidden = true
+    }
+
+    /// A document that fits only at the smallest cutting is cut down to it and seen, never held: no stale report from a
+    /// larger cutting skips to holding.
+    @Test func aDocumentThatFitsOnlyAtTheSmallestCuttingIsSeen() async throws {
+        let r = Reports()
+        let h = try hostVC(document(Self.widest, voiceOver: true, r), height: 700)
+        await settle()
+        // The first pass finds rows too tall as they come on screen, and the document is cut again (coverage from
+        // nothing); a second pass, at the cutting that fits, sees it whole.
+        await scrollThrough(h.scroll)
+        await scrollThrough(h.scroll)
+        #expect(r.held == 0 && r.seen == 1)
+        h.window.isHidden = true
+    }
+
+    /// A document already seen whole shows no notice, held or not.
+    @Test func noNoticeBesideADocumentSeenWhole() async throws {
+        let r = Reports()
+        let (window, scroll) = try host(document(Self.widest, voiceOver: true, seen: true, r), height: 200)
+        await settle()
+        await scrollThrough(scroll)
+        #expect(r.held == 0 && !r.showing)
+        window.isHidden = true
+    }
+
+    /// A row one point under the limit counts as seen once scrolled through.
+    @Test func aRowJustUnderTheLimitIsSeen() async throws {
+        final class Box { var seen = 0 }
+        let box = Box()
+        let row = DocRow(Color.gray.frame(height: DocumentRows.maxRowPixels / UIScreen.main.scale - 1))
+        let (window, scroll) = try host(DocumentRows(rows: [row], onSeenWhole: { box.seen += 1 }))
+        await settle()
+        await scrollThrough(scroll)
+        #expect(box.seen == 1)
         window.isHidden = true
     }
 
@@ -314,7 +406,7 @@ import VettIDUI
     @Test func aRowTooTallIsSaid() async throws {
         final class Box { var tall = false }
         let box = Box()
-        let tall = AnyView(Color.gray.frame(height: DocumentRows.maxRowPixels / UIScreen.main.scale + 1))
+        let tall = DocRow(Color.gray.frame(height: DocumentRows.maxRowPixels / UIScreen.main.scale + 1))
         let (window, _) = try host(DocumentRows(rows: [tall], onSeenWhole: {}, onTooTall: { box.tall = true }))
         // The cutting halves on each report, down to the smallest piece.
         #expect(ApprovalDocumentView.cutting(voiceOver: false, shrink: 1).max == 100)

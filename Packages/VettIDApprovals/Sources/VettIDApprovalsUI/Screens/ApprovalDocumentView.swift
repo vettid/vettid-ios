@@ -24,14 +24,16 @@ struct ApprovalDocumentView: View, Equatable {
     let onSeenWhole: @MainActor (String, Int) -> Void
     /// TEST ONLY: each row's height in pixels as it is measured.
     var onRowPixels: (@MainActor (CGFloat) -> Void)?
-    /// TEST ONLY: the document is held (the notice shows).
-    var onHeld: (@MainActor () -> Void)?
+    /// TEST ONLY: whether the notice shows, each time that changes.
+    var onNotice: (@MainActor (Bool) -> Void)?
     /// A row is too tall to be drawn even at the smallest cutting: the document cannot be approved here, and the screen
     /// says so.
     @State private var tooTall = false
     /// Times the cutting was halved because a row was too tall to be drawn: rows are cut again, smaller, before the
     /// screen ever gives up (``smallestPiece``).
     @State private var shrink = 0
+    /// VoiceOver as the screen last saw it (``rowTooTall(_:)`` compares against it).
+    @State private var liveVoiceOver = false
 
     /// The fewest characters a piece is cut to.
     static let smallestPiece = 10
@@ -62,17 +64,17 @@ struct ApprovalDocumentView: View, Equatable {
         )
     }
 
-    /// A row too tall to be drawn: cut again smaller, or, at the smallest cutting, say so.
     /// A row too tall to be drawn, reported by rows of [reported] cutting: cut again smaller, or, at the smallest
     /// cutting, say so. A report from rows of an earlier cutting (several in one pass) is stale and changes nothing, so
     /// the smallest cutting is always laid out before the screen says so.
     private func rowTooTall(_ reported: Cutting) {
-        guard reported == cutting else { return }
-        if cutting.max > Self.smallestPiece {
+        // The cutting now, from state (the closure that reports may hold an earlier copy of this view).
+        let current = Self.cutting(voiceOver: liveVoiceOver, shrink: shrink)
+        guard reported == current else { return }
+        if current.max > Self.smallestPiece {
             shrink += 1
         } else if !tooTall {
             tooTall = true
-            onHeld?()
         }
     }
 
@@ -129,21 +131,25 @@ struct ApprovalDocumentView: View, Equatable {
         .padding(.top, Spacing.l)
         // Another document starts from the usual cutting.
         .onChange(of: generation) { resetCutting() }
-        .onChange(of: voiceOver) { resetCutting() }
+        .onChange(of: voiceOver, initial: true) { _, now in
+            if liveVoiceOver != now { resetCutting() }
+            liveVoiceOver = now
+        }
+        .onChange(of: tooTall && !seen) { _, shows in onNotice?(shows) }
         .onChange(of: typeSize) { resetCutting() }
     }
 
     /// The document as rows, each small: the parts under their labels, and every value of any length in pieces
     /// (``DocPiece``), so that the largest document is drawn a few rows at a time and every row is drawn whole.
-    private func rows(_ p: DocumentPresentation) -> [AnyView] {
+    private func rows(_ p: DocumentPresentation) -> [DocRow] {
         let d = DocRows(max: cutting.max, maxBreaks: cutting.maxBreaks)
-        var r: [AnyView] = [DocRows.heading(ApprovalsStrings.docAsked)]
+        var r: [DocRow] = [DocRows.heading(ApprovalsStrings.docAsked)]
         switch p.asked {
         case .known(let a): r.append(DocRows.block { Text(Self.title(a)).vettIDFont(.bodyLarge) })
         case .unknown(let action):
             r += d.value(ShownText(action))
             let who = AccountNames.isolateOrNull(name) ?? ApprovalsStrings.aConnection
-            r.append(AnyView(
+            r.append(DocRow(
                 NoticeCard(.warning, title: ApprovalsStrings.docUnknownWarning(who)).padding(.top, Spacing.s)
                     .accessibilityIdentifier("document_unknown")
             ))
@@ -187,7 +193,7 @@ struct ApprovalDocumentView: View, Equatable {
 /// (``SeenCoverage``); once every row has been on screen whole, the model is told. A row never brought on screen (past a
 /// jump to the end) is never seen, and a change of a row's height (another text size) starts that row again.
 struct DocumentRows: View {
-    let rows: [AnyView]
+    let rows: [DocRow]
     let onSeenWhole: @MainActor () -> Void
     var onTooTall: @MainActor () -> Void = {}
     var onRowPixels: (@MainActor (CGFloat) -> Void)?
@@ -209,9 +215,10 @@ struct DocumentRows: View {
     var body: some View {
         LazyVStack(alignment: .leading, spacing: 0) {
             ForEach(rows.indices, id: \.self) { i in
-                rows[i].clipped()
+                rows[i].view.clipped()
                     .modifier(RowSeen(
-                        onWhole: { rowSeen(i) }, onTooTall: onTooTall, onPixels: onRowPixels, fitScreen: fitScreen,
+                        content: rows[i].content, onWhole: { rowSeen(i) }, onTooTall: onTooTall, onPixels: onRowPixels,
+                        fitScreen: fitScreen,
                         onScreen: { h in
                             guard abs(h - screen) > 1 else { return }
                             if screen > 0 { onScreenHeight(h) }
@@ -232,15 +239,15 @@ struct DocumentRows: View {
 /// Says once that the whole of a row has been on screen in the enclosing scroll view.
 struct RowSeen: ViewModifier {
     @Environment(\.displayScale) private var scale
+    /// The row holds the document's text (a value's piece, raw lines), not the app's own words: only such a row must fit
+    /// the screen under VoiceOver.
+    var content = false
     let onWhole: @MainActor () -> Void
     var onTooTall: @MainActor () -> Void = {}
     var onPixels: (@MainActor (CGFloat) -> Void)?
     var fitScreen = false
     var onScreen: @MainActor (CGFloat) -> Void = { _ in }
     @State private var coverage = SeenCoverage()
-    /// The row holds the document's text (a value's piece, raw lines), not the app's own words: only such a row must
-    /// fit the screen under VoiceOver (``ContentRow``).
-    @State private var content = false
 
     struct Seen: Equatable {
         var visible: ClosedRange<CGFloat>?
@@ -258,7 +265,7 @@ struct RowSeen: ViewModifier {
     }
 
     func body(content row: Content) -> some View {
-        row.onPreferenceChange(ContentRow.self) { content = $0 }.background(
+        row.background(
             GeometryReader { g in
                 Color.clear.onChange(of: Self.seen(g), initial: true) { _, now in
                     let pixels = now.height * scale
@@ -274,10 +281,19 @@ struct RowSeen: ViewModifier {
     }
 }
 
-/// Set by a row that holds the document's text, read by its ``RowSeen``.
-struct ContentRow: PreferenceKey {
-    static let defaultValue = false
-    static func reduce(value: inout Bool, nextValue: () -> Bool) { value = value || nextValue() }
+/// A row of a document: its view, and whether it holds the document's text (a value's piece, raw lines) rather than
+/// the app's own words (headings, labels, notices).
+struct DocRow {
+    let view: AnyView
+    let content: Bool
+
+    init(_ view: some View, content: Bool = false) {
+        self.view = AnyView(view)
+        self.content = content
+    }
+
+    /// The row with room above it.
+    func padded(_ top: CGFloat) -> DocRow { DocRow(view.padding(.top, top), content: content) }
 }
 
 /// The rows of each part of a document, built from ``DocPiece``s of at most [max] characters.
@@ -286,41 +302,38 @@ struct DocRows {
     let max: Int
     var maxBreaks: Int = .max
 
-    static func heading(_ label: String) -> AnyView {
-        AnyView(DocHeading(label: label).padding(.top, Spacing.l).padding(.bottom, Spacing.s))
+    static func heading(_ label: String) -> DocRow {
+        DocRow(DocHeading(label: label).padding(.top, Spacing.l).padding(.bottom, Spacing.s))
     }
 
-    static func label(_ text: String) -> AnyView {
-        AnyView(FieldLabel(text: text).padding(.top, Spacing.m).padding(.bottom, Spacing.xs))
+    static func label(_ text: String) -> DocRow {
+        DocRow(FieldLabel(text: text).padding(.top, Spacing.m).padding(.bottom, Spacing.xs))
     }
 
-    static func note(_ text: String) -> AnyView { AnyView(DocNote(text: text).padding(.top, Spacing.s)) }
+    static func note(_ text: String) -> DocRow { DocRow(DocNote(text: text).padding(.top, Spacing.s)) }
 
     /// A value in a block of its own, as rows of pieces that join into one block.
-    func value(_ t: ShownText) -> [AnyView] {
+    func value(_ t: ShownText) -> [DocRow] {
         let pieces = DocPiece.value(t, max: max, maxBreaks: maxBreaks)
         return pieces.indices.map { i in
-            AnyView(
-                ValuePiece(first: i == 0, last: i == pieces.count - 1) { DocPieceView(pieces: [pieces[i]], raw: false) }
-                    .preference(key: ContentRow.self, value: true)
-            )
+            DocRow(ValuePiece(first: i == 0, last: i == pieces.count - 1) { DocPieceView(pieces: [pieces[i]], raw: false) }, content: true)
         }
     }
 
     /// A short value of the app's own words or a time, in a block of its own.
-    static func block(@ViewBuilder _ content: @escaping @MainActor () -> some View) -> AnyView {
-        AnyView(ValuePiece(first: true, last: true) { content() })
+    static func block(@ViewBuilder _ content: @escaping @MainActor () -> some View) -> DocRow {
+        DocRow(ValuePiece(first: true, last: true) { content() })
     }
 
-    func proposal(_ f: DocumentPresentation.ProposalForm) -> [AnyView] {
-        var r: [AnyView] = [Self.label(ApprovalsStrings.docFieldTitle)] + value(f.title)
+    func proposal(_ f: DocumentPresentation.ProposalForm) -> [DocRow] {
+        var r: [DocRow] = [Self.label(ApprovalsStrings.docFieldTitle)] + value(f.title)
         r.append(Self.label(ApprovalsStrings.docFieldMotion))
-        if let text = f.text { r += value(text) } else { r.append(AnyView(FieldLabel(text: ApprovalsStrings.docNone))) }
+        if let text = f.text { r += value(text) } else { r.append(DocRow(FieldLabel(text: ApprovalsStrings.docNone))) }
         r.append(Self.label(ApprovalsStrings.docFieldChoices))
         for (i, c) in f.choices.enumerated() {
-            r += value(c).enumerated().map { j, v in j == 0 && i > 0 ? AnyView(v.padding(.top, Spacing.xs)) : v }
+            r += value(c).enumerated().map { j, v in j == 0 && i > 0 ? v.padded(Spacing.xs) : v }
         }
-        r.append(AnyView(
+        r.append(DocRow(
             HStack(spacing: Spacing.s) {
                 Text(ApprovalsStrings.docAbstain).vettIDFont(.bodyLarge)
                 FieldLabel(text: ApprovalsStrings.docAbstainAdded)
@@ -331,12 +344,10 @@ struct DocRows {
         r.append(Self.label(ApprovalsStrings.docFieldQuorum))
         r.append(Self.block { Text(ApprovalsStrings.docBallots(Int(clamping: f.quorumBallots))).vettIDFont(.bodyLarge) })
         if let text = f.quorumText {
-            r += value(text).enumerated().map { j, v in j == 0 ? AnyView(v.padding(.top, Spacing.xs)) : v }
+            r += value(text).enumerated().map { j, v in j == 0 ? v.padded(Spacing.xs) : v }
         }
-        r.append(AnyView(
-            Self.block { Text(f.binding ? ApprovalsStrings.docBinding : ApprovalsStrings.docAdvisory).vettIDFont(.bodyLarge) }
-                .padding(.top, Spacing.m)
-        ))
+        r.append(Self.block { Text(f.binding ? ApprovalsStrings.docBinding : ApprovalsStrings.docAdvisory).vettIDFont(.bodyLarge) }
+            .padded(Spacing.m))
         r.append(Self.label(ApprovalsStrings.docFieldRemovedMayVote))
         r.append(Self.block { Text(f.removedMayVote ? ApprovalsStrings.docYes : ApprovalsStrings.docNo).vettIDFont(.bodyLarge) })
         r.append(Self.label(ApprovalsStrings.docFieldOpens))
@@ -348,7 +359,7 @@ struct DocRows {
         return r
     }
 
-    func extend(_ f: DocumentPresentation.ExtendForm) -> [AnyView] {
+    func extend(_ f: DocumentPresentation.ExtendForm) -> [DocRow] {
         [Self.label(ApprovalsStrings.docFieldVote)] + value(f.proposalID)
             + [Self.label(ApprovalsStrings.docFieldNewClose), Self.block { TimeValue(seconds: f.closesAt) }]
             + [Self.label(ApprovalsStrings.docFieldOutageFrom), Self.block { TimeValue(seconds: f.outageFrom) }]
@@ -357,7 +368,7 @@ struct DocRows {
     }
 
     /// The raw view as rows of a few pieces each (one with VoiceOver), joining into one block.
-    func raw(_ lines: [DocumentPresentation.RawLine], perRow: Int) -> [AnyView] {
+    func raw(_ lines: [DocumentPresentation.RawLine], perRow: Int) -> [DocRow] {
         var rows: [[DocPiece]] = []
         var cur: [DocPiece] = []
         var count = 0
@@ -372,10 +383,10 @@ struct DocRows {
         }
         if !cur.isEmpty { rows.append(cur) }
         return rows.indices.map { i in
-            AnyView(
+            DocRow(
                 ValuePiece(first: i == 0, last: i == rows.count - 1) { DocPieceView(pieces: rows[i], raw: true) }
-                    .environment(\.layoutDirection, .leftToRight)
-                    .preference(key: ContentRow.self, value: true)
+                    .environment(\.layoutDirection, .leftToRight),
+                content: true
             )
         }
     }

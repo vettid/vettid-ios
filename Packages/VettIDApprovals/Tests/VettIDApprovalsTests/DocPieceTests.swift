@@ -93,11 +93,15 @@ import Testing
             #expect(ShownText(String(Character(u))).runs == [.marker(v)], "U+\(String(v, radix: 16))")
         }
         #expect(glue > 10)
-        // A few by value: Malayalam dot reph, Sharada and Kirat signs (Unicode 15), and a Unicode 16 one where known.
+        // A few by value: Malayalam dot reph (U+0D4E), Sharada (U+111C2), Zanabazar Square (U+11A3A), Masaram Gondi (U+11D46).
         for v: UInt32 in [0x0D4E, 0x111C2, 0x11A3A, 0x11D46] {
             #expect(ShownText(String(Character(Unicode.Scalar(v)!)) + "a").runs.first == .marker(v), "U+\(String(v, radix: 16))")
         }
-        for v: UInt32 in [0x21B3, 0x21AA, 0x2937, 0x21B4, 0x2BA1, 0x2514, 0x2570, 0x21B5, 0x23CE, 0x27A5, 0x2935, 0x221F, 0x2517] {
+        let lookAlikes: [UInt32] = [
+            0x21B3, 0x21AA, 0x2937, 0x21B4, 0x2BA1, 0x2514, 0x2570, 0x2936, 0x21B2, 0x21B5, 0x23CE, 0x27A5, 0x2B91, 0x2BA9,
+            0x2935, 0x221F, 0x2517, 0x2515, 0x2516, 0x255A, 0x2558, 0x2559, 0x231E, 0x23A3, 0x2B0E, 0x2BA7,
+        ]
+        for v in lookAlikes {
             #expect(ShownText("a" + String(Character(Unicode.Scalar(v)!)) + "b").runs == [.text("a"), .marker(v), .text("b")])
         }
         #expect(ShownText("\u{1F3FD}x").runs == [.marker(0x1F3FD), .text("x")], "a skin tone with no base")

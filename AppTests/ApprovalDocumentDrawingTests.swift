@@ -214,10 +214,14 @@ struct ApprovalDocumentDrawingTests {
             #expect(dark > 500 && light > 500, "the row just under the limit drawn at \(at)")
         }
         window.isHidden = true
-        // Where one text stops drawing.
+        // Where one text stops drawing, from about 60,000 pixels up (so that "far past the limit" can fail): the line
+        // height measured as the host lays the text out.
+        let sample = (0..<100).map { "line \($0) budget" }.joined(separator: "\n")
+        let lineHeight = UIHostingController(rootView: Text(sample).font(.body).dynamicTypeSize(.accessibility5))
+            .sizeThatFits(in: CGSize(width: width, height: .greatestFiniteMagnitude)).height / 100
         var blankFrom: CGFloat?
-        for target in [CGFloat(100_000), 170_000, 250_000, 400_000] {
-            let lines = (0..<Int(target / scale / 40)).map { "line \($0) budget" }.joined(separator: "\n")
+        for target in [CGFloat(60_000), 100_000, 170_000, 250_000, 400_000] {
+            let lines = (0..<Int(target / scale / lineHeight)).map { "line \($0) budget" }.joined(separator: "\n")
             let (w, sc) = try host(Text(lines).font(.body))
             try await Task.sleep(for: .milliseconds(800))
             sc.setContentOffset(CGPoint(x: 0, y: sc.contentSize.height - sc.bounds.height), animated: false)
