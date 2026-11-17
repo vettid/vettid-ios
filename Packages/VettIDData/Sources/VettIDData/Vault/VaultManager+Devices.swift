@@ -25,7 +25,7 @@ extension VaultManager {
     }
 
     /// Pairing an agent or a desktop: the code, the comparison, the approval. Memory only, cleared with ``devices``; its events
-    /// come in ``activityEvent(_:)``, only while the vault takes events.
+    /// come in ``devicesEvent(_:)``, only while the vault takes events.
     static func pairingManager(_ manager: VaultManager) -> PairingManager {
         let ref = ManagerRef()
         ref.manager = manager

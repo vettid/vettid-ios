@@ -326,15 +326,20 @@ extension VaultManager {
         if dropsInHeldBackground(m) { return }
         ownerChecks.onEvent(m)
         if supersededByReread(m) { return }
-        // Nothing the vault sends is taken into the app's lists while a lock is pending (as vettid-android), nor while the
-        // vault must first move to the current release (the lists are read when it has, ``followBehind``).
-        if lockGuard.takesEvents(), !releaseUpdate.behind {
+        // Nothing the vault sends is taken into the app's lists while a lock is pending (as vettid-android).
+        if lockGuard.takesEvents() {
+            // Taken also while the vault must first move to the current release: an authentication's verdict (a changed key)
+            // and a pairing's steps are in no list a read gives back.
             connections.onEvent(m)
-            messages.onEvent(m)
-            attachments.onEvent(m)
-            items.onEvent(m)
-            sharing.onEvent(m)
-            activityEvent(m)
+            devicesEvent(m)
+            // Those that only change a list wait for the move: every list is read when it is made (``followBehind``).
+            if !releaseUpdate.behind {
+                messages.onEvent(m)
+                attachments.onEvent(m)
+                items.onEvent(m)
+                sharing.onEvent(m)
+                activityEvent(m)
+            }
         }
         switch m.type {
         // §3.6.3: entering the hold ends the credential's unlock window; IOS-PLAN §6.9: no vault content is kept.

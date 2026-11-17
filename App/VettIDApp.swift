@@ -332,7 +332,7 @@ struct AppRoot: View {
             OwnerCheckGateView(
                 vault: vault, path: shell.path, onGated: { shell.shown() }, onCovered: { shell.checkCovers = $0 }
             ) { gate, now in
-                if vault.releaseUpdate.required {
+                if vault.releaseUpdate.behind {
                     // Until the vault is on the current release (owner decision 2026-11-17), only its update and the ways to
                     // leave it. Inside the owner check's gate: the update asks for the check first when it is due. What the
                     // notifications said is taken away, as when the app is covered.
@@ -342,6 +342,9 @@ struct AppRoot: View {
                     ) { openPortal() }
                     .environment(\.accountDeletionURL, AccountDeletion.url(origin: environment.apiOrigin))
                     .onAppear { notifications?.covered() }
+                } else if vault.releaseUpdate.checking {
+                    // The release is read after the opening (a moment): the starting screen, nothing of the vault yet.
+                    StartingScreen()
                 } else {
                     AppShell(
                         account: vault, vault: vault, ownerChecks: vault.ownerChecks, credential: vault, profiles: vault.profiles,

@@ -7,12 +7,12 @@ import VettIDShell
 import VettIDUI
 
 /// No release but the current one is used (owner decision 2026-11-17): the open vault is not on the newest `active`
-/// release, or that is being checked after the opening, so instead of the shell the member sees the update ("Approve and
-/// update", with no way back; "Checking" while the manifest is read) and only the ways to leave the vault: the account
+/// release (``ReleaseUpdateManager/behind``), so instead of the shell the member sees the update ("Approve and update", with
+/// no way back) and only the ways to leave the vault: the account
 /// sheet (where "Lock vault" is), Help, and Delete vault (to enroll anew when the update cannot complete). The clone alarm
 /// and the relay's refusal of the vault's key stay above it, with their screens. Nothing else of the shell is reachable,
-/// no list takes the vault's events or is read, and no call starts or rings (``ReleaseUpdateManager/required``); the
-/// lists are read again once the vault is on the current release.
+/// no list is read or takes the events that only change it, and no call starts or rings (``ReleaseUpdateManager/required``);
+/// the lists are read again once the vault is on the current release.
 public struct ReleaseRequiredGate: View {
     private let updates: any ReleaseUpdateRepository
     private let ownerCheck: (any OwnerCheckRepository)?

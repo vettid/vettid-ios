@@ -80,6 +80,17 @@ import VettIDDataTesting
         #expect(await eventually { service.requestsSeen.dropFirst(before).contains("connection.list") }, "the lists once lifted")
     }
 
+    /// While the vault is behind, an authentication's verdict still reaches the connections: a changed key is in no list a
+    /// read gives back, so its warning is not lost behind the update.
+    @Test func aKeyChangeVerdictIsTakenWhileBehind() async throws {
+        defer { phone.close() }
+        try await setUp()
+        await m.releaseUpdate.refreshOffer()
+        #expect(m.releaseUpdate.behind)
+        service.sendEvent("connection.authenticate.result", #"{"connection_id":"c1","authenticated":true,"key_changed":true}"#)
+        #expect(await eventually { m.connections.authentication["c1"]?.keyChanged == true })
+    }
+
     /// Without a newer release, nothing is required or gated.
     @Test func theCurrentReleaseIsNotGated() async throws {
         defer { phone.close() }
