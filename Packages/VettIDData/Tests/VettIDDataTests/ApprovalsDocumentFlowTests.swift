@@ -168,10 +168,12 @@ import VettIDDataTesting
         #expect(try await m.authenticationDocument(r) == .failure(.hash))
     }
 
-    @Test func aDocumentRequiredAskIsRefusedWithoutItsDocumentBeforeTheUnlock() async throws {
+    @Test func anAskWithADocumentIsRefusedWithoutItBeforeTheUnlock() async throws {
         let (m, unlocked) = manager()
-        pending(m, challenge(required: true))
-        #expect(await kind { try await m.approveAuthentication("a1", password: "pw") } == .vaultCode("update_required"))
+        for required in [true, false] {
+            pending(m, challenge(required: required))
+            #expect(await kind { try await m.approveAuthentication("a1", password: "pw") } == .other)
+        }
         #expect(ops.calls.isEmpty && unlocked().isEmpty && m.approvals.count == 1)
     }
 

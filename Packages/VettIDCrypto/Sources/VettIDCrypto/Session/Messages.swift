@@ -429,9 +429,12 @@ public enum DeviceFeatures {
     /// (0.87.0, §6.3.1 "Capability") It runs §6.3.1's responder half toward its vault: `hs.confirm` and the confirmed
     /// epoch. A device starts no rekey, so the initiator half does not arise.
     public static let hsConfirm = "hs_confirm"
+    /// (0.89.0, §10.4 "Approval documents") It fetches, checks and shows an approval's document and approves over it.
+    /// Not sticky at the vault: an app without it in its list is never asked for a `document_required` approval.
+    public static let approvalDocument = "approval_document"
     /// What this app advertises, sorted: the inner `features` of every message it deposits to its vault and the
     /// `device.features` list. `relay_follow` is not implemented, so not advertised (as vettid-vault's `client`).
-    public static let all: [String] = [hsConfirm]
+    public static let all: [String] = [approvalDocument, hsConfirm]
 }
 
 /// Constant-time check that a relay key equals the one on record (§6.3).

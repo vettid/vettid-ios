@@ -19,6 +19,18 @@ public struct AnswerItem: Equatable, Sendable, Identifiable {
     }
 }
 
+/// A challenge's document on the approval screen (VAULT-MESSAGING 0.89.0 §10.4 "Approval documents").
+public enum DocumentStep: Equatable, Sendable {
+    /// Being fetched (`connection.authenticate.document`).
+    case loading
+    /// Fetched and checked: shown, and approvable once it has all been on screen.
+    case shown(ApprovalDocument, DocumentPresentation)
+    /// Fetched, but it failed the app's checks: "This request can't be shown", Deny only.
+    case unshowable(ApprovalDocument.Failure)
+    /// The fetch failed (the vault could not be reached, say): said, with Try again; Deny stays.
+    case failed(FailureKind)
+}
+
 /// What a decision needs from the member: the credential password for the critical actions (ANDROID-PLAN §4 Approvals).
 public enum ApprovalNeeds: Equatable, Sendable { case nothing, password }
 
@@ -76,6 +88,31 @@ public struct ApprovalDetailState: Equatable, Sendable, CustomStringConvertible,
     public var limit: VaultLimit?
     /// The requesting connection's "First Last", when the request names a connection that has names.
     public var connectionName: String?
+    /// (0.89.0 §10.4) The challenge's document, for a member authentication that carries one; nil for any other request.
+    public var document: DocumentStep?
+    /// Counts the documents shown: the screen follows each from nothing seen, the same document shown again included.
+    public var documentGeneration = 0
+    /// The `document_sha256` the request named when ``document`` was fetched: another one fetches again.
+    public var documentFor: String?
+    /// The hash of the document whose whole the screen has shown: Approve is enabled only for that document.
+    public var documentSeen: String?
+
+    /// A challenge with a document that is not shown (loading, failed, can't be shown): only Deny is offered, with no
+    /// password field and no Approve (§10.4 "offers only Deny").
+    public var onlyDeny: Bool {
+        guard case .authentication(let x)? = approval, x.hasDocument else { return false }
+        if case .shown? = document { return false }
+        return true
+    }
+
+    /// The document shown and checked, when it has all been on screen: the only one an approval signs.
+    /// It is the document the request held now names, so Approve is never enabled, even for a moment, over an older one.
+    public var documentToApprove: ApprovalDocument? {
+        guard case .shown(let d, _)? = document, documentSeen == d.sha256, case .authentication(let x)? = approval,
+              x.documentSha256 == d.sha256
+        else { return nil }
+        return d
+    }
 
     /// A withdrawn request's notice offers "Mute requests from <name>": the request names a connection with names and its
     /// asks are not muted. Without a name it is not offered, as in History (a mute names whom it mutes).
@@ -147,7 +184,8 @@ public struct ApprovalDetailState: Equatable, Sendable, CustomStringConvertible,
         // seed (0.21.0) only denied.
         case .critical(let c)?: c.suitable != false && c.payloadVerified && !password.isEmpty && backoffOver(now)
         case .share(let d)?: d.items.contains { !shareExcluded.contains($0.itemID) }
-        case .authentication?: !password.isEmpty && backoffOver(now)
+        // §10.4 "Approval documents": a challenge with a document only once it was shown, checked and seen whole.
+        case .authentication(let x)?: !password.isEmpty && backoffOver(now) && (!x.hasDocument || documentToApprove != nil)
         }
     }
 
@@ -166,12 +204,14 @@ public struct ApprovalDetailState: Equatable, Sendable, CustomStringConvertible,
 @MainActor
 @Observable
 public final class ApprovalDetailViewModel {
-    @ObservationIgnored private let repo: any ApprovalsRepository
+    @ObservationIgnored let repo: any ApprovalsRepository
     @ObservationIgnored private let connections: (any ConnectionsRepository)?
     @ObservationIgnored private let vault: (any ItemsRepository)?
-    @ObservationIgnored private let work = Work()
+    @ObservationIgnored let work = Work()
     @ObservationIgnored private let follows = TaskBag()
-    private var local: ApprovalDetailState
+    /// The screen's own state (``state`` adds what the repositories hold); the document's part is kept by
+    /// `ApprovalDetailViewModel+Document.swift`.
+    var local: ApprovalDetailState
     /// The repository's ``ApprovalsRepository/forgetCount`` when the screen opened.
     @ObservationIgnored private let forgetCountAtOpen: Int
     /// The repository's ``ApprovalsRepository/deviceSessionReads`` when the screen first held its session request: the
@@ -204,6 +244,7 @@ public final class ApprovalDetailViewModel {
         local.items = items.sorted { $0.name.lowercased() < $1.name.lowercased() }
         follows.add(follow(self, read: { m in m.repo.approvals.first { $0.key == m.local.key } }, apply: { m, a in
             if let a { m.local.approval = a }
+            m.loadDocument()
             // A session request held only after the screen opened (from the feed, before the list answered) is followed
             // from when it arrives.
             m.followSessions()
@@ -219,6 +260,7 @@ public final class ApprovalDetailViewModel {
                 }
             }
         }
+        loadDocument()
     }
 
     deinit {
@@ -406,6 +448,10 @@ public final class ApprovalDetailViewModel {
             switch a {
             case .connection(.incoming(let r)): try await repo.approveConnection(r.pendingID)
             case .connection(.outgoing(let r)): try await repo.approveOutgoing(r.connectionID)
+            case .authentication(let x) where x.hasDocument:
+                // Never a success without the approval: a model that went sends nothing and does not count as decided.
+                guard let self else { throw CancellationError() }
+                try await approveOverDocument(x, s, password: pw)
             case .authentication(let x): try await repo.approveAuthentication(x.requestID, password: pw)
             case .grant(let g):
                 let idx = s.grantIndexes
@@ -535,6 +581,11 @@ public final class ApprovalDetailViewModel {
     }
 
     private func failed(_ error: any Error) {
+        if error is DocumentRestarted {
+            local.password = ""
+            local.busy = false
+            return
+        }
         let f = error as? VaultFailure
         local.error = failureKind(error)
         local.limit = f?.limit

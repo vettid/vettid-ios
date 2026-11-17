@@ -37,7 +37,7 @@ extension VaultDeviceTests {
         let ini = try v.rekey(d)
         try await d.handle(v.msg(ini.envelope))
         let res = try ini.handleResp(try await relay.nextDeposit().payload, collectSender: d.relayAddr.pk, now: Date())
-        #expect(res.inner.features == ["hs_confirm"]) // hs.resp carries the list too
+        #expect(res.inner.features == ["approval_document", "hs_confirm"]) // hs.resp carries the list too
         try await d.handle(v.msg(res.fin))
         #expect(try await take(res.epoch).type == "hs.confirm")
         #expect(try await take(res.epoch).type == "device.features")
@@ -295,7 +295,7 @@ extension VaultDeviceTests {
         let (d, v) = try await pairedDevice()
         let op = Task { try await d.opOnce("vault.status") }
         let req = try v.open(try await relay.nextDeposit().payload)
-        #expect(req.type == "vault.status" && req.features == ["hs_confirm"])
+        #expect(req.type == "vault.status" && req.features == ["approval_document", "hs_confirm"])
         try await d.handle(try v.seal("vault.status", "{}", re: req.id, status: Inner.statusOK))
         _ = try await op.value
     }

@@ -34,6 +34,10 @@ public struct DecisionActions {
     public var onMute: @MainActor () -> Void = {}
     /// The screen left or the app went to the background: the password goes.
     public var onForgetSecrets: @MainActor () -> Void = {}
+    /// An approval's document (VAULT-MESSAGING 0.89.0 §10.4): its fetch again after a failure, and its end on screen.
+    public var onRetryDocument: @MainActor () -> Void = {}
+    /// The whole of the document of that hash, in that generation, has been on screen.
+    public var onDocumentShownWhole: @MainActor (String, Int) -> Void = { _, _ in }
 
     public init() {}
 }
@@ -188,7 +192,7 @@ public struct ApprovalDetailScreen: View {
         FormScaffold(
             title: ApprovalTexts.title(a, name: state.connectionName),
             message: ApprovalTexts.body(a, name: state.connectionName),
-            primaryLabel: ApprovalTexts.approveLabel(a),
+            primaryLabel: state.onlyDeny ? nil : ApprovalTexts.approveLabel(a),
             primaryEnabled: state.canApprove(at: now),
             busy: state.busy,
             secondaryLabel: ApprovalTexts.denyLabel(a),
@@ -229,6 +233,7 @@ struct TitleServiceLabel: View {
 /// The decision's content: the facts of the request, the password, "Block this request", the failure.
 struct DecisionContent: View {
     @Environment(\.vettIDColors) private var colors
+    @Environment(\.accessibilityVoiceOverEnabled) private var voiceOver
     @Environment(\.vettIDTimeScale) private var timeScale
     let approval: PendingApproval
     let state: ApprovalDetailState
@@ -247,7 +252,16 @@ struct DecisionContent: View {
                     renewal: state.renewalUntil(at: now) != nil
                 )
             }
-            if state.needs == .password {
+            // An approval's document (§10.4), before the password and Approve; Approve waits for its end on screen.
+            if case .authentication(let x) = approval, x.hasDocument, let step = state.document {
+                ApprovalDocumentView(
+                    step: step, generation: state.documentGeneration, voiceOver: voiceOver, name: state.connectionName,
+                    seen: state.documentToApprove != nil,
+                    onRetry: actions.onRetryDocument, onSeenWhole: actions.onDocumentShownWhole
+                )
+                .equatable()
+            }
+            if state.needs == .password, !state.onlyDeny {
                 SecretField(
                     ApprovalsStrings.password, text: Binding(get: { state.password }, set: { actions.onPassword($0) }),
                     supporting: ApprovalsStrings.passwordHint, onSubmit: actions.onApprove

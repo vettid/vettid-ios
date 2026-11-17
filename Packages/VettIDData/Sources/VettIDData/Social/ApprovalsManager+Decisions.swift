@@ -38,10 +38,10 @@ extension ApprovalsManager {
     private func pending(_ key: String) -> PendingApproval? { approvals.first { $0.key == key } }
 
     public func approveAuthentication(_ requestID: String, password: String) async throws {
-        // A document_required challenge cannot count without its document: refused here as the vault would refuse it
-        // (`update_required`), before the unlock window is opened for nothing.
-        if case .authentication(let r)? = pending("auth:\(requestID)"), r.documentRequired {
-            throw VaultFailure(.vaultCode(Self.updateRequired))
+        // §10.4 "Approval documents": a challenge held with a document is approved only over it
+        // (``approveAuthentication(_:password:document:)``). The screen decides from the request it shows as well.
+        if case .authentication(let r)? = pending("auth:\(requestID)"), r.hasDocument {
+            throw VaultFailure(.other, code: Self.documentNotShown)
         }
         try await guarded { try await openUnlockWindow(password) }
         try await decide("auth:\(requestID)") { try await $0.authenticateApprove(requestID, documentSha256: nil) }
@@ -90,10 +90,10 @@ extension ApprovalsManager {
 
     /// The vault's answer to an approval with the hash of a document this device has not fetched (0.89.0).
     static let documentNotFetched = "document_not_fetched"
-    /// The vault's answer to an approval without the document of a `document_required` challenge (0.89.0).
-    static let updateRequired = "update_required"
     /// The app's own refusal of a document that is not the one its request announced (never sent to the vault).
     static let documentMismatch = "document_mismatch"
+    /// The app's own refusal to approve a challenge with a document without it (never sent to the vault).
+    static let documentNotShown = "document_not_shown"
 
     public func denyAuthentication(_ requestID: String) async throws {
         try await decide("auth:\(requestID)") { try await $0.authenticateDeny(requestID) }

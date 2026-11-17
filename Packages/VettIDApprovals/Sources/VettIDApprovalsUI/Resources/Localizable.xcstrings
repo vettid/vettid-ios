@@ -1961,6 +1961,480 @@
           }
         }
       }
+    },
+    "approvals_doc_asked": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "What is asked"
+          }
+        }
+      }
+    },
+    "approvals_doc_description": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The service's description"
+          }
+        }
+      }
+    },
+    "approvals_doc_description_note": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "What you approve is the request below"
+          }
+        }
+      }
+    },
+    "approvals_doc_summary": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The service's summary"
+          }
+        }
+      }
+    },
+    "approvals_doc_request": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The request"
+          }
+        }
+      }
+    },
+    "approvals_doc_details": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Request details"
+          }
+        }
+      }
+    },
+    "approvals_doc_title_proposal_create": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New vote"
+          }
+        }
+      }
+    },
+    "approvals_doc_title_vote_extend": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Extend a vote"
+          }
+        }
+      }
+    },
+    "approvals_doc_title_admin_set_add": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add an admin"
+          }
+        }
+      }
+    },
+    "approvals_doc_title_admin_set_remove": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remove an admin"
+          }
+        }
+      }
+    },
+    "approvals_doc_title_admin_repin": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Re-pin an admin's key"
+          }
+        }
+      }
+    },
+    "approvals_doc_title_contract_template_change": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Change the contract template"
+          }
+        }
+      }
+    },
+    "approvals_doc_title_assignment_push": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Send an assignment"
+          }
+        }
+      }
+    },
+    "approvals_doc_cant_show": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This request can't be shown"
+          }
+        }
+      }
+    },
+    "approvals_doc_loading": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Getting the request…"
+          }
+        }
+      }
+    },
+    "approvals_doc_retry": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Try again"
+          }
+        }
+      }
+    },
+    "approvals_doc_read_to_end": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scroll to the end of the request to approve it."
+          }
+        }
+      }
+    },
+    "approvals_doc_field_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Title"
+          }
+        }
+      }
+    },
+    "approvals_doc_field_motion": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Motion"
+          }
+        }
+      }
+    },
+    "approvals_doc_none": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "None"
+          }
+        }
+      }
+    },
+    "approvals_doc_field_choices": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choices"
+          }
+        }
+      }
+    },
+    "approvals_doc_abstain": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Abstain"
+          }
+        }
+      }
+    },
+    "approvals_doc_abstain_added": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "added by the service"
+          }
+        }
+      }
+    },
+    "approvals_doc_field_quorum": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quorum"
+          }
+        }
+      }
+    },
+    "approvals_doc_binding": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Binding"
+          }
+        }
+      }
+    },
+    "approvals_doc_advisory": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Advisory"
+          }
+        }
+      }
+    },
+    "approvals_doc_field_removed_may_vote": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Members removed after the roster date may vote"
+          }
+        }
+      }
+    },
+    "approvals_doc_yes": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yes"
+          }
+        }
+      }
+    },
+    "approvals_doc_no": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No"
+          }
+        }
+      }
+    },
+    "approvals_doc_field_opens": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Opens"
+          }
+        }
+      }
+    },
+    "approvals_doc_field_closes": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Closes"
+          }
+        }
+      }
+    },
+    "approvals_doc_field_outage_rule": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Outage rule"
+          }
+        }
+      }
+    },
+    "approvals_doc_field_vote": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vote"
+          }
+        }
+      }
+    },
+    "approvals_doc_field_new_close": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New close"
+          }
+        }
+      }
+    },
+    "approvals_doc_field_outage_from": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Outage from"
+          }
+        }
+      }
+    },
+    "approvals_doc_field_outage_to": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Outage to"
+          }
+        }
+      }
+    },
+    "approvals_doc_field_reported_by": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reported by"
+          }
+        }
+      }
+    },
+    "approvals_doc_unknown_warning": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ asks for something this app doesn't know. Read all of it before you approve."
+          }
+        }
+      }
+    },
+    "approvals_doc_ballots": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld ballot"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld ballots"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "approvals_doc_level_spoken": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "level %lld"
+          }
+        }
+      }
+    },
+    "approvals_doc_too_tall": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This request can't be shown at this text size"
+          }
+        }
+      }
+    },
+    "approvals_doc_too_tall_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose a smaller text size in Settings, then open the request again. You can deny it now."
+          }
+        }
+      }
     }
   },
   "version": "1.0"

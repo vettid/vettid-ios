@@ -78,10 +78,9 @@ public protocol ApprovalsRepository: ConnectionRequestsRepository {
     /// and the approval offered, only if it matches the hash (``CriticalUse/payloadVerified``).
     func loadCriticalUse(_ requestID: String) async throws
 
-    /// Opens the credential's unlock window with [password] and signs the challenge (§10.4), sending no document hash: the
-    /// purpose form, as an app before 0.89.0 approves; a `document_required` one is refused (`update_required`) before
-    /// the unlock window opens. While `approval_document` is not in `device.features` this is how a
-    /// challenge with a document is approved too; the screen that shows documents brings the refusal with it.
+    /// Opens the credential's unlock window with [password] and signs the challenge (§10.4) in the purpose form. Refused
+    /// (``FailureKind/other``, nothing sent) for a challenge held with a document (0.89.0 "Approval documents"): that one
+    /// is approved only over its document, from the screen that showed it.
     func approveAuthentication(_ requestID: String, password: String) async throws
 
     /// Fetches the document of [request], a challenge that carries one, and checks it against what the vault said of it
