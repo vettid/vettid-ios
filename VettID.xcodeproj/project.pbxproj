@@ -139,6 +139,7 @@
 		D92A272A8A2F2BEF0E89BF6A /* CallsCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = E617EAA90484DE23347EBCA3 /* CallsCatalog.swift */; };
 		DA6800A3D7DE982F9F6229FB /* vettid_ringtone.caf in Resources */ = {isa = PBXBuildFile; fileRef = 58F10BFB096BF7C87801B737 /* vettid_ringtone.caf */; };
 		DBACC8BECCC6A93B92DD9D69 /* ShellCatalogTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 99011BCFDF16002458067C88 /* ShellCatalogTests.swift */; };
+		DC8BA911DDB115121A2BB306 /* ApprovalDocumentDrawingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 379BF99947832400DA30D6DC /* ApprovalDocumentDrawingTests.swift */; };
 		DEC1680139C8789B3CB5D70D /* VettIDSettings in Frameworks */ = {isa = PBXBuildFile; productRef = FC29162B7CA798AA95BE2B66 /* VettIDSettings */; };
 		E077D76E9DFBC0587596D6B0 /* DebugCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = F26B1FBF5F334471A59B5B8C /* DebugCatalog.swift */; };
 		E26E6F3B45EBA6EF5C8C590C /* VettIDCalls in Frameworks */ = {isa = PBXBuildFile; productRef = A5F095E92494D1DDB98007A4 /* VettIDCalls */; };
@@ -201,6 +202,7 @@
 		2B11C310596A4F2C26AACAFC /* DevStack.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = DevStack.xcconfig; sourceTree = "<group>"; };
 		2D4DA90211D97D9417FAC02C /* StagingTests+Messages.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StagingTests+Messages.swift"; sourceTree = "<group>"; };
 		2EAA1051D68BE8B6888B7634 /* VettIDVault */ = {isa = PBXFileReference; lastKnownFileType = folder; name = VettIDVault; path = Packages/VettIDVault; sourceTree = SOURCE_ROOT; };
+		379BF99947832400DA30D6DC /* ApprovalDocumentDrawingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ApprovalDocumentDrawingTests.swift; sourceTree = "<group>"; };
 		39A6F272A462838C1C0D7D29 /* VettIDHistory */ = {isa = PBXFileReference; lastKnownFileType = folder; name = VettIDHistory; path = Packages/VettIDHistory; sourceTree = SOURCE_ROOT; };
 		412ACBC39A6E3761D83FDE48 /* AppEnvironment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppEnvironment.swift; sourceTree = "<group>"; };
 		413317A388BA8F9F2776CB1B /* Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Release.xcconfig; sourceTree = "<group>"; };
@@ -413,6 +415,7 @@
 				9D2B5CA030BC6FA62B3EEF7D /* AppAttestDeviceTests.swift */,
 				D78BD3F6C3BB2643C264466A /* AppEnvironmentTests.swift */,
 				EB1D13186B27047D3E39486C /* AppLockWindowTests.swift */,
+				379BF99947832400DA30D6DC /* ApprovalDocumentDrawingTests.swift */,
 				487FDD5894FCC86CC8623FF7 /* CallsConversationTests.swift */,
 				E7DE72A8BEA6545C60125D53 /* CallsWindowTests.swift */,
 				0FE633DD8FFE64A6E2D63CF4 /* CallsWiringTests.swift */,
@@ -855,6 +858,7 @@
 				A65E5E4EFA6A74AF7B884B2E /* AppAttestDeviceTests.swift in Sources */,
 				926662D958BB0CF0087EB183 /* AppEnvironmentTests.swift in Sources */,
 				48C14D9734DD1B7FCF3CF6B0 /* AppLockWindowTests.swift in Sources */,
+				DC8BA911DDB115121A2BB306 /* ApprovalDocumentDrawingTests.swift in Sources */,
 				C1A6EB8D1D12BC24A07C1957 /* CallsConversationTests.swift in Sources */,
 				A8F7BF4C8B3342DC23AF52B0 /* CallsWindowTests.swift in Sources */,
 				C16277EC80296B2350B60276 /* CallsWiringTests.swift in Sources */,

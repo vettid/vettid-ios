@@ -105,12 +105,13 @@ import VettIDUI
         let words = Array(repeating: "budget", count: 9_000).joined(separator: " ")
         let motion = #"{"action":"proposal.create","payload":{"binding":true,"choices":[],"closes_at":2,"opens_at":1,"outage_rule":"","quorum":{"min_ballots":1,"text":""},"removed_may_vote":false,"text":"\#(words)","title":"t"},"summary":""}"#
         let raw = #"{"action":"x","payload":{"s":"\#(words)"},"summary":""}"#
-        for doc in [motion, raw] {
+        // The Motion is followed by the form's other fields: its end is sampled at 0.9, the raw string's at 0.97.
+        for (doc, last) in [(motion, 0.9), (raw, 0.97)] {
             let (window, scroll) = try host(view(Self.shown(doc), seen: true))
             await settle()
             let height = scroll.contentSize.height
             #expect(height > 20_000, "a value taller than any layer")
-            for at in [0.25, 0.5, 0.75, 0.97] {
+            for at in [0.25, 0.5, 0.75, last] {
                 scroll.setContentOffset(CGPoint(x: 0, y: (height - scroll.bounds.height) * at), animated: false)
                 await settle()
                 #expect(darkPixels(window) > 500, "drawn at \(at) of \(Int(height)) pt")
@@ -134,11 +135,12 @@ import VettIDUI
         scroll.setContentOffset(CGPoint(x: 0, y: bottom), animated: false)
         await settle()
         #expect(box.seen.isEmpty, "a jump to the end")
+        // A lazy stack's height is an estimate until its rows are drawn: the end is read again at every step.
         var y: CGFloat = 0
-        while y < bottom {
-            y = min(y + scroll.bounds.height / 2, bottom)
+        while y < scroll.contentSize.height - scroll.bounds.height {
+            y = min(y + scroll.bounds.height / 2, scroll.contentSize.height - scroll.bounds.height)
             scroll.setContentOffset(CGPoint(x: 0, y: y), animated: false)
-            try? await Task.sleep(for: .milliseconds(60))
+            try? await Task.sleep(for: .milliseconds(80))
         }
         await settle()
         guard case .shown(let d, _) = step else { return }
@@ -151,13 +153,28 @@ import VettIDUI
         let pieces = lines.map(RawDocumentView.spoken)
         let spoken = pieces.map(Spoken.plain)
         #expect(spoken.first == "level 1, {")
-        #expect(spoken.contains("level 3, amount: 10, text") && spoken.contains("level 3, count: 10"))
-        #expect(spoken.contains { $0.hasPrefix("level 3, note:") && $0.contains("code point U+202E") })
-        // The document's own text is content (another pitch), the app's words are not: a string that says "level 2" or
-        // "code point U+202E" is heard as content.
-        let note = try #require(pieces.first { Spoken.plain($0).hasPrefix("level 3, note:") })
-        #expect(note.contains(.content("note")) && note.contains(.content("evil")) && note.contains(.app("level 3, ")))
-        #expect(note.contains { if case .app(let s) = $0 { s.contains("code point U+202E") } else { false } })
+        #expect(spoken.contains(#"level 3, "amount": "10", text"#) && spoken.contains(#"level 3, "count": 10"#))
+        #expect(spoken.contains("level 3, \"note\": \"⟨U+202E⟩evil\", text"))
+        // The quotation marks and the marker are the app's symbols (always spoken as punctuation), the key and the string
+        // the document's content: content that says "level 2", a quotation mark or a marker is heard and brailled as
+        // content, between the app's own marks.
+        let note = try #require(pieces.first { Spoken.plain($0).hasPrefix("level 3, \"note") })
+        #expect(note == [
+            .app("level 3, "), .symbol("\""), .content("note"), .symbol("\""), .app(": "),
+            .app(""), .symbol("\""), .symbol("⟨U+202E⟩"), .content("evil"), .symbol("\""), .app(", text"),
+        ])
+        let a = Spoken.attributed(note)
+        for run in a.runs {
+            let text = String(a[run.range].characters)
+            // Adjacent pieces of one kind join into one run (the quotation mark and the marker after it).
+            let isContent = text == "note" || text == "evil"
+            let isApp = text.contains("level") || text == ": " || text == ", text"
+            #expect((run.accessibilitySpeechAdjustedPitch != nil) == isContent, "pitch on \(text)")
+            #expect((run.accessibilitySpeechIncludesPunctuation == true) == (!isContent && !isApp), "punctuation on \(text)")
+        }
+        // Escaped content cannot close its quotes: a string's own quotation mark is spoken escaped, inside the app's.
+        let sneaky = DocumentPresentation.RawLine(depth: 1, key: ShownText("k", escaped: true), value: .string(ShownText(#"x", "y"#, escaped: true)), comma: false)
+        #expect(Spoken.plain(RawDocumentView.spoken(sneaky)) == #"level 2, "k": "x\", \"y", text"#)
     }
 
     @Test func theTitlesAreTheSpecs() {

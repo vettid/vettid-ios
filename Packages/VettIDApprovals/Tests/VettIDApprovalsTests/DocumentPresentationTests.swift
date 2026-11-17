@@ -45,13 +45,21 @@ import Testing
     @Test func noTextCanSpellAMarkerOrDecorateTheAppsOwnCharacters() {
         // The brackets a marker is drawn with are markers themselves.
         #expect(ShownText("\u{27E8}U+202E\u{27E9}").runs == [.marker(0x27E8), .text("U+202E"), .marker(0x27E9)])
-        for v: UInt32 in [0x2329, 0x232A, 0x3008, 0x3009, 0x276C, 0x276D] {
+        let lookAlikes: [UInt32] = [
+            0x2329, 0x232A, 0x3008, 0x3009, 0x276C, 0x276D, 0x2039, 0x203A, 0x276E, 0x276F, 0x27EA, 0x27EB, 0xFF1C, 0xFF1E,
+            0x29FC, 0x29FD, 0x2991, 0x2992, 0x2770, 0x2771, 0x300A, 0x300B, 0xFE64, 0xFE65, 0x02C2, 0x02C3, 0x1438, 0x1433,
+            0x2800, 0xFFFC,
+        ]
+        for v in lookAlikes {
             #expect(ShownText("a" + String(Character(Unicode.Scalar(v)!)) + "b").runs == [.text("a"), .marker(v), .text("b")])
         }
         // A combining mark with no base in its run would combine with a quotation mark or a marker drawn before it.
         #expect(ShownText("\u{0338}x").runs == [.marker(0x0338), .text("x")])
         #expect(ShownText("\u{202E}\u{20DD}x").runs == [.marker(0x202E), .marker(0x20DD), .text("x")])
         #expect(ShownText("a\n\u{0301}", lineBreaks: true).runs == [.text("a"), .lineBreak, .marker(0x0301)])
+        // A spacing mark (Mc) or any other grapheme extender with no base, too; with a base it stays.
+        #expect(ShownText("\u{0903}x").runs == [.marker(0x0903), .text("x")])
+        #expect(ShownText("\u{0915}\u{0903}").runs == [.text("\u{0915}\u{0903}")])
     }
 
     @Test func aRawStringShowsItsQuotesAndBackslashesEscaped() {
@@ -87,6 +95,23 @@ import Testing
         var g = SeenCoverage()
         g.saw(5...200, height: 200)
         #expect(!g.whole)
+    }
+
+    @Test func aLongTextIsCutIntoBoundedPiecesWithNothingLostOrMarkerCut() {
+        let words = Array(repeating: "budget", count: 3_000).joined(separator: " ")
+        let t = ShownText(words + "\u{202E}" + words)
+        let pieces = t.pieces()
+        #expect(pieces.count > 100)
+        #expect(pieces.allSatisfy { $0.plain.count <= ShownText.pieceCharacters })
+        #expect(pieces.map(\.plain).joined() == t.plain, "nothing lost or added")
+        #expect(pieces.contains { $0.runs.contains(.marker(0x202E)) }, "the marker whole, in one piece")
+        // One word longer than a piece is cut at the bound.
+        let long = ShownText(String(repeating: "x", count: 450)).pieces()
+        #expect(long.map(\.plain) == [String(repeating: "x", count: 200), String(repeating: "x", count: 200), String(repeating: "x", count: 50)])
+        // A kept line break once a piece is half full is the break between pieces.
+        let lines = ShownText(String(repeating: "a", count: 150) + "\n" + "b", lineBreaks: true).pieces()
+        #expect(lines.map(\.plain) == [String(repeating: "a", count: 150), "b"])
+        #expect(ShownText("").pieces() == [ShownText("")])
     }
 
     @Test func lineBreaksAreKeptOnlyWhereTheFieldKeepsThem() {

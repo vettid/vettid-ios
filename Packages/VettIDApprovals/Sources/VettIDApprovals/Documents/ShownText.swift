@@ -34,6 +34,63 @@ public struct ShownText: Equatable, Sendable {
     /// Whether nothing is shown (an empty string).
     public var isEmpty: Bool { runs.isEmpty }
 
+    init(runs: [Run]) { self.runs = runs }
+
+    /// At most this many characters to a piece (``pieces(max:)``).
+    public static let pieceCharacters = 200
+
+    /// The text in pieces of at most [max] characters, each drawn as a row of its own: a single text of tens of
+    /// kilobytes is drawn blank on an iPhone, and drawn whole it takes more memory than an app is allowed. A piece ends
+    /// after a white space where there is one, at a kept line break once it is half full (the break between pieces is
+    /// that line break), never inside a marker, else at the bound.
+    /// (One case per kind of run, and the cut of a text run in place.)
+    public func pieces(max: Int = ShownText.pieceCharacters) -> [ShownText] { // swiftlint:disable:this cyclomatic_complexity
+        var out: [ShownText] = []
+        var cur: [Run] = []
+        var n = 0
+        func close() {
+            out.append(ShownText(runs: cur))
+            cur = []
+            n = 0
+        }
+        for run in runs {
+            switch run {
+            case .marker(let v):
+                let len = Self.marker(v).count
+                if n > 0, n + len > max { close() }
+                cur.append(run)
+                n += len
+            case .lineBreak:
+                if n >= max / 2 { close() } else {
+                    cur.append(run)
+                    n += 1
+                }
+            case .text(let s):
+                var rest = Substring(s)
+                while !rest.isEmpty {
+                    guard let limit = rest.index(rest.startIndex, offsetBy: max - n, limitedBy: rest.endIndex), limit < rest.endIndex
+                    else {
+                        n += rest.count
+                        cur.append(.text(String(rest)))
+                        break
+                    }
+                    var cut = limit
+                    if let ws = rest[..<limit].lastIndex(where: \.isWhitespace) {
+                        cut = rest.index(after: ws)
+                    } else if n > 0 {
+                        close()
+                        continue
+                    }
+                    if cut > rest.startIndex { cur.append(.text(String(rest[..<cut]))) }
+                    rest = rest[cut...]
+                    close()
+                }
+            }
+        }
+        if !cur.isEmpty || out.isEmpty { close() }
+        return out
+    }
+
     /// [s] cleaned. [lineBreaks]: the field keeps line breaks (Motion and Quorum's text): at most two LF in a row are
     /// kept, a third and later in a row are markers; elsewhere every LF is a marker. [escaped]: a string of the raw view,
     /// whose `"` and `\` are shown escaped as JSON writes them (`\"`, `\\`), so that no string can close its own quotes
@@ -55,7 +112,8 @@ public struct ShownText: Equatable, Sendable {
             // A combining mark with no base of its own in this run (at the start, or after a marker or a line break)
             // would combine with what the app draws before it (a quotation mark, a marker): a marker itself; a spacing
             // mark (Mc) as well.
-            let baseless = (isMark || scalar.properties.generalCategory == .spacingMark) && text.isEmpty
+            let p = scalar.properties
+            let baseless = (isMark || p.isGraphemeExtend || p.generalCategory == .spacingMark) && text.isEmpty
             if isBreak, lineBreaks, breaks <= 2 {
                 flush()
                 runs.append(.lineBreak)
@@ -81,11 +139,13 @@ public struct ShownText: Equatable, Sendable {
     /// so that no text can spell a marker, however it is styled.
     /// ⟨ ⟩ and the angle brackets that look like them: 〈 〉 (U+2329, U+232A), 〈 〉 (U+3008, U+3009), ❬ ❭ (U+276C, U+276D),
     /// ‹ › (U+2039, U+203A), ❮ ❯ (U+276E, U+276F), ⟪ ⟫ (U+27EA, U+27EB), ＜ ＞ (U+FF1C, U+FF1E), ⧼ ⧽ (U+29FC, U+29FD),
-    /// ⦑ ⦒ (U+2991, U+2992), and the blank glyphs that are not default-ignorable: U+2800 BRAILLE PATTERN BLANK and U+FFFC
+    /// ⦑ ⦒ (U+2991, U+2992), ❰ ❱ (U+2770, U+2771), 《 》 (U+300A, U+300B), ﹤ ﹥ (U+FE64, U+FE65), ˂ ˃ (U+02C2, U+02C3),
+    /// ᐸ ᐳ (U+1438, U+1433), and the blank glyphs that are not default-ignorable: U+2800 BRAILLE PATTERN BLANK and U+FFFC
     /// OBJECT REPLACEMENT CHARACTER.
     static let markerBrackets: Set<UInt32> = [
         0x27E8, 0x27E9, 0x2329, 0x232A, 0x3008, 0x3009, 0x276C, 0x276D, 0x2039, 0x203A, 0x276E, 0x276F, 0x27EA, 0x27EB,
-        0xFF1C, 0xFF1E, 0x29FC, 0x29FD, 0x2991, 0x2992, 0x2800, 0xFFFC,
+        0xFF1C, 0xFF1E, 0x29FC, 0x29FD, 0x2991, 0x2992, 0x2770, 0x2771, 0x300A, 0x300B, 0xFE64, 0xFE65, 0x02C2, 0x02C3,
+        0x1438, 0x1433, 0x2800, 0xFFFC,
     ]
 
     static func marked(_ scalar: Unicode.Scalar) -> Bool {

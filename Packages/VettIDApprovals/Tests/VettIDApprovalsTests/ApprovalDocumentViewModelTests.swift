@@ -89,6 +89,20 @@ import VettIDDataTesting
         #expect(fake.calls.last == "approveAuthenticationDocument:a1" && !fake.calls.contains("approveAuthentication:a1"))
     }
 
+    /// The guard on its own: a document shown and seen whole is not approvable once the request held names another.
+    @Test func aDocumentSeenWholeIsNotApprovableForARequestNamingAnother() {
+        var s = ApprovalDetailState(key: "auth:a1")
+        var other = request
+        other.documentSha256 = "bmV3"
+        s.approval = .authentication(other)
+        s.password = "pw"
+        s.document = .shown(document, DocumentPresentation(document, context: nil)!)
+        s.documentSeen = document.sha256
+        #expect(s.documentToApprove == nil && !s.canApprove())
+        s.approval = .authentication(request)
+        #expect(s.documentToApprove == document && s.canApprove())
+    }
+
     @Test func aReportAboutAnotherDocumentCountsForNothing() async {
         let m = await model()
         m.setPassword("pw")

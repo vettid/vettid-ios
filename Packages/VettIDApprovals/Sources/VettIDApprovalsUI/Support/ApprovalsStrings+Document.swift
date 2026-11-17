@@ -121,10 +121,6 @@ extension ApprovalsStrings {
         )
     }
 
-    static func docMarkerSpoken(_ value: String) -> String {
-        String(localized: "approvals_doc_marker_spoken", defaultValue: "code point \(value)", bundle: .module)
-    }
-
     static func docTextSpoken(_ value: String) -> String {
         String(localized: "approvals_doc_text_spoken", defaultValue: "\(value), text", bundle: .module)
     }
