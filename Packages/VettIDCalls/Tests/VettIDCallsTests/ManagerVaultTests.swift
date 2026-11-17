@@ -99,6 +99,8 @@ import VettIDVault
     @Test func erasingThePhoneShowsTheVaultNotOpen() async throws {
         defer { phone.close() }
         try await openVault()
+        // The opening's own read of the manifest first: until then the release is being checked and calls are closed.
+        #expect(await waitFor { !m.releaseUpdate.checking })
         let vault = ManagerVault(m)
         var changes = vault.unlockedChanges().makeAsyncIterator()
         #expect(await changes.next() == true)
