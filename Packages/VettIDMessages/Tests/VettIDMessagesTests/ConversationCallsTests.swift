@@ -64,6 +64,19 @@ final class FakeConversationCalls {
         return m
     }
 
+    /// The availability moved to [a], then waited for until [m] has taken it (the model follows it through an observation, which
+    /// ``ConversationViewModel/settle()`` does not wait for), then settled: each step is seen, none coalesced with the next.
+    func change(to a: ConversationCallAvailability, on m: ConversationViewModel) async {
+        fake.availability = a
+        var yields = 0
+        while m.state.callAvailability != a, yields < 10_000 {
+            await Task.yield()
+            yields += 1
+        }
+        #expect(m.state.callAvailability == a, "the model took the change")
+        await m.settle()
+    }
+
     func call(
         _ id: String, _ outcome: ConversationCallOutcome = .missed, at: TimeInterval = 0, outgoing: Bool = false,
         duration: TimeInterval? = nil
@@ -81,24 +94,20 @@ final class FakeConversationCalls {
         m.call()
         #expect(fake.called.isEmpty)
 
-        fake.availability = .ready
-        await m.settle()
+        await change(to: .ready, on: m)
         #expect(m.state.callShown)
         m.call()
         #expect(fake.called == ["c1"])
 
-        fake.availability = .inCall
-        await m.settle()
+        await change(to: .inCall, on: m)
         #expect(!m.state.callShown, "hidden during a call")
         m.call()
         #expect(fake.called == ["c1"])
 
-        fake.availability = .ready
-        await m.settle()
+        await change(to: .ready, on: m)
         #expect(m.state.callShown)
 
-        fake.availability = .unavailable
-        await m.settle()
+        await change(to: .unavailable, on: m)
         #expect(!m.state.callShown)
         m.call()
         #expect(fake.called == ["c1"], "no note for a vault without calls: the action is not there")
@@ -192,19 +201,15 @@ final class FakeConversationCalls {
         #expect(fake.reads.sorted() == ["c1", "c1", "c2", "c2"], "read, and once more a moment later")
 
         fake.history = ConversationCallHistory(calls: [call("k1")], someNotShown: false)
-        fake.availability = .inCall
-        await c1.settle()
+        await change(to: .inCall, on: c1)
         #expect(c1.state.callsNotShown && c1.state.calls.count == 1, "during a call the list stays")
-        fake.availability = .ready
-        await c1.settle()
+        await change(to: .ready, on: c1)
         #expect(!c1.state.callsNotShown, "read again after the call: none skipped now")
 
         fake.history = ConversationCallHistory(calls: [call("k1")], someNotShown: true)
-        fake.availability = .unavailable // locked
-        await c1.settle()
+        await change(to: .unavailable, on: c1) // locked
         #expect(!c1.state.callsNotShown && c1.state.calls.isEmpty, "nothing of the history stays in memory")
-        fake.availability = .ready
-        await c1.settle()
+        await change(to: .ready, on: c1)
         #expect(c1.state.callsNotShown, "skipped again after the unlock")
     }
 
@@ -217,10 +222,8 @@ final class FakeConversationCalls {
         #expect(m.state.calls.map(\.callId) == ["k1"] && m.state.callsNotShown)
 
         fake.history = nil
-        fake.availability = .inCall
-        await m.settle()
-        fake.availability = .ready
-        await m.settle()
+        await change(to: .inCall, on: m)
+        await change(to: .ready, on: m)
         #expect(fake.reads.count == 4, "both reads after the call were made")
         #expect(m.state.calls.map(\.callId) == ["k1"] && m.state.callsNotShown, "the lines and the note stay")
     }
@@ -236,11 +239,9 @@ final class FakeConversationCalls {
         #expect(m.state.calls.map(\.callId) == ["k1"] && m.state.callsOutOfDate)
 
         fake.failFrom = nil
-        fake.availability = .inCall
-        await m.settle()
+        await change(to: .inCall, on: m)
         #expect(m.state.callsOutOfDate, "during a call the note stays with the lines")
-        fake.availability = .ready
-        await m.settle()
+        await change(to: .ready, on: m)
         #expect(!m.state.callsOutOfDate, "a read that answers clears it")
     }
 
@@ -253,22 +254,16 @@ final class FakeConversationCalls {
         #expect(m.state.calls.isEmpty && !m.state.callsOutOfDate, "never read: nothing to say")
 
         fake.history = ConversationCallHistory(calls: [call("k1")])
-        fake.availability = .inCall
-        await m.settle()
-        fake.availability = .ready
-        await m.settle()
+        await change(to: .inCall, on: m)
+        await change(to: .ready, on: m)
         fake.history = nil
-        fake.availability = .inCall
-        await m.settle()
-        fake.availability = .ready
-        await m.settle()
+        await change(to: .inCall, on: m)
+        await change(to: .ready, on: m)
         #expect(m.state.callsOutOfDate)
 
-        fake.availability = .unavailable // locked
-        await m.settle()
+        await change(to: .unavailable, on: m) // locked
         #expect(!m.state.callsOutOfDate && m.state.calls.isEmpty, "a lock clears the note with the lines")
-        fake.availability = .ready
-        await m.settle()
+        await change(to: .ready, on: m)
         #expect(!m.state.callsOutOfDate, "nothing read since the unlock")
     }
 
