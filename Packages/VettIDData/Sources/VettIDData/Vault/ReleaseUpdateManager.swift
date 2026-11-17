@@ -27,6 +27,12 @@ public final class ReleaseUpdateManager: ReleaseUpdateRepository {
 
     public private(set) var offer: ReleaseUpdateOffer?
     public private(set) var offerKnown = false
+
+    /// The vault is not on the newest `active` release of the manifest this phone trusts (rule 3: no release but the current
+    /// one is used): only the update, and the ways to leave the vault, are open until it moves. Read from the offer, so it
+    /// holds once the manifest was read after the unlock; before that, and when the manifest could not be read, the app
+    /// goes on as before (the unlock's own checks of the release still apply).
+    public var required: Bool { offer != nil }
     public private(set) var progress: UpdateProgress?
     public private(set) var dismissal: ReleaseDismissal?
 

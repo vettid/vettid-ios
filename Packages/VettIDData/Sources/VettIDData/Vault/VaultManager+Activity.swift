@@ -28,7 +28,7 @@ extension VaultManager {
         let feed = FeedManager(
             ops: { try await memberApi(ref) }, quietOps: { try quietApi(ref) },
             // §3.6.3: nothing of the feed is shown while the vault is held or due.
-            gated: { [now = config.now] in ref.manager?.ownerChecks.ownerCheck?.gated(now()) ?? false },
+            gated: { ref.manager?.featuresGated() ?? false },
             now: config.now
         )
         let approvals = ApprovalsManager(

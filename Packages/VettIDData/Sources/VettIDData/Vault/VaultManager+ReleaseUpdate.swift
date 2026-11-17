@@ -112,6 +112,12 @@ extension VaultManager {
         }
     }
 
+    /// Nothing of the vault's features is read, shown or acted on: the owner check is past its deadline (§3.6.3), or the vault
+    /// must first move to the current release (``ReleaseUpdateManager/required``; rule 3).
+    func featuresGated() -> Bool {
+        ownerChecks.ownerCheck?.gated(config.now()) == true || releaseUpdate.required
+    }
+
     /// The owner check is due or held (§3.6.5), or the vault locked after ten failed checks (not a lock of unknown cause,
     /// VAULT-MESSAGING 0.73.0).
     func ownerCheckGates() -> Bool {

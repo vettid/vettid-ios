@@ -332,22 +332,32 @@ struct AppRoot: View {
             OwnerCheckGateView(
                 vault: vault, path: shell.path, onGated: { shell.shown() }, onCovered: { shell.checkCovers = $0 }
             ) { gate, now in
-                AppShell(
-                    account: vault, vault: vault, ownerChecks: vault.ownerChecks, credential: vault, profiles: vault.profiles,
-                    appLock: appLock, model: shell, gate: gate, now: now,
-                    version: .of(Bundle.main.infoDictionary ?? [:]), installedFrom: InstalledFromBuild.current,
-                    promptReason: AppLockTexts.reason, canary: vault.canary, canaryInbox: canaryInbox,
-                    releaseUpdates: vault.releaseUpdate, releaseNotes: releaseNotes, releaseInbox: releaseInbox,
-                    connections: vault.connections, connectionRequests: vault.connections, inviteInbox: inviteInbox,
-                    messages: vault.messages, attachments: vault.attachments, feed: vault.feed, approvals: vault.approvals,
-                    history: vault.history, historyExport: vault.historyExport, items: vault.items, sharing: vault.sharing,
-                    votes: vault.votes, devices: vault.devices, pairing: vault.pairing, move: move,
-                    calls: calls.map { ShellCalls($0) }
-                ) { openPortal() }
-                .environment(\.accountDeletionURL, AccountDeletion.url(origin: environment.apiOrigin))
-                .modifier(OptionalNotificationsHook(
-                    notifications: notifications, model: shell, feed: vault.feed, checks: vault.ownerChecks
-                ))
+                if vault.releaseUpdate.required {
+                    // Rule 3: until the vault is on the current release, only its update and the ways to leave it. Inside
+                    // the owner check's gate: the update asks for the check first when it is due.
+                    ReleaseRequiredGate(
+                        updates: vault.releaseUpdate, ownerCheck: vault.ownerChecks, notes: releaseNotes, vault: vault,
+                        account: vault
+                    ) { openPortal() }
+                    .environment(\.accountDeletionURL, AccountDeletion.url(origin: environment.apiOrigin))
+                } else {
+                    AppShell(
+                        account: vault, vault: vault, ownerChecks: vault.ownerChecks, credential: vault, profiles: vault.profiles,
+                        appLock: appLock, model: shell, gate: gate, now: now,
+                        version: .of(Bundle.main.infoDictionary ?? [:]), installedFrom: InstalledFromBuild.current,
+                        promptReason: AppLockTexts.reason, canary: vault.canary, canaryInbox: canaryInbox,
+                        releaseUpdates: vault.releaseUpdate, releaseNotes: releaseNotes, releaseInbox: releaseInbox,
+                        connections: vault.connections, connectionRequests: vault.connections, inviteInbox: inviteInbox,
+                        messages: vault.messages, attachments: vault.attachments, feed: vault.feed, approvals: vault.approvals,
+                        history: vault.history, historyExport: vault.historyExport, items: vault.items, sharing: vault.sharing,
+                        votes: vault.votes, devices: vault.devices, pairing: vault.pairing, move: move,
+                        calls: calls.map { ShellCalls($0) }
+                    ) { openPortal() }
+                    .environment(\.accountDeletionURL, AccountDeletion.url(origin: environment.apiOrigin))
+                    .modifier(OptionalNotificationsHook(
+                        notifications: notifications, model: shell, feed: vault.feed, checks: vault.ownerChecks
+                    ))
+                }
             }
         }
     }

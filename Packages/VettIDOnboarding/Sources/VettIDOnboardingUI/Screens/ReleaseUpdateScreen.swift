@@ -5,20 +5,20 @@ import VettIDData
 import VettIDOnboarding
 import VettIDUI
 
-/// The update screen with its view model: "Update available" in Settings → Vault. Mirrors vettid-android's
-/// `releaseUpdateDestination`.
+/// The update screen with its view model: "Update available" in Settings → Vault, and the required update over the open
+/// vault (rule 3), where it has no way back ([onBack] nil). Mirrors vettid-android's `releaseUpdateDestination`.
 public struct ReleaseUpdateRoute: View {
     private let updates: any ReleaseUpdateRepository
     private let ownerCheck: (any OwnerCheckRepository)?
     private let notes: any ReleaseNotesRepository
-    private let onBack: @MainActor () -> Void
+    private let onBack: (@MainActor () -> Void)?
     @State private var model: ReleaseUpdateViewModel?
 
     public init(
         updates: any ReleaseUpdateRepository,
         ownerCheck: (any OwnerCheckRepository)?,
         notes: any ReleaseNotesRepository,
-        onBack: @escaping @MainActor () -> Void
+        onBack: (@MainActor () -> Void)?
     ) {
         self.updates = updates
         self.ownerCheck = ownerCheck
@@ -48,13 +48,14 @@ public struct ReleaseUpdateContent: View {
     @Environment(\.vettIDTimeScale) private var timeScale
     let state: ReleaseUpdateState
     let onApprove: @MainActor (String) -> Bool
-    let onBack: @MainActor () -> Void
+    /// None when the update is required: the screen has no way back (rule 3).
+    let onBack: (@MainActor () -> Void)?
     /// The first digit was typed into the empty keypad (``ReleaseUpdateViewModel/pinTypingStarted()``).
     let onTypingStarts: @MainActor () -> Void
     @State private var pin = PinBuffer()
 
     public init(
-        state: ReleaseUpdateState, onApprove: @escaping @MainActor (String) -> Bool, onBack: @escaping @MainActor () -> Void,
+        state: ReleaseUpdateState, onApprove: @escaping @MainActor (String) -> Bool, onBack: (@MainActor () -> Void)?,
         onTypingStarts: @escaping @MainActor () -> Void = {}
     ) {
         self.state = state

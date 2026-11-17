@@ -43,6 +43,32 @@ import VettIDDataTesting
         #expect(m.releaseUpdate.offer == nil && m.releaseUpdate.offerKnown)
     }
 
+    /// Rule 3: while a newer `active` release is listed, the update is required and the vault's features are gated as for a
+    /// check past its deadline; once the vault is on release 4, neither.
+    @Test func aNewerReleaseIsRequiredAndGatesTheFeaturesUntilTheVaultMoves() async throws {
+        defer { phone.close() }
+        try await setUp()
+        #expect(!m.releaseUpdate.required && !m.featuresGated(), "release 4 not read yet")
+        await m.releaseUpdate.refreshOffer()
+        let offer = try #require(m.releaseUpdate.offer)
+        #expect(m.releaseUpdate.required && m.featuresGated())
+        #expect(m.releaseUpdate.start(pin: pin, offer: offer))
+        await m.releaseUpdate.settle()
+        #expect(try #require(m.releaseUpdate.progress).step == .done)
+        await m.releaseUpdate.refreshOffer()
+        #expect(m.releaseUpdate.offer == nil && m.releaseUpdate.offerKnown)
+        #expect(!m.releaseUpdate.required && !m.featuresGated())
+    }
+
+    /// Without a newer release, nothing is required or gated.
+    @Test func theCurrentReleaseIsNotGated() async throws {
+        defer { phone.close() }
+        try await setUp()
+        service.listsRelease4 = false
+        await m.releaseUpdate.refreshOffer()
+        #expect(m.releaseUpdate.offerKnown && !m.releaseUpdate.required && !m.featuresGated())
+    }
+
     /// "Approve and update": the lock, one unlock carrying the approval for release 4 beside its device assertion, `moved`,
     /// then the unlock that reaches release 4 with the same PIN and no approval. The phone records release 4.
     @Test func approveLocksMovesAndOpensOnTheNewRelease() async throws {
