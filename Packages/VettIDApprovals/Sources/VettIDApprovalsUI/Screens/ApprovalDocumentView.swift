@@ -9,13 +9,16 @@ import VettIDUI
 /// block of its own that looks clearly different from the labels; or "This request can't be shown" when the document
 /// failed its checks. Once the whole of the document has been on screen, from its top down without a gap, the model is
 /// told (Approve waits for it).
-struct ApprovalDocumentView: View {
+struct ApprovalDocumentView: View, Equatable {
     @Environment(\.vettIDColors) private var colors
     let step: DocumentStep
     let name: String?
     let seen: Bool
     let onRetry: @MainActor () -> Void
     let onSeenWhole: @MainActor (String) -> Void
+
+    /// What it shows: the screen's one-second countdown does not lay a large document out again (`.equatable()`).
+    nonisolated static func == (a: Self, b: Self) -> Bool { a.step == b.step && a.name == b.name && a.seen == b.seen }
 
     var body: some View {
         VStack(alignment: .leading, spacing: Spacing.m) {
@@ -168,7 +171,7 @@ private struct FieldLabel: View {
 }
 
 /// How the document's texts are drawn: a marker in a monospaced, boxed and underlined style of its own, so that it is
-/// told from text by more than its colour.
+/// told from text by more than its color.
 struct DocumentStyle {
     var marker: Color
     var markerFill: Color
@@ -197,7 +200,7 @@ struct DocumentStyle {
                 a.font = .system(.body, design: .monospaced)
                 a.foregroundColor = marker
                 a.backgroundColor = markerFill
-                // Underlined too: told from text by more than its colour.
+                // Underlined too: told from text by more than its color.
                 a.underlineStyle = .single
                 out += a
             }
@@ -217,17 +220,52 @@ struct ShownTextView: View {
             .vettIDFont(.bodyLarge)
             .fixedSize(horizontal: false, vertical: true)
             .textSelection(.disabled)
-            .accessibilityLabel(Self.spoken(text))
+            .accessibilityLabel(Spoken.text(Self.spoken(text)))
     }
 
-    static func spoken(_ t: ShownText) -> String {
-        t.runs.map { run -> String in
+    /// What VoiceOver reads: the document's own text as content, a marker as the app's words.
+    static func spoken(_ t: ShownText) -> [Spoken] {
+        t.runs.map { run -> Spoken in
             switch run {
-            case .text(let s): s
-            case .lineBreak: "\n"
-            case .marker(let v): " " + ApprovalsStrings.docMarkerSpoken("U+" + String(format: "%04X", v)) + " "
+            case .text(let s): .content(s)
+            case .lineBreak: .content("\n")
+            case .marker(let v): .app(" " + ApprovalsStrings.docMarkerSpoken("U+" + String(format: "%04X", v)) + " ")
+            }
+        }
+    }
+}
+
+/// A piece of what VoiceOver reads on this screen: the app's own words at the usual pitch, the document's text at a
+/// pitch of its own, so that no text can be heard as the app's words, a marker or a line's level, whatever it says.
+enum Spoken: Equatable {
+    case app(String)
+    case content(String)
+
+    /// The adjustment of the document's text (VoiceOver's pitch, from -1 to 1).
+    static let contentPitch = -0.5
+
+    static func plain(_ pieces: [Spoken]) -> String {
+        pieces.map { p in
+            switch p {
+            case .app(let s), .content(let s): s
             }
         }.joined()
+    }
+
+    /// One attributed text, the pitch an attribute of the content's runs: never a chain of concatenated texts, whose
+    /// depth grows with the document (tens of thousands of pieces).
+    static func text(_ pieces: [Spoken]) -> Text {
+        var out = AttributedString()
+        for p in pieces {
+            switch p {
+            case .app(let s): out += AttributedString(s)
+            case .content(let s):
+                var a = AttributedString(s)
+                a.accessibilitySpeechAdjustedPitch = contentPitch
+                out += a
+            }
+        }
+        return Text(out)
     }
 }
 
@@ -345,7 +383,7 @@ struct RawDocumentView: View {
                 .font(.system(.callout, design: .monospaced))
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .accessibilityLabel(part.map(Self.spoken).joined(separator: "\n"))
+                .accessibilityLabel(Spoken.text(Array(part.map(Self.spoken).joined(separator: [.app("\n")]))))
             }
         }
         .environment(\.layoutDirection, .leftToRight)
@@ -377,19 +415,27 @@ struct RawDocumentView: View {
         return t
     }
 
-    /// What VoiceOver reads for a line: its level, then its key and value, a string said to be text.
-    static func spoken(_ line: DocumentPresentation.RawLine) -> String {
-        let key = line.key.map { ShownTextView.spoken($0) + ": " } ?? ""
-        let value = switch line.value {
-        case .string(let s): ApprovalsStrings.docTextSpoken(ShownTextView.spoken(s))
-        case .number(let n): n
-        case .bool(let b): b ? "true" : "false"
-        case .null: "null"
-        case .open(let c): c == .object ? "{" : "["
-        case .close(let c): c == .object ? "}" : "]"
-        case .empty(let c): c == .object ? "{}" : "[]"
+    /// What VoiceOver reads for a line: its level (the document object is level 1, as §10.4 counts), then its key and
+    /// value, a string said to be text; keys and strings are the document's content.
+    static func spoken(_ line: DocumentPresentation.RawLine) -> [Spoken] {
+        var out: [Spoken] = [.app(ApprovalsStrings.docLevelSpoken(line.depth + 1) + ", ")]
+        if let key = line.key { out += ShownTextView.spoken(key) + [.app(": ")] }
+        switch line.value {
+        case .string(let s):
+            // "<value>, text": the value spliced where the app's words put it.
+            let marker = "\u{FFFC}"
+            let parts = ApprovalsStrings.docTextSpoken(marker).components(separatedBy: marker)
+            out.append(.app(parts.first ?? ""))
+            out += ShownTextView.spoken(s)
+            out.append(.app(parts.dropFirst().joined()))
+        case .number(let n): out.append(.content(n))
+        case .bool(let b): out.append(.content(b ? "true" : "false"))
+        case .null: out.append(.content("null"))
+        case .open(let c): out.append(.app(c == .object ? "{" : "["))
+        case .close(let c): out.append(.app(c == .object ? "}" : "]"))
+        case .empty(let c): out.append(.app(c == .object ? "{}" : "[]"))
         }
-        return ApprovalsStrings.docLevelSpoken(line.depth) + ", " + key + value
+        return out
     }
 }
 #endif

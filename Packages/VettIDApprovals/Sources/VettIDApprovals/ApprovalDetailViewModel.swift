@@ -104,8 +104,11 @@ public struct ApprovalDetailState: Equatable, Sendable, CustomStringConvertible,
     }
 
     /// The document shown and checked, when it has all been on screen: the only one an approval signs.
+    /// It is the document the request held now names, so Approve is never enabled, even for a moment, over an older one.
     public var documentToApprove: ApprovalDocument? {
-        guard case .shown(let d, _)? = document, documentSeen == d.sha256 else { return nil }
+        guard case .shown(let d, _)? = document, documentSeen == d.sha256, case .authentication(let x)? = approval,
+              x.documentSha256 == d.sha256
+        else { return nil }
         return d
     }
 

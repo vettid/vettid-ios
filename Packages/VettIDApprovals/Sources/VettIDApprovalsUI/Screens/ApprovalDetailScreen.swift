@@ -257,6 +257,7 @@ struct DecisionContent: View {
                     step: step, name: state.connectionName, seen: state.documentToApprove != nil,
                     onRetry: actions.onRetryDocument, onSeenWhole: actions.onDocumentShownWhole
                 )
+                .equatable()
             }
             if state.needs == .password, !state.onlyDeny {
                 SecretField(

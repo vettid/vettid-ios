@@ -53,8 +53,9 @@ public struct ShownText: Equatable, Sendable {
             let isMark = [.nonspacingMark, .enclosingMark].contains(scalar.properties.generalCategory)
             marks = isMark ? marks + 1 : 0
             // A combining mark with no base of its own in this run (at the start, or after a marker or a line break)
-            // would combine with what the app draws before it (a quotation mark, a marker): a marker itself.
-            let baseless = isMark && text.isEmpty
+            // would combine with what the app draws before it (a quotation mark, a marker): a marker itself; a spacing
+            // mark (Mc) as well.
+            let baseless = (isMark || scalar.properties.generalCategory == .spacingMark) && text.isEmpty
             if isBreak, lineBreaks, breaks <= 2 {
                 flush()
                 runs.append(.lineBreak)
@@ -78,8 +79,14 @@ public struct ShownText: Equatable, Sendable {
     /// Hangul fillers, the variation selectors, U+FE0F and the joiners among them), and every space separator (Zs) but
     /// U+0020. Also (chosen; not in the spec) the brackets markers are drawn with, U+27E8 and U+27E9, and their look-alikes,
     /// so that no text can spell a marker, however it is styled.
-    /// ⟨ ⟩ and the angle brackets that look like them: 〈 〉 (U+2329, U+232A), 〈 〉 (U+3008, U+3009), ❬ ❭ (U+276C, U+276D).
-    static let markerBrackets: Set<UInt32> = [0x27E8, 0x27E9, 0x2329, 0x232A, 0x3008, 0x3009, 0x276C, 0x276D]
+    /// ⟨ ⟩ and the angle brackets that look like them: 〈 〉 (U+2329, U+232A), 〈 〉 (U+3008, U+3009), ❬ ❭ (U+276C, U+276D),
+    /// ‹ › (U+2039, U+203A), ❮ ❯ (U+276E, U+276F), ⟪ ⟫ (U+27EA, U+27EB), ＜ ＞ (U+FF1C, U+FF1E), ⧼ ⧽ (U+29FC, U+29FD),
+    /// ⦑ ⦒ (U+2991, U+2992), and the blank glyphs that are not default-ignorable: U+2800 BRAILLE PATTERN BLANK and U+FFFC
+    /// OBJECT REPLACEMENT CHARACTER.
+    static let markerBrackets: Set<UInt32> = [
+        0x27E8, 0x27E9, 0x2329, 0x232A, 0x3008, 0x3009, 0x276C, 0x276D, 0x2039, 0x203A, 0x276E, 0x276F, 0x27EA, 0x27EB,
+        0xFF1C, 0xFF1E, 0x29FC, 0x29FD, 0x2991, 0x2992, 0x2800, 0xFFFC,
+    ]
 
     static func marked(_ scalar: Unicode.Scalar) -> Bool {
         if markerBrackets.contains(scalar.value) { return true }
