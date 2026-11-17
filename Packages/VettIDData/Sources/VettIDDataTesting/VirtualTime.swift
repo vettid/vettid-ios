@@ -40,7 +40,9 @@ public final class VirtualTime {
 
     /// The wait a view model sleeps with.
     public var sleep: @Sendable (Duration) async throws -> Void {
-        { [weak self] d in
+        // Isolated to the main actor, as the clock: a woken sleeper resumes there, in order, without a hop through the thread
+        // pool that a busy machine could make late.
+        { @MainActor [weak self] d in
             guard let self else { return }
             try await self.wait(d)
         }
@@ -48,7 +50,7 @@ public final class VirtualTime {
 
     /// A second's tick, for the view models that count down with ``sleep``.
     public var tick: @Sendable () async throws -> Void {
-        { [weak self] in
+        { @MainActor [weak self] in
             guard let self else { return }
             try await self.wait(.seconds(1))
         }
