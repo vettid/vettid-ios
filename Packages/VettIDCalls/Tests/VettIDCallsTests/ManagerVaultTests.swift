@@ -70,4 +70,17 @@ import VettIDVault
         #expect(await changes.next() == false)
         #expect(!vault.updateShowing)
     }
+
+    /// Leaving the vault for another starts with erasing this phone, which shows "not open": the calls' host drops the call
+    /// logic of the vault before, and with it the calls it knew had ended, before any other vault can be opened here.
+    @Test func erasingThePhoneShowsTheVaultNotOpen() async throws {
+        defer { phone.close() }
+        try await openVault()
+        let vault = ManagerVault(m)
+        var changes = vault.unlockedChanges().makeAsyncIterator()
+        #expect(await changes.next() == true)
+        try await m.eraseThisPhone()
+        #expect(await changes.next() == false)
+        #expect(!vault.isOpen)
+    }
 }

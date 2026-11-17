@@ -240,4 +240,79 @@ extension CallMachineTests {
         await runCurrent()
         #expect(!hasSent(signalling, "answer(") && !hasSent(signalling, "ringing("))
     }
+
+    /// As above, but the start comes back lost and the glare's end is the one it carries (``CallLostError``), not held: the
+    /// winner, known to have ended only among the other calls' ends, is kept among the winners before the replay of the many
+    /// ends held, so the call is missed at once and the winner's late offer is not answered or rung.
+    @Test func aWinnerEndedBeforeALostCallIsKeptAmongTheWinnersBeforeTheReplay() async throws {
+        let m = machine()
+        await runCurrent()
+        signalling.deliver(.end(callId: glareId, reason: CallReason.hangup))
+        await runCurrent()
+        signalling.holdStart()
+        m.call("conn-1")
+        await runCurrent()
+        for n in 0...CallMachine.maxEndedOthers { signalling.deliver(.end(callId: endedId(n), reason: CallReason.hangup)) }
+        await runCurrent()
+        signalling.startResult = {
+            throw CallLostError(callId: callId, end: .init(reason: CallReason.busy, supersededBy: glareId))
+        }
+        signalling.releaseStart()
+        await runCurrent()
+        #expect(try ended(m).reason == .missed)
+        #expect(m.endedWinners.contains(glareId))
+        // The case this is about: the other calls' ends replayed have pushed the winner out of the other calls' list.
+        #expect(!m.endedOthers.contains(glareId))
+        signalling.deliver(offer(glareId))
+        await runCurrent()
+        #expect(!hasSent(signalling, "answer(") && !hasSent(signalling, "ringing("))
+        #expect(!hasSent(signalling, "end("))
+    }
+
+    /// The same with the held events full: the call's own glare end, which comes past them, is not held (it is the one the
+    /// start carries), and the winner known to have ended is kept among the winners all the same.
+    @Test func aWinnerEndedBeforeALostCallIsKeptWithTheHeldEventsFull() async throws {
+        let m = machine()
+        await runCurrent()
+        signalling.deliver(.end(callId: glareId, reason: CallReason.hangup))
+        await runCurrent()
+        signalling.holdStart()
+        m.call("conn-1")
+        await runCurrent()
+        for n in 0..<CallMachine.maxEarly { signalling.deliver(.end(callId: endedId(n), reason: CallReason.hangup)) }
+        signalling.deliver(.end(callId: callId, reason: CallReason.busy, supersededBy: glareId))
+        await runCurrent()
+        signalling.startResult = {
+            throw CallLostError(callId: callId, end: .init(reason: CallReason.busy, supersededBy: glareId))
+        }
+        signalling.releaseStart()
+        await runCurrent()
+        #expect(try ended(m).reason == .missed)
+        #expect(m.endedWinners.contains(glareId))
+        // The case this is about: the other calls' ends replayed have pushed the winner out of the other calls' list.
+        #expect(!m.endedOthers.contains(glareId))
+        signalling.deliver(offer(glareId))
+        await runCurrent()
+        #expect(!hasSent(signalling, "answer(") && !hasSent(signalling, "ringing("))
+        #expect(!hasSent(signalling, "end("))
+    }
+
+    /// The carried end of another kind, or naming a winner that is not lower, is no glare's: it does not fill the winners.
+    @Test func aCarriedEndThatIsNoGlaresDoesNotFillTheWinners() async throws {
+        for (reason, by) in [(CallReason.decline, glareId), (CallReason.busy, "01JB2Z6V9K3M4N5P6Q7R8S9ZZZ")] {
+            let s = FakeSignalling()
+            let m = machine(s)
+            await runCurrent()
+            s.deliver(.end(callId: by, reason: CallReason.hangup))
+            await runCurrent()
+            s.holdStart()
+            m.call("conn-1")
+            await runCurrent()
+            s.startResult = { throw CallLostError(callId: callId, end: .init(reason: reason, supersededBy: by)) }
+            s.releaseStart()
+            await runCurrent()
+            #expect(!m.endedWinners.contains(by), "\(reason) by \(by)")
+            m.stop()
+        }
+    }
 }
