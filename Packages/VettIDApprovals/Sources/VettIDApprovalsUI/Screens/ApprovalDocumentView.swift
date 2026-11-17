@@ -60,7 +60,8 @@ struct ApprovalDocumentView: View {
             case .known(let a): ValueBlock { Text(Self.title(a)).vettIDFont(.bodyLarge) }
             case .unknown(let action):
                 ValueBlock { ShownTextView(text: ShownText(action)) }
-                NoticeCard(.warning, title: ApprovalsStrings.docUnknownWarning(AccountNames.isolateOrNull(name) ?? ApprovalsStrings.aConnection))
+                let who = AccountNames.isolateOrNull(name) ?? ApprovalsStrings.aConnection
+                NoticeCard(.warning, title: ApprovalsStrings.docUnknownWarning(who))
                     .accessibilityIdentifier("document_unknown")
             }
         }
@@ -290,18 +291,21 @@ struct RawDocumentView: View {
 
     static func text(_ line: DocumentPresentation.RawLine, markerColor: some ShapeStyle) -> Text {
         // A left-to-right mark first: the line's base direction is left-to-right whatever its isolates hold.
-        var t = Text(verbatim: lrm)
-        if let key = line.key { t = t + Text(verbatim: "\"") + isolated(key, markerColor: markerColor) + Text(verbatim: "\": ") }
-        switch line.value {
-        case .string(let s): t = t + Text(verbatim: "\"") + isolated(s, markerColor: markerColor) + Text(verbatim: "\"")
-        case .number(let n): t = t + Text(verbatim: n)
-        case .bool(let b): t = t + Text(verbatim: b ? "true" : "false")
-        case .null: t = t + Text(verbatim: "null")
-        case .open(let c): t = t + Text(verbatim: c == .object ? "{" : "[")
-        case .close(let c): t = t + Text(verbatim: c == .object ? "}" : "]")
-        case .empty(let c): t = t + Text(verbatim: c == .object ? "{}" : "[]")
+        var parts = [Text(verbatim: lrm)]
+        if let key = line.key {
+            parts += [Text(verbatim: "\""), isolated(key, markerColor: markerColor), Text(verbatim: "\": ")]
         }
-        return line.comma ? t + Text(verbatim: ",") : t
+        switch line.value {
+        case .string(let s): parts += [Text(verbatim: "\""), isolated(s, markerColor: markerColor), Text(verbatim: "\"")]
+        case .number(let n): parts.append(Text(verbatim: n))
+        case .bool(let b): parts.append(Text(verbatim: b ? "true" : "false"))
+        case .null: parts.append(Text(verbatim: "null"))
+        case .open(let c): parts.append(Text(verbatim: c == .object ? "{" : "["))
+        case .close(let c): parts.append(Text(verbatim: c == .object ? "}" : "]"))
+        case .empty(let c): parts.append(Text(verbatim: c == .object ? "{}" : "[]"))
+        }
+        if line.comma { parts.append(Text(verbatim: ",")) }
+        return parts.dropFirst().reduce(parts[0], +)
     }
 
     static func spoken(_ line: DocumentPresentation.RawLine) -> String {

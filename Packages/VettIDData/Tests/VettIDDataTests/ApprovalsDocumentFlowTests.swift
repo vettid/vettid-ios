@@ -168,6 +168,44 @@ import VettIDDataTesting
         #expect(try await m.authenticationDocument(r) == .failure(.hash))
     }
 
+    @Test func anAskWithADocumentIsRefusedWithoutItBeforeTheUnlock() async throws {
+        let (m, unlocked) = manager()
+        for required in [true, false] {
+            pending(m, challenge(required: required))
+            #expect(await kind { try await m.approveAuthentication("a1", password: "pw") } == .other)
+        }
+        #expect(ops.calls.isEmpty && unlocked().isEmpty && m.approvals.count == 1)
+    }
+
+    @Test func onlyTheAnnouncedDocumentIsApproved() async throws {
+        let (m, unlocked) = manager()
+        pending(m, challenge(Self.other))
+        let otherReq = try request(m)
+        let (m2, _) = manager()
+        pending(m2, challenge())
+        ops.documents = [Self.b64(Self.doc)]
+        guard case .success(let d) = try await m2.authenticationDocument(try request(m2)) else { throw CocoaError(.coderInvalidValue) }
+        ops.calls.removeAll()
+        // The document of another request (another hash) is refused before anything is opened or sent.
+        await #expect(throws: VaultFailure.self) { _ = try await m.approveAuthentication(otherReq, password: "pw", document: d) }
+        #expect(ops.calls.isEmpty && unlocked().isEmpty && m.approvals.count == 1)
+    }
+
+    @Test func aRequestWithoutADocumentIsNeverAskedForOne() async throws {
+        let (m, _) = manager()
+        pending(m, #"{"request_id":"a1","connection_id":"c1","purpose":"approval","exp":"\#(exp)"}"#)
+        #expect(try await m.authenticationDocument(try request(m)) == .failure(.hash))
+        #expect(ops.calls.isEmpty && m.approvals.count == 1)
+    }
+
+    @Test func anAnswerWithoutADocumentIsNoDocument() async throws {
+        let (m, _) = manager()
+        pending(m, challenge())
+        ops.documents = [nil]
+        #expect(try await m.authenticationDocument(try request(m)) == .failure(.encoding))
+        #expect(m.approvals.count == 1)
+    }
+
     @Test func anApprovalWithoutADocumentSendsNoHash() async throws {
         let (m, _) = manager()
         pending(m, #"{"request_id":"a1","connection_id":"c1","purpose":"approval","exp":"\#(exp)"}"#)

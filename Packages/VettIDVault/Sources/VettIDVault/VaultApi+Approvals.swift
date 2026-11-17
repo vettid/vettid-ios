@@ -34,12 +34,10 @@ extension VaultApi {
     /// `connection.authenticate.document` (0.89.0): the challenge's document, standard base64, while `pending.list` would
     /// list the ask for this device; `not_found` otherwise, and for a challenge without one. The vault records the fetch:
     /// only a device that fetched the document can approve it in the document form.
-    public func authenticateDocument(_ requestID: String) async throws -> String {
+    /// Nil when the answer has no `document` string.
+    public func authenticateDocument(_ requestID: String) async throws -> String? {
         let o = try await approvalOp("connection.authenticate.document", JsonBuilder().string("request_id", requestID))
-        guard let d = VaultJSON.string(o, "document") else {
-            throw VaultStateError(message: "connection.authenticate.document without document")
-        }
-        return d
+        return VaultJSON.string(o, "document")
     }
 
     /// `connection.authenticate.deny`: a decline (§10.4.1: it starts the cooldown).

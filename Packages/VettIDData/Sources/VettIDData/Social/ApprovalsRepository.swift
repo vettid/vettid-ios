@@ -8,8 +8,9 @@ import VettIDVault
 public protocol ApprovalOps: Sendable {
     /// [documentSha256]: the hash of the document this device fetched and showed (0.89.0 §10.4 "Approval documents").
     func authenticateApprove(_ requestID: String, documentSha256: String?) async throws
-    /// `connection.authenticate.document` (0.89.0): the challenge's document, standard base64.
-    func authenticateDocument(_ requestID: String) async throws -> String
+    /// `connection.authenticate.document` (0.89.0): the challenge's document, standard base64; nil when the answer has no
+    /// `document` string.
+    func authenticateDocument(_ requestID: String) async throws -> String?
     func authenticateDeny(_ requestID: String) async throws
     func grantList() async throws -> JsonObject
     func grantDecide(_ requestID: String, approve: Bool, choice: GrantChoice) async throws -> JsonObject

@@ -2,6 +2,9 @@ import Foundation
 import VettIDCrypto
 @testable import VettIDData
 
+// Documents stay on one line each; the samples are valid UTF-8.
+// swiftlint:disable line_length optional_data_string_conversion
+
 /// TEST ONLY. Approval documents and their challenges (VAULT-MESSAGING 0.89.0 §10.4 "Approval documents").
 enum DocumentSamples {
     /// The §16 vector's document (vettid-vault `testdata/vectors/connauth_document.json`).
@@ -37,3 +40,5 @@ enum DocumentSamples {
         return r
     }
 }
+
+// swiftlint:enable line_length optional_data_string_conversion

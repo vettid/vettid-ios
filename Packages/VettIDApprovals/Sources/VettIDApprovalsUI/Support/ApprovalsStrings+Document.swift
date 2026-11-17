@@ -6,9 +6,13 @@ import Foundation
 extension ApprovalsStrings {
     static var docAsked: String { String(localized: "approvals_doc_asked", defaultValue: "What is asked", bundle: .module) }
 
-    static var docDescription: String { String(localized: "approvals_doc_description", defaultValue: "The service's description", bundle: .module) }
+    static var docDescription: String {
+        String(localized: "approvals_doc_description", defaultValue: "The service's description", bundle: .module)
+    }
 
-    static var docDescriptionNote: String { String(localized: "approvals_doc_description_note", defaultValue: "What you approve is the request below", bundle: .module) }
+    static var docDescriptionNote: String {
+        String(localized: "approvals_doc_description_note", defaultValue: "What you approve is the request below", bundle: .module)
+    }
 
     static var docSummary: String { String(localized: "approvals_doc_summary", defaultValue: "The service's summary", bundle: .module) }
 
@@ -16,27 +20,45 @@ extension ApprovalsStrings {
 
     static var docDetails: String { String(localized: "approvals_doc_details", defaultValue: "Request details", bundle: .module) }
 
-    static var docTitleProposalCreate: String { String(localized: "approvals_doc_title_proposal_create", defaultValue: "New vote", bundle: .module) }
+    static var docTitleProposalCreate: String {
+        String(localized: "approvals_doc_title_proposal_create", defaultValue: "New vote", bundle: .module)
+    }
 
-    static var docTitleVoteExtend: String { String(localized: "approvals_doc_title_vote_extend", defaultValue: "Extend a vote", bundle: .module) }
+    static var docTitleVoteExtend: String {
+        String(localized: "approvals_doc_title_vote_extend", defaultValue: "Extend a vote", bundle: .module)
+    }
 
-    static var docTitleAdminSetAdd: String { String(localized: "approvals_doc_title_admin_set_add", defaultValue: "Add an admin", bundle: .module) }
+    static var docTitleAdminSetAdd: String {
+        String(localized: "approvals_doc_title_admin_set_add", defaultValue: "Add an admin", bundle: .module)
+    }
 
-    static var docTitleAdminSetRemove: String { String(localized: "approvals_doc_title_admin_set_remove", defaultValue: "Remove an admin", bundle: .module) }
+    static var docTitleAdminSetRemove: String {
+        String(localized: "approvals_doc_title_admin_set_remove", defaultValue: "Remove an admin", bundle: .module)
+    }
 
-    static var docTitleAdminRepin: String { String(localized: "approvals_doc_title_admin_repin", defaultValue: "Re-pin an admin's key", bundle: .module) }
+    static var docTitleAdminRepin: String {
+        String(localized: "approvals_doc_title_admin_repin", defaultValue: "Re-pin an admin's key", bundle: .module)
+    }
 
-    static var docTitleContractTemplateChange: String { String(localized: "approvals_doc_title_contract_template_change", defaultValue: "Change the contract template", bundle: .module) }
+    static var docTitleContractTemplateChange: String {
+        String(localized: "approvals_doc_title_contract_template_change", defaultValue: "Change the contract template", bundle: .module)
+    }
 
-    static var docTitleAssignmentPush: String { String(localized: "approvals_doc_title_assignment_push", defaultValue: "Send an assignment", bundle: .module) }
+    static var docTitleAssignmentPush: String {
+        String(localized: "approvals_doc_title_assignment_push", defaultValue: "Send an assignment", bundle: .module)
+    }
 
-    static var docCantShow: String { String(localized: "approvals_doc_cant_show", defaultValue: "This request can't be shown", bundle: .module) }
+    static var docCantShow: String {
+        String(localized: "approvals_doc_cant_show", defaultValue: "This request can't be shown", bundle: .module)
+    }
 
     static var docLoading: String { String(localized: "approvals_doc_loading", defaultValue: "Getting the request…", bundle: .module) }
 
     static var docRetry: String { String(localized: "approvals_doc_retry", defaultValue: "Try again", bundle: .module) }
 
-    static var docReadToEnd: String { String(localized: "approvals_doc_read_to_end", defaultValue: "Scroll to the end of the request to approve it.", bundle: .module) }
+    static var docReadToEnd: String {
+        String(localized: "approvals_doc_read_to_end", defaultValue: "Scroll to the end of the request to approve it.", bundle: .module)
+    }
 
     static var docFieldTitle: String { String(localized: "approvals_doc_field_title", defaultValue: "Title", bundle: .module) }
 
@@ -48,7 +70,9 @@ extension ApprovalsStrings {
 
     static var docAbstain: String { String(localized: "approvals_doc_abstain", defaultValue: "Abstain", bundle: .module) }
 
-    static var docAbstainAdded: String { String(localized: "approvals_doc_abstain_added", defaultValue: "added by the service", bundle: .module) }
+    static var docAbstainAdded: String {
+        String(localized: "approvals_doc_abstain_added", defaultValue: "added by the service", bundle: .module)
+    }
 
     static var docFieldQuorum: String { String(localized: "approvals_doc_field_quorum", defaultValue: "Quorum", bundle: .module) }
 
@@ -56,7 +80,12 @@ extension ApprovalsStrings {
 
     static var docAdvisory: String { String(localized: "approvals_doc_advisory", defaultValue: "Advisory", bundle: .module) }
 
-    static var docFieldRemovedMayVote: String { String(localized: "approvals_doc_field_removed_may_vote", defaultValue: "Members removed after the roster date may vote", bundle: .module) }
+    static var docFieldRemovedMayVote: String {
+        String(
+            localized: "approvals_doc_field_removed_may_vote", defaultValue: "Members removed after the roster date may vote",
+            bundle: .module
+        )
+    }
 
     static var docYes: String { String(localized: "approvals_doc_yes", defaultValue: "Yes", bundle: .module) }
 
@@ -66,20 +95,30 @@ extension ApprovalsStrings {
 
     static var docFieldCloses: String { String(localized: "approvals_doc_field_closes", defaultValue: "Closes", bundle: .module) }
 
-    static var docFieldOutageRule: String { String(localized: "approvals_doc_field_outage_rule", defaultValue: "Outage rule", bundle: .module) }
+    static var docFieldOutageRule: String {
+        String(localized: "approvals_doc_field_outage_rule", defaultValue: "Outage rule", bundle: .module)
+    }
 
     static var docFieldVote: String { String(localized: "approvals_doc_field_vote", defaultValue: "Vote", bundle: .module) }
 
     static var docFieldNewClose: String { String(localized: "approvals_doc_field_new_close", defaultValue: "New close", bundle: .module) }
 
-    static var docFieldOutageFrom: String { String(localized: "approvals_doc_field_outage_from", defaultValue: "Outage from", bundle: .module) }
+    static var docFieldOutageFrom: String {
+        String(localized: "approvals_doc_field_outage_from", defaultValue: "Outage from", bundle: .module)
+    }
 
     static var docFieldOutageTo: String { String(localized: "approvals_doc_field_outage_to", defaultValue: "Outage to", bundle: .module) }
 
-    static var docFieldReportedBy: String { String(localized: "approvals_doc_field_reported_by", defaultValue: "Reported by", bundle: .module) }
+    static var docFieldReportedBy: String {
+        String(localized: "approvals_doc_field_reported_by", defaultValue: "Reported by", bundle: .module)
+    }
 
     static func docUnknownWarning(_ value: String) -> String {
-        String(localized: "approvals_doc_unknown_warning", defaultValue: "\(value) asks for something this app doesn't know. Read all of it before you approve.", bundle: .module)
+        String(
+            localized: "approvals_doc_unknown_warning",
+            defaultValue: "\(value) asks for something this app doesn't know. Read all of it before you approve.",
+            bundle: .module
+        )
     }
 
     static func docMarkerSpoken(_ value: String) -> String {
