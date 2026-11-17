@@ -53,7 +53,10 @@ package final class CallMachine {
     /// many of them (a mailbox replayed after a reconnect) cannot push a glare's ended winner out. An end that arrives with no
     /// session at all is remembered too. Both lists are memory only, and are the machine's: each opening of the vault has a
     /// machine of its own (``CallsRuntime``), so they last for one opening and never reach another, a sign-out to another vault
-    /// included. A lock's ``vaultLocking()`` leaves them as they are for that opening's last moments.
+    /// included. That rests on the vault's open state showing "not open" between two openings: ``CallsHost`` drops the runtime
+    /// only on that value, and keeps the one it has when the vault is opened again without it (the stream drops repeated
+    /// values). Leaving a vault for another goes through a phase that is not open (the phone is erased, then set up again).
+    /// A lock's ``vaultLocking()`` leaves the lists as they are for that opening's last moments.
     @ObservationIgnored var endedOthers: [String] = []
     @ObservationIgnored private var loops: [Task<Void, Never>] = []
     @ObservationIgnored private var watchers: [Int: AsyncStream<CallTransition>.Continuation] = [:]

@@ -261,6 +261,8 @@ extension CallMachineTests {
         await runCurrent()
         #expect(try ended(m).reason == .missed)
         #expect(m.endedWinners.contains(glareId))
+        // The case this is about: the other calls' ends replayed have pushed the winner out of the other calls' list.
+        #expect(!m.endedOthers.contains(glareId))
         signalling.deliver(offer(glareId))
         await runCurrent()
         #expect(!hasSent(signalling, "answer(") && !hasSent(signalling, "ringing("))
@@ -287,6 +289,8 @@ extension CallMachineTests {
         await runCurrent()
         #expect(try ended(m).reason == .missed)
         #expect(m.endedWinners.contains(glareId))
+        // The case this is about: the other calls' ends replayed have pushed the winner out of the other calls' list.
+        #expect(!m.endedOthers.contains(glareId))
         signalling.deliver(offer(glareId))
         await runCurrent()
         #expect(!hasSent(signalling, "answer(") && !hasSent(signalling, "ringing("))
