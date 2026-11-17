@@ -31,8 +31,10 @@ public struct DocPiece: Equatable, Sendable {
     /// A piece after the first of its value or line.
     public var continuation: Bool
 
-    /// The continuation mark, drawn and spoken at the start of a piece after a cut.
+    /// The continuation marks, drawn and spoken: at the start of a piece after a cut, and at the end of the piece cut.
+    /// No text can draw them (they are markers in the document's text).
     public static let continued = "↳ "
+    public static let continues = " ↳"
 
     /// How many characters the piece draws.
     public var length: Int { tokens.reduce(0) { $0 + Self.length($1) } }
@@ -49,20 +51,24 @@ public struct DocPiece: Equatable, Sendable {
 
     // MARK: - A form's value
 
-    /// A value under a form's label, in pieces: each read between quotation marks, a piece after the first marked ↳.
-    public static func value(_ t: ShownText, max: Int = ShownText.pieceCharacters) -> [DocPiece] {
-        t.pieces(max: max - continued.count).enumerated().map { i, piece in
-            var tokens: [Token] = i > 0 ? [.punct(continued)] : []
+    /// A value under a form's label, in pieces: each read between quotation marks, except where it is cut inside a
+    /// paragraph: there the piece ends with ↳ and the next begins with it (a piece that starts a paragraph does not).
+    public static func value(_ t: ShownText, max: Int = ShownText.pieceCharacters, maxBreaks: Int = .max) -> [DocPiece] {
+        let pieces = t.pieces(max: max - continued.count - continues.count, maxBreaks: maxBreaks)
+        return pieces.indices.map { i in
+            let piece = pieces[i]
+            let cut = i + 1 < pieces.count && pieces[i + 1].continues
+            var tokens: [Token] = piece.continues ? [.punct(continued)] : []
             tokens.append(.spokenQuote)
-            for run in piece.runs {
+            for run in piece.text.runs {
                 switch run {
                 case .text(let s): tokens.append(.content(s))
                 case .marker(let v): tokens.append(.marker(v))
                 case .lineBreak: tokens.append(.lineBreak)
                 }
             }
-            tokens.append(.spokenQuote)
-            return DocPiece(tokens: tokens, level: nil, continuation: i > 0)
+            tokens.append(cut ? .punct(continues) : .spokenQuote)
+            return DocPiece(tokens: tokens, level: nil, continuation: piece.continues)
         }
     }
 
@@ -98,8 +104,10 @@ public struct DocPiece: Equatable, Sendable {
         return t
     }
 
-    /// A raw view's line in pieces of at most [max] characters. A piece cut inside a key or string closes its isolate and
-    /// is read with a closing quotation mark; the next starts with ↳, reopens the isolate and is read from an opening one.
+    /// A raw view's line in pieces of at most [max] characters (closing punctuation of up to 3 may go past it). A piece
+    /// cut inside a key or string closes its isolate and ends with ↳; the next starts with ↳, reopens the isolate and is
+    /// read from an opening quotation mark. A cut never leaves an isolate empty: an opening quotation mark and isolate
+    /// with nothing after them go on to the next piece.
     public static func raw(_ line: DocumentPresentation.RawLine, max: Int = ShownText.pieceCharacters) -> [DocPiece] {
         var cutter = Cutter(level: line.depth + 1, max: max)
         for token in tokens(line) { cutter.add(token) }
@@ -120,14 +128,32 @@ public struct DocPiece: Equatable, Sendable {
             self.max = max
         }
 
-        /// Nothing but the continuation mark (or nothing) in the piece yet.
-        var fresh: Bool { n <= (pieces.isEmpty ? 0 : DocPiece.continued.count) }
+        /// Nothing but the continuation mark and a carried opening (or nothing) in the piece yet.
+        var fresh: Bool {
+            !cur.contains {
+                switch $0 {
+                case .content, .literal, .marker: true
+                default: false
+                }
+            }
+        }
 
         mutating func close() {
-            if inIsolate { cur += [.close, .spokenQuote] }
+            // An isolate opened with nothing in it yet goes on to the next piece, with its quotation mark.
+            var carry: [Token] = []
+            if cur.last == .open {
+                cur.removeLast()
+                carry = [.open]
+                if cur.last == .punct("\"") {
+                    cur.removeLast()
+                    carry.insert(.punct("\""), at: 0)
+                }
+            }
+            if inIsolate, carry.isEmpty { cur.append(.close) }
+            cur.append(.punct(DocPiece.continues))
             pieces.append(DocPiece(tokens: cur, level: pieces.isEmpty ? level : nil, continuation: !pieces.isEmpty))
-            cur = [.punct(DocPiece.continued)] + (inIsolate ? [.spokenQuote, .open] : [])
-            n = DocPiece.continued.count
+            cur = [.punct(DocPiece.continued)] + (carry.isEmpty ? (inIsolate ? [.spokenQuote, .open] : []) : carry)
+            n = cur.reduce(0) { $0 + DocPiece.length($1) }
         }
 
         mutating func add(_ token: Token) {
@@ -138,14 +164,17 @@ public struct DocPiece: Equatable, Sendable {
             }
             guard case .content(let s) = token else {
                 let len = DocPiece.length(token)
-                if len > 0, n + len > max, !fresh { close() }
+                // Closing punctuation of up to 3 (`",`, `]`, `},`) stays with what it closes.
+                let closing = if case .punct = token { len <= 3 } else { false }
+                if len > 0, n + len > max, !fresh, !closing { close() }
                 cur.append(token)
                 n += len
                 return
             }
             var rest = Substring(s)
             while !rest.isEmpty {
-                guard let limit = rest.index(rest.startIndex, offsetBy: max - n, limitedBy: rest.endIndex),
+                let room = Swift.max(max - n - DocPiece.continues.count, 1)
+                guard let limit = rest.index(rest.startIndex, offsetBy: room, limitedBy: rest.endIndex),
                       limit < rest.endIndex
                 else {
                     n += rest.count
@@ -191,7 +220,7 @@ public struct DocPiece: Equatable, Sendable {
         }
 
         mutating func finish() -> [DocPiece] {
-            if !cur.isEmpty, cur != [.punct(DocPiece.continued)] || pieces.isEmpty {
+            if !cur.isEmpty, cur.contains(where: { if case .punct(DocPiece.continued) = $0 { false } else { true } }) || pieces.isEmpty {
                 pieces.append(DocPiece(tokens: cur, level: pieces.isEmpty ? level : nil, continuation: !pieces.isEmpty))
             }
             return pieces

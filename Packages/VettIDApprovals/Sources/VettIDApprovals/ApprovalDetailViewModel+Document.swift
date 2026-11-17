@@ -50,8 +50,11 @@ extension ApprovalDetailViewModel {
     /// The screen has shown the whole of the document whose hash is [sha256], from its top to its end without a gap
     /// (``SeenCoverage``): Approve may be enabled, for that document only (a report about a document no longer shown
     /// counts for nothing).
-    public func documentShownWhole(_ sha256: String) {
-        guard case .shown(let d, _)? = local.document, d.sha256 == sha256 else { return }
+    /// [generation]: the ``ApprovalDetailState/documentGeneration`` the screen showed it in; a report from an earlier
+    /// showing counts for nothing either.
+    public func documentShownWhole(_ sha256: String, generation: Int? = nil) {
+        guard case .shown(let d, _)? = local.document, d.sha256 == sha256, generation.map({ $0 == local.documentGeneration }) ?? true
+        else { return }
         local.documentSeen = d.sha256
     }
 

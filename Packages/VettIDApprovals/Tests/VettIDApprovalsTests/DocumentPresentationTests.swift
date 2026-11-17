@@ -102,16 +102,20 @@ import Testing
         let t = ShownText(words + "\u{202E}" + words)
         let pieces = t.pieces()
         #expect(pieces.count > 100)
-        #expect(pieces.allSatisfy { $0.plain.count <= ShownText.pieceCharacters })
-        #expect(pieces.map(\.plain).joined() == t.plain, "nothing lost or added")
-        #expect(pieces.contains { $0.runs.contains(.marker(0x202E)) }, "the marker whole, in one piece")
+        #expect(pieces.allSatisfy { $0.text.plain.count <= ShownText.pieceCharacters })
+        #expect(pieces.map(\.text.plain).joined() == t.plain, "nothing lost or added")
+        #expect(pieces.contains { $0.text.runs.contains(.marker(0x202E)) }, "the marker whole, in one piece")
+        #expect(!pieces[0].continues && pieces.dropFirst().allSatisfy(\.continues), "cut inside one paragraph")
         // One word longer than a piece is cut at the bound.
         let long = ShownText(String(repeating: "x", count: 450)).pieces()
-        #expect(long.map(\.plain) == [String(repeating: "x", count: 200), String(repeating: "x", count: 200), String(repeating: "x", count: 50)])
-        // A kept line break once a piece is half full is the break between pieces.
+        #expect(long.map(\.text.plain) == [String(repeating: "x", count: 200), String(repeating: "x", count: 200), String(repeating: "x", count: 50)])
+        // A kept line break once a piece is half full is the break between pieces, and the next starts a paragraph.
         let lines = ShownText(String(repeating: "a", count: 150) + "\n" + "b", lineBreaks: true).pieces()
-        #expect(lines.map(\.plain) == [String(repeating: "a", count: 150), "b"])
-        #expect(ShownText("").pieces() == [ShownText("")])
+        #expect(lines.map(\.text.plain) == [String(repeating: "a", count: 150), "b"] && !lines[1].continues)
+        // At most [maxBreaks] kept line breaks to a piece.
+        let breaks = ShownText(Array(repeating: "a", count: 20).joined(separator: "\n"), lineBreaks: true).pieces(max: 30, maxBreaks: 4)
+        #expect(breaks.allSatisfy { $0.text.runs.filter { $0 == .lineBreak }.count <= 4 })
+        #expect(ShownText("").pieces().map(\.text) == [ShownText("")])
     }
 
     @Test func lineBreaksAreKeptOnlyWhereTheFieldKeepsThem() {

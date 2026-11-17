@@ -11,23 +11,34 @@ import VettIDUI
 /// (Approve waits for it).
 struct ApprovalDocumentView: View, Equatable {
     @Environment(\.vettIDColors) private var colors
-    @Environment(\.accessibilityVoiceOverEnabled) private var voiceOver
     let step: DocumentStep
     /// Counts the documents shown: the same document shown again is followed again from nothing seen.
     var generation = 0
+    /// VoiceOver is on (read by the screen and passed in, so that turning it on or off cuts the document again).
+    var voiceOver = false
     let name: String?
     let seen: Bool
     let onRetry: @MainActor () -> Void
-    let onSeenWhole: @MainActor (String) -> Void
+    /// The whole of the document of that hash, in that generation, has been on screen.
+    let onSeenWhole: @MainActor (String, Int) -> Void
 
     /// What it shows: the screen's one-second countdown does not lay a large document out again (`.equatable()`).
     nonisolated static func == (a: Self, b: Self) -> Bool {
-        a.step == b.step && a.generation == b.generation && a.name == b.name && a.seen == b.seen
+        a.step == b.step && a.generation == b.generation && a.voiceOver == b.voiceOver && a.name == b.name && a.seen == b.seen
     }
 
-    /// Characters to a piece: with VoiceOver, small enough that a piece fits on the screen at the largest text size, so
-    /// moving from one element to the next brings every part on screen.
-    static let voiceOverPieceCharacters = 60
+    /// The cutting: with VoiceOver, pieces small enough (in characters and kept line breaks) that each fits on the screen
+    /// at the largest text size, so moving from one element to the next brings every part on screen.
+    var cutting: Cutting {
+        voiceOver ? Cutting(max: 30, maxBreaks: 4, perRow: 1) : Cutting(max: ShownText.pieceCharacters, maxBreaks: .max, perRow: 20)
+    }
+
+    /// How a document is cut into rows: characters and kept line breaks to a piece, raw pieces to a row.
+    struct Cutting {
+        var max: Int
+        var maxBreaks: Int
+        var perRow: Int
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: Spacing.m) {
@@ -48,9 +59,10 @@ struct ApprovalDocumentView: View, Equatable {
                 NoticeCard(.warning, title: ApprovalsStrings.docCantShow, announce: .polite)
                     .accessibilityIdentifier("document_cant_show")
             case .shown(let d, let p):
-                DocumentRows(sha256: d.sha256, rows: rows(p), onSeenWhole: onSeenWhole)
-                    // Another document, or the same shown again, is another view: its coverage starts again.
-                    .id("\(d.sha256) \(generation)")
+                DocumentRows(rows: rows(p)) { onSeenWhole(d.sha256, generation) }
+                    // Another document, the same shown again, or another cutting is another view: its coverage starts
+                    // again (rows of one cutting are not rows of another).
+                    .id("\(d.sha256) \(generation) \(cutting.max)")
                 if !seen {
                     Text(ApprovalsStrings.docReadToEnd).vettIDFont(.bodyMedium).foregroundStyle(colors.onSurfaceVariant)
                         .accessibilityIdentifier("document_read_to_end")
@@ -63,7 +75,7 @@ struct ApprovalDocumentView: View, Equatable {
     /// The document as rows, each small: the parts under their labels, and every value of any length in pieces
     /// (``DocPiece``), so that the largest document is drawn a few rows at a time and every row is drawn whole.
     private func rows(_ p: DocumentPresentation) -> [AnyView] {
-        let d = DocRows(max: voiceOver ? Self.voiceOverPieceCharacters : ShownText.pieceCharacters)
+        let d = DocRows(max: cutting.max, maxBreaks: cutting.maxBreaks)
         var r: [AnyView] = [DocRows.heading(ApprovalsStrings.docAsked)]
         switch p.asked {
         case .known(let a): r.append(DocRows.block { Text(Self.title(a)).vettIDFont(.bodyLarge) })
@@ -91,7 +103,7 @@ struct ApprovalDocumentView: View, Equatable {
             r += d.extend(f)
         case .raw(let lines):
             r.append(DocRows.heading(ApprovalsStrings.docDetails))
-            r += d.raw(lines, perRow: voiceOver ? 1 : 20)
+            r += d.raw(lines, perRow: cutting.perRow)
         }
         return r
     }
@@ -114,10 +126,13 @@ struct ApprovalDocumentView: View, Equatable {
 /// (``SeenCoverage``); once every row has been on screen whole, the model is told. A row never brought on screen (past a
 /// jump to the end) is never seen, and a change of a row's height (another text size) starts that row again.
 struct DocumentRows: View {
-    let sha256: String
     let rows: [AnyView]
-    let onSeenWhole: @MainActor (String) -> Void
+    let onSeenWhole: @MainActor () -> Void
     @State private var seen: Set<Int> = []
+
+    /// The tallest a row may be and still count as seen: a row taller than a phone is known to draw is never seen, so a
+    /// document that could draw blank is never approved (fail closed). Rows are cut far below it.
+    static let maxRowHeight: CGFloat = 4_000
 
     var body: some View {
         LazyVStack(alignment: .leading, spacing: 0) {
@@ -128,9 +143,9 @@ struct DocumentRows: View {
     }
 
     private func rowSeen(_ i: Int) {
-        guard !seen.contains(i) else { return }
+        guard rows.indices.contains(i), !seen.contains(i) else { return }
         seen.insert(i)
-        if seen.count == rows.count { onSeenWhole(sha256) }
+        if seen.isSuperset(of: rows.indices) { onSeenWhole() }
     }
 }
 
@@ -157,7 +172,7 @@ struct RowSeen: ViewModifier {
             GeometryReader { g in
                 Color.clear.onChange(of: Self.seen(g), initial: true) { _, now in
                     coverage.saw(now.visible, height: now.height)
-                    if coverage.whole { onWhole() }
+                    if coverage.whole, now.height <= DocumentRows.maxRowHeight { onWhole() }
                 }
             }
         )
@@ -168,6 +183,7 @@ struct RowSeen: ViewModifier {
 @MainActor
 struct DocRows {
     let max: Int
+    var maxBreaks: Int = .max
 
     static func heading(_ label: String) -> AnyView {
         AnyView(DocHeading(label: label).padding(.top, Spacing.l).padding(.bottom, Spacing.s))
@@ -181,7 +197,7 @@ struct DocRows {
 
     /// A value in a block of its own, as rows of pieces that join into one block.
     func value(_ t: ShownText) -> [AnyView] {
-        let pieces = DocPiece.value(t, max: max)
+        let pieces = DocPiece.value(t, max: max, maxBreaks: maxBreaks)
         return pieces.indices.map { i in
             AnyView(ValuePiece(first: i == 0, last: i == pieces.count - 1) { DocPieceView(pieces: [pieces[i]], raw: false) })
         }
@@ -460,8 +476,14 @@ enum Spoken: Equatable {
         return out
     }
 
+    /// Code point by code point, as ``ShownText`` escapes the raw view: a `"` or `\\` that carries a mark is escaped too.
     static func escaped(_ s: String) -> String {
-        s.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"")
+        var out = String.UnicodeScalarView()
+        for scalar in s.unicodeScalars {
+            if scalar == "\"" || scalar == "\\" { out.append("\\") }
+            out.append(scalar)
+        }
+        return String(out)
     }
 
     static func plain(_ pieces: [Spoken]) -> String {

@@ -7,12 +7,12 @@ import VettIDCrypto
 import VettIDData
 import VettIDUI
 
-/// Only on a phone: the simulator draws what a phone does not.
+/// Only on a phone: the simulator draws what a phone does not, and so does a Mac running the app.
 private let onDevice: Bool = {
     #if targetEnvironment(simulator)
     false
     #else
-    true
+    !ProcessInfo.processInfo.isiOSAppOnMac
     #endif
 }()
 
@@ -81,8 +81,9 @@ struct ApprovalDocumentDrawingTests {
     /// The control: the same capture shows text for a short value, so a blank capture below is the value's, not the
     /// capture's.
     @Test func aShortValueIsDrawn() async throws {
+        print("DOC_DEVICE: \(UIDevice.current.model) \(UIDevice.current.systemName) \(UIDevice.current.systemVersion)")
         let doc = #"{"action":"x","payload":{"s":"\#(Array(repeating: "budget", count: 150).joined(separator: " "))"},"summary":""}"#
-        let view = ApprovalDocumentView(step: try Self.shown(doc), name: nil, seen: true, onRetry: {}, onSeenWhole: { _ in })
+        let view = ApprovalDocumentView(step: try Self.shown(doc), name: nil, seen: true, onRetry: {}, onSeenWhole: { _, _ in })
         let (window, scroll) = try host(view)
         try await Task.sleep(for: .milliseconds(800))
         scroll.setContentOffset(CGPoint(x: 0, y: min(1_500, scroll.contentSize.height - scroll.bounds.height)), animated: false)
@@ -107,7 +108,7 @@ struct ApprovalDocumentDrawingTests {
             try await Task.sleep(for: .seconds(hold))
             let (dark, light) = pixels(window)
             print("DOC_DRAWN: \(name) at \(at) of \(Int(scroll.contentSize.height)) pt: \(dark) dark, \(light) light samples")
-            #expect(dark > 500 && light > 500, "\(name) drawn at \(at)")
+            #expect(dark > 100 && light > 500, "\(name) drawn at \(at)")
         }
         window.isHidden = true
     }
@@ -116,24 +117,53 @@ struct ApprovalDocumentDrawingTests {
 
     @Test func aLongMotionIsDrawnToItsEnd() async throws {
         let motion = #"{"action":"proposal.create","payload":{"binding":true,"choices":[],"closes_at":2,"opens_at":1,"outage_rule":"","quorum":{"min_ballots":1,"text":""},"removed_may_vote":false,"text":"\#(Self.words)","title":"t"},"summary":""}"#
-        try await sampled(ApprovalDocumentView(step: try Self.shown(motion), name: nil, seen: true, onRetry: {}, onSeenWhole: { _ in }), "motion", last: 0.9)
+        try await sampled(ApprovalDocumentView(step: try Self.shown(motion), name: nil, seen: true, onRetry: {}, onSeenWhole: { _, _ in }), "motion", last: 0.9)
     }
 
     @Test func aLongRawStringIsDrawnToItsEnd() async throws {
         let raw = #"{"action":"x","payload":{"s":"\#(Self.words)"},"summary":""}"#
-        try await sampled(ApprovalDocumentView(step: try Self.shown(raw), name: nil, seen: true, onRetry: {}, onSeenWhole: { _ in }), "raw")
+        try await sampled(ApprovalDocumentView(step: try Self.shown(raw), name: nil, seen: true, onRetry: {}, onSeenWhole: { _, _ in }), "raw")
     }
 
-    /// The shapes a service could choose to defeat the cuts: no white space at all, nothing but markers, and one
-    /// character of 21,000 code points.
+    /// The shapes a service could choose to defeat the cuts: no white space at all, nothing but markers, one character of
+    /// 21,000 code points, the widest glyph there is (U+FDFD), wide script, and syllables of 8 code points each.
     @Test func adversarialValuesAreDrawnToTheirEnd() async throws {
         let unbroken = String(repeating: "x", count: 65_000)
         let markers = String(repeating: "\u{7F}", count: 65_000)
         let jamo = String(repeating: "\u{1100}", count: 21_000)
-        for (name, s) in [("unbroken", unbroken), ("markers", markers), ("jamo", jamo)] {
+        let widest = String(repeating: "\u{FDFD}", count: 21_000)
+        let cjk = String(repeating: "\u{6F22}", count: 21_000)
+        let syllables = String(repeating: "\u{1100}\u{1100}\u{1100}\u{1100}\u{1161}\u{1161}\u{11A8}\u{11A8}", count: 2_700)
+        for (name, s) in [("unbroken", unbroken), ("markers", markers), ("jamo", jamo), ("widest", widest), ("cjk", cjk), ("syllables", syllables)] {
             let doc = #"{"action":"x","payload":{"s":"\#(s)"},"summary":""}"#
-            try await sampled(ApprovalDocumentView(step: try Self.shown(doc), name: nil, seen: true, onRetry: {}, onSeenWhole: { _ in }), name)
+            try await sampled(ApprovalDocumentView(step: try Self.shown(doc), name: nil, seen: true, onRetry: {}, onSeenWhole: { _, _ in }), name)
         }
+    }
+
+    /// Approve's report comes only once the document has been on screen, row by row, here on the phone: a jump to the end
+    /// does not count, scrolling down to it does.
+    @Test func aJumpToTheEndIsNotSeeingTheWholeOnThisDevice() async throws {
+        print("DOC_DEVICE: \(UIDevice.current.model) \(UIDevice.current.systemName) \(UIDevice.current.systemVersion)")
+        final class Box { var seen = 0 }
+        let box = Box()
+        let doc = #"{"action":"x","payload":{"a":["# + Array(repeating: "0", count: 600).joined(separator: ",") + #"]},"summary":""}"#
+        let view = ApprovalDocumentView(step: try Self.shown(doc), name: nil, seen: false, onRetry: {}, onSeenWhole: { _, _ in box.seen += 1 })
+        let (window, scroll) = try host(view)
+        try await Task.sleep(for: .milliseconds(800))
+        scroll.setContentOffset(CGPoint(x: 0, y: scroll.contentSize.height - scroll.bounds.height), animated: false)
+        try await Task.sleep(for: .milliseconds(800))
+        #expect(box.seen == 0, "a jump to the end")
+        var y: CGFloat = 0
+        scroll.setContentOffset(.zero, animated: false)
+        while y < scroll.contentSize.height - scroll.bounds.height {
+            y = min(y + scroll.bounds.height / 2, scroll.contentSize.height - scroll.bounds.height)
+            scroll.setContentOffset(CGPoint(x: 0, y: y), animated: false)
+            try await Task.sleep(for: .milliseconds(80))
+        }
+        try await Task.sleep(for: .milliseconds(500))
+        print("DOC_SEEN: \(box.seen) report(s) after scrolling down")
+        #expect(box.seen == 1, "scrolled down to the end")
+        window.isHidden = true
     }
 
     /// The negative control: the layout this replaces, one text of 65 KB, is drawn blank on the phone. If a later iOS

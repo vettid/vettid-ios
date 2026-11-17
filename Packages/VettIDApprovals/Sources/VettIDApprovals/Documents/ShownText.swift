@@ -36,34 +36,46 @@ public struct ShownText: Equatable, Sendable {
 
     init(runs: [Run]) { self.runs = runs }
 
-    /// At most this many characters to a piece (``pieces(max:)``).
+    /// At most this many characters to a piece (``pieces(max:maxBreaks:)``).
     public static let pieceCharacters = 200
 
-    /// The text in pieces of at most [max] characters, each drawn as a row of its own: a single text of tens of
-    /// kilobytes is drawn blank on an iPhone, and drawn whole it takes more memory than an app is allowed. A piece ends
-    /// after a white space where there is one, at a kept line break once it is half full (the break between pieces is
-    /// that line break), never inside a marker, else at the bound.
-    /// (One case per kind of run, and the cut of a text run in place.)
-    public func pieces(max: Int = ShownText.pieceCharacters) -> [ShownText] { // swiftlint:disable:this cyclomatic_complexity
-        var out: [ShownText] = []
+    /// A piece of a value: its text, and whether it goes on from the piece before (cut inside a paragraph) rather than
+    /// starting a paragraph of its own (after a kept line break) or the value.
+    public struct Piece: Equatable, Sendable {
+        public var text: ShownText
+        public var continues: Bool
+    }
+
+    /// The text in pieces of at most [max] characters and [maxBreaks] kept line breaks, each drawn as a row of its own: a
+    /// single text of tens of kilobytes is drawn blank on an iPhone, and drawn whole it takes more memory than an app may
+    /// hold. A piece ends after a white space where there is one, at a kept line break once it is half full (the break
+    /// between pieces is that line break, and the next piece starts a paragraph), never inside a marker, else at the
+    /// bound. (One case per kind of run, and the cut of a text run in place.)
+    public func pieces(max: Int = Self.pieceCharacters, maxBreaks: Int = .max) -> [Piece] { // swiftlint:disable:this cyclomatic_complexity
+        var out: [Piece] = []
         var cur: [Run] = []
         var n = 0
-        func close() {
-            out.append(ShownText(runs: cur))
+        var breaks = 0
+        var continues = false
+        func close(paragraph: Bool) {
+            out.append(Piece(text: ShownText(runs: cur), continues: continues))
             cur = []
             n = 0
+            breaks = 0
+            continues = !paragraph
         }
         for run in runs {
             switch run {
             case .marker(let v):
                 let len = Self.marker(v).count
-                if n > 0, n + len > max { close() }
+                if n > 0, n + len > max { close(paragraph: false) }
                 cur.append(run)
                 n += len
             case .lineBreak:
-                if n >= max / 2 { close() } else {
+                if n >= max / 2 || breaks >= maxBreaks { close(paragraph: true) } else {
                     cur.append(run)
                     n += 1
+                    breaks += 1
                 }
             case .text(let s):
                 var rest = Substring(s)
@@ -78,16 +90,16 @@ public struct ShownText: Equatable, Sendable {
                     if let ws = rest[..<limit].lastIndex(where: \.isWhitespace) {
                         cut = rest.index(after: ws)
                     } else if n > 0 {
-                        close()
+                        close(paragraph: false)
                         continue
                     }
                     if cut > rest.startIndex { cur.append(.text(String(rest[..<cut]))) }
                     rest = rest[cut...]
-                    close()
+                    close(paragraph: false)
                 }
             }
         }
-        if !cur.isEmpty || out.isEmpty { close() }
+        if !cur.isEmpty || out.isEmpty { close(paragraph: true) }
         return out
     }
 
@@ -117,12 +129,15 @@ public struct ShownText: Equatable, Sendable {
                 let isBreak = scalar == "\n"
                 breaks = isBreak ? breaks + 1 : 0
                 let p = scalar.properties
-                // Every combining or spacing mark counts in the row (Mn, Me, Mc, any other grapheme extender).
-                let isMark = [.nonspacingMark, .enclosingMark, .spacingMark].contains(p.generalCategory) || p.isGraphemeExtend
+                // The row §10.4 counts: combining and enclosing marks (Mn, Me). Spacing marks (Mc) do not stack (ordinary
+                // Burmese has three in a row); the code-point cap bounds every cluster.
+                let isMark = [.nonspacingMark, .enclosingMark].contains(p.generalCategory)
                 marks = isMark ? marks + 1 : 0
-                // A mark with no base of its own in this run (at the start, or after a marker or a line break) would
-                // combine with what the app draws before it (a quotation mark, a marker): a marker itself.
-                let baseless = isMark && text.isEmpty
+                // A mark of any kind with no base of its own in this run (at the start, or after a marker or a line break)
+                // would combine with what the app draws before it (a quotation mark, a marker): a marker itself; and an
+                // emoji skin-tone modifier with no base would tint it.
+                let extender = isMark || p.generalCategory == .spacingMark || p.isGraphemeExtend
+                let baseless = (extender || p.isEmojiModifier) && text.isEmpty
                 if isBreak, lineBreaks, breaks <= 2 {
                     flush()
                     runs.append(.lineBreak)
@@ -149,7 +164,7 @@ public struct ShownText: Equatable, Sendable {
     /// Hangul fillers, the variation selectors, U+FE0F and the joiners among them), and every space separator (Zs) but
     /// U+0020. Also (chosen; not in the spec) the brackets markers are drawn with, U+27E8 and U+27E9, and their look-alikes,
     /// so that no text can spell a marker, however it is styled.
-    /// ⟨ ⟩ and the angle brackets that look like them: 〈 〉 (U+2329, U+232A), 〈 〉 (U+3008, U+3009), ❬ ❭ (U+276C, U+276D),
+    /// Always markers (chosen; not in the spec). ⟨ ⟩ and the angle brackets that look like them: 〈 〉 (U+2329, U+232A), 〈 〉 (U+3008, U+3009), ❬ ❭ (U+276C, U+276D),
     /// ‹ › (U+2039, U+203A), ❮ ❯ (U+276E, U+276F), ⟪ ⟫ (U+27EA, U+27EB), ＜ ＞ (U+FF1C, U+FF1E), ⧼ ⧽ (U+29FC, U+29FD),
     /// ⦑ ⦒ (U+2991, U+2992), ❰ ❱ (U+2770, U+2771), 《 》 (U+300A, U+300B), ﹤ ﹥ (U+FE64, U+FE65), ˂ ˃ (U+02C2, U+02C3),
     /// ᐸ ᐳ (U+1438, U+1433), and the blank glyphs that are not default-ignorable: U+2800 BRAILLE PATTERN BLANK and U+FFFC
@@ -158,6 +173,12 @@ public struct ShownText: Equatable, Sendable {
         0x27E8, 0x27E9, 0x2329, 0x232A, 0x3008, 0x3009, 0x276C, 0x276D, 0x2039, 0x203A, 0x276E, 0x276F, 0x27EA, 0x27EB,
         0xFF1C, 0xFF1E, 0x29FC, 0x29FD, 0x2991, 0x2992, 0x2770, 0x2771, 0x300A, 0x300B, 0xFE64, 0xFE65, 0x02C2, 0x02C3,
         0x1438, 0x1433, 0x2800, 0xFFFC,
+        // The continuation mark the screen draws (↳) and its look-alikes: ↪ ⤷ ↴ ⮡ └ ╰ ⤶ ↲.
+        0x21B3, 0x21AA, 0x2937, 0x21B4, 0x2BA1, 0x2514, 0x2570, 0x2936, 0x21B2,
+        // The Prepend characters that are not format characters (those are marked already): each clusters with what
+        // follows it, a `\` the app inserts or the app's own quotation mark (Unicode 15 Grapheme_Cluster_Break=Prepend).
+        0x0D4E, 0x111C2, 0x111C3, 0x1193F, 0x11941, 0x11A3A, 0x11A84, 0x11A85, 0x11A86, 0x11A87, 0x11A88, 0x11A89,
+        0x11D46, 0x11F02,
     ]
 
     static func marked(_ scalar: Unicode.Scalar) -> Bool {

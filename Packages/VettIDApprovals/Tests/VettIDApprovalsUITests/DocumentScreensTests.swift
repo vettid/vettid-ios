@@ -37,7 +37,7 @@ import VettIDUI
     }
 
     func view(_ step: DocumentStep, seen: Bool = false) -> some View {
-        ApprovalDocumentView(step: step, name: "Example Service", seen: seen, onRetry: {}, onSeenWhole: { _ in })
+        ApprovalDocumentView(step: step, name: "Example Service", seen: seen, onRetry: {}, onSeenWhole: { _, _ in })
     }
 
     private func height(_ view: some View) -> CGFloat {
@@ -127,7 +127,7 @@ import VettIDUI
         let box = Box()
         let doc = #"{"action":"x","payload":{"a":["# + Array(repeating: "0", count: 600).joined(separator: ",") + #"]},"summary":""}"#
         let step = Self.shown(doc)
-        let content = ApprovalDocumentView(step: step, name: nil, seen: false, onRetry: {}, onSeenWhole: { box.seen.append($0) })
+        let content = ApprovalDocumentView(step: step, name: nil, seen: false, onRetry: {}, onSeenWhole: { sha, _ in box.seen.append(sha) })
         let (window, scroll) = try host(content)
         await settle()
         let bottom = scroll.contentSize.height - scroll.bounds.height
@@ -146,6 +146,43 @@ import VettIDUI
         guard case .shown(let d, _) = step else { return }
         #expect(box.seen == [d.sha256], "scrolled down to the end")
         window.isHidden = true
+    }
+
+    /// A row taller than a phone is known to draw is never seen, however far it is scrolled (fail closed).
+    @Test func aRowTallerThanIsSafeIsNeverSeen() async throws {
+        final class Box { var seen = 0 }
+        let box = Box()
+        let tall = AnyView(Color.gray.frame(height: DocumentRows.maxRowHeight + 500))
+        let (window, scroll) = try host(DocumentRows(rows: [tall]) { box.seen += 1 })
+        await settle()
+        var y: CGFloat = 0
+        while y < scroll.contentSize.height - scroll.bounds.height {
+            y = min(y + scroll.bounds.height / 2, scroll.contentSize.height - scroll.bounds.height)
+            scroll.setContentOffset(CGPoint(x: 0, y: y), animated: false)
+            try? await Task.sleep(for: .milliseconds(80))
+        }
+        await settle()
+        #expect(box.seen == 0)
+        window.isHidden = true
+    }
+
+    /// With VoiceOver's cutting, a piece fits on the screen at the largest text size, so moving from one element to the
+    /// next brings every part on screen: wide script, and kept line breaks.
+    @Test func voiceOversPiecesFitOnTheScreen() {
+        let cutting = ApprovalDocumentView(step: .loading, voiceOver: true, name: nil, seen: false, onRetry: {}, onSeenWhole: { _, _ in }).cutting
+        let samples = [
+            ShownText(String(repeating: "\u{6F22}", count: 300)),
+            ShownText(Array(repeating: "a", count: 100).joined(separator: "\n\n"), lineBreaks: true),
+            ShownText(String(repeating: "W", count: 300)),
+        ]
+        for t in samples {
+            for piece in DocPiece.value(t, max: cutting.max, maxBreaks: cutting.maxBreaks) {
+                let h = UIHostingController(rootView: ValuePiece(first: true, last: true) { DocPieceView(pieces: [piece], raw: false) }
+                    .vettIDTheme(.light).dynamicTypeSize(.accessibility5))
+                    .sizeThatFits(in: CGSize(width: 390, height: 10_000)).height
+                #expect(h < 700, "a piece \(Int(h)) pt tall")
+            }
+        }
     }
 
     @Test func theRawViewKeepsStringsApartFromNumbers() throws {

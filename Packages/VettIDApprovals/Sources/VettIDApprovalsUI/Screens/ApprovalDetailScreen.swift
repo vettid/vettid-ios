@@ -36,8 +36,8 @@ public struct DecisionActions {
     public var onForgetSecrets: @MainActor () -> Void = {}
     /// An approval's document (VAULT-MESSAGING 0.89.0 §10.4): its fetch again after a failure, and its end on screen.
     public var onRetryDocument: @MainActor () -> Void = {}
-    /// The whole of the document of that hash has been on screen.
-    public var onDocumentShownWhole: @MainActor (String) -> Void = { _ in }
+    /// The whole of the document of that hash, in that generation, has been on screen.
+    public var onDocumentShownWhole: @MainActor (String, Int) -> Void = { _, _ in }
 
     public init() {}
 }
@@ -233,6 +233,7 @@ struct TitleServiceLabel: View {
 /// The decision's content: the facts of the request, the password, "Block this request", the failure.
 struct DecisionContent: View {
     @Environment(\.vettIDColors) private var colors
+    @Environment(\.accessibilityVoiceOverEnabled) private var voiceOver
     @Environment(\.vettIDTimeScale) private var timeScale
     let approval: PendingApproval
     let state: ApprovalDetailState
@@ -254,7 +255,8 @@ struct DecisionContent: View {
             // An approval's document (§10.4), before the password and Approve; Approve waits for its end on screen.
             if case .authentication(let x) = approval, x.hasDocument, let step = state.document {
                 ApprovalDocumentView(
-                    step: step, generation: state.documentGeneration, name: state.connectionName, seen: state.documentToApprove != nil,
+                    step: step, generation: state.documentGeneration, voiceOver: voiceOver, name: state.connectionName,
+                    seen: state.documentToApprove != nil,
                     onRetry: actions.onRetryDocument, onSeenWhole: actions.onDocumentShownWhole
                 )
                 .equatable()
