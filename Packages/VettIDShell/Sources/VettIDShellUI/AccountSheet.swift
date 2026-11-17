@@ -18,8 +18,9 @@ public struct AccountSheet: View {
     let photo: UIImage?
     let now: Date
     let onLockVault: @MainActor () -> Void
-    let onChangeName: @MainActor () -> Void
-    let onSharedProfile: @MainActor () -> Void
+    /// None: no "Change name" and no "Shared profile" (the required update's screen, where neither can be opened).
+    let onChangeName: (@MainActor () -> Void)?
+    let onSharedProfile: (@MainActor () -> Void)?
     let onOpenPortal: @MainActor () -> Void
 
     public init(
@@ -27,8 +28,8 @@ public struct AccountSheet: View {
         photo: UIImage? = nil,
         now: Date = Date(),
         onLockVault: @escaping @MainActor () -> Void,
-        onChangeName: @escaping @MainActor () -> Void = {},
-        onSharedProfile: @escaping @MainActor () -> Void = {},
+        onChangeName: (@MainActor () -> Void)? = {},
+        onSharedProfile: (@MainActor () -> Void)? = {},
         onOpenPortal: @escaping @MainActor () -> Void
     ) {
         self.account = account.shownInShell
@@ -74,8 +75,8 @@ struct AccountSheetOptions: View {
     let account: AccountInfo?
     let now: Date
     let onLockVault: @MainActor () -> Void
-    let onChangeName: @MainActor () -> Void
-    let onSharedProfile: @MainActor () -> Void
+    let onChangeName: (@MainActor () -> Void)?
+    let onSharedProfile: (@MainActor () -> Void)?
     let onOpenPortal: @MainActor () -> Void
 
     var body: some View {
@@ -92,15 +93,21 @@ struct AccountSheetOptions: View {
             SettingsInfoRow(ShellStrings.accountNames, value: account?.fullName ?? ShellStrings.accountNamesNone, icon: .person)
             note([ShellStrings.accountNamesNote, NameStatus.text(account, now: now)].compactMap { $0 }.joined(separator: "\n"))
                 .accessibilityIdentifier("account_names_note")
-            SettingsDivider()
-            SettingsRow(ShellStrings.accountChangeName, icon: .edit, supporting: ShellStrings.accountChangeNameBody, action: onChangeName)
+            if let onChangeName {
+                SettingsDivider()
+                SettingsRow(
+                    ShellStrings.accountChangeName, icon: .edit, supporting: ShellStrings.accountChangeNameBody, action: onChangeName
+                )
                 .accessibilityIdentifier("account_change_name")
-            SettingsDivider()
-            SettingsRow(
-                ShellStrings.accountSharedProfile, icon: sharedProfileSymbol, supporting: ShellStrings.accountSharedProfileBody,
-                action: onSharedProfile
-            )
-            .accessibilityIdentifier("account_shared_profile")
+            }
+            if let onSharedProfile {
+                SettingsDivider()
+                SettingsRow(
+                    ShellStrings.accountSharedProfile, icon: sharedProfileSymbol, supporting: ShellStrings.accountSharedProfileBody,
+                    action: onSharedProfile
+                )
+                .accessibilityIdentifier("account_shared_profile")
+            }
         }
         .accessibilityIdentifier("account_names")
         // Only while the vault is open: never the masked hint of the account record (IOS-PLAN §4.7).

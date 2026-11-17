@@ -60,11 +60,13 @@ import VettIDVault
         #expect(hangUp < lock, "before the vault is told to lock")
     }
 
-    /// Rule 3: a vault that must first move to a newer release counts as not open for the calls (none starts or rings), and
+    /// Owner decision 2026-11-17: a vault that must first move to a newer release counts as not open for the calls (none starts or rings), and
     /// as open again once nothing newer is listed.
     @Test func aRequiredUpdateCountsAsClosed() async throws {
         defer { phone.close() }
         try await openVault()
+        // The opening's own read of the manifest first: until then the release is being checked and calls are closed.
+        #expect(await waitFor { !m.releaseUpdate.checking })
         let vault = ManagerVault(m)
         var changes = vault.unlockedChanges().makeAsyncIterator()
         #expect(await changes.next() == true)
@@ -82,6 +84,8 @@ import VettIDVault
     @Test func theLockCountsAsClosedAtOnce() async throws {
         defer { phone.close() }
         try await openVault()
+        // The opening's own read of the manifest first: until then the release is being checked and calls are closed.
+        #expect(await waitFor { !m.releaseUpdate.checking })
         let vault = ManagerVault(m)
         var changes = vault.unlockedChanges().makeAsyncIterator()
         #expect(await changes.next() == true)

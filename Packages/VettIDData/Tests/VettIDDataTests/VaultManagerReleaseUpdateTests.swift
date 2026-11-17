@@ -43,12 +43,13 @@ import VettIDDataTesting
         #expect(m.releaseUpdate.offer == nil && m.releaseUpdate.offerKnown)
     }
 
-    /// Rule 3: while a newer `active` release is listed, the update is required and the vault's features are gated as for a
+    /// Owner decision 2026-11-17: while a newer `active` release is listed, the update is required and the vault's features are gated as for a
     /// check past its deadline; once the vault is on release 4, neither.
     @Test func aNewerReleaseIsRequiredAndGatesTheFeaturesUntilTheVaultMoves() async throws {
         defer { phone.close() }
         try await setUp()
-        #expect(!m.releaseUpdate.required && !m.featuresGated(), "release 4 not read yet")
+        // The opening's own read of the manifest first (``ReleaseUpdateManager/checking``).
+        #expect(await eventually { !m.releaseUpdate.checking })
         await m.releaseUpdate.refreshOffer()
         let offer = try #require(m.releaseUpdate.offer)
         #expect(m.releaseUpdate.required && m.featuresGated())
@@ -58,6 +59,25 @@ import VettIDDataTesting
         await m.releaseUpdate.refreshOffer()
         #expect(m.releaseUpdate.offer == nil && m.releaseUpdate.offerKnown)
         #expect(!m.releaseUpdate.required && !m.featuresGated())
+    }
+
+    /// An unlock while release 4 is listed shows only the release check from its first moment, then the update; once
+    /// nothing newer is listed with the vault still open, every list is read again as after an unlock.
+    @Test func theListsAreReadAgainOnceTheVaultIsNoLongerBehind() async throws {
+        defer { phone.close() }
+        try await setUp()
+        try await m.lock()
+        #expect(try await m.unlock(pin: pin) == .success)
+        #expect(m.releaseUpdate.required, "from the unlock on, while the manifest is read")
+        #expect(await eventually { m.releaseUpdate.offerKnown && m.releaseUpdate.behind })
+        #expect(m.releaseUpdate.required && m.featuresGated())
+        #expect(await eventually { m.listsRead == nil || m.listsReads > 0 })
+        await m.listsRead?.value
+        let before = service.requestsSeen.count
+        service.listsRelease4 = false
+        await m.releaseUpdate.refreshOffer()
+        #expect(!m.releaseUpdate.required && !m.releaseUpdate.behind)
+        #expect(await eventually { service.requestsSeen.dropFirst(before).contains("connection.list") }, "the lists once lifted")
     }
 
     /// Without a newer release, nothing is required or gated.

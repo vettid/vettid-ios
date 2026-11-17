@@ -6,7 +6,7 @@ import VettIDOnboarding
 import VettIDUI
 
 /// The update screen with its view model: "Update available" in Settings → Vault, and the required update over the open
-/// vault (rule 3), where it has no way back ([onBack] nil). Mirrors vettid-android's `releaseUpdateDestination`.
+/// vault (owner decision 2026-11-17), where it has no way back ([onBack] nil). Mirrors vettid-android's `releaseUpdateDestination`.
 public struct ReleaseUpdateRoute: View {
     private let updates: any ReleaseUpdateRepository
     private let ownerCheck: (any OwnerCheckRepository)?
@@ -48,7 +48,7 @@ public struct ReleaseUpdateContent: View {
     @Environment(\.vettIDTimeScale) private var timeScale
     let state: ReleaseUpdateState
     let onApprove: @MainActor (String) -> Bool
-    /// None when the update is required: the screen has no way back (rule 3).
+    /// None when the update is required: the screen has no way back (owner decision 2026-11-17).
     let onBack: (@MainActor () -> Void)?
     /// The first digit was typed into the empty keypad (``ReleaseUpdateViewModel/pinTypingStarted()``).
     let onTypingStarts: @MainActor () -> Void

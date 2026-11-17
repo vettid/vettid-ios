@@ -41,7 +41,7 @@ package final class ManagerVault: CallsAppVault {
     }
 
     /// A lock pending counts as locked: the manager's phase is `locked` from the first line of the member's lock. A vault
-    /// that must first move to the current release (rule 3, ``ReleaseUpdateManager/required``) counts as not open either:
+    /// that must first move to the current release (owner decision 2026-11-17, ``ReleaseUpdateManager/required``) counts as not open either:
     /// no call starts or rings until it has moved.
     package func unlockedChanges() -> AsyncStream<Bool> { observed { [manager] in Self.open(manager) } }
 

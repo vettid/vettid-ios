@@ -27,12 +27,36 @@ public final class ReleaseUpdateManager: ReleaseUpdateRepository {
 
     public private(set) var offer: ReleaseUpdateOffer?
     public private(set) var offerKnown = false
+    /// The vault opened and the manifest has not been read since (``vaultOpened()``).
+    public private(set) var checking = false
+    /// Told when ``behind`` changes: the vault manager reads the lists again when it ends with the vault open.
+    @ObservationIgnored public var onBehindChange: (@MainActor (Bool) -> Void)?
+    @ObservationIgnored private var lastBehind = false
 
-    /// The vault is not on the newest `active` release of the manifest this phone trusts (rule 3: no release but the current
-    /// one is used): only the update, and the ways to leave the vault, are open until it moves. Read from the offer, so it
-    /// holds once the manifest was read after the unlock; before that, and when the manifest could not be read, the app
-    /// goes on as before (the unlock's own checks of the release still apply).
-    public var required: Bool { offer != nil }
+    /// No release but the current one is used (owner decision 2026-11-17): the vault is not on the newest `active` release
+    /// of the manifest this phone trusts. An offer counts only for the release the vault is on now: one read before the
+    /// vault moved does not. While this holds, the vault's features take no event and read nothing
+    /// (``VaultManager/featuresGated()``), and they are read again when it ends.
+    public var behind: Bool {
+        guard let o = offer else { return false }
+        return o.current.number == ops.releaseNumber()
+    }
+
+    /// What the member sees and what can reach them: only the update and the ways to leave the vault, no call and no
+    /// notification. While the vault is ``behind``, and also while the manifest is first read after an opening
+    /// (``checking``), so that nothing of the open app shows before the release is known. When the manifest cannot be read,
+    /// the app goes on as before (chosen; the unlock's own checks of the release still apply).
+    public var required: Bool { checking || behind }
+
+    /// The vault opened (an unlock, the end of onboarding, a start while open): ``required`` until the manifest is read.
+    public func vaultOpened() { checking = true }
+
+    private func noteBehind() {
+        let now = behind
+        guard now != lastBehind else { return }
+        lastBehind = now
+        onBehindChange?(now)
+    }
     public private(set) var progress: UpdateProgress?
     public private(set) var dismissal: ReleaseDismissal?
 
@@ -51,8 +75,10 @@ public final class ReleaseUpdateManager: ReleaseUpdateRepository {
             offer = try await ops.offer()
             offerKnown = true
         } catch {
-            // Display only: the last offer stays.
+            // The last offer stays (it counts only for the release the vault is on, ``required``).
         }
+        checking = false
+        noteBehind()
     }
 
     public func ownerCheckDue() -> Bool { ops.ownerCheckDue() }
@@ -71,8 +97,10 @@ public final class ReleaseUpdateManager: ReleaseUpdateRepository {
         job = nil
         offer = nil
         offerKnown = false
+        checking = false
         progress = nil
         dismissal = nil
+        noteBehind()
     }
 
     public var pinGeneration: Int { ops.pinGeneration() }
@@ -165,6 +193,7 @@ public final class ReleaseUpdateManager: ReleaseUpdateRepository {
         let done = progress?.step == .done
         progress = nil
         if done { offer = nil }
+        noteBehind()
     }
 
     /// TEST ONLY: returns once the running step has ended.
@@ -271,6 +300,7 @@ public final class ReleaseUpdateManager: ReleaseUpdateRepository {
     private func done() {
         set { $0.step = .done; $0.vaultOpen = true; $0.canAbandon = false }
         offer = nil
+        noteBehind()
     }
 
     private func newReleaseFailed(_ r: UpdateStepResult) {

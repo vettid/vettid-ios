@@ -264,7 +264,7 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
             timeScale: { scale.value }, writeFails: config.phoneSecretsWriteFails
         )
         (canary, enclaveRecords) = (Self.canaryManifests(config, member, ref), Self.enclaveRecordStore(config, ref))
-        releaseUpdate = ReleaseUpdateManager(ops: VaultReleaseUpdateOps(ref: ref))
+        releaseUpdate = Self.releaseUpdateManager(ref)
         let timing = config.lockTiming
         let rec = record
         let lockFile = LockRecordFile(

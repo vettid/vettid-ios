@@ -132,6 +132,8 @@ extension VaultManager {
         // (VAULT-MESSAGING 0.70.0 §10.4.2) A vault that did not know `pending.list` is asked again after each unlock, not
         // after a passed owner check.
         approvals.vaultOpened()
+        // The open app shows only the release check until the manifest is read (``ReleaseUpdateManager/required``).
+        releaseUpdate.vaultOpened()
         refreshListsQuietly()
         // The clone alarm is read after every unlock, whatever event was or was not received (a held background's, a process that
         // ended): `credential.version` shows it (§3.5.9).

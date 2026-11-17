@@ -65,6 +65,17 @@ struct NotificationShellOpenTests {
         #expect(ShellNotificationsHook.decision(stale: false, active: true, inFront: inFront, found: true, waitOver: false) == .later)
     }
 
+    /// While the vault must first move to the current release, only the update is shown: nothing posts and a tap waits.
+    @Test func aRequiredUpdateClosesTheShell() {
+        let now = Date(timeIntervalSince1970: 1_000_000)
+        let ahead = OwnerCheckView(state: .ok, deadline: now.addingTimeInterval(3_600))
+        #expect(!AppNotifications.shellOpen(unlocked: true, checkAfterCancel: false, check: ahead, now: now, releaseRequired: true))
+        #expect(!AppNotifications.mayPost(
+            covered: false,
+            shellOpen: AppNotifications.shellOpen(unlocked: true, checkAfterCancel: false, check: ahead, now: now, releaseRequired: true)
+        ))
+    }
+
     /// No feed item notification posts while the app lock covers the app, so no name shows over it.
     @Test func nothingPostsWhileTheAppLockCoversTheApp() {
         #expect(AppNotifications.mayPost(covered: false, shellOpen: true))

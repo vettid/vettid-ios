@@ -113,9 +113,25 @@ extension VaultManager {
     }
 
     /// Nothing of the vault's features is read, shown or acted on: the owner check is past its deadline (§3.6.3), or the vault
-    /// must first move to the current release (``ReleaseUpdateManager/required``; rule 3).
+    /// must first move to the current release (``ReleaseUpdateManager/required``; owner decision 2026-11-17).
     func featuresGated() -> Bool {
-        ownerChecks.ownerCheck?.gated(config.now()) == true || releaseUpdate.required
+        ownerChecks.ownerCheck?.gated(config.now()) == true || releaseUpdate.behind
+    }
+
+    /// While the vault is behind no list takes the vault's events and none is read (``featuresGated()``, ``onEvent(_:)``);
+    /// when it no longer is, with the vault open (the vault moved, or the manifest stopped listing the newer release), every
+    /// list is read as after an unlock, the votes site work with it, so nothing dropped meanwhile is missing.
+    static func releaseUpdateManager(_ ref: ManagerRef) -> ReleaseUpdateManager {
+        let updates = ReleaseUpdateManager(ops: VaultReleaseUpdateOps(ref: ref))
+        followBehind(updates, ref)
+        return updates
+    }
+
+    private static func followBehind(_ updates: ReleaseUpdateManager, _ ref: ManagerRef) {
+        updates.onBehindChange = { behind in
+            guard !behind, let m = ref.manager, m.phase == .unlocked else { return }
+            m.refreshListsQuietly()
+        }
     }
 
     /// The owner check is due or held (§3.6.5), or the vault locked after ten failed checks (not a lock of unknown cause,

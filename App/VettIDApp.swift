@@ -333,13 +333,15 @@ struct AppRoot: View {
                 vault: vault, path: shell.path, onGated: { shell.shown() }, onCovered: { shell.checkCovers = $0 }
             ) { gate, now in
                 if vault.releaseUpdate.required {
-                    // Rule 3: until the vault is on the current release, only its update and the ways to leave it. Inside
-                    // the owner check's gate: the update asks for the check first when it is due.
+                    // Until the vault is on the current release (owner decision 2026-11-17), only its update and the ways to
+                    // leave it. Inside the owner check's gate: the update asks for the check first when it is due. What the
+                    // notifications said is taken away, as when the app is covered.
                     ReleaseRequiredGate(
                         updates: vault.releaseUpdate, ownerCheck: vault.ownerChecks, notes: releaseNotes, vault: vault,
-                        account: vault
+                        account: vault, credential: vault
                     ) { openPortal() }
                     .environment(\.accountDeletionURL, AccountDeletion.url(origin: environment.apiOrigin))
+                    .onAppear { notifications?.covered() }
                 } else {
                     AppShell(
                         account: vault, vault: vault, ownerChecks: vault.ownerChecks, credential: vault, profiles: vault.profiles,

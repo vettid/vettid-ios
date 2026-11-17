@@ -130,7 +130,7 @@ extension VaultManager {
             // The device's lock gate holds what may not go while a lock is pending (``setFlushGate``).
             await s.device.flushOutbox()
             // The events a held background did not handle (no list, feed or approval was touched in the background): read again now.
-            if catchUp, phase == .unlocked, let s = try? await openSession() {
+            if catchUp, phase == .unlocked, !releaseUpdate.behind, let s = try? await openSession() {
                 // The lists are read as of now (the vault's time): what comes back from the relay older than this, after its lease, is
                 // covered by the read of its list (``supersededByReread(_:)``). Each list's mark is set the moment that list's read
                 // answered and was applied, not when the others are over: a failed one, one the vault does not have, and one a lock or a
@@ -326,8 +326,9 @@ extension VaultManager {
         if dropsInHeldBackground(m) { return }
         ownerChecks.onEvent(m)
         if supersededByReread(m) { return }
-        // Nothing the vault sends is taken into the app's lists while a lock is pending (as vettid-android).
-        if lockGuard.takesEvents() {
+        // Nothing the vault sends is taken into the app's lists while a lock is pending (as vettid-android), nor while the
+        // vault must first move to the current release (the lists are read when it has, ``followBehind``).
+        if lockGuard.takesEvents(), !releaseUpdate.behind {
             connections.onEvent(m)
             messages.onEvent(m)
             attachments.onEvent(m)
