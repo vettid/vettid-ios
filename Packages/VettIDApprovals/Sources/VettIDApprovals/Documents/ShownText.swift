@@ -76,10 +76,13 @@ public struct ShownText: Equatable, Sendable {
     /// among them) characters, line and paragraph separators (Zl, Zp), private-use and unassigned code points (Co, Cn: a
     /// character newer than this system's Unicode data is unassigned to it), any other Default_Ignorable_Code_Point (the
     /// Hangul fillers, the variation selectors, U+FE0F and the joiners among them), and every space separator (Zs) but
-    /// U+0020. Also (chosen; not in the spec) the brackets markers are drawn with, U+27E8 and U+27E9, so that no text can
-    /// spell a marker, however it is styled.
+    /// U+0020. Also (chosen; not in the spec) the brackets markers are drawn with, U+27E8 and U+27E9, and their look-alikes,
+    /// so that no text can spell a marker, however it is styled.
+    /// ⟨ ⟩ and the angle brackets that look like them: 〈 〉 (U+2329, U+232A), 〈 〉 (U+3008, U+3009), ❬ ❭ (U+276C, U+276D).
+    static let markerBrackets: Set<UInt32> = [0x27E8, 0x27E9, 0x2329, 0x232A, 0x3008, 0x3009, 0x276C, 0x276D]
+
     static func marked(_ scalar: Unicode.Scalar) -> Bool {
-        if scalar == "\u{27E8}" || scalar == "\u{27E9}" { return true }
+        if markerBrackets.contains(scalar.value) { return true }
         let p = scalar.properties
         switch p.generalCategory {
         case .control, .format, .lineSeparator, .paragraphSeparator, .privateUse, .unassigned, .surrogate: return true

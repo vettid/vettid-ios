@@ -90,6 +90,8 @@ public struct ApprovalDetailState: Equatable, Sendable, CustomStringConvertible,
     public var connectionName: String?
     /// (0.89.0 §10.4) The challenge's document, for a member authentication that carries one; nil for any other request.
     public var document: DocumentStep?
+    /// The `document_sha256` the request named when ``document`` was fetched: another one fetches again.
+    public var documentFor: String?
     /// The hash of the document whose whole the screen has shown: Approve is enabled only for that document.
     public var documentSeen: String?
 

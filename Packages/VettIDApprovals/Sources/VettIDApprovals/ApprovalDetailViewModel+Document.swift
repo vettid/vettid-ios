@@ -8,12 +8,13 @@ extension ApprovalDetailViewModel {
     /// holds the request, and again if the request it holds comes to name another document than the one shown.
     func loadDocument() {
         guard case .authentication(let x)? = local.approval, x.hasDocument else { return }
-        switch local.document {
-        case nil: break
-        case .shown(let d, _)? where d.sha256 != x.documentSha256: break
-        default: return
-        }
+        // Fetched once for the hash the request names, and again whenever it names another (from any state but a fetch on
+        // its way, which looks again once it is answered).
+        if local.document == .loading || (local.document != nil && local.documentFor == x.documentSha256) { return }
+        local.documentFor = x.documentSha256
         local.document = .loading
+        // The password field goes while there is nothing to approve; it does not come back filled.
+        local.password = ""
         let repo = repo
         work.launch { [weak self] in
             do {
@@ -22,6 +23,8 @@ extension ApprovalDetailViewModel {
             } catch {
                 self?.local.document = .failed(failureKind(error))
             }
+            // The request may have come to name another document meanwhile.
+            self?.loadDocument()
         }
     }
 
@@ -39,6 +42,7 @@ extension ApprovalDetailViewModel {
     public func retryDocument() {
         guard case .failed? = local.document else { return }
         local.document = nil
+        local.documentFor = nil
         loadDocument()
     }
 

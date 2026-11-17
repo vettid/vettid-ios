@@ -167,8 +167,8 @@ private struct FieldLabel: View {
     }
 }
 
-/// How the document's texts are drawn: a marker in a monospaced, boxed style of its own (a fill behind it, not only a
-/// colour), so that it is told from text by its shape too.
+/// How the document's texts are drawn: a marker in a monospaced, boxed and underlined style of its own, so that it is
+/// told from text by more than its colour.
 struct DocumentStyle {
     var marker: Color
     var markerFill: Color
@@ -197,6 +197,8 @@ struct DocumentStyle {
                 a.font = .system(.body, design: .monospaced)
                 a.foregroundColor = marker
                 a.backgroundColor = markerFill
+                // Underlined too: told from text by more than its colour.
+                a.underlineStyle = .single
                 out += a
             }
         }
@@ -267,7 +269,7 @@ private struct ProposalFormView: View {
             }
             field(ApprovalsStrings.docFieldQuorum) {
                 // The app's own count, then the service's text in a block of its own.
-                Text(ApprovalsStrings.docBallots(Int(clamping: form.quorumBallots))).vettIDFont(.bodyLarge)
+                ValueBlock { Text(ApprovalsStrings.docBallots(Int(clamping: form.quorumBallots))).vettIDFont(.bodyLarge) }
                 if let text = form.quorumText { ValueBlock { ShownTextView(text: text) } }
             }
             field(nil) {
@@ -321,15 +323,19 @@ private struct ExtendFormView: View {
 /// document stays a few hundred views.
 struct RawDocumentView: View {
     @Environment(\.vettIDColors) private var colors
+    @Environment(\.accessibilityVoiceOverEnabled) private var voiceOver
     let lines: [DocumentPresentation.RawLine]
 
     static let chunk = 40
 
     var body: some View {
         let style = DocumentStyle(colors)
+        // With VoiceOver, one element to a line: moving from one to the next brings each on screen in turn, so the
+        // coverage has no gap and each line is read with its level.
+        let chunk = voiceOver ? 1 : Self.chunk
         ValueBlock {
-            ForEach(Array(stride(from: 0, to: lines.count, by: Self.chunk)), id: \.self) { start in
-                let part = lines[start..<min(start + Self.chunk, lines.count)]
+            ForEach(Array(stride(from: 0, to: lines.count, by: chunk)), id: \.self) { start in
+                let part = lines[start..<min(start + chunk, lines.count)]
                 Text(part.enumerated().reduce(into: AttributedString()) { out, e in
                     if e.offset > 0 { out += AttributedString("\n") }
                     out += Self.attributed(e.element, style)

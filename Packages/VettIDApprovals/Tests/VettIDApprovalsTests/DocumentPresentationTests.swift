@@ -45,6 +45,9 @@ import Testing
     @Test func noTextCanSpellAMarkerOrDecorateTheAppsOwnCharacters() {
         // The brackets a marker is drawn with are markers themselves.
         #expect(ShownText("\u{27E8}U+202E\u{27E9}").runs == [.marker(0x27E8), .text("U+202E"), .marker(0x27E9)])
+        for v: UInt32 in [0x2329, 0x232A, 0x3008, 0x3009, 0x276C, 0x276D] {
+            #expect(ShownText("a" + String(Character(Unicode.Scalar(v)!)) + "b").runs == [.text("a"), .marker(v), .text("b")])
+        }
         // A combining mark with no base in its run would combine with a quotation mark or a marker drawn before it.
         #expect(ShownText("\u{0338}x").runs == [.marker(0x0338), .text("x")])
         #expect(ShownText("\u{202E}\u{20DD}x").runs == [.marker(0x202E), .marker(0x20DD), .text("x")])
@@ -64,8 +67,8 @@ import Testing
         // A jump past the middle (to the password field below) does not count.
         c.saw(700...1000, height: 1000)
         #expect(!c.whole && c.seenTo == 300)
-        c.saw(250...600, height: 1000)
-        c.saw(600...1000, height: 1000)
+        // The middle seen later (scrolling back) joins what was seen on both sides of it.
+        c.saw(250...700, height: 1000)
         #expect(c.whole)
         // Another height (a new text size, a document shown again) starts again from the top.
         var d = SeenCoverage()
