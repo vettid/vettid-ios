@@ -54,7 +54,7 @@ import VettIDTesting
         let c = try v.open(raw)
         #expect(c.type == "hs.confirm" && c.re == nil && c.exp == nil)
         #expect(String(bytes: c.body, encoding: .utf8) == "{}")
-        #expect(c.features == ["hs_confirm"])
+        #expect(c.features == ["approval_document", "hs_confirm"])
         try await relay.takeFeatures(v)
     }
 

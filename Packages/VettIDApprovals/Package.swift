@@ -13,7 +13,7 @@ let package = Package(
     dependencies: [
         .package(path: "../VettIDData"),
         .package(path: "../VettIDUI"),
-        // TEST ONLY: critical-use payloads and their hashes in the tests.
+        // An approval's document (its parsed payload), and in the tests critical-use payloads and their hashes.
         .package(path: "../VettIDCrypto"),
     ],
     targets: [
@@ -22,6 +22,7 @@ let package = Package(
             name: "VettIDApprovals",
             dependencies: [
                 .product(name: "VettIDData", package: "VettIDData"),
+                .product(name: "VettIDCrypto", package: "VettIDCrypto"),
             ]
         ),
         // The screens (iOS only: VettIDUI is UIKit-based; on macOS this target compiles empty).

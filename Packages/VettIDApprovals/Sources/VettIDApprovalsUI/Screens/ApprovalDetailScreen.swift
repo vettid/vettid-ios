@@ -34,6 +34,9 @@ public struct DecisionActions {
     public var onMute: @MainActor () -> Void = {}
     /// The screen left or the app went to the background: the password goes.
     public var onForgetSecrets: @MainActor () -> Void = {}
+    /// An approval's document (VAULT-MESSAGING 0.89.0 §10.4): its fetch again after a failure, and its end on screen.
+    public var onRetryDocument: @MainActor () -> Void = {}
+    public var onDocumentShownWhole: @MainActor () -> Void = {}
 
     public init() {}
 }
@@ -245,6 +248,13 @@ struct DecisionContent: View {
                 Facts(
                     approval: approval, name: state.connectionName, service: state.connectionIsService,
                     renewal: state.renewalUntil(at: now) != nil
+                )
+            }
+            // An approval's document (§10.4), before the password and Approve; Approve waits for its end on screen.
+            if case .authentication(let x) = approval, x.hasDocument, let step = state.document {
+                ApprovalDocumentView(
+                    step: step, name: state.connectionName, seen: state.documentToApprove != nil,
+                    onRetry: actions.onRetryDocument, onSeenWhole: actions.onDocumentShownWhole
                 )
             }
             if state.needs == .password {

@@ -71,7 +71,8 @@ struct Facts: View {
                     FromValue(text: AccountNames.isolateOrNull(name) ?? ApprovalsStrings.aConnectionInline, service: service)
                 }
                 // The challenger's claim (§10.4), in full whatever the purpose; a fixed line when a purpose comes without one.
-                if let c = ApprovalTexts.contextNote(x) {
+                // With a document, it is shown with the document instead, as "The service's description" (0.89.0).
+                if !x.hasDocument, let c = ApprovalTexts.contextNote(x) {
                     FactLabel(ApprovalsStrings.context)
                     FactValue(c).accessibilityIdentifier("auth_context")
                 }

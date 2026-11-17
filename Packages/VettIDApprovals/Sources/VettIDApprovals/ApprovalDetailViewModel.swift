@@ -19,6 +19,18 @@ public struct AnswerItem: Equatable, Sendable, Identifiable {
     }
 }
 
+/// A challenge's document on the approval screen (VAULT-MESSAGING 0.89.0 §10.4 "Approval documents").
+public enum DocumentStep: Equatable, Sendable {
+    /// Being fetched (`connection.authenticate.document`).
+    case loading
+    /// Fetched and checked: shown, and approvable once it has all been on screen.
+    case shown(ApprovalDocument, DocumentPresentation)
+    /// Fetched, but it failed the app's checks: "This request can't be shown", Deny only.
+    case unshowable(ApprovalDocument.Failure)
+    /// The fetch failed (the vault could not be reached, say): said, with Try again; Deny stays.
+    case failed(FailureKind)
+}
+
 /// What a decision needs from the member: the credential password for the critical actions (ANDROID-PLAN §4 Approvals).
 public enum ApprovalNeeds: Equatable, Sendable { case nothing, password }
 
@@ -76,6 +88,16 @@ public struct ApprovalDetailState: Equatable, Sendable, CustomStringConvertible,
     public var limit: VaultLimit?
     /// The requesting connection's "First Last", when the request names a connection that has names.
     public var connectionName: String?
+    /// (0.89.0 §10.4) The challenge's document, for a member authentication that carries one; nil for any other request.
+    public var document: DocumentStep?
+    /// The hash of the document whose whole the screen has shown: Approve is enabled only for that document.
+    public var documentSeen: String?
+
+    /// The document shown and checked, when it has all been on screen: the only one an approval signs.
+    public var documentToApprove: ApprovalDocument? {
+        guard case .shown(let d, _)? = document, documentSeen == d.sha256 else { return nil }
+        return d
+    }
 
     /// A withdrawn request's notice offers "Mute requests from <name>": the request names a connection with names and its
     /// asks are not muted. Without a name it is not offered, as in History (a mute names whom it mutes).
@@ -147,7 +169,8 @@ public struct ApprovalDetailState: Equatable, Sendable, CustomStringConvertible,
         // seed (0.21.0) only denied.
         case .critical(let c)?: c.suitable != false && c.payloadVerified && !password.isEmpty && backoffOver(now)
         case .share(let d)?: d.items.contains { !shareExcluded.contains($0.itemID) }
-        case .authentication?: !password.isEmpty && backoffOver(now)
+        // §10.4 "Approval documents": a challenge with a document only once it was shown, checked and seen whole.
+        case .authentication(let x)?: !password.isEmpty && backoffOver(now) && (!x.hasDocument || documentToApprove != nil)
         }
     }
 
@@ -204,6 +227,7 @@ public final class ApprovalDetailViewModel {
         local.items = items.sorted { $0.name.lowercased() < $1.name.lowercased() }
         follows.add(follow(self, read: { m in m.repo.approvals.first { $0.key == m.local.key } }, apply: { m, a in
             if let a { m.local.approval = a }
+            m.loadDocument()
             // A session request held only after the screen opened (from the feed, before the list answered) is followed
             // from when it arrives.
             m.followSessions()
@@ -219,6 +243,45 @@ public final class ApprovalDetailViewModel {
                 }
             }
         }
+        loadDocument()
+    }
+
+    /// A member authentication that carries a document (0.89.0 §10.4): it is fetched and checked once, when the screen
+    /// first holds the request.
+    private func loadDocument() {
+        guard local.document == nil, case .authentication(let x)? = local.approval, x.hasDocument else { return }
+        local.document = .loading
+        let repo = repo
+        work.launch { [weak self] in
+            do {
+                let checked = try await repo.authenticationDocument(x)
+                self?.show(checked, context: x.context)
+            } catch {
+                self?.local.document = .failed(failureKind(error))
+            }
+        }
+    }
+
+    /// [checked] in place of whatever document the screen showed: it is shown from the start, not yet seen whole.
+    private func show(_ checked: Result<ApprovalDocument, ApprovalDocument.Failure>, context: String?) {
+        local.documentSeen = nil
+        switch checked {
+        case .success(let d): local.document = .shown(d, DocumentPresentation(d, context: context))
+        case .failure(let f): local.document = .unshowable(f)
+        }
+    }
+
+    /// The document's fetch failed: Try again.
+    public func retryDocument() {
+        guard case .failed? = local.document else { return }
+        local.document = nil
+        loadDocument()
+    }
+
+    /// The screen has shown the whole of the document it shows now (its end came on screen): Approve may be enabled.
+    public func documentShownWhole() {
+        guard case .shown(let d, _)? = local.document else { return }
+        local.documentSeen = d.sha256
     }
 
     deinit {
@@ -406,6 +469,14 @@ public final class ApprovalDetailViewModel {
             switch a {
             case .connection(.incoming(let r)): try await repo.approveConnection(r.pendingID)
             case .connection(.outgoing(let r)): try await repo.approveOutgoing(r.connectionID)
+            case .authentication(let x) where x.hasDocument:
+                // Decided from the request in hand, never from what the repository still holds: a challenge with a document
+                // is approved only over the document shown here, whole (§10.4: nowhere else, and never without it).
+                guard let d = s.documentToApprove else { throw VaultFailure(.other, code: Self.documentNotShown) }
+                if case .changed(let again) = try await repo.approveAuthentication(x, password: pw, document: d) {
+                    self?.show(again, context: x.context)
+                    throw DocumentRestarted()
+                }
             case .authentication(let x): try await repo.approveAuthentication(x.requestID, password: pw)
             case .grant(let g):
                 let idx = s.grantIndexes
@@ -534,7 +605,19 @@ public final class ApprovalDetailViewModel {
         }
     }
 
+    /// The approval found another document than the one shown (`document_not_fetched`, then other bytes): nothing was
+    /// approved and the screen shows what it has now from the start; no failure is said for it.
+    private struct DocumentRestarted: Error {}
+
+    /// The app's own refusal to approve a challenge with a document that is not shown whole (never sent to the vault).
+    static let documentNotShown = "document_not_shown"
+
     private func failed(_ error: any Error) {
+        if error is DocumentRestarted {
+            local.password = ""
+            local.busy = false
+            return
+        }
         let f = error as? VaultFailure
         local.error = failureKind(error)
         local.limit = f?.limit
