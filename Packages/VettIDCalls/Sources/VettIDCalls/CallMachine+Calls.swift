@@ -63,7 +63,7 @@ extension CallMachine {
         // the signalling remembers the newest ends): that end says how the call ended (`busy`, a glare's winner, the winner's own
         // end), as for a placed call (``onPlaced(_:seq:call:atMs:)``). Nothing else held is of use: the call has no key, and its
         // media never started.
-        let ended = replayHeldEnds(s, callId: callId)
+        let ended = replayHeldEnds(s, callId: callId, carried: end)
         guard session === s else { return }
         // The vault's end the signalling remembered, which the machine may not have had yet (it may be on its way here, to land
         // with no session) or at all: applied as it would have been, so a `busy` or a glare's end is what the call shows, and
@@ -77,15 +77,16 @@ extension CallMachine {
 
     /// The lost call takes its id and the ends held for it are applied; the calls they ended are returned. Candidates of
     /// another call (a glare's winner) are given to the session they are for: kept with the held offer, or applied to the
-    /// winner once it is answered. The lost call's own are of no use.
-    private func replayHeldEnds(_ s: CallSession, callId: String) -> Set<String> {
+    /// winner once it is answered. The lost call's own are of no use. The end the start [carried], applied after the replay,
+    /// counts for the winners' rule as a held one does (``rememberHeldWinners(_:of:carried:)``).
+    private func replayHeldEnds(_ s: CallSession, callId: String, carried: CallLostError.End?) -> Set<String> {
         let early = s.early
         s.early.removeAll()
         s.callId = callId
         // An offer held before the call had its id, that turns out to carry this very id, is no other call.
         if s.glareOffer?.callId == callId { s.glareOffer = nil }
         forgetEndedGlareOffer(s, early)
-        rememberHeldWinners(early, of: callId)
+        rememberHeldWinners(early, of: callId, carried: carried)
         s.phase = .calling
         var ended: Set<String> = []
         for e in early {
@@ -167,12 +168,17 @@ extension CallMachine {
     /// or it is already known to have ended here (``hasEnded(_:)``), is remembered among the winners first, so that the other
     /// calls' ends held with it cannot push it out before the glare's end is applied (``lostGlare``). Only this call's own
     /// glare end counts, under the rule ``superseded`` applies (`busy`, a lower winner): other calls' ends that name a winner
-    /// do not fill the winners' list.
-    private func rememberHeldWinners(_ early: [SignalEvent], of callId: String) {
+    /// do not fill the winners' list. On the lost path the glare's end may be the one the start [carried] (``CallLostError``)
+    /// rather than a held one: it counts the same, so that a winner known to have ended only among the other calls' ends
+    /// (``endedOthers``) is not pushed out by the ends held with the start before that end is applied.
+    private func rememberHeldWinners(_ early: [SignalEvent], of callId: String, carried: CallLostError.End? = nil) {
         var ended: Set<String> = []
         for case .end(let id, _, _) in early { ended.insert(id) }
-        for case .end(let id, let reason, let by?) in early
-        where id == callId && reason == CallReason.busy && (ended.contains(by) || hasEnded(by))
+        var own: [(reason: String, by: String)] = []
+        for case .end(let id, let reason, let by?) in early where id == callId { own.append((reason, by)) }
+        if let carried, let by = carried.supersededBy { own.append((carried.reason, by)) }
+        for (reason, by) in own
+        where reason == CallReason.busy && (ended.contains(by) || hasEnded(by))
             && Array(by.utf8).lexicographicallyPrecedes(Array(callId.utf8)) {
             rememberEnded(by)
         }

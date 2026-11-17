@@ -102,6 +102,27 @@ final class FakeAppVault: CallsAppVault {
         #expect(h.runtime != nil && h.runtime !== first && h.started == 2 && partsMade == 1)
     }
 
+    /// The calls known to have ended (``CallMachine/endedWinners``, ``CallMachine/endedOthers``) are the machine's, and each
+    /// opening has a machine of its own: none of them reaches the next opening, whichever vault it opens (a sign-out to another
+    /// vault closes this one's opening like a lock).
+    @Test func theEndedCallListsDoNotReachTheNextOpening() async {
+        let h = host()
+        h.start()
+        vault.inner.setUnlocked(true)
+        await settle()
+        let first = h.runtime?.controller.machine
+        first?.rememberEndedOther(otherId)
+        first?.rememberEnded(glareId)
+        #expect(first?.hasEnded(otherId) == true && first?.hasEnded(glareId) == true)
+        vault.inner.setUnlocked(false)
+        await settle()
+        vault.inner.setUnlocked(true)
+        await settle()
+        let next = h.runtime?.controller.machine
+        #expect(next != nil && next !== first)
+        #expect(next?.endedOthers.isEmpty == true && next?.endedWinners.isEmpty == true)
+    }
+
     @Test func aLockDropsTheCallLogicAfterACallWasTried() async throws {
         let h = host()
         h.start()
