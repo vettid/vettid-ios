@@ -25,6 +25,7 @@ public final class FinishMoveRunner {
 
     @ObservationIgnored private let hold: Duration
     @ObservationIgnored private let sleep: @Sendable (Duration) async throws -> Void
+    @ObservationIgnored private let refusedBeforeLock: @MainActor () -> UnlockAttempt?
     @ObservationIgnored private let lock: @MainActor () async throws -> Void
     @ObservationIgnored private let unlock: @MainActor (_ pin: String, _ taken: Int?) async throws -> UnlockAttempt
     @ObservationIgnored private let generation: @MainActor () -> Int
@@ -39,11 +40,14 @@ public final class FinishMoveRunner {
 
     /// - Parameters:
     ///   - hold: how long ``finishing`` lasts at most (90 s in the app, as Android's `holdMs`).
+    ///   - refusedBeforeLock: the unlock's answer when it is already known to refuse (no `user_guid`): the run ends with it,
+    ///     as if the unlock had answered, and nothing is locked or sent.
     ///   - lock: `vault.lock`.
     ///   - unlock: the unlock with the PIN and the ``PhoneSecrets/pinGeneration`` it was taken at.
     public init(
         hold: Duration,
         sleep: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) },
+        refusedBeforeLock: @escaping @MainActor () -> UnlockAttempt?,
         lock: @escaping @MainActor () async throws -> Void,
         unlock: @escaping @MainActor (_ pin: String, _ taken: Int?) async throws -> UnlockAttempt,
         generation: @escaping @MainActor () -> Int,
@@ -53,6 +57,7 @@ public final class FinishMoveRunner {
     ) {
         self.hold = hold
         self.sleep = sleep
+        self.refusedBeforeLock = refusedBeforeLock
         self.lock = lock
         self.unlock = unlock
         self.generation = generation
@@ -106,6 +111,12 @@ public final class FinishMoveRunner {
                 running = false
                 current = nil
             }
+        }
+        // An unlock that would refuse whatever the vault says: nothing is locked (the vault stays open) or sent.
+        if let r = refusedBeforeLock() {
+            if id == runID { failure = FinishSetupGate.failure(of: r) }
+            await onOutcome(r)
+            return r
         }
         do {
             try await lock()

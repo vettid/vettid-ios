@@ -25,6 +25,9 @@ final class VaultReleaseUpdateOps: ReleaseUpdateOps {
 
     func ownerCheckDue() -> Bool { ref.manager?.ownerCheckGates() ?? false }
 
+    // With the manager gone the lock itself fails (`session_dropped`), which says so better than `no_user_guid`.
+    func userGuidUsable() -> Bool { ref.manager?.userGuidUsable ?? true }
+
     func lock() async throws { try await manager.lockForUpdate() }
 
     func unlock(

@@ -247,7 +247,7 @@ public final class ReleaseUpdateManager: ReleaseUpdateRepository {
         // The PIN as the keypad took it: a change that moves which PIN the vault expects before an unlock goes out stops it.
         let pin = taken(pin, generation)
         // Checked before the lock too: a PIN taken before a change neither locks the vault nor is sent.
-        if refusedAsTakenBefore(pin) { return true }
+        if refusedAsTakenBefore(pin) || refusedWithoutUserGuid() { return true }
         launch { [self] in
             do {
                 try await ops.lock()
@@ -270,7 +270,7 @@ public final class ReleaseUpdateManager: ReleaseUpdateRepository {
         case .failed:
             launch { [self] in
                 if p.vaultOpen {
-                    if refusedAsTakenBefore(pin) { return }
+                    if refusedAsTakenBefore(pin) || refusedWithoutUserGuid() { return }
                     set { $0.step = .locking; $0.failure = nil; $0.failureCode = nil }
                     do {
                         try await ops.lock()
@@ -373,6 +373,20 @@ public final class ReleaseUpdateManager: ReleaseUpdateRepository {
         guard var p = progress else { return }
         f(&p)
         progress = p
+    }
+
+    /// §6.7.1: without the vault's `user_guid` the unlock refuses, so the vault is not locked first: the update fails as
+    /// the unlock would have failed it (`no_user_guid`), before this attempt's lock and with nothing sent (the vault as the
+    /// step before left it: open, unless a lock that went out and failed left it otherwise).
+    private func refusedWithoutUserGuid() -> Bool {
+        guard !ops.userGuidUsable() else { return false }
+        set {
+            $0.step = .failed
+            $0.failure = .notSupported
+            $0.failureCode = UnlockAttempt.codeNoUserGuid
+            $0.vaultOpen = true
+        }
+        return true
     }
 
     private func failedBeforeMove(_ error: any Error, vaultOpen: Bool) {

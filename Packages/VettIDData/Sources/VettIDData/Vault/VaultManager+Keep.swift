@@ -207,6 +207,8 @@ extension VaultManager {
     static func finishMoveRunner(_ ref: ManagerRef, hold: Duration, sleep: @escaping LockSleep) -> FinishMoveRunner {
         FinishMoveRunner(
             hold: hold, sleep: sleep,
+            // §6.7.1: without the vault's user_guid the unlock refuses, so the vault is not locked first.
+            refusedBeforeLock: { ref.manager?.userGuidUsable == false ? VaultManager.refusedWithoutUserGuid : nil },
             lock: { try await ref.manager?.lock() },
             unlock: { pin, taken in
                 guard let m = ref.manager else { return .failed(.other, code: "session_dropped") }

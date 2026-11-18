@@ -378,8 +378,30 @@ import VettIDDataTesting
         _ = try await m.transferIn(code: try code())
         #expect(try await m.awaitTransferIn() == false)
         #expect(m.record.value.userGuid.isEmpty && m.record.value.finishMovePending && m.phase == .setup(.finishing))
+        let locks = service.requestsSeen.filter { $0 == "vault.lock" }.count
         let r = try await m.finishMove(pin: pin)
         #expect(r == .failed(.notSupported, code: UnlockAttempt.codeNoUserGuid))
+        // §6.7.1: refused before the lock, so the vault is not locked for an unlock that cannot open it.
+        #expect(service.requestsSeen.filter { $0 == "vault.lock" }.count == locks, "\(service.requestsSeen)")
+    }
+
+    /// The same phone's release update: refused before its lock, so no `vault.lock` or `vault.unlock` goes out and the phone
+    /// stays where it was (the real ops' ``ReleaseUpdateOps/userGuidUsable()``, not a fake).
+    @Test func aReleaseUpdateWithoutUserGuidLocksNothing() async throws {
+        defer { phone.close() }
+        service.transferWithoutUserGuid = true
+        _ = try await m.transferIn(code: try code())
+        #expect(try await m.awaitTransferIn() == false)
+        #expect(m.record.value.userGuid.isEmpty && m.phase == .setup(.finishing))
+        let seen = service.requestsSeen.count
+        let rel = { (n: UInt64, status: String) in
+            ReleaseView(number: n, pcr0: String(repeating: "ab", count: 48), status: status, endsAt: nil, notes: "")
+        }
+        #expect(m.releaseUpdate.start(pin: pin, offer: ReleaseUpdateOffer(current: rel(3, "deprecated"), target: rel(4, "active")), generation: nil))
+        await m.releaseUpdate.settle()
+        let sent = service.requestsSeen.dropFirst(seen)
+        #expect(!sent.contains("vault.lock") && !sent.contains("vault.unlock"), "\(Array(sent))")
+        #expect(m.releaseUpdate.progress?.failureCode == UnlockAttempt.codeNoUserGuid && m.phase == .setup(.finishing))
     }
 
     // MARK: - Finish the move
