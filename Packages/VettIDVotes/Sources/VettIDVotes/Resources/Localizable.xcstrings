@@ -1184,7 +1184,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Decided only if every vote for a choice is for the same one. Abstaining doesn't count."
+            "value": "Decided only if all the votes, not counting abstentions, are for one choice."
           }
         }
       }
@@ -1217,7 +1217,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Decided by more than half of the votes for a choice. Abstaining doesn't count."
+            "value": "Decided by more than half of the votes, not counting abstentions."
           }
         }
       }
@@ -1261,7 +1261,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Decided by at least %@ of the votes for a choice. Abstaining doesn't count."
+            "value": "Decided by at least %@ of the votes, not counting abstentions."
           }
         }
       }

@@ -152,15 +152,15 @@ import Testing
         Row("vote_release_pin", VoteStrings.voteReleasePin, "Vault PIN"),
         Row("vote_release_not_saved", VoteStrings.voteReleaseNotSaved, "Save the proof first: the record can be released only after it was saved."),
         Row("vote_released", VoteStrings.voteReleased, "The vote record was released."),
-        // BALLOT-PROTOCOL 0.14.0 §3.5 and §7.1: the owner's a on #14031 (#14043). The `cast` lines are the draft's own words
-        // until the owner says otherwise (#14049).
-        Row("vote_rule_majority_cast", VoteStrings.voteRuleMajorityCast, "Decided by more than half of the votes for a choice. Abstaining doesn't count."),
+        // BALLOT-PROTOCOL 0.14.0 §3.5 and §7.1: the owner's a on #14031 (#14043), with the `cast` lines reworded (#14071)
+        // and the 1/1 lines (#14068).
+        Row("vote_rule_majority_cast", VoteStrings.voteRuleMajorityCast, "Decided by more than half of the votes, not counting abstentions."),
         Row("vote_rule_majority_voted", VoteStrings.voteRuleMajorityVoted, "Decided by more than half of all ballots. Abstaining counts against."),
         Row("vote_rule_majority_elig", VoteStrings.voteRuleMajorityElig, "Decided by more than half of all eligible members. Not voting counts against."),
-        Row("vote_rule_threshold_cast", VoteStrings.voteRuleThresholdCast("2/3"), "Decided by at least 2/3 of the votes for a choice. Abstaining doesn't count."),
+        Row("vote_rule_threshold_cast", VoteStrings.voteRuleThresholdCast("2/3"), "Decided by at least 2/3 of the votes, not counting abstentions."),
         Row("vote_rule_threshold_voted", VoteStrings.voteRuleThresholdVoted("2/3"), "Decided by at least 2/3 of all ballots. Abstaining counts against."),
         Row("vote_rule_threshold_elig", VoteStrings.voteRuleThresholdElig("2/3"), "Decided by at least 2/3 of all eligible members. Not voting counts against."),
-        Row("vote_rule_all_cast", VoteStrings.voteRuleAllCast, "Decided only if every vote for a choice is for the same one. Abstaining doesn't count."),
+        Row("vote_rule_all_cast", VoteStrings.voteRuleAllCast, "Decided only if all the votes, not counting abstentions, are for one choice."),
         Row("vote_rule_all_voted", VoteStrings.voteRuleAllVoted, "Decided only if all ballots are for one choice. Abstaining counts against."),
         Row("vote_rule_all_elig", VoteStrings.voteRuleAllElig, "Decided only if all eligible members vote for one choice. Not voting counts against."),
         Row("vote_rule_plurality", VoteStrings.voteRulePlurality, "Decided by the most votes. A tie at the top decides nothing."),

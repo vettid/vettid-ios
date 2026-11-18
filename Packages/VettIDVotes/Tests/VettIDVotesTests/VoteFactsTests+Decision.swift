@@ -17,13 +17,13 @@ extension VoteFactsTests {
     }
 
     @Test func theRuleIsShownInTheOwnersWordsForEachRuleAndBase() {
-        #expect(rule(.majority, .cast) == "Decided by more than half of the votes for a choice. Abstaining doesn't count.")
+        #expect(rule(.majority, .cast) == "Decided by more than half of the votes, not counting abstentions.")
         #expect(rule(.majority, .voted) == "Decided by more than half of all ballots. Abstaining counts against.")
         #expect(rule(.majority, .elig) == "Decided by more than half of all eligible members. Not voting counts against.")
-        #expect(rule(.threshold(num: 2, den: 3), .cast) == "Decided by at least 2/3 of the votes for a choice. Abstaining doesn't count.")
+        #expect(rule(.threshold(num: 2, den: 3), .cast) == "Decided by at least 2/3 of the votes, not counting abstentions.")
         #expect(rule(.threshold(num: 3, den: 4), .voted) == "Decided by at least 3/4 of all ballots. Abstaining counts against.")
         #expect(rule(.threshold(num: 9, den: 10), .elig) == "Decided by at least 9/10 of all eligible members. Not voting counts against.")
-        #expect(rule(.threshold(num: 1, den: 1), .cast) == "Decided only if every vote for a choice is for the same one. Abstaining doesn't count.")
+        #expect(rule(.threshold(num: 1, den: 1), .cast) == "Decided only if all the votes, not counting abstentions, are for one choice.")
         #expect(rule(.threshold(num: 1, den: 1), .voted) == "Decided only if all ballots are for one choice. Abstaining counts against.")
         #expect(rule(.threshold(num: 1, den: 1), .elig) == "Decided only if all eligible members vote for one choice. Not voting counts against.")
         #expect(rule(.plurality, nil) == "Decided by the most votes. A tie at the top decides nothing.")

@@ -169,7 +169,7 @@ public struct VoteFacts: Equatable, Sendable {
         return lines
     }
 
-    /// How the vote is decided (#14031: owner a, #14043; the 1/1 lines wait for #14059): the rule and, for a majority or a threshold,
+    /// How the vote is decided, in the owner's words (#14031, #14043, #14068, #14071): the rule and, for a majority or a threshold,
     /// what it is of. A threshold of 1/1 says "all". Nil for a decision BALLOT-PROTOCOL §3.5 does not allow (the vault
     /// refuses those on arrival), so no wrong rule is ever shown.
     static func rule(_ d: VoteDecision) -> String? {
