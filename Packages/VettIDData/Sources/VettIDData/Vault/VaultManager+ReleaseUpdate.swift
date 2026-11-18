@@ -124,8 +124,15 @@ extension VaultManager {
     /// Nothing of the vault's features is read, shown or acted on: the owner check is past its deadline (§3.6.3), or the vault
     /// must first move to the current release (``ReleaseUpdateManager/required``; owner decision 2026-11-17).
     func featuresGated() -> Bool {
-        ownerChecks.ownerCheck?.gated(config.now()) == true || releaseUpdate.holdsFeatures
+        ownerCheckGated || releaseUpdate.holdsFeatures
     }
+
+    /// The owner check is past its deadline at this manager's clock, or held (§3.6.3).
+    private var ownerCheckGated: Bool { ownerChecks.ownerCheck?.gated(config.now()) == true }
+
+    /// The owner check comes first: it is due or held at this manager's clock, or its screen follows a cancelled recovery.
+    /// No call rings meanwhile (owner decision 2026-11-18); another device may still answer it.
+    public var ownerCheckDue: Bool { ownerChecks.checkAfterCancel || ownerCheckGated }
 
     /// While the features are held (the vault behind, or its release not yet checked after a failed read) no list is read
     /// (``refreshListsQuietly(onAnswered:)``) and none takes the events that only change it (``onEvent(_:)``). When they no
@@ -139,6 +146,8 @@ extension VaultManager {
 
     private static func followBehind(_ updates: ReleaseUpdateManager, _ ref: ManagerRef) {
         updates.onHoldsChange = { holds in
+            // The hold begins: the site work under way stops (nothing more is read from the votes site).
+            if holds { ref.manager?.votes.siteRunner?.hold() }
             guard !holds, let m = ref.manager, m.phase == .unlocked, m.deletion == nil else { return }
             m.refreshListsQuietly()
         }

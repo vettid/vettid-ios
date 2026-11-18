@@ -284,11 +284,11 @@ public final class VotesManager: VotesRepository {
     public func forgetStored() { attempts.forgetAll() }
 
     /// `vote.event` (§10.19.8, the app only): a change of any vote re-reads the list; a due check (`check_due`) is run
-    /// after it. The event carries no choice.
+    /// after it, not while the site work is held (the run at the hold's end does it). The event carries no choice.
     public func onEvent(_ m: VaultMessage) {
         guard m.type == VaultApi.typeVoteEvent, !gated() else { return }
         refreshQuietly()
-        if VaultJSON.string(m.object, "event") == "check_due", let runner = siteRunner {
+        if VaultJSON.string(m.object, "event") == "check_due", !held(), let runner = siteRunner {
             let generation = runner.haltGeneration
             Task { [weak self] in
                 try? await self?.read(quietly: true)

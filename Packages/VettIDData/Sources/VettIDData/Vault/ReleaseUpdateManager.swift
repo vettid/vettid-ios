@@ -44,6 +44,8 @@ public final class ReleaseUpdateManager: ReleaseUpdateRepository {
     @ObservationIgnored private var generation = 0
     /// The next read while a check failed (``retryChecking(_:)``).
     @ObservationIgnored private var retry: Task<Void, Never>?
+    /// Names each retry, so that one ending clears only its own handle (not a later one of the same check).
+    @ObservationIgnored private var retryID = 0
     /// Between reads while a check fails: 2, 5, 15 and 30 seconds, then every minute.
     nonisolated static let checkRetries: [Int64] = [2, 5, 15, 30, 60]
 
@@ -157,6 +159,8 @@ public final class ReleaseUpdateManager: ReleaseUpdateRepository {
         guard retry == nil else { return }
         let waits = Self.checkRetries
         let sleep = self.sleep
+        retryID += 1
+        let id = retryID
         retry = Task { [weak self] in
             var attempt = 0
             while let self, self.checking, self.generation == begun, !Task.isCancelled {
@@ -166,8 +170,8 @@ public final class ReleaseUpdateManager: ReleaseUpdateRepository {
                 attempt += 1
                 await self.refreshOfferOnce(begun)
             }
-            // Only this check's own handle: a newer one's stays.
-            if let self, self.generation == begun { self.retry = nil }
+            // Only this retry's own handle: a newer one's stays.
+            if let self, self.retryID == id { self.retry = nil }
         }
     }
 

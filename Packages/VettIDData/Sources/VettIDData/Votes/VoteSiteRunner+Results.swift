@@ -71,7 +71,8 @@ extension VoteSiteRunner {
     /// is fetched again next time, since a lost submission may be the cause). One cut off by a lock after it downloaded
     /// `rows.json` still counts toward the daily limit, with only its time and hashes. Never after a wipe (the epoch).
     private func attempt(_ key: VoteKey, quietly: Bool, due: Bool) async throws -> ResultsOutcome {
-        guard let votes else { throw CancellationError() }
+        // Held meanwhile (a lock cancels it; the release gate or the owner check holds it): nothing is read or sent.
+        guard let votes, !votes.held() else { throw CancellationError() }
         let checkState = votes.votes.first { $0.key == key }?.check?.state
         let gaveUp = checkState == .gaveUp
         // Looked at again in the line of the attempts, so that two passes that both found it due (a `check_due` event and

@@ -7,10 +7,19 @@ import VettIDCrypto
 /// `features/vote/sync.go`) is not passed on.
 struct VoteSiteReader: Sendable {
     let site: any VoteSite
+    /// False while the vault's features are held (a lock, a hold, the owner check past its deadline, the release gate or
+    /// its check): nothing more is read from the site, so it does not learn which votes the member follows meanwhile.
+    var live: @MainActor @Sendable () -> Bool = { true }
 
-    /// A read of the site; cancelled work stops here.
-    func get(_ path: String, _ max: Int) async throws -> SiteAnswer {
+    /// Cancelled work, or work the vault's state no longer allows, stops here: before every read of the site.
+    func mayRead() async throws {
         try Task.checkCancellation()
+        guard await live() else { throw CancellationError() }
+    }
+
+    /// A read of the site; cancelled or held work stops here.
+    func get(_ path: String, _ max: Int) async throws -> SiteAnswer {
+        try await mayRead()
         let answer = await site.get(path, maxBytes: max)
         try Task.checkCancellation()
         return answer
@@ -171,7 +180,7 @@ struct VoteSiteReader: Sendable {
     /// `rows.json` up to [cap] bytes, and never over ``VoteSiteLimits/rowsMax``. [received] is told the bytes as they arrive,
     /// also of a download that then drops (``VoteSite/getCounted(_:maxBytes:received:)``).
     func fetchRows(_ proposalID: String, cap: Int, received: @escaping @Sendable (Int) -> Void = { _ in }) async throws -> RowsFetch {
-        try Task.checkCancellation()
+        try await mayRead()
         let answer = await site.getCounted("p/\(proposalID)/rows.json", maxBytes: min(VoteSiteLimits.rowsMax, cap), received: received)
         try Task.checkCancellation()
         switch answer {

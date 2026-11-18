@@ -96,6 +96,8 @@ package final class CallsController {
     @ObservationIgnored private var microphoneAsking: MicrophoneAction?
     @ObservationIgnored private var probeGeneration = 0
     @ObservationIgnored private var longCall: Task<Void, Never>?
+    /// Watches a call ringing here for the owner check coming due or the update screen (``ringWatchEvery``).
+    @ObservationIgnored private var ringWatch: Task<Void, Never>?
     @ObservationIgnored private var microphoneAsk: Task<Void, Never>?
 
     /// How many call-list entries one read asks for (the vault keeps the latest 200).
@@ -112,6 +114,9 @@ package final class CallsController {
     /// already for each read.
     private static let probeRetries: [Duration] = [.milliseconds(500), .milliseconds(1500)]
     private static let pollEvery: Duration = .milliseconds(50)
+    /// How often a call ringing here looks whether the owner check came due (or the update screen came up) meanwhile. A look
+    /// each time rather than a timer to the deadline: it holds across the phone's sleep and a change of its clock.
+    package static let ringWatchEvery: Duration = .milliseconds(500)
     private static let unsupported = "unsupported_type"
 
     /// [answering]: what answering the ringing call does (the CallKit coordinator's `answer()` in the app); the machine's own
@@ -171,6 +176,7 @@ package final class CallsController {
         tasks.removeAll()
         probeTask?.cancel()
         longCall?.cancel()
+        ringWatch?.cancel()
         microphoneAsk?.cancel()
         machine.stop()
     }
@@ -434,6 +440,7 @@ package final class CallsController {
 
     private func around(_ t: CallTransition) {
         dropStaleAnswerPrompt(t)
+        watchRing(t)
         guard case .live(let l) = t.state, l.phase == .active else {
             longCall?.cancel()
             longCall = nil
@@ -445,6 +452,27 @@ package final class CallsController {
             guard let self else { return }
             do { try await clock.sleep(for: Self.maxCall) } catch { return }
             machine.hangUp(seq: seq)
+        }
+    }
+
+    /// A call ringing here (never one answered) stops ringing when the owner check comes due or is held, or the update screen
+    /// comes up (owner decision 2026-11-18): as a ring that ran out, so nothing is sent and another device may still answer.
+    private func watchRing(_ t: CallTransition) {
+        guard case .live(let l) = t.state, l.phase == .incoming else {
+            ringWatch?.cancel()
+            ringWatch = nil
+            return
+        }
+        guard ringWatch == nil else { return }
+        let seq = t.seq
+        ringWatch = Task { [weak self] in
+            while let self, !Task.isCancelled {
+                if vault.ownerCheckShowing || vault.updateShowing {
+                    machine.ringStopped(seq: seq)
+                    return
+                }
+                do { try await clock.sleep(for: Self.ringWatchEvery) } catch { return }
+            }
         }
     }
 
