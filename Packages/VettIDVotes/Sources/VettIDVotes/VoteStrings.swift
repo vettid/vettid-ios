@@ -543,5 +543,6 @@ public enum VoteStrings {
             bundle: .module
         )
     }
+
 }
 // swiftlint:enable line_length

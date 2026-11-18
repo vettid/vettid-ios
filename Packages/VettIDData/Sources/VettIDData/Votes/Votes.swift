@@ -143,11 +143,18 @@ public struct VoteDetail: Equatable, Sendable, CustomStringConvertible, CustomDe
     public var counts: VoteCounts?
     /// The ballot of the service while a restore asks "Is this your vote?": its choice id (0.81.3 `service_ballot`).
     public var serviceBallotChoiceID: String?
+    /// How the vote is decided (BALLOT-PROTOCOL 0.14.0 §3.5), as the vault holds the proposal (VAULT-MESSAGING 0.90.18
+    /// §10.19.8: from `vote.get`, never from the site); nil when the vault sent none the app can read.
+    public var decision: VoteDecision?
+    /// The outcome (BALLOT-PROTOCOL §7.1), with the tally and counts: only from results the vault's check judged
+    /// `verified` or `unconfirmed`, which it recomputed.
+    public var outcome: VoteOutcome?
 
     public init(
         summary: VoteSummary, text: String = "", choices: [VoteChoice] = [], quorumText: String? = nil, minBallots: Int64? = nil,
         binding: Bool? = nil, recordTag: String? = nil, choiceID: String? = nil, extensions: Int = 0,
-        tally: [String: Int64]? = nil, counts: VoteCounts? = nil, serviceBallotChoiceID: String? = nil
+        tally: [String: Int64]? = nil, counts: VoteCounts? = nil, serviceBallotChoiceID: String? = nil,
+        decision: VoteDecision? = nil, outcome: VoteOutcome? = nil
     ) {
         self.summary = summary
         self.text = text
@@ -161,6 +168,8 @@ public struct VoteDetail: Equatable, Sendable, CustomStringConvertible, CustomDe
         self.tally = tally
         self.counts = counts
         self.serviceBallotChoiceID = serviceBallotChoiceID
+        self.decision = decision
+        self.outcome = outcome
     }
 
     public var description: String { "VoteDetail(\(summary.connectionID)/\(summary.proposalID))" }
@@ -177,6 +186,56 @@ public struct VoteChoice: Equatable, Sendable {
     public init(id: String, label: String) {
         self.id = id
         self.label = label
+    }
+}
+
+/// How a vote is decided (BALLOT-PROTOCOL 0.14.0 §3.5): a rule, and for a majority or a threshold its base.
+public struct VoteDecision: Equatable, Sendable {
+    public enum Rule: Equatable, Sendable {
+        /// A real choice with more than half of the base.
+        case majority
+        /// A real choice with at least `num/den` of the base.
+        case threshold(num: Int64, den: Int64)
+        /// The real choice with the most ballots; a top count held by several is a tie.
+        case plurality
+    }
+
+    /// What a majority or a threshold is of.
+    public enum Base: String, Equatable, Sendable {
+        /// The ballots for a real choice (abstain left out).
+        case cast
+        /// Every ballot, abstain included.
+        case voted
+        /// Every eligible member.
+        case elig
+    }
+
+    public let rule: Rule
+    /// Nil for ``Rule/plurality`` only.
+    public let base: Base?
+
+    public init(rule: Rule, base: Base?) {
+        self.rule = rule
+        self.base = base
+    }
+}
+
+/// The results' outcome (BALLOT-PROTOCOL 0.14.0 §7.1).
+public struct VoteOutcome: Equatable, Sendable {
+    public enum Status: String, Equatable, Sendable {
+        case decided
+        case notDecided = "not_decided"
+        case tied
+        case noQuorum = "no_quorum"
+    }
+
+    public let status: Status
+    /// The decided choice's id, for ``Status/decided`` only.
+    public let choice: String?
+
+    public init(status: Status, choice: String?) {
+        self.status = status
+        self.choice = choice
     }
 }
 
@@ -326,8 +385,38 @@ public enum VoteWire {
             extensions: VaultJSON.int(o, "extensions").map { Int(clamping: $0) } ?? 0,
             tally: tally,
             counts: counts,
-            serviceBallotChoiceID: obj(o, "service_ballot").flatMap { s($0, "choice_id") }
+            serviceBallotChoiceID: obj(o, "service_ballot").flatMap { s($0, "choice_id") },
+            decision: obj(o, "decision").flatMap(decision),
+            outcome: obj(o, "outcome").flatMap(outcome)
         )
+    }
+
+    /// `decision` as the vault sends it (it refused any other on arrival, VAULT-MESSAGING §10.19.4 step 2): a rule with
+    /// its base, or nil when it isn't one of BALLOT-PROTOCOL §3.5's (then no rule line shows, rather than a wrong one).
+    static func decision(_ d: JsonObject) -> VoteDecision? {
+        let base = s(d, "base").flatMap(VoteDecision.Base.init(rawValue:))
+        switch s(d, "rule") {
+        case "majority":
+            return base.map { VoteDecision(rule: .majority, base: $0) }
+        case "threshold":
+            guard let t = obj(d, "threshold"), let num = VaultJSON.int(t, "num"), let den = VaultJSON.int(t, "den"),
+                  den >= 1, den <= 10, num >= 1, num <= den, 2 * num > den, let base
+            else { return nil }
+            return VoteDecision(rule: .threshold(num: num, den: den), base: base)
+        case "plurality":
+            return VoteDecision(rule: .plurality, base: nil)
+        default:
+            return nil
+        }
+    }
+
+    /// `outcome` as the vault sends it (recomputed from the signed tally, §10.19.6 step 2); nil when it isn't one of
+    /// BALLOT-PROTOCOL §7.1's, or `decided` without a choice.
+    static func outcome(_ o: JsonObject) -> VoteOutcome? {
+        guard let status = s(o, "status").flatMap(VoteOutcome.Status.init(rawValue:)) else { return nil }
+        let choice = s(o, "choice")
+        if status == .decided, choice == nil { return nil }
+        return VoteOutcome(status: status, choice: status == .decided ? choice : nil)
     }
 
     /// The label as sent, in the order sent; cleaned like any received text. A label that shows nothing is its id. The
