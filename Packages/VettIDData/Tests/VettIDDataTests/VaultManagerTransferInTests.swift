@@ -378,8 +378,11 @@ import VettIDDataTesting
         _ = try await m.transferIn(code: try code())
         #expect(try await m.awaitTransferIn() == false)
         #expect(m.record.value.userGuid.isEmpty && m.record.value.finishMovePending && m.phase == .setup(.finishing))
+        let locks = service.requestsSeen.filter { $0 == "vault.lock" }.count
         let r = try await m.finishMove(pin: pin)
         #expect(r == .failed(.notSupported, code: UnlockAttempt.codeNoUserGuid))
+        // §6.7.1: refused before the lock, so the vault is not locked for an unlock that cannot open it.
+        #expect(service.requestsSeen.filter { $0 == "vault.lock" }.count == locks, "\(service.requestsSeen)")
     }
 
     // MARK: - Finish the move

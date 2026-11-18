@@ -93,6 +93,10 @@ public protocol ReleaseUpdateOps: AnyObject {
     /// The owner check is due or held (§3.6.5): the check comes first, the update never bypasses it.
     func ownerCheckDue() -> Bool
 
+    /// This phone holds the vault's `user_guid` (§6.7.1): without it the unlock refuses (`no_user_guid`), so the update
+    /// does not lock the vault first.
+    func userGuidUsable() -> Bool
+
     /// Locks the vault and waits (bounded) until the member API no longer sees it unlocked.
     func lock() async throws
 

@@ -66,6 +66,8 @@ import Testing
         }
 
         func ownerCheckDue() -> Bool { due }
+        var guidUsable = true
+        func userGuidUsable() -> Bool { guidUsable }
 
         func lock() async throws {
             log.append("lock")

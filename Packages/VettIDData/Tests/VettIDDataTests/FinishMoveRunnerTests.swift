@@ -22,9 +22,10 @@ import VettIDDataTesting
         var takens: [Int?] = []
         var runner: FinishMoveRunner!
 
-        init(unlock: (@MainActor (Fixture) async throws -> UnlockAttempt)? = nil) {
+        init(refused: UnlockAttempt? = nil, unlock: (@MainActor (Fixture) async throws -> UnlockAttempt)? = nil) {
             runner = FinishMoveRunner(
                 hold: .seconds(90), sleep: clock.sleep,
+                refusedBeforeLock: { refused },
                 lock: { [unowned self] in
                     locked += 1
                     generation += 1
@@ -52,6 +53,18 @@ import VettIDDataTesting
 
     func start(_ f: Fixture, _ pin: String = "975310", taken: Int? = nil) -> Task<UnlockAttempt, any Error> {
         Task { @MainActor in try await f.runner.run(pin: pin, taken: taken) }
+    }
+
+    /// (§6.7.1) An unlock known to refuse (no `user_guid` on this phone) ends the run with its answer: nothing is locked or
+    /// sent, so the open vault stays open.
+    @Test func anUnlockKnownToRefuseLocksNothing() async throws {
+        let refused = UnlockAttempt.failed(.notSupported, code: UnlockAttempt.codeNoUserGuid)
+        let f = Fixture(refused: refused)
+        // Answered, so that a run that went on to the lock would end (and fail here) rather than wait.
+        f.answer.complete(.success)
+        #expect(try await f.runner.run(pin: "975310") == refused)
+        #expect(f.locked == 0 && f.unlocks == 0, "neither locked nor unlocked")
+        #expect(f.outcomes == [refused] && f.runner.failure == .notSupported && !f.runner.finishing && !f.rotateOffered)
     }
 
     @Test func aScreenThatGoesAwayStillGetsTheVaultOpened() async throws {

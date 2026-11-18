@@ -59,6 +59,16 @@ struct UnlockStepOutcome: Sendable {
 // check before the PIN (§11.10.6) and what the result says (§11.8 backoff, §11.10.4 release moves, §11.11.4 recovery,
 // §13.2 rollback). Mirrors vettid-android `VaultManager.preflight`, `unlockOnce`, `unlockStep` and `unlockWithSecret`.
 extension VaultManager {
+    /// This phone can open the vault: it holds the vault's `user_guid` (§6.7.1; §11.4 needs it). The unlock refuses without
+    /// it (`no_user_guid`), and so do the flows that lock first (Finish the move, the release update), before their lock:
+    /// they would lock a vault this phone cannot open again.
+    var userGuidUsable: Bool { !record.value.userGuid.isEmpty }
+
+    /// ``userGuidUsable``'s refusal, as the unlock answers it.
+    static let refusedWithoutUserGuid = UnlockAttempt.failed(.notSupported, code: UnlockAttempt.codeNoUserGuid)
+}
+
+extension VaultManager {
     nonisolated static let updateMoved = "moved"
     nonisolated static let updateAbandoned = "abandoned"
     nonisolated static let updateRefused = "refused"
@@ -163,7 +173,7 @@ extension VaultManager {
             return UnlockStepOutcome(.failed(f?.kind ?? .other, code: f?.code))
         }
         // §6.7.1 (0.17.0): a phone a transfer set up from an older vault release has no user_guid (§11.4 needs it).
-        guard !record.value.userGuid.isEmpty else { return UnlockStepOutcome(.failed(.notSupported, code: UnlockAttempt.codeNoUserGuid)) }
+        guard userGuidUsable else { return UnlockStepOutcome(.failed(.notSupported, code: UnlockAttempt.codeNoUserGuid)) }
         // §11.14.9 step 5: while a PIN change is unresolved, the previous PIN with the current record, then the new one.
         refreshPinStep()
         let step = route.path == .current && route.pinSteps ? unlockPinStep : .pin

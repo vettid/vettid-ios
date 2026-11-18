@@ -25,6 +25,8 @@ final class VaultReleaseUpdateOps: ReleaseUpdateOps {
 
     func ownerCheckDue() -> Bool { ref.manager?.ownerCheckGates() ?? false }
 
+    func userGuidUsable() -> Bool { ref.manager?.userGuidUsable ?? false }
+
     func lock() async throws { try await manager.lockForUpdate() }
 
     func unlock(
