@@ -142,10 +142,23 @@ extension VaultManager {
             guard !holds, let m = ref.manager, m.phase == .unlocked, m.deletion == nil else { return }
             m.refreshListsQuietly()
         }
+        // A check that passed at once: the site's work, held while it went on, starts once the opening's read is done (unless
+        // that read started it, or a lock or a newer read came meanwhile).
+        updates.onCheckEnded = {
+            guard let m = ref.manager else { return }
+            let reads = m.listsReads
+            Task { @MainActor [weak m] in
+                await m?.listsRead?.value
+                guard let m, m.listsReads == reads, m.phase == .unlocked, m.deletion == nil,
+                      !m.votes.held(), m.votes.siteRunner?.running != true
+                else { return }
+                m.votes.startSync()
+            }
+        }
     }
 
     /// The vault's release could not be checked against the manifest (``releaseOffer()``).
-    static let codeReleaseUnchecked = "release_unchecked"
+    static let codeReleaseUnchecked = ReleaseUpdateManager.codeReleaseUnchecked
 
     /// The vault's release as the phone recorded it, when the manifest does not list it.
     static func unlisted(_ st: AltState) -> ReleaseView {

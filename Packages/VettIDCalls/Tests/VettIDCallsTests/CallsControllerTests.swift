@@ -460,4 +460,34 @@ import VettIDCrypto
         await settle()
         #expect(c.state == .idle)
     }
+
+    /// Owner decision 2026-11-18: while the daily owner check is due or held (or its screen covers the app), no call rings on
+    /// this phone, though the probe said the vault has calls; another device may still answer. Once it is done, one rings.
+    @Test func noOfferRingsWhileTheOwnerCheckIsDue() async {
+        vault.gatewayFake.incomingResult = { _ in try self.incoming() }
+        let c = controller(FakeMicrophone(.granted))
+        await unlock()
+        vault.ownerCheckShowing = true
+        vault.gatewayFake.send(offerEvent())
+        await settle()
+        #expect(c.state == .idle)
+        vault.ownerCheckShowing = false
+        vault.gatewayFake.send(offerEvent())
+        await settle()
+        #expect(c.state != .idle, "rings once the check is done")
+    }
+
+    /// An offer that waits for an unlock still in progress: the unlock completes with the daily check due, and it does not
+    /// ring (looked at again after the wait).
+    @Test func anOfferWaitingForTheUnlockDoesNotRingWhenTheCheckIsDue() async {
+        vault.gatewayFake.incomingResult = { _ in try self.incoming() }
+        let c = controller(FakeMicrophone(.granted))
+        await settle()
+        vault.gatewayFake.send(offerEvent())
+        await clock.advance(by: 500)
+        vault.ownerCheckShowing = true
+        await unlock()
+        await clock.advance(by: 3000)
+        #expect(c.state == .idle)
+    }
 }

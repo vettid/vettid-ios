@@ -73,6 +73,7 @@ final class FakeCallVault: CallVault {
     let gatewayFake = ControllerGateway()
     var gateway: any CallGateway { gatewayFake }
     var updateShowing = false
+    var ownerCheckShowing = false
     var identities = ["conn-1": "aaaa bbbb"]
     var firstNames = ["conn-1": "Sam"]
     private(set) var unlocked = false

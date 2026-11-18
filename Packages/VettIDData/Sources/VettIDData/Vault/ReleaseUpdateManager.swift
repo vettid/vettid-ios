@@ -36,6 +36,8 @@ public final class ReleaseUpdateManager: ReleaseUpdateRepository {
     /// Told when ``holdsFeatures`` changes (not by ``clear()`` or ``vaultClosed()``): the vault manager reads the lists when
     /// it ends with the vault open.
     @ObservationIgnored public var onHoldsChange: (@MainActor (Bool) -> Void)?
+    /// Told when a check that never failed ends with a read (one that failed is followed by ``onHoldsChange``).
+    @ObservationIgnored public var onCheckEnded: (@MainActor () -> Void)?
     @ObservationIgnored private var lastHolds = false
     /// Counts the openings and the clears: a manifest read begun before the latest of them neither ends its check nor sets
     /// an offer.
@@ -74,7 +76,8 @@ public final class ReleaseUpdateManager: ReleaseUpdateRepository {
         retry = nil
         checking = true
         checkFailure = nil
-        noteBehind()
+        // Not told: the opening reads its lists itself (``VaultManager/onOpened()``); a lift told here would read them twice.
+        lastHolds = holdsFeatures
     }
 
     /// The vault is no longer open (a lock, a sign-out): the check ends and is not read again; the next opening checks anew.
@@ -111,9 +114,11 @@ public final class ReleaseUpdateManager: ReleaseUpdateRepository {
         let begun = generation
         let read: ReleaseUpdateOffer??
         var failure: FailureKind = .network
-        do { read = .some(try await ops.offer()) } catch {
+        var error: (any Error)?
+        do { read = .some(try await ops.offer()) } catch let e {
             read = nil
-            failure = (error as? VaultFailure)?.kind ?? .network
+            error = e
+            failure = (e as? VaultFailure)?.kind ?? .network
         }
         // Begun before the latest opening or clear: that one's own read decides.
         guard begun == generation else { return }
@@ -124,14 +129,27 @@ public final class ReleaseUpdateManager: ReleaseUpdateRepository {
                 checkFailure = failure
                 noteBehind()
                 retryChecking(begun)
+            } else if let error, Self.unverified(error) {
+                // A manifest that no longer verifies, or no longer checks the vault's release, after this opening's check
+                // passed: held as the first check is (fail closed), and read again. A read that could not reach the
+                // manifest keeps the last verified answer.
+                checking = true
+                checkFailure = failure
+                noteBehind()
+                retryChecking(begun)
             }
             return
         }
+        let ended = checking && checkFailure == nil
         offer = read
         offerKnown = true
         checking = false
         checkFailure = nil
+        // The check is over: so are its retries (a later failure that holds again starts its own).
+        retry?.cancel()
+        retry = nil
         noteBehind()
+        if ended { onCheckEnded?() }
     }
 
     /// The check's read failed: read again after the next wait, unless an opening or a clear came meanwhile.
@@ -143,7 +161,8 @@ public final class ReleaseUpdateManager: ReleaseUpdateRepository {
             var attempt = 0
             while let self, self.checking, self.generation == begun, !Task.isCancelled {
                 do { try await sleep(.seconds(waits[min(attempt, waits.count - 1)])) } catch { return }
-                guard self.checking, self.generation == begun else { return }
+                // Ended meanwhile (Try again, a foreground read): out of the loop, so that the handle is cleared below.
+                guard self.checking, self.generation == begun else { break }
                 attempt += 1
                 await self.refreshOfferOnce(begun)
             }
@@ -152,12 +171,32 @@ public final class ReleaseUpdateManager: ReleaseUpdateRepository {
         }
     }
 
+    /// Every failure but one that could not reach the manifest (``unreachable``): a manifest that did not verify (its
+    /// signature, key or serial), one that cannot check the vault's release (not recorded, or listed under another number
+    /// with nothing newer), or anything unexpected. As vettid-android's `ReleaseCheckFailure`.
+    nonisolated static func unverified(_ error: any Error) -> Bool {
+        if error is CancellationError { return false }
+        guard let f = error as? VaultFailure else { return true }
+        return !unreachable.contains(f.kind)
+    }
+
+    /// The manifest, or the vault, could not be reached: the last verified answer stands.
+    nonisolated static let unreachable: Set<FailureKind> = [
+        .network, .offline, .noResponse, .manifestUnavailable, .vaultUnavailable, .servicePaused, .rateLimited,
+        // No answer just after the clock went back (``VaultManager`` names it so): still no answer.
+        .clockOff,
+    ]
+
+    /// The vault's release could not be checked against the manifest (``VaultManager/releaseOffer()``).
+    public nonisolated static let codeReleaseUnchecked = "release_unchecked"
+
     /// One read of the check's retry.
     private func refreshOfferOnce(_ begun: Int) async {
         let read: ReleaseUpdateOffer?
         // (Not `try?`: a read that answered "nothing newer" is not a failed one.)
         do { read = try await ops.offer() } catch {
-            if begun == generation { checkFailure = (error as? VaultFailure)?.kind ?? .network }
+            // Only while this check goes on: a Try again that answered meanwhile ended it.
+            if begun == generation, checking { checkFailure = (error as? VaultFailure)?.kind ?? .network }
             return
         }
         guard begun == generation else { return }

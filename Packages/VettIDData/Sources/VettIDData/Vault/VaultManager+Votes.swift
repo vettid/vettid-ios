@@ -15,6 +15,9 @@ extension VaultManager {
             ops: { try await memberApi(ref) }, quietOps: { try quietApi(ref) },
             // §3.6.3: a held vault answers `owner_check_required`; nothing is read until the check.
             gated: { ref.manager?.featuresGated() ?? false },
+            // While the vault's release is checked after an opening (owner decision 2026-11-17), no run with the public site
+            // starts: it may be behind. It starts when the check ends (``followBehind``).
+            siteHeld: { ref.manager?.releaseUpdate.checking ?? false },
             windowUntil: { ref.manager?.unlockWindow },
             openWindow: { password in try await ref.manager?.openUnlockWindow(password: password) },
             closeWindow: { try await ref.manager?.closeUnlockWindow() },

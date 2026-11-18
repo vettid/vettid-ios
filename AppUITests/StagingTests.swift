@@ -158,25 +158,12 @@ final class StagingTests: VaultUITestCase {
 
         let app = launch()
         guard lockedAtStart(app, pin: pin, password: password) else { return }
-        guard shown(app)["release_offer"] != nil else { throw XCTSkip("The unlock screen offers no release update.") }
-        snap(app, "1-unlock-offer")
-        guard openGate(app, pin: pin, password: password) else { return }
-        snap(app, "2-gate")
-        let screen = shown(app)
-        for id in ["release_required_account", "release_required_help", "release_required_delete", "release_offer"]
-        where screen[id] == nil { return fail(app, "The gate has no \(id).") }
-        if screen["app_shell"] != nil { return fail(app, "The open app shows beside the gate.") }
-        if screen["top_bar_back"] != nil || screen["form_secondary"] != nil { return fail(app, "The gate has a way back.") }
-
-        // Help and Delete vault open over the gate and go back to it (Delete vault is never confirmed).
-        for (button, page, name) in [("release_required_help", "help_privacy", "3-help"),
-                                     ("release_required_delete", "delete_vault_screen", "4-delete")] {
-            tap(app.buttons[button])
-            expect(app, page, timeout: 30)
-            snap(app, name)
-            tap(app.buttons["top_bar_back"].firstMatch)
-            expect(app, "release_offer", timeout: 30)
+        // The unlock screen's offer comes with its manifest read.
+        guard waitForAny(app, ["release_offer"], timeout: Self.network) != nil else {
+            throw XCTSkip("The unlock screen offers no release update.")
         }
+        snap(app, "1-unlock-offer")
+        guard openGate(app, pin: pin, password: password), gateHasOnlyItsWaysOut(app) else { return }
 
         // Account: its "Lock vault" locks; the next unlock shows the gate again.
         tap(app.buttons["release_required_account"])
@@ -209,6 +196,31 @@ final class StagingTests: VaultUITestCase {
         expect(app, "app_shell", timeout: Self.network)
         snap(app, "8-open")
         lock(app)
+    }
+
+    /// The gate shows the update and only its ways out; Help and Delete vault open over it and go back to it (Delete vault is
+    /// never confirmed).
+    @MainActor
+    private func gateHasOnlyItsWaysOut(_ app: XCUIApplication) -> Bool {
+        snap(app, "2-gate")
+        let screen = shown(app)
+        let missing = ["release_required_account", "release_required_help", "release_required_delete", "release_offer"]
+            .filter { screen[$0] == nil }
+        if !missing.isEmpty { fail(app, "The gate has no \(missing.joined(separator: ", ")).") }
+        if screen["app_shell"] != nil { fail(app, "The open app shows beside the gate.") }
+        if screen["top_bar_back"] != nil || screen["form_secondary"] != nil { fail(app, "The gate has a way back.") }
+        guard missing.isEmpty, screen["app_shell"] == nil, screen["top_bar_back"] == nil, screen["form_secondary"] == nil else {
+            return false
+        }
+        for (button, page, name) in [("release_required_help", "help_privacy", "3-help"),
+                                     ("release_required_delete", "delete_vault_screen", "4-delete")] {
+            tap(app.buttons[button])
+            expect(app, page, timeout: 30)
+            snap(app, name)
+            tap(app.buttons["top_bar_back"].firstMatch)
+            expect(app, "release_offer", timeout: 30)
+        }
+        return true
     }
 
     /// The unlock (without the offer's approval) and the gate's update screen, through a due owner check.

@@ -23,7 +23,7 @@ public extension FakeVaultService {
     }
 
     /// The published manifest cannot be fetched (no connection).
-    public var manifestOffline: Bool {
+    var manifestOffline: Bool {
         get { locked { manifestOfflineValue } }
         set { locked { manifestOfflineValue = newValue } }
     }
@@ -50,7 +50,9 @@ extension FakeVaultService {
         if manifestOfflineValue { return .failure(.notConnectedToInternet) }
         if manifestBrokenValue { return .bytes(200, Array("not a manifest".utf8)) }
         guard let serial = publishedSerialValue else { return .json(404, #"{"error":"not_found"}"#) }
-        let served = try? servedManifest(serial: serial, release4: releases.listed4, release3: !releases.delisted3)
+        let served = try? servedManifest(
+            serial: serial, release4: releases.listed4, release3: !releases.delisted3, release3Number: releases.release3Number
+        )
         return served.map { .bytes(200, $0) } ?? .empty(500)
     }
 }

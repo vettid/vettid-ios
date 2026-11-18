@@ -15,6 +15,10 @@ package protocol CallVault: AnyObject {
     /// True while the release-update screen covers the app: no screen could answer a call, so none rings.
     var updateShowing: Bool { get }
 
+    /// True while the daily owner check is due or held, or its screen covers the app (owner decision 2026-11-18): no call
+    /// rings on this phone; another device may still answer it.
+    var ownerCheckShowing: Bool { get }
+
     /// The fingerprint of [connectionId]'s pinned identity key, as the connection's details show it; nil if unknown.
     func fingerprint(_ connectionId: String) async -> String?
 
@@ -34,6 +38,7 @@ package protocol CallVault: AnyObject {
 
 extension CallVault {
     package var updateShowing: Bool { false }
+    package var ownerCheckShowing: Bool { false }
 }
 
 /// What is known beyond one call, for the diagnostics view and the phone tests: counts only, nothing else.
@@ -126,10 +131,12 @@ package final class CallsController {
             refreshConnections: { await vault.refreshConnections() },
             // An offer waits a moment for an unlock that is completing; none comes: it does not ring.
             mayRing: { [vault, clock] in
-                guard !vault.updateShowing else { return false }
+                guard !vault.updateShowing, !vault.ownerCheckShowing else { return false }
                 // Rings only for a vault the probe has said has calls (as Android's `mayRing`): wait, bounded, for the unlock and then
                 // for the probe's answer; "not in vault", a refusal or a failed probe: no ring, no CallKit report, no `call.ringing`.
-                return await Self.waitForCalls(flag, clock)
+                guard await Self.waitForCalls(flag, clock) else { return false }
+                // Again after the wait: an unlock that completed meanwhile may have shown the update or the daily check.
+                return !vault.updateShowing && !vault.ownerCheckShowing
             },
             clock: clock
         )
