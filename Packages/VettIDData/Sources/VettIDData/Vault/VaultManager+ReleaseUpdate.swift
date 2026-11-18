@@ -128,11 +128,12 @@ extension VaultManager {
     }
 
     /// The owner check is past its deadline at this manager's clock, or held (§3.6.3).
-    private var ownerCheckGated: Bool { ownerChecks.ownerCheck?.gated(config.now()) == true }
+    var ownerCheckGated: Bool { ownerChecks.ownerCheck?.gated(config.now()) == true }
 
     /// The owner check comes first: it is due or held at this manager's clock, or its screen follows a cancelled recovery.
-    /// No call rings meanwhile (owner decision 2026-11-18); another device may still answer it.
-    public var ownerCheckDue: Bool { ownerChecks.checkAfterCancel || ownerCheckGated }
+    /// No call rings meanwhile (owner decision 2026-11-18); another device may still answer it. (Not
+    /// ``ReleaseUpdateOps/ownerCheckDue()``, which also counts a vault locked by ten failed checks.)
+    public var ownerCheckComesFirst: Bool { ownerChecks.checkAfterCancel || ownerCheckGated }
 
     /// While the features are held (the vault behind, or its release not yet checked after a failed read) no list is read
     /// (``refreshListsQuietly(onAnswered:)``) and none takes the events that only change it (``onEvent(_:)``). When they no
@@ -150,11 +151,15 @@ extension VaultManager {
             if holds { ref.manager?.votes.siteRunner?.hold() }
             guard !holds, let m = ref.manager, m.phase == .unlocked, m.deletion == nil else { return }
             m.refreshListsQuietly()
+            // The feed's events and arrivals held while the release was checked: notified now, after its reads under way.
+            m.feed.releaseHeld()
         }
         // A check that passed at once: the site's work, held while it went on, starts once the opening's read is done (unless
         // that read started it, or a lock or a newer read came meanwhile).
         updates.onCheckEnded = {
             guard let m = ref.manager else { return }
+            // What the feed held during the check comes now, unless the check ended behind (then at the lift).
+            m.feed.releaseHeld()
             let reads = m.listsReads
             Task { @MainActor [weak m] in
                 await m?.listsRead?.value

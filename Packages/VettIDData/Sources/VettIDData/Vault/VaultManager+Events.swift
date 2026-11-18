@@ -333,6 +333,8 @@ extension VaultManager {
             // and a pairing's steps are in no list a read gives back.
             connections.onEvent(m)
             devicesEvent(m)
+            // The feed follows its own rule: held while the release is checked, dropped while the vault is behind it.
+            feed.onEvent(m)
             // Those that only change a list wait for the move: every list is read when it is made (``followBehind``).
             if !releaseUpdate.holdsFeatures {
                 messages.onEvent(m)
