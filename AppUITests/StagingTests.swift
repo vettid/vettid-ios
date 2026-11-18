@@ -146,6 +146,91 @@ final class StagingTests: VaultUITestCase {
         lock(app)
     }
 
+    /// Rule 3's gate (an open vault not on the newest active release): the unlock without the offer's approval opens on the
+    /// update with no way back and only the ways out (Help, Delete vault, Account); each is opened and left (Delete vault
+    /// is never confirmed), the account's "Lock vault" locks, and the next unlock shows the gate again. Then "Approve and
+    /// update" with the PIN moves the vault and the app opens on the new release. Screenshots of each step are attached.
+    /// Skipped when the unlock offers no update.
+    @MainActor
+    func testStagingReleaseGate() throws {
+        let pin = try Self.pin()
+        let password = try Self.input("VETTID_STAGING_PASSWORD")
+
+        let app = launch()
+        guard lockedAtStart(app, pin: pin, password: password) else { return }
+        guard shown(app)["release_offer"] != nil else { throw XCTSkip("The unlock screen offers no release update.") }
+        snap(app, "1-unlock-offer")
+        guard openGate(app, pin: pin, password: password) else { return }
+        snap(app, "2-gate")
+        let screen = shown(app)
+        for id in ["release_required_account", "release_required_help", "release_required_delete", "release_offer"]
+        where screen[id] == nil { return fail(app, "The gate has no \(id).") }
+        if screen["app_shell"] != nil { return fail(app, "The open app shows beside the gate.") }
+        if screen["top_bar_back"] != nil || screen["form_secondary"] != nil { return fail(app, "The gate has a way back.") }
+
+        // Help and Delete vault open over the gate and go back to it (Delete vault is never confirmed).
+        for (button, page, name) in [("release_required_help", "help_privacy", "3-help"),
+                                     ("release_required_delete", "delete_vault_screen", "4-delete")] {
+            tap(app.buttons[button])
+            expect(app, page, timeout: 30)
+            snap(app, name)
+            tap(app.buttons["top_bar_back"].firstMatch)
+            expect(app, "release_offer", timeout: 30)
+        }
+
+        // Account: its "Lock vault" locks; the next unlock shows the gate again.
+        tap(app.buttons["release_required_account"])
+        expect(app, "account_lock_vault", timeout: 30)
+        snap(app, "5-account")
+        tap(app.buttons["account_lock_vault"])
+        expect(app, "unlock", timeout: Self.network)
+        if !waitUntil(timeout: Self.network, { shown(app)["unlock_lock_locking"] == nil }) {
+            return fail(app, "The lock from the gate was not confirmed.")
+        }
+        guard openGate(app, pin: pin, password: password) else { return }
+
+        // "Approve and update" with the PIN: the move, then the app on the new release.
+        enterPin(app, pin)
+        snap(app, "6-approve")
+        tapPrimary(app)
+        let outcomes = ["release_update_done", "release_update_refused", "release_update_failed", "release_update_bad_pin",
+                        "release_update_new_failed"]
+        let outcome = waitForAny(app, outcomes, timeout: Self.releaseUpdate)
+        snap(app, "7-outcome")
+        guard outcome == "release_update_done" else {
+            return fail(app, "The update did not finish: \(outcome ?? "still running after \(Int(Self.releaseUpdate)) s").")
+        }
+        tapPrimary(app)
+        switch waitForAny(app, ["app_shell", "owner_check", "release_required"], timeout: Self.network) {
+        case "owner_check": ownerCheck(app, pin: pin, password: password)
+        case "app_shell": break
+        default: return fail(app, "The app did not open on the new release.")
+        }
+        expect(app, "app_shell", timeout: Self.network)
+        snap(app, "8-open")
+        lock(app)
+    }
+
+    /// The unlock (without the offer's approval) and the gate's update screen, through a due owner check.
+    @MainActor
+    private func openGate(_ app: XCUIApplication, pin: String, password: String) -> Bool {
+        expect(app, "unlock", timeout: Self.network)
+        enterUnlock(app, pin: pin, password: password)
+        switch waitForAny(app, ["release_required", "app_shell", "owner_check"], timeout: Self.network) {
+        case "owner_check": ownerCheck(app, pin: pin, password: password)
+        case "release_required": break
+        case let other:
+            fail(app, "The unlock did not show the gate: \(other ?? "no known screen") is shown.")
+            return false
+        }
+        // The release check first ("Checking your vault's software"), then the update.
+        if waitForAny(app, ["release_offer"], timeout: Self.network) != "release_offer" {
+            fail(app, "The gate never showed the update.")
+            return false
+        }
+        return true
+    }
+
     /// I1.8a's voluntary owner check (VAULT-MESSAGING §3.6.5): from the open app, Settings → the daily check's "Check
     /// now", the PIN on the keypad and the credential password; the check passes when its screen closes on Settings with
     /// no failure shown (the app has no success notice: the screen closes, as on vettid-android). Then the vault is
@@ -399,11 +484,15 @@ final class StagingTests: VaultUITestCase {
     /// after the failure, when there is no vault.
     @MainActor
     private func lockedAtStart(_ app: XCUIApplication, pin: String, password: String) -> Bool {
-        switch waitForAny(app, ["unlock", "app_shell", "owner_check", "welcome_recover"], timeout: 60) {
+        switch waitForAny(app, ["unlock", "app_shell", "owner_check", "welcome_recover", "release_required"], timeout: 60) {
         case "app_shell": lock(app)
         case "owner_check":
             ownerCheck(app, pin: pin, password: password)
             lock(app)
+        case "release_required":
+            // Left open on the release gate: its Account's "Lock vault".
+            tap(app.buttons["release_required_account"])
+            tap(app.buttons["account_lock_vault"])
         case "unlock": break
         case let other:
             fail(app, "No vault on this phone: \(other ?? "no known screen") is shown.")
