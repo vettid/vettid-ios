@@ -29,6 +29,10 @@ extension VaultManager {
             ops: { try await memberApi(ref) }, quietOps: { try quietApi(ref) },
             // §3.6.3: nothing of the feed is shown while the vault is held or due.
             gated: { ref.manager?.featuresGated() ?? false },
+            // Rule 3: while the release is checked its events and arrivals wait; told when the check is over (followBehind).
+            checking: { ref.manager?.releaseUpdate.checking ?? false },
+            paused: { ref.manager?.releaseUpdate.holdsFeatures ?? false },
+            ownerGated: { ref.manager?.ownerCheckGated ?? false },
             now: config.now
         )
         let approvals = ApprovalsManager(
@@ -58,10 +62,9 @@ extension VaultManager {
         )
     }
 
-    /// One vault event for the feed, the approvals and the votes (only while the vault takes events and is not behind its
-    /// release, ``onEvent(_:)``).
+    /// One vault event for the approvals and the votes (only while the vault takes events and the release gate does not hold
+    /// the features, ``onEvent(_:)``; the feed takes each event itself, ``FeedManager+Held``).
     func activityEvent(_ m: VaultMessage) {
-        feed.onEvent(m)
         approvals.onEvent(m)
         votes.onEvent(m)
     }

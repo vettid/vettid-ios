@@ -41,6 +41,17 @@ extension CallsControllerTests {
         try stoppedAsMissed(c)
     }
 
+    /// The stop reaches CallKit as a missed call (`unanswered`), so its screen goes and Recents shows it missed.
+    @Test func aRingStoppedByTheOwnerCheckEndsInCallKitAsUnanswered() async throws {
+        let r = try await ringing(FakeMicrophone(.granted))
+        let uuid = try #require(r.kit.uuid)
+        vault.ownerCheckShowing = true
+        await clock.advance(by: 600)
+        await settle()
+        try stoppedAsMissed(r.controller)
+        #expect(r.kit.events.contains(.ended(uuid, .unanswered)), "\(r.kit.events)")
+    }
+
     @Test func anAnsweredCallGoesOnWhenTheOwnerCheckComesDue() async throws {
         let c = try await ringing()
         c.answer()

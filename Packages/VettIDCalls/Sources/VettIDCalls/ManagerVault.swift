@@ -49,7 +49,7 @@ package final class ManagerVault: CallsAppVault {
 
     /// As the notifications' gate (the shell not shown): the check's screen after a cancel, or a check due or held, also one
     /// known only from the clock (the manager's).
-    package var ownerCheckShowing: Bool { manager.ownerCheckDue }
+    package var ownerCheckShowing: Bool { manager.ownerCheckComesFirst }
 
     package var isOpen: Bool { Self.open(manager) }
 

@@ -93,6 +93,11 @@ public protocol FeedRepository: AnyObject, Observable, Sendable {
 ///   closure item that is not a `rollback` are neither listed, counted nor passed to ``onArrival``; the cursor moves past
 ///   them (``FeedKinds/isHidden(_:)``).
 /// - **Held or due** ([gated]): nothing is listed and events are ignored; after the check, a full read.
+/// - **The release check** ([checking], Rule 3): `feed.event`s and arrivals wait in memory, in order, at most
+///   ``heldLimit`` each, and come when it is over with the vault not behind, or when the release gate lifts
+///   (``releaseHeld()``, after the reads under way); a clear drops them. Until they came, a later event or arrival waits
+///   behind them, so none overtakes them. An event of an item that came among the held arrivals is applied, and notified
+///   again only for a newer change.
 ///
 /// Mirrors vettid-android `FeedManager`.
 @MainActor
@@ -118,7 +123,7 @@ public final class FeedManager: FeedRepository {
     public private(set) var load: FeedLoad = .notLoaded
     public private(set) var badge = FeedBadge()
 
-    @ObservationIgnored private var byID: [String: FeedItem] = [:]
+    @ObservationIgnored private(set) var byID: [String: FeedItem] = [:]
     @ObservationIgnored private(set) var cursor: Int64 = 0
     @ObservationIgnored private var retentionDays = FeedManager.defaultRetentionDays
     /// Bumped by ``clear()``: a read that started before it is not applied after it.
@@ -127,17 +132,39 @@ public final class FeedManager: FeedRepository {
     @ObservationIgnored private var catchUpQueued = false
     /// Open from the end of the held or due state until the waiting asks' replay (``openWaitingAsks()``): the items that
     /// arrived meanwhile, which the replay leaves out. Nil when closed.
-    @ObservationIgnored private var arrivedSinceCheck: Set<String>?
+    @ObservationIgnored var arrivedSinceCheck: Set<String>?
     /// A full read applied since ``openWaitingAsks()``; until then a replay asked for waits for it (``waitingReplay``).
     @ObservationIgnored private var fullReadSinceCheck = false
     @ObservationIgnored private var waitingReplay: [PendingApproval]?
+    /// (Rule 3) The `feed.event`s that came during the release check, in order (``FeedManager+Held``).
+    @ObservationIgnored var heldEvents: [VaultMessage] = []
+    /// (Rule 3) The arrivals of the release check, in order, one per item (its latest), with whether each is a waiting ask.
+    @ObservationIgnored var heldArrivals: [HeldArrival] = []
+    /// The reads queued or under way (``read(full:quietly:queued:)``): what was held is released after them.
+    @ObservationIgnored var readsRunning = 0
+    /// (Rule 3) When the vault last opened, on the vault's clock (``vaultOpened(at:)``): a held event the feed's read covers
+    /// notifies only if the vault sent it since; one sent before is the mailbox's backlog of what changed while it was away.
+    @ObservationIgnored var openedAt: Date?
+    /// (Rule 3) The gate lifted: what was held waits for a full read, since what changed while paused was not taken.
+    @ObservationIgnored var needsFullRead = false
+    /// The `seq` each item was last notified at, while the vault is open: a held event of a change already notified (one
+    /// delivered live, then again during a check that began again) does not notify it twice.
+    @ObservationIgnored var lastNotified: [String: Int64] = [:]
     @ObservationIgnored private let marking = FeedMarking(limit: FeedManager.inFlight)
 
     @ObservationIgnored let ops: @MainActor () async throws -> any FeedOps
     /// The calls of a read nobody asked for (the opening, an event): only over the session already open, never opening one.
     @ObservationIgnored let quietOps: @MainActor () async throws -> any FeedOps
-    /// True while the vault is held or due (VAULT-MESSAGING §3.6.3): nothing of the feed is shown.
-    @ObservationIgnored private let gated: @MainActor () -> Bool
+    /// True while the vault is held or due (VAULT-MESSAGING §3.6.3), or the release gate pauses the vault's work
+    /// ([paused]): nothing of the feed is shown.
+    @ObservationIgnored let gated: @MainActor () -> Bool
+    /// (Rule 3) The vault's release is being checked (``ReleaseUpdateManager/checking``): events and arrivals wait.
+    @ObservationIgnored let checking: @MainActor () -> Bool
+    /// (Rule 3) The release gate pauses the vault's work (``ReleaseUpdateManager/holdsFeatures``, part of [gated]): what
+    /// waits (the held events and arrivals, a waiting-asks replay) is kept for the lift.
+    @ObservationIgnored let paused: @MainActor () -> Bool
+    /// The owner check is due or held (§3.6.3, part of [gated]): nothing that comes then is held for later.
+    @ObservationIgnored let ownerGated: @MainActor () -> Bool
     @ObservationIgnored let now: @Sendable () -> Date
     /// New and changed unread items as they arrive (`feed.event`, the items of a catch-up), never from a full read: the
     /// notifications' source (IOS-PLAN §6.7), so that nothing missed while locked or held is replayed as a notification,
@@ -158,11 +185,17 @@ public final class FeedManager: FeedRepository {
         ops: @escaping @MainActor () async throws -> any FeedOps,
         quietOps: (@MainActor () async throws -> any FeedOps)? = nil,
         gated: @escaping @MainActor () -> Bool = { false },
+        checking: @escaping @MainActor () -> Bool = { false },
+        paused: @escaping @MainActor () -> Bool = { false },
+        ownerGated: @escaping @MainActor () -> Bool = { false },
         now: @escaping @Sendable () -> Date = { Date() }
     ) {
         self.ops = ops
         self.quietOps = quietOps ?? ops
         self.gated = gated
+        self.checking = checking
+        self.paused = paused
+        self.ownerGated = ownerGated
         self.now = now
     }
 
@@ -180,6 +213,10 @@ public final class FeedManager: FeedRepository {
         byID = [:]
         cursor = 0
         catchUpQueued = false
+        heldEvents = []
+        heldArrivals = []
+        needsFullRead = false
+        lastNotified = [:]
         closeWaitingAsks()
         load = .notLoaded
         publish()
@@ -190,8 +227,9 @@ public final class FeedManager: FeedRepository {
     public func onEvent(_ m: VaultMessage) {
         switch m.type {
         case "feed.event":
-            // While held only the clone alarm's item arrives; it opens the alarm path elsewhere, it is not listed.
-            guard !gated(), let item = FeedItem.of(m.object) else { return }
+            // Held while the release is checked (Rule 3). While held only the clone alarm's item arrives; it opens the alarm
+            // path elsewhere, it is not listed.
+            guard !holds(m), !gated(), let item = FeedItem.of(m.object) else { return }
             onItem(item)
         case "sync.event":
             let kind = VaultJSON.string(m.object, "kind")
@@ -201,14 +239,15 @@ public final class FeedManager: FeedRepository {
         }
     }
 
-    private func onItem(_ item: FeedItem) {
+    /// Applies [item] in `seq` order; [notify]: false for a held event of an item notified no older among the held arrivals.
+    func onItem(_ item: FeedItem, notify: Bool = true) {
         // A read under way may have been answered before the item: read again after it.
         guard load == .loaded else { return catchUp() }
         guard item.seq > cursor else { return } // already applied
         let next = item.seq == cursor + 1
         apply([item])
         if next { cursor = item.seq }
-        if item.status == Self.statusActive { arrived(item) }
+        if notify, item.status == Self.statusActive { arrived(item) }
         if !next { catchUp() }
     }
 
@@ -219,7 +258,7 @@ public final class FeedManager: FeedRepository {
         catchUpQueued = true
         Task { [weak self] in
             guard let self else { return }
-            try? await read(full: load != .loaded, quietly: true, queued: true)
+            try? await read(full: load != .loaded || needsFullRead, quietly: true, queued: true)
         }
     }
 
@@ -228,11 +267,17 @@ public final class FeedManager: FeedRepository {
     /// One paged read after the reads before it ([full]: from 0, replacing everything).
     private func read(full: Bool, quietly: Bool, queued: Bool = false) async throws {
         let before = reading
+        readsRunning += 1
         let task = Task { @MainActor [weak self] in
             _ = await before?.result
             guard let self else { return }
+            // What the release check held comes after the reads under way (``releaseHeld()``).
+            defer {
+                readsRunning -= 1
+                releaseIfOver()
+            }
             if queued { catchUpQueued = false }
-            try await readNow(full: full || load != .loaded, quietly: quietly)
+            try await readNow(full: full || load != .loaded || needsFullRead, quietly: quietly)
         }
         reading = task
         try await task.value
@@ -253,7 +298,10 @@ public final class FeedManager: FeedRepository {
             apply(changed)
             cursor = max(full ? 0 : cursor, seq)
             load = .loaded
-            guard !full else { return fullReadForWaitingAsks() }
+            guard !full else {
+                needsFullRead = false
+                return fullReadForWaitingAsks()
+            }
             var seen = Set<String>()
             for c in changed where c.status == Self.statusActive && (known[c.itemID]?.seq ?? 0) < c.seq && seen.insert(c.itemID).inserted {
                 if let now = byID[c.itemID] { arrived(now) }
@@ -318,18 +366,31 @@ public final class FeedManager: FeedRepository {
 
     private func runWaitingReplay() {
         guard let since = arrivedSinceCheck, let approvals = waitingReplay else { return }
+        // Rule 3: while the release gate pauses the vault's work, the replay waits with its window open for the feed's full
+        // read at the lift (``VaultManager/refreshListsQuietly(onAnswered:)``), and runs after it.
+        if paused() {
+            fullReadSinceCheck = false
+            return
+        }
         closeWaitingAsks()
         guard !gated(), load == .loaded else { return }
         for item in WaitingAsks.of(byID.values, approvals: approvals, now: now()) where !since.contains(item.itemID) {
             guard let onWaitingAsk else { return assertionFailure("onWaitingAsk is not set") }
-            if !FeedKinds.isHidden(item) { onWaitingAsk(item) }
+            // While the release is checked it waits with the arrivals (``FeedManager+Held``).
+            if !FeedKinds.isHidden(item), !holdsArrival(item, replayed: true) {
+                lastNotified[item.itemID] = item.seq
+                onWaitingAsk(item)
+            }
         }
     }
 
     /// A notification's source, except the History-only kinds (IOS-PLAN §4.1, de-duplication).
-    private func arrived(_ item: FeedItem) {
+    func arrived(_ item: FeedItem) {
         guard !FeedKinds.isHidden(item) else { return }
         arrivedSinceCheck?.insert(item.itemID)
+        // Rule 3: while the release is checked it waits; after it, until what was held came, behind it.
+        guard !holdsArrival(item, replayed: false) else { return }
+        lastNotified[item.itemID] = max(lastNotified[item.itemID] ?? 0, item.seq)
         onArrival(item)
     }
 
