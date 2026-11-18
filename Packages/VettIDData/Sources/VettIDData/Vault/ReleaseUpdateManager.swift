@@ -376,7 +376,8 @@ public final class ReleaseUpdateManager: ReleaseUpdateRepository {
     }
 
     /// §6.7.1: without the vault's `user_guid` the unlock refuses, so the vault is not locked first: the update fails as
-    /// the unlock would have failed it (`no_user_guid`), with the vault still open and nothing sent.
+    /// the unlock would have failed it (`no_user_guid`), before this attempt's lock and with nothing sent (the vault as the
+    /// step before left it: open, unless a lock that went out and failed left it otherwise).
     private func refusedWithoutUserGuid() -> Bool {
         guard !ops.userGuidUsable() else { return false }
         set {

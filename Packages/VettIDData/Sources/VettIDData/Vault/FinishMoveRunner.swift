@@ -47,7 +47,7 @@ public final class FinishMoveRunner {
     public init(
         hold: Duration,
         sleep: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) },
-        refusedBeforeLock: @escaping @MainActor () -> UnlockAttempt? = { nil },
+        refusedBeforeLock: @escaping @MainActor () -> UnlockAttempt?,
         lock: @escaping @MainActor () async throws -> Void,
         unlock: @escaping @MainActor (_ pin: String, _ taken: Int?) async throws -> UnlockAttempt,
         generation: @escaping @MainActor () -> Int,
