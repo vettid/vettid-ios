@@ -23,7 +23,8 @@ extension FeedManager {
     /// The most events, and the most arrivals, held (vettid-android's `ARRIVAL_BUFFER`).
     nonisolated static let heldLimit = 64
 
-    /// The vault opened at [at] (this phone's clock): held events the vault sent before are its backlog, and stay silent.
+    /// The vault opened at [at], on the vault's clock (its messages' `ts`; never the phone's, which may differ by minutes):
+    /// held events the vault sent before are its backlog, and stay silent.
     public func vaultOpened(at: Date) { openedAt = at }
 
     /// The check is over but what it held has not come yet: a later event or arrival waits behind it.
@@ -84,13 +85,14 @@ extension FeedManager {
 
     /// The arrivals first, as the feed has them now, then the events: one the feed's read already covers notifies the item
     /// as listed (if still unread, and sent since the vault opened); one it does not is applied as a live one. An item
-    /// notified here is not notified again for a change no newer than the one notified.
+    /// notified here, or already notified before (live, or by an earlier release), is not notified again for a change no
+    /// newer than the one notified.
     private func releaseNow() {
         let arrivals = heldArrivals
         let events = heldEvents
         heldArrivals = []
         heldEvents = []
-        var notified: [String: Int64] = [:]
+        var notified = lastNotified
         for a in arrivals {
             guard let now = byID[a.item.itemID], now.status == Self.statusActive else { continue }
             notified[now.itemID] = now.seq
@@ -113,5 +115,6 @@ extension FeedManager {
             }
             if let listed = byID[item.itemID] { notified[item.itemID] = max(notified[item.itemID] ?? 0, listed.seq) }
         }
+        lastNotified.merge(notified) { max($0, $1) }
     }
 }

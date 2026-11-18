@@ -142,11 +142,14 @@ public final class FeedManager: FeedRepository {
     @ObservationIgnored var heldArrivals: [HeldArrival] = []
     /// The reads queued or under way (``read(full:quietly:queued:)``): what was held is released after them.
     @ObservationIgnored var readsRunning = 0
-    /// (Rule 3) When the vault last opened, by this phone's clock (``vaultOpened(at:)``): a held event the feed's read covers
+    /// (Rule 3) When the vault last opened, on the vault's clock (``vaultOpened(at:)``): a held event the feed's read covers
     /// notifies only if the vault sent it since; one sent before is the mailbox's backlog of what changed while it was away.
     @ObservationIgnored var openedAt: Date?
     /// (Rule 3) The gate lifted: what was held waits for a full read, since what changed while paused was not taken.
     @ObservationIgnored var needsFullRead = false
+    /// The `seq` each item was last notified at, while the vault is open: a held event of a change already notified (one
+    /// delivered live, then again during a check that began again) does not notify it twice.
+    @ObservationIgnored var lastNotified: [String: Int64] = [:]
     @ObservationIgnored private let marking = FeedMarking(limit: FeedManager.inFlight)
 
     @ObservationIgnored let ops: @MainActor () async throws -> any FeedOps
@@ -213,6 +216,7 @@ public final class FeedManager: FeedRepository {
         heldEvents = []
         heldArrivals = []
         needsFullRead = false
+        lastNotified = [:]
         closeWaitingAsks()
         load = .notLoaded
         publish()
@@ -373,7 +377,10 @@ public final class FeedManager: FeedRepository {
         for item in WaitingAsks.of(byID.values, approvals: approvals, now: now()) where !since.contains(item.itemID) {
             guard let onWaitingAsk else { return assertionFailure("onWaitingAsk is not set") }
             // While the release is checked it waits with the arrivals (``FeedManager+Held``).
-            if !FeedKinds.isHidden(item), !holdsArrival(item, replayed: true) { onWaitingAsk(item) }
+            if !FeedKinds.isHidden(item), !holdsArrival(item, replayed: true) {
+                lastNotified[item.itemID] = item.seq
+                onWaitingAsk(item)
+            }
         }
     }
 
@@ -383,6 +390,7 @@ public final class FeedManager: FeedRepository {
         arrivedSinceCheck?.insert(item.itemID)
         // Rule 3: while the release is checked it waits; after it, until what was held came, behind it.
         guard !holdsArrival(item, replayed: false) else { return }
+        lastNotified[item.itemID] = max(lastNotified[item.itemID] ?? 0, item.seq)
         onArrival(item)
     }
 

@@ -349,6 +349,23 @@ import VettIDDataTesting
         #expect(state.arrived == [id(changed)])
     }
 
+    /// A change notified live, then delivered again during a check that began again (the opening's mark is older): it does
+    /// not notify twice.
+    @Test func aChangeNotifiedLiveIsNotNotifiedAgainByARestartedCheck() async throws {
+        ops.add("message.received", at: now)
+        let f = manager()
+        try await f.refresh()
+        let item = ops.add("connection.added", at: now)
+        f.onEvent(event(item))
+        #expect(state.arrived == [id(item)], "live")
+        state.checking = true // a re-read that no longer verifies: the check again
+        f.onEvent(event(item)) // redelivered
+        try await f.refresh()
+        state.checking = false
+        f.releaseHeld()
+        #expect(state.arrived == [id(item)])
+    }
+
     // MARK: the waiting asks
 
     func approvals() -> [PendingApproval] {

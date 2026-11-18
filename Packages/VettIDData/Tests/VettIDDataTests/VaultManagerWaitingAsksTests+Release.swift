@@ -35,6 +35,23 @@ extension VaultManagerWaitingAsksTests {
         #expect(live.count == 1 && replays.isEmpty, "once")
     }
 
+    /// The feed's opening mark is on the vault's clock, as its messages' `ts` are, whichever way the phone's clock is off: an
+    /// item sent during a failing check notifies once it passes, also with the vault's clock two minutes behind the phone's.
+    @Test(arguments: [-120.0, 120.0])
+    func theOpeningMarkIsOnTheVaultsClock(skew: TimeInterval) async throws {
+        defer { phone.close() }
+        service.stampsOnVaultClock = true
+        service.advanceVaultClock(skew)
+        let id = try await connected()
+        let mark = try #require(m.feed.openedAt)
+        #expect(abs(mark.timeIntervalSinceNow - skew) < 30, "the vault's clock, not the phone's: \(mark.timeIntervalSinceNow)")
+        await failReleaseCheck()
+        _ = try service.feedItemArrives("message.received", connectionID: id)
+        try await Task.sleep(for: .milliseconds(200))
+        await passReleaseCheck()
+        #expect(await eventually { live.count == 1 }, "\(live)")
+    }
+
     @Test func aCheckPassedElsewhereWhileAFailingReleaseCheckHoldsReplaysAfterTheLift() async throws {
         defer { phone.close() }
         let id = try await connected()
