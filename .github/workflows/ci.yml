@@ -17,10 +17,10 @@ concurrency:
 
 jobs:
   ios:
-    # Lint, the pure packages' tests on macOS, the app and package tests on a
-    # simulator, and the release check. Touches no signing material: the
-    # Release and Staging archives are built unsigned. The run takes about an
-    # hour on the hosted runner; the limit leaves room above that.
+    # Lint, the pure packages' tests on macOS, and the app and package tests on
+    # a simulator. The release check runs beside it, in the release-check job.
+    # The run takes about 70 minutes on the hosted runner; the limit leaves
+    # room above that.
     runs-on: macos-26
     timeout-minutes: 90
     steps:
@@ -67,8 +67,6 @@ jobs:
             -parallel-testing-worker-count 2 \
             -derivedDataPath build/DerivedData \
             -resultBundlePath build/VettID.xcresult
-      - name: release check (Release and Staging carry no TEST, dev-stack or other-environment strings)
-        run: scripts/release-check.sh --self-test
       # Best effort: the result bundle helps diagnose a failure, but an upload that fails (GitHub's artifact service
       # unreachable) says nothing about the app and must not fail a required check.
       - name: results
@@ -80,6 +78,25 @@ jobs:
           path: build/VettID.xcresult
           if-no-files-found: ignore
           retention-days: 14
+
+  release-check:
+    # The release check (scripts/release-check.sh --self-test): the Release and Staging archives carry no TEST, dev-stack
+    # or other-environment strings, and the check fails on a planted one. It builds its own archives, unsigned, in its own
+    # derived data, so it needs nothing from the ios job and runs beside it. Touches no signing material. It takes about
+    # 15 to 25 minutes on the hosted runner; the limit leaves room above that.
+    runs-on: macos-26
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: toolchain
+        run: xcodebuild -version && swift --version
+      - name: the media stack's binary
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/Library/Caches/org.swift.swiftpm/artifacts
+          key: webrtc-binary-${{ hashFiles('Packages/VettIDCallsWebRTC/Package.swift', 'Packages/VettIDCallsWebRTC/Package.resolved') }}
+      - name: release check (Release and Staging carry no TEST, dev-stack or other-environment strings)
+        run: scripts/release-check.sh --self-test
 
   calls-webrtc:
     # The calls' WebRTC media engine (Packages/VettIDCallsWebRTC), on its own: its tests run on macOS (swift test) and on a
