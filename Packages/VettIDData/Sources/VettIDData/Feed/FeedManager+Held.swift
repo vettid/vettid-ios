@@ -11,13 +11,20 @@ struct HeldArrival: Equatable {
 /// (Rule 3) The feed during the release check (``FeedManager/checking``): nothing notifies before the app knows the vault is
 /// on the current release. `feed.event`s wait unapplied and arrivals wait as they came, in order, at most ``heldLimit``
 /// each (the oldest go first). They come when the check is over with the vault not behind, or when the release gate lifts
-/// (``releaseHeld()``), after the feed's reads under way: the arrivals as the feed has them now (not at all once read,
-/// archived or deleted), then the events. Until they came, a later event or arrival waits behind them. While the gate pauses
-/// the vault's work (``FeedManager/paused``) they are kept for the lift; while the owner check is due or held they are
-/// dropped, as live ones are not notified then; a clear drops them. Mirrors vettid-android `FeedManager` (#392).
+/// (``releaseHeld(afterFullRead:)``; then after a full read, since what changed while paused was not taken), after the
+/// feed's reads under way: first every arrival, as the feed has it now (not at all once read, archived or deleted), then
+/// every event, so an arrival comes before an older event of another item. An event the feed's read covers notifies only
+/// if the vault sent it after the vault opened (``FeedManager/openedAt``): one sent before is the mailbox's backlog of what
+/// changed while it was away, which is never notified (IOS-PLAN §6.7). Until they came, a later event or arrival waits
+/// behind them. While the gate pauses the vault's work (``FeedManager/paused``) they are kept for the lift; while the owner
+/// check is due or held they are dropped, as live ones are not notified then; a clear drops them. They are in memory only:
+/// a process that ends loses them, as it loses the feed. Mirrors vettid-android `FeedManager` (#392).
 extension FeedManager {
     /// The most events, and the most arrivals, held (vettid-android's `ARRIVAL_BUFFER`).
     nonisolated static let heldLimit = 64
+
+    /// The vault opened at [at] (this phone's clock): held events the vault sent before are its backlog, and stay silent.
+    public func vaultOpened(at: Date) { openedAt = at }
 
     /// The check is over but what it held has not come yet: a later event or arrival waits behind it.
     var queuesBehind: Bool { !heldEvents.isEmpty || !heldArrivals.isEmpty }
@@ -30,7 +37,8 @@ extension FeedManager {
         guard !ownerGated(), checking() || (!gated() && queuesBehind) else { return false }
         heldEvents.append(m)
         if heldEvents.count > Self.heldLimit { heldEvents.removeFirst(heldEvents.count - Self.heldLimit) }
-        releaseIfOver()
+        // The check may be over (behind it, or one that came meanwhile): released, after a read if the feed needs one.
+        releaseHeld()
         return true
     }
 
@@ -41,15 +49,20 @@ extension FeedManager {
         heldArrivals.removeAll { $0.item.itemID == item.itemID }
         heldArrivals.append(HeldArrival(item: item, replayed: replayed))
         if heldArrivals.count > Self.heldLimit { heldArrivals.removeFirst(heldArrivals.count - Self.heldLimit) }
-        releaseIfOver()
+        releaseHeld()
         return true
     }
 
-    /// The release check is over with the vault not behind, or the release gate lifted: what it held comes once the feed's
-    /// reads under way are done (at once when none is), from a loaded feed (a feed that is not loaded is read first).
-    public func releaseHeld() { release(readIfNeeded: true) }
+    /// The release check is over with the vault not behind, or ([afterFullRead]) the release gate lifted: what it held comes
+    /// once the feed's reads under way are done (at once when none is), from a loaded feed (one that is not loaded, or must
+    /// be read in full, is read first).
+    public func releaseHeld(afterFullRead: Bool = false) {
+        if afterFullRead, queuesBehind { needsFullRead = true }
+        release(readIfNeeded: true)
+    }
 
-    /// After a read, or something held: released if the check is over and the feed not paused, else kept.
+    /// After a read: released if the check is over and the feed not paused, else kept (no read started: one that failed is
+    /// not retried in a loop; the next event or release starts one).
     func releaseIfOver() { release(readIfNeeded: false) }
 
     private func release(readIfNeeded: Bool) {
@@ -58,10 +71,11 @@ extension FeedManager {
         guard !gated() else {
             heldEvents = []
             heldArrivals = []
+            needsFullRead = false
             return
         }
         guard readsRunning == 0 else { return }
-        guard load == .loaded else {
+        guard load == .loaded, !needsFullRead else {
             if readIfNeeded { catchUp() }
             return
         }
@@ -69,8 +83,8 @@ extension FeedManager {
     }
 
     /// The arrivals first, as the feed has them now, then the events: one the feed's read already covers notifies the item
-    /// as listed (if still unread); one it does not is applied as a live one. An item notified here is not notified again
-    /// for a change no newer than the one notified.
+    /// as listed (if still unread, and sent since the vault opened); one it does not is applied as a live one. An item
+    /// notified here is not notified again for a change no newer than the one notified.
     private func releaseNow() {
         let arrivals = heldArrivals
         let events = heldEvents
@@ -80,6 +94,8 @@ extension FeedManager {
         for a in arrivals {
             guard let now = byID[a.item.itemID], now.status == Self.statusActive else { continue }
             notified[now.itemID] = now.seq
+            // A new arrival counts for the waiting asks' replay as a live one does (it is not replayed again).
+            if !a.replayed { arrivedSinceCheck?.insert(now.itemID) }
             if a.replayed {
                 guard let onWaitingAsk else { assertionFailure("onWaitingAsk is not set"); continue }
                 onWaitingAsk(now)
@@ -92,7 +108,7 @@ extension FeedManager {
             let notify = notified[item.itemID].map { item.seq > $0 } ?? true
             if item.seq > cursor {
                 onItem(item, notify: notify)
-            } else if notify, let listed = byID[item.itemID], listed.status == Self.statusActive {
+            } else if notify, let opened = openedAt, m.ts >= opened, let listed = byID[item.itemID], listed.status == Self.statusActive {
                 arrived(listed)
             }
             if let listed = byID[item.itemID] { notified[item.itemID] = max(notified[item.itemID] ?? 0, listed.seq) }

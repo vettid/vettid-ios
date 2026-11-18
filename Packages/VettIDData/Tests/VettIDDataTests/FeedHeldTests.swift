@@ -35,13 +35,15 @@ import VettIDDataTesting
         let f = FeedManager(ops: { ops }, gated: { s.ownerGated || s.paused }, checking: { s.checking }, paused: { s.paused }, ownerGated: { s.ownerGated }, now: { now })
         f.onArrival = { s.arrived.append("\($0.itemID)@\($0.seq)") }
         f.onWaitingAsk = { s.replayed.append($0.itemID) }
+        // The vault opened just before the events of these tests were sent (``event(_:sent:)``).
+        f.vaultOpened(at: now.addingTimeInterval(-1))
         return f
     }
 
-    func event(_ item: FeedItem) -> VaultMessage {
+    func event(_ item: FeedItem, sent: Date? = nil) -> VaultMessage {
         var b = JsonBuilder().string("item_id", item.itemID).uint("seq", UInt64(item.seq)).string("kind", item.kind).string("at", item.at).string("status", item.status).string("priority", item.priority)
         if let r = item.ref { b = b.string("ref", r) }
-        return VaultMessage(inner: Inner(id: Ulid.new(), type: "feed.event", ts: now, body: b.bytes()))
+        return VaultMessage(inner: Inner(id: Ulid.new(), type: "feed.event", ts: sent ?? now, body: b.bytes()))
     }
 
     func sync() -> VaultMessage {
@@ -206,6 +208,145 @@ import VettIDDataTesting
         f.releaseHeld()
         #expect(await eventually { state.arrived == [id(item)] })
         #expect(f.load == .loaded)
+    }
+
+    // MARK: the review's cases
+
+    /// A read that fails after the check does not stall the feed: the next event reads it, and what was held comes.
+    @Test func aFailedReadAfterTheCheckDoesNotStallTheFeed() async throws {
+        ops.add("message.received", at: now)
+        ops.failing = ["list"]
+        let f = manager()
+        try? await f.refresh()
+        #expect(f.load == .failed)
+        state.checking = true
+        let held = ops.add("connection.added", at: now)
+        f.onEvent(event(held))
+        state.checking = false
+        f.releaseHeld()
+        #expect(await eventually { ops.calls.count == 2 && f.readsRunning == 0 }, "its read failed")
+        ops.failing = []
+        let live = ops.add("grant.request", at: now, ref: "g1")
+        f.onEvent(event(live))
+        #expect(await eventually { state.arrived.count == 2 }, "\(state.arrived)")
+        #expect(state.arrived == [id(held), id(live)] && f.load == .loaded)
+    }
+
+    /// The gate lifts: what was held waits for a full read, so an item read elsewhere during the pause does not alert.
+    @Test func theLiftReleasesAfterAFullRead() async throws {
+        let f = try await checked()
+        state.paused = true
+        let item = ops.add("connection.added", at: now)
+        f.onEvent(event(item))
+        _ = try await ops.feedUpdate(item.itemID, status: FeedManager.statusRead) // on another device; its sync.event dropped
+        f.onEvent(sync())
+        state.checking = false
+        state.paused = false
+        f.releaseHeld(afterFullRead: true)
+        #expect(await eventually { !f.queuesBehind && f.readsRunning == 0 })
+        #expect(state.arrived.isEmpty, "\(state.arrived)")
+        #expect(f.items.first { $0.itemID == item.itemID }?.status == FeedManager.statusRead)
+    }
+
+    /// The mailbox's backlog at an opening (sent before the vault opened) is covered by the opening's read and stays silent;
+    /// what the vault sent after the opening notifies.
+    @Test func theBacklogSentBeforeTheOpeningIsNotNotified() async throws {
+        ops.add("message.received", at: now)
+        let f = manager()
+        f.vaultOpened(at: now)
+        state.checking = true
+        let backlog = ops.add("connection.added", at: now)
+        f.onEvent(event(backlog, sent: now.addingTimeInterval(-120)))
+        let fresh = ops.add("grant.request", at: now, ref: "g1")
+        f.onEvent(event(fresh, sent: now.addingTimeInterval(1)))
+        try await f.refresh()
+        state.checking = false
+        f.releaseHeld()
+        #expect(state.arrived == [id(fresh)])
+    }
+
+    /// A released arrival counts for the waiting asks as a live one: an owner check passed while it was held opens the
+    /// window, and the replay does not notify it again.
+    @Test func aReleasedArrivalIsNotReplayedAgain() async throws {
+        let f = manager()
+        try await f.refresh()
+        state.checking = true
+        let ask = ops.add("connection.authenticate.requested", at: now, ref: "r1")
+        f.onEvent(sync())
+        #expect(await eventually { f.heldArrivals.count == 1 })
+        f.openWaitingAsks()
+        state.checking = false
+        f.releaseHeld()
+        #expect(state.arrived == [id(ask)])
+        try await f.refresh()
+        f.replayWaitingAsks(approvals())
+        #expect(state.replayed.isEmpty)
+    }
+
+    /// Two catch-ups bring the same item during the check: it is held once, as it is now, and notifies once.
+    @Test func anItemHeldTwiceNotifiesOnce() async throws {
+        let f = try await checked()
+        let item = ops.add("approval.pending", at: now, ref: "r1")
+        f.onEvent(sync())
+        #expect(await eventually { f.cursor == item.seq })
+        let changed = try await ops.feedUpdate(item.itemID, status: FeedManager.statusActive)
+        f.onEvent(sync())
+        #expect(await eventually { f.cursor == changed.seq })
+        #expect(f.heldArrivals.count == 1)
+        state.checking = false
+        f.releaseHeld()
+        #expect(state.arrived == [id(changed)])
+    }
+
+    /// The check ended behind with something held: an event that comes then is dropped (the vault is behind), not queued.
+    @Test func anEventWhileBehindIsDroppedNotQueued() async throws {
+        let f = try await checked()
+        let held = ops.add("connection.added", at: now)
+        f.onEvent(event(held))
+        state.checking = false
+        state.paused = true
+        let behind = ops.add("grant.request", at: now, ref: "g1")
+        f.onEvent(event(behind))
+        #expect(f.heldEvents.count == 1)
+        state.paused = false
+        f.releaseHeld(afterFullRead: true)
+        #expect(await eventually { !f.queuesBehind && f.readsRunning == 0 })
+        #expect(state.arrived == [id(held)])
+    }
+
+    @Test func atMost64ArrivalsAreHeldInOrder() async throws {
+        let f = try await checked()
+        let items = (0..<70).map { _ in ops.add("message.received", at: now) }
+        f.onEvent(sync())
+        #expect(await eventually { f.cursor == items.last?.seq })
+        #expect(f.heldArrivals.map(\.item.itemID) == items.suffix(FeedManager.heldLimit).map(\.itemID))
+        state.checking = false
+        f.releaseHeld()
+        #expect(state.arrived == items.suffix(FeedManager.heldLimit).map(id))
+    }
+
+    @Test func aHeldArrivalReadMeanwhileIsNotNotified() async throws {
+        let f = try await checked()
+        let item = ops.add("connection.added", at: now)
+        f.onEvent(sync())
+        #expect(await eventually { f.heldArrivals.count == 1 })
+        try await f.setStatus(item.itemID, status: FeedManager.statusRead)
+        state.checking = false
+        f.releaseHeld()
+        #expect(state.arrived.isEmpty)
+    }
+
+    /// Two held events of one item that the read covers: the listed item notifies once.
+    @Test func twoCoveredEventsOfOneItemNotifyOnce() async throws {
+        let f = try await checked()
+        let item = ops.add("approval.pending", at: now, ref: "r1")
+        f.onEvent(event(item))
+        let changed = try await ops.feedUpdate(item.itemID, status: FeedManager.statusActive)
+        f.onEvent(event(changed))
+        try await f.refresh()
+        state.checking = false
+        f.releaseHeld()
+        #expect(state.arrived == [id(changed)])
     }
 
     // MARK: the waiting asks

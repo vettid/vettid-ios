@@ -134,6 +134,8 @@ extension VaultManager {
         approvals.vaultOpened()
         // The open app shows nothing of the vault until its release is known (``ReleaseUpdateManager/required``). The lists
         // are read at once, as before (skipped while the vault is behind, and read when it no longer is: ``followBehind``).
+        // The feed's mark: a held event the vault sent before it is the mailbox's backlog, never notified.
+        feed.vaultOpened(at: config.now())
         releaseUpdate.vaultOpened()
         refreshListsQuietly()
         // The clone alarm is read after every unlock, whatever event was or was not received (a held background's, a process that

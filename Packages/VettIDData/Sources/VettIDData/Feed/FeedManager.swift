@@ -132,7 +132,7 @@ public final class FeedManager: FeedRepository {
     @ObservationIgnored private var catchUpQueued = false
     /// Open from the end of the held or due state until the waiting asks' replay (``openWaitingAsks()``): the items that
     /// arrived meanwhile, which the replay leaves out. Nil when closed.
-    @ObservationIgnored private var arrivedSinceCheck: Set<String>?
+    @ObservationIgnored var arrivedSinceCheck: Set<String>?
     /// A full read applied since ``openWaitingAsks()``; until then a replay asked for waits for it (``waitingReplay``).
     @ObservationIgnored private var fullReadSinceCheck = false
     @ObservationIgnored private var waitingReplay: [PendingApproval]?
@@ -142,6 +142,11 @@ public final class FeedManager: FeedRepository {
     @ObservationIgnored var heldArrivals: [HeldArrival] = []
     /// The reads queued or under way (``read(full:quietly:queued:)``): what was held is released after them.
     @ObservationIgnored var readsRunning = 0
+    /// (Rule 3) When the vault last opened, by this phone's clock (``vaultOpened(at:)``): a held event the feed's read covers
+    /// notifies only if the vault sent it since; one sent before is the mailbox's backlog of what changed while it was away.
+    @ObservationIgnored var openedAt: Date?
+    /// (Rule 3) The gate lifted: what was held waits for a full read, since what changed while paused was not taken.
+    @ObservationIgnored var needsFullRead = false
     @ObservationIgnored private let marking = FeedMarking(limit: FeedManager.inFlight)
 
     @ObservationIgnored let ops: @MainActor () async throws -> any FeedOps
@@ -207,6 +212,7 @@ public final class FeedManager: FeedRepository {
         catchUpQueued = false
         heldEvents = []
         heldArrivals = []
+        needsFullRead = false
         closeWaitingAsks()
         load = .notLoaded
         publish()
@@ -248,7 +254,7 @@ public final class FeedManager: FeedRepository {
         catchUpQueued = true
         Task { [weak self] in
             guard let self else { return }
-            try? await read(full: load != .loaded, quietly: true, queued: true)
+            try? await read(full: load != .loaded || needsFullRead, quietly: true, queued: true)
         }
     }
 
@@ -267,7 +273,7 @@ public final class FeedManager: FeedRepository {
                 releaseIfOver()
             }
             if queued { catchUpQueued = false }
-            try await readNow(full: full || load != .loaded, quietly: quietly)
+            try await readNow(full: full || load != .loaded || needsFullRead, quietly: quietly)
         }
         reading = task
         try await task.value
@@ -288,7 +294,10 @@ public final class FeedManager: FeedRepository {
             apply(changed)
             cursor = max(full ? 0 : cursor, seq)
             load = .loaded
-            guard !full else { return fullReadForWaitingAsks() }
+            guard !full else {
+                needsFullRead = false
+                return fullReadForWaitingAsks()
+            }
             var seen = Set<String>()
             for c in changed where c.status == Self.statusActive && (known[c.itemID]?.seq ?? 0) < c.seq && seen.insert(c.itemID).inserted {
                 if let now = byID[c.itemID] { arrived(now) }

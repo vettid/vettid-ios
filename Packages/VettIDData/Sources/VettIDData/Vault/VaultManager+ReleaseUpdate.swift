@@ -151,8 +151,9 @@ extension VaultManager {
             if holds { ref.manager?.votes.siteRunner?.hold() }
             guard !holds, let m = ref.manager, m.phase == .unlocked, m.deletion == nil else { return }
             m.refreshListsQuietly()
-            // The feed's events and arrivals held while the release was checked: notified now, after its reads under way.
-            m.feed.releaseHeld()
+            // The feed's events and arrivals held while the release was checked: notified after a full read (what changed
+            // while paused was not taken).
+            m.feed.releaseHeld(afterFullRead: true)
         }
         // A check that passed at once: the site's work, held while it went on, starts once the opening's read is done (unless
         // that read started it, or a lock or a newer read came meanwhile).
