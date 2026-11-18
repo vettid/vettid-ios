@@ -3,8 +3,10 @@ import Foundation
 // One text per line, as in VoteStrings.swift.
 // swiftlint:disable line_length
 
-/// How a vote is decided, and its outcome (BALLOT-PROTOCOL 0.14.0 §3.5, §7.1): the owner's words (a on #14031, #14043). The
-/// three `cast` lines are the draft's own words until the owner says otherwise (#14049); they are here and in the catalog only.
+/// How a vote is decided, and its outcome (BALLOT-PROTOCOL 0.14.0 §3.5, §7.1): the owner's words (a on #14031, #14043),
+/// except the three 1/1 lines, which fill in the approved "Decided only if every one of … chooses it" and wait for the
+/// owner (#14059). The three `cast` lines are the draft's own words until the owner says otherwise (#14049). They are here
+/// and in the catalog only.
 extension VoteStrings {
     public static var voteRuleMajorityCast: String {
         String(localized: "vote_rule_majority_cast", defaultValue: "Decided by more than half of the votes for a choice. Abstaining doesn't count.", bundle: .module)

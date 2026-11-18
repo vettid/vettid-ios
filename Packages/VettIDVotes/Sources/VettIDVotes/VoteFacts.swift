@@ -40,6 +40,8 @@ public struct VoteFacts: Equatable, Sendable {
     /// votes, under the quorum line.
     public var rule: String?
     public var binding: String?
+    /// The lines under the proposal, in order: the quorum, how it's decided, whether it's binding.
+    public var facts: [String] { [quorum, rule, binding].compactMap { $0 } }
     public var closes: String?
     public var extended: String?
     /// The states in words, in order.
@@ -151,7 +153,7 @@ public struct VoteFacts: Equatable, Sendable {
         var lines = [VoteStrings.voteResultsTitle]
         // The outcome first (BALLOT-PROTOCOL §7.1), as the vault recomputed it; the unhandled messages stay at the end of
         // the same lines.
-        if let o = d.outcome { lines.append(outcome(o, d.choices)) }
+        if let o = d.outcome, let line = outcome(o, d.choices) { lines.append(line) }
         for c in d.choices {
             if let n = tally[c.id] { lines.append(VoteStrings.voteResultsRow(AccountNames.isolateOrNull(c.label) ?? c.id, Int(n))) }
         }
@@ -167,7 +169,7 @@ public struct VoteFacts: Equatable, Sendable {
         return lines
     }
 
-    /// How the vote is decided, in the owner's words (#14031: owner a, #14043): the rule and, for a majority or a threshold,
+    /// How the vote is decided (#14031: owner a, #14043; the 1/1 lines wait for #14059): the rule and, for a majority or a threshold,
     /// what it is of. A threshold of 1/1 says "all". Nil for a decision BALLOT-PROTOCOL §3.5 does not allow (the vault
     /// refuses those on arrival), so no wrong rule is ever shown.
     static func rule(_ d: VoteDecision) -> String? {
@@ -208,12 +210,13 @@ public struct VoteFacts: Equatable, Sendable {
         }
     }
 
-    /// The outcome's line: the decided choice by its label as shown with the choices (its id when none shows).
-    static func outcome(_ o: VoteOutcome, _ choices: [VoteChoice]) -> String {
+    /// The outcome's line: the decided choice by its label as shown with the choices (its id when its label shows nothing).
+    /// Nil for `decided` with a choice that is not one of the vote's real choices (abstain never is), so no wrong line shows.
+    static func outcome(_ o: VoteOutcome, _ choices: [VoteChoice]) -> String? {
         switch o.status {
         case .decided:
-            let c = choices.first { $0.id == o.choice }
-            return VoteStrings.voteOutcomeDecided(c.flatMap { AccountNames.isolateOrNull($0.label) } ?? o.choice ?? "")
+            guard o.choice != VoteChoice.abstain, let c = choices.first(where: { $0.id == o.choice }) else { return nil }
+            return VoteStrings.voteOutcomeDecided(AccountNames.isolateOrNull(c.label) ?? c.id)
         case .notDecided: return VoteStrings.voteOutcomeNotDecided
         case .tied: return VoteStrings.voteOutcomeTied
         case .noQuorum: return VoteStrings.voteOutcomeNoQuorum

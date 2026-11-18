@@ -54,6 +54,25 @@ extension VoteFactsTests {
         #expect(results(nil)?[1] == "\u{2068}Yes\u{2069}: 3", "no outcome line without one")
     }
 
+    /// `decided` shows only a real choice of the vote: never abstain, never an id the vote doesn't have.
+    @Test func aDecidedChoiceThatIsNotARealChoiceShowsNoLine() {
+        #expect(results(VoteOutcome(status: .decided, choice: "abstain"))?[1] == "\u{2068}Yes\u{2069}: 3")
+        #expect(results(VoteOutcome(status: .decided, choice: "maybe"))?[1] == "\u{2068}Yes\u{2069}: 3")
+    }
+
+    /// The lines under the proposal, in order: the quorum, then how it's decided, then whether it's binding.
+    @Test func theRuleSitsBetweenTheQuorumAndBinding() {
+        let s = Samples.open()
+        var d = Samples.detail(s)
+        d.quorumText = "Half"
+        d.binding = true
+        d.decision = VoteDecision(rule: .plurality, base: nil)
+        #expect(Samples.facts(Samples.screen(s, detail: d)).facts == [
+            "Quorum, as the service states it: \u{2068}Half\u{2069}", "Decided by the most votes. A tie at the top decides nothing.",
+            "The service says this vote is binding.",
+        ])
+    }
+
     /// The outcome is one of the numbers (VAULT-MESSAGING 0.90.18 §10.19.6 step 1): hidden with them when the app's own
     /// observer check failed or hasn't run.
     @Test func theOutcomeIsHiddenWithTheNumbers() {
