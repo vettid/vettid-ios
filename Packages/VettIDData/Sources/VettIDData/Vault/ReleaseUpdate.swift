@@ -251,6 +251,9 @@ public struct UpdateProgress: Equatable, Sendable {
 public protocol ReleaseUpdateRepository: AnyObject, Observable, Sendable {
     var offer: ReleaseUpdateOffer? { get }
 
+    /// The open vault must first move to the current release (``ReleaseUpdateManager/required``): the update has no "Not now".
+    var required: Bool { get }
+
     /// ``offer`` has been read from the manifest at least once in this process (before that, nil means "not known").
     var offerKnown: Bool { get }
 
@@ -301,6 +304,8 @@ public protocol ReleaseUpdateRepository: AnyObject, Observable, Sendable {
 
 public extension ReleaseUpdateRepository {
     var pinGeneration: Int { 0 }
+
+    var required: Bool { false }
 
     func returnToPrevious(pin: String, generation: Int?) -> Bool { false }
 

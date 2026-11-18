@@ -132,6 +132,8 @@ public struct ReleaseUpdateFlowState: Equatable, Sendable {
     public var waitSeconds: Int64 = 0
     /// "Return to release N" asks first.
     public var abandonConfirm = false
+    /// The update is required (``ReleaseUpdateRepository/required``): a failed step goes back to the update, not "Not now".
+    public var required = false
 
     public init(progress: UpdateProgress? = nil) {
         self.progress = progress
@@ -165,8 +167,10 @@ public final class ReleaseUpdateFlowViewModel {
         self.updates = updates
         self.tick = tick
         state = ReleaseUpdateFlowState(progress: updates.progress)
+        state.required = updates.required
         keypad.follow(state.pinAllowed, updates)
         followers.add(follow(self, read: { $0.updates.progress }, apply: { $0.progressChanged($1) }))
+        followers.add(follow(self, read: { $0.updates.required }, apply: { $0.state.required = $1 }))
     }
 
     deinit {

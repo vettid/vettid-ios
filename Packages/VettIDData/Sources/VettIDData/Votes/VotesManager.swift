@@ -227,7 +227,7 @@ public final class VotesManager: VotesRepository {
     public init(
         ops: @escaping @MainActor () async throws -> any VoteOps,
         quietOps: (@MainActor () async throws -> any VoteOps)? = nil,
-        gated: @escaping @MainActor () -> Bool = { false },
+        gated: @escaping @MainActor () -> Bool = { false }, siteHeld: @escaping @MainActor () -> Bool = { false },
         windowUntil: @escaping @MainActor () -> Date? = { nil },
         openWindow: @escaping @MainActor (String) async throws -> Void = { _ in },
         closeWindow: @escaping @MainActor () async throws -> Void = {},
@@ -249,6 +249,7 @@ public final class VotesManager: VotesRepository {
         self.ops = ops
         self.quietOps = quietOps ?? ops
         self.gated = gated
+        held = { gated() || siteHeld() }
         self.windowUntil = windowUntil
         self.openWindow = openWindow
         self.closeWindow = closeWindow
@@ -283,11 +284,11 @@ public final class VotesManager: VotesRepository {
     public func forgetStored() { attempts.forgetAll() }
 
     /// `vote.event` (§10.19.8, the app only): a change of any vote re-reads the list; a due check (`check_due`) is run
-    /// after it. The event carries no choice.
+    /// after it, not while the site work is held (the run at the hold's end does it). The event carries no choice.
     public func onEvent(_ m: VaultMessage) {
         guard m.type == VaultApi.typeVoteEvent, !gated() else { return }
         refreshQuietly()
-        if VaultJSON.string(m.object, "event") == "check_due", let runner = siteRunner {
+        if VaultJSON.string(m.object, "event") == "check_due", !held(), let runner = siteRunner {
             let generation = runner.haltGeneration
             Task { [weak self] in
                 try? await self?.read(quietly: true)
@@ -333,8 +334,8 @@ public final class VotesManager: VotesRepository {
 
     public func refresh() async throws { try await read(quietly: false) }
 
-    /// True while the vault is held or due: nothing is read or sent.
-    func held() -> Bool { gated() }
+    /// True while the vault is held or due (nothing is read or sent), or the site's work waits ([siteHeld]: its release checked).
+    @ObservationIgnored let held: @MainActor () -> Bool
 
     /// One read after the reads before it.
     func read(quietly: Bool, queued fromQueue: Bool = false) async throws {

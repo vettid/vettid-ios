@@ -275,13 +275,20 @@ private struct UpdatePin: View {
 }
 
 /// A wrong PIN, or a failure before anything moved: the approval again with the PIN, or leave.
-private struct UpdateRetryScreen: View {
+struct UpdateRetryScreen: View {
     @Environment(\.vettIDTimeScale) private var timeScale
     let progress: UpdateProgress
     let state: ReleaseUpdateFlowState
     let pin: PinBuffer
     let retry: @MainActor () -> Void
     let onSecondary: @MainActor () -> Void
+
+    /// The way out of a failed step: "Unlock only" with the vault locked; with it open, "Not now", or "Continue" (back to the
+    /// update) while the update is required (owner decision 2026-11-17: there is no "Not now"; as vettid-android).
+    static func secondaryLabel(vaultOpen: Bool, required: Bool) -> String {
+        !vaultOpen ? OnboardingStrings.releaseUpdateUnlockOnly
+            : required ? OnboardingStrings.releaseUpdateContinue : OnboardingStrings.releaseUpdateNotNow
+    }
 
     var body: some View {
         let p = progress
@@ -300,7 +307,7 @@ private struct UpdateRetryScreen: View {
             message: body,
             primaryLabel: badPin ? OnboardingStrings.releaseUpdateApprove : OnboardingStrings.releaseUpdateRetry,
             primaryEnabled: state.retryAllowed(pinTyped: pin.count),
-            secondaryLabel: p.vaultOpen ? OnboardingStrings.releaseUpdateNotNow : OnboardingStrings.releaseUpdateUnlockOnly,
+            secondaryLabel: Self.secondaryLabel(vaultOpen: p.vaultOpen, required: state.required),
             onPrimary: retry, onSecondary: onSecondary, header: { UpdateGlyph() }
         ) {
             VStack(alignment: .leading, spacing: Spacing.m) {

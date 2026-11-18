@@ -47,6 +47,10 @@ package final class ManagerVault: CallsAppVault {
 
     package var updateShowing: Bool { manager.releaseUpdateShowing }
 
+    /// As the notifications' gate (the shell not shown): the check's screen after a cancel, or a check due or held, also one
+    /// known only from the clock (the manager's).
+    package var ownerCheckShowing: Bool { manager.ownerCheckDue }
+
     package var isOpen: Bool { Self.open(manager) }
 
     private static func open(_ manager: VaultManager) -> Bool { manager.phase == .unlocked && !manager.releaseUpdate.required }

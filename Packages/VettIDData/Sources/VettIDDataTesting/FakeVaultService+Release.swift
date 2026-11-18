@@ -24,6 +24,8 @@ struct FakeReleases {
     var askedUnavailable = false
     /// The manifest no longer lists release 3.
     var delisted3 = false
+    /// The number the manifest lists release 3's PCR0 under.
+    var release3Number: UInt64 = 3
     var answer: FakeVaultService.ReleaseUpdateAnswer = .move
     var updates: [FakeVaultService.UpdateSeen] = []
 }
@@ -99,6 +101,12 @@ extension FakeVaultService {
     public var delistsRelease3: Bool {
         get { locked { releases.delisted3 } }
         set { locked { releases.delisted3 = newValue } }
+    }
+
+    /// The served manifest lists release 3's PCR0 under another number (a release and its number that do not match).
+    public var release3ListedAs: UInt64 {
+        get { locked { releases.release3Number } }
+        set { locked { releases.release3Number = newValue } }
     }
 
     /// The vault's `sync.event{kind: "vault.release"}` naming release [n] (§11.10.6), sent to this phone.

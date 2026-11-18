@@ -48,12 +48,19 @@ import Testing
         /// How many reads were asked.
         var reads = 0
 
+        /// What a failed read throws.
+        var offerFailure = VaultFailure(.network)
+        /// The reads (counted from 1) that fail, whatever ``offerFailures`` says.
+        var failingReads: Set<Int> = []
+
         func offer() async throws -> ReleaseUpdateOffer? {
             reads += 1
+            let read = reads
             if let duringRead { await duringRead() }
+            if failingReads.contains(read) { throw offerFailure }
             if offerFailures > 0 {
                 offerFailures -= 1
-                throw VaultFailure(.network)
+                throw offerFailure
             }
             return offerValue
         }

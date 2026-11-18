@@ -214,7 +214,7 @@ case "${TEST}" in
   testStagingMessageSend|testStagingMessageReceive|testStagingPhotoSend|testStagingPhotoReceive) ;;
   testStagingInvite|testStagingApproveRequest|testStagingRotate|testStagingSendAll|testStagingWaitMessage) ;;
   testStagingTransferIn|testStagingTransferOut|testStagingSignIn) ;;
-  testStagingLook|testStagingCheck|testStagingCallPlace|testStagingCallAnswer) ;;
+  testStagingLook|testStagingCheck|testStagingCallPlace|testStagingCallAnswer|testStagingReleaseGate) ;;
   *) echo "--test must be testStagingEnroll, testStagingUnlockLock, testStagingApproveUpdate," \
        "testStagingApproveUpdateAtUnlock, testStagingCheckNow, testStagingWrongPinInPasswordChange," \
        "testStagingConnectAccept, testStagingConnectApprove, testStagingMessageSend, testStagingMessageReceive," \

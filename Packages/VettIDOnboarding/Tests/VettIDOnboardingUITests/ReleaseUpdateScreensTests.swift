@@ -106,6 +106,23 @@ import VettIDUI
         #expect(height(long, .large) < height("Four", .large) + 40)
     }
 
+    /// The checking screen's notice after a failed read (owner decision 2026-11-17, fail closed): a list that did not verify
+    /// says so; any other failure is the list not loaded.
+    @Test func theCheckingScreenSaysWhatFailed() {
+        #expect(ReleaseCheckingScreen.message(.manifest) == FailureKind.manifest.message)
+        for f in [FailureKind.network, .manifestUnavailable, .other] {
+            #expect(ReleaseCheckingScreen.message(f) == FailureKind.manifestUnavailable.message)
+        }
+    }
+
+    /// A failed update step's way out: "Continue" back to the update while it is required (no "Not now"), as vettid-android.
+    @Test func aFailedStepWhileRequiredContinuesToTheUpdate() {
+        #expect(UpdateRetryScreen.secondaryLabel(vaultOpen: true, required: true) == OnboardingStrings.releaseUpdateContinue)
+        #expect(UpdateRetryScreen.secondaryLabel(vaultOpen: true, required: false) == OnboardingStrings.releaseUpdateNotNow)
+        #expect(UpdateRetryScreen.secondaryLabel(vaultOpen: false, required: true) == OnboardingStrings.releaseUpdateUnlockOnly)
+        #expect(OnboardingStrings.releaseUpdateContinue == "Continue")
+    }
+
     private func views(in view: UIView) -> [UIView] { [view] + view.subviews.flatMap { views(in: $0) } }
 
     private func textFields(in view: UIView) -> [UITextField] { views(in: view).compactMap { $0 as? UITextField } }

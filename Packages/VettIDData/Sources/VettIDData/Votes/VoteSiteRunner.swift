@@ -83,7 +83,7 @@ final class VoteSiteRunner {
     ) {
         self.votes = votes
         self.site = site
-        self.reader = VoteSiteReader(site: site)
+        self.reader = VoteSiteReader(site: site, live: { [weak votes] in votes.map { !$0.held() } ?? false })
         self.ops = ops
         self.every = every
         self.sleep = sleep
@@ -105,6 +105,10 @@ final class VoteSiteRunner {
         wanted = false
         halt()
     }
+
+    /// The vault's features are held from now (the release gate, or its check after a read that did not verify): what goes
+    /// on is cancelled, and the work starts again when the hold ends (``start()``).
+    func hold() { halt() }
 
     /// The app left the foreground: no run while it is away (there is no background job); what goes on is cancelled.
     func pause() {
@@ -353,7 +357,7 @@ final class VoteSiteRunner {
     /// The due checks after a `check_due` event, when no halt came since [generation] was read: in the line of the runs
     /// (cancelled with them).
     func submitDueNow(ifGeneration generation: Int) async {
-        guard site.configured, generation == haltGeneration else { return }
+        guard site.configured, generation == haltGeneration, votes.map({ !$0.held() }) ?? false else { return }
         try? await serially(.runs) { [self] in try await submitDue() }
     }
 
@@ -389,7 +393,9 @@ final class VoteSiteRunner {
         return try await withTaskCancellationHandler { try await task.value.get() } onCancel: { task.cancel() }
     }
 
+    /// A vault call of the site work; not while the vault's features are held (nothing goes to the vault then).
     func guarded<T: Sendable>(_ body: @MainActor () async throws -> T) async throws -> T {
+        guard votes.map({ !$0.held() }) ?? false else { throw CancellationError() }
         do {
             return try await body()
         } catch is CancellationError {

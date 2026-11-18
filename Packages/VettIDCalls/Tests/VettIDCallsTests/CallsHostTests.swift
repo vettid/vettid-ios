@@ -12,6 +12,7 @@ final class FakeAppVault: CallsAppVault {
 
     var gateway: any CallGateway { inner.gateway }
     var updateShowing: Bool { inner.updateShowing }
+    var ownerCheckShowing: Bool { inner.ownerCheckShowing }
     var isOpen: Bool { inner.unlocked }
     func unlockedChanges() -> AsyncStream<Bool> { inner.unlockedChanges() }
     func rechecks() -> AsyncStream<Void> { inner.rechecks() }

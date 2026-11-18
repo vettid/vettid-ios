@@ -142,9 +142,9 @@ extension VaultManager {
             guard let self, let s = try? await openSession(), let api = try? openApi(s) else { return }
             await refreshAlarm(api)
         }
-        // A change whose answer was lost is decided as soon as the vault runs (§11.14.9 step 2).
         // §10.5.1 "Compatibility": once after each unlock.
         Task { [weak self] in await self?.attachments.probe() }
+        // A change whose answer was lost is decided as soon as the vault runs (§11.14.9 step 2).
         kickChangeCheck()
         // The proactive release notice (ANDROID-PLAN "Vault update"): the manifest, read after every unlock.
         Task { [weak self] in await self?.releaseUpdate.refreshOffer() }
