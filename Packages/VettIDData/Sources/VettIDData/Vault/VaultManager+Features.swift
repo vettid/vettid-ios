@@ -122,6 +122,9 @@ extension VaultManager {
     /// [onAnswered]: told of each list whose events are patches, the moment its own read answered and was applied (and no newer read
     /// of the lists began, and the vault is still open): a list that failed, or that the vault does not have, is not told.
     func refreshListsQuietly(onAnswered: (@MainActor (_ list: ReReadList) -> Void)? = nil) {
+        // No list is read while the features are held (the vault behind its release, or not yet checked after a failed read):
+        // they are read when they no longer are (``followBehind``).
+        guard !releaseUpdate.holdsFeatures else { return }
         listsReads += 1
         let reads = listsReads
         listsRead = Task { [weak self] in

@@ -60,9 +60,32 @@ import VettIDVault
         #expect(hangUp < lock, "before the vault is told to lock")
     }
 
+    /// Owner decision 2026-11-17: a vault that must first move to a newer release counts as not open for the calls (none starts or rings), and
+    /// as open again once nothing newer is listed.
+    @Test func aRequiredUpdateCountsAsClosed() async throws {
+        defer { phone.close() }
+        try await openVault()
+        // The opening's own read of the manifest first: until then the release is being checked and calls are closed.
+        #expect(await waitFor { !m.releaseUpdate.checking })
+        let vault = ManagerVault(m)
+        var changes = vault.unlockedChanges().makeAsyncIterator()
+        #expect(await changes.next() == true)
+        service.listsRelease4 = true
+        await m.releaseUpdate.refreshOffer()
+        #expect(m.releaseUpdate.required)
+        #expect(await changes.next() == false)
+        #expect(!vault.isOpen)
+        service.listsRelease4 = false
+        await m.releaseUpdate.refreshOffer()
+        #expect(await changes.next() == true)
+        #expect(vault.isOpen)
+    }
+
     @Test func theLockCountsAsClosedAtOnce() async throws {
         defer { phone.close() }
         try await openVault()
+        // The opening's own read of the manifest first: until then the release is being checked and calls are closed.
+        #expect(await waitFor { !m.releaseUpdate.checking })
         let vault = ManagerVault(m)
         var changes = vault.unlockedChanges().makeAsyncIterator()
         #expect(await changes.next() == true)
@@ -76,6 +99,8 @@ import VettIDVault
     @Test func erasingThePhoneShowsTheVaultNotOpen() async throws {
         defer { phone.close() }
         try await openVault()
+        // The opening's own read of the manifest first: until then the release is being checked and calls are closed.
+        #expect(await waitFor { !m.releaseUpdate.checking })
         let vault = ManagerVault(m)
         var changes = vault.unlockedChanges().makeAsyncIterator()
         #expect(await changes.next() == true)

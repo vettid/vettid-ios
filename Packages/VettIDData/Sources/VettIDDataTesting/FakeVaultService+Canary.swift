@@ -23,7 +23,7 @@ public extension FakeVaultService {
     }
 
     /// The published manifest cannot be fetched (no connection).
-    var manifestOffline: Bool {
+    public var manifestOffline: Bool {
         get { locked { manifestOfflineValue } }
         set { locked { manifestOfflineValue = newValue } }
     }

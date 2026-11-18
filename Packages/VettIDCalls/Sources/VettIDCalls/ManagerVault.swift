@@ -40,12 +40,16 @@ package final class ManagerVault: CallsAppVault {
         )
     }
 
-    /// A lock pending counts as locked: the manager's phase is `locked` from the first line of the member's lock.
-    package func unlockedChanges() -> AsyncStream<Bool> { observed { [manager] in manager.phase == .unlocked } }
+    /// A lock pending counts as locked: the manager's phase is `locked` from the first line of the member's lock. A vault
+    /// that must first move to the current release (owner decision 2026-11-17, ``ReleaseUpdateManager/required``) counts as not open either:
+    /// no call starts or rings until it has moved.
+    package func unlockedChanges() -> AsyncStream<Bool> { observed { [manager] in Self.open(manager) } }
 
     package var updateShowing: Bool { manager.releaseUpdateShowing }
 
-    package var isOpen: Bool { manager.phase == .unlocked }
+    package var isOpen: Bool { Self.open(manager) }
+
+    private static func open(_ manager: VaultManager) -> Bool { manager.phase == .unlocked && !manager.releaseUpdate.required }
 
     /// The daily check was done, or the connections were read: the vault answers now, if it did not before. (Not the current
     /// values: only a change.)

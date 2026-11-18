@@ -132,6 +132,9 @@ extension VaultManager {
         // (VAULT-MESSAGING 0.70.0 §10.4.2) A vault that did not know `pending.list` is asked again after each unlock, not
         // after a passed owner check.
         approvals.vaultOpened()
+        // The open app shows nothing of the vault until its release is known (``ReleaseUpdateManager/required``). The lists
+        // are read at once, as before (skipped while the vault is behind, and read when it no longer is: ``followBehind``).
+        releaseUpdate.vaultOpened()
         refreshListsQuietly()
         // The clone alarm is read after every unlock, whatever event was or was not received (a held background's, a process that
         // ended): `credential.version` shows it (§3.5.9).
@@ -139,9 +142,9 @@ extension VaultManager {
             guard let self, let s = try? await openSession(), let api = try? openApi(s) else { return }
             await refreshAlarm(api)
         }
+        // A change whose answer was lost is decided as soon as the vault runs (§11.14.9 step 2).
         // §10.5.1 "Compatibility": once after each unlock.
         Task { [weak self] in await self?.attachments.probe() }
-        // A change whose answer was lost is decided as soon as the vault runs (§11.14.9 step 2).
         kickChangeCheck()
         // The proactive release notice (ANDROID-PLAN "Vault update"): the manifest, read after every unlock.
         Task { [weak self] in await self?.releaseUpdate.refreshOffer() }

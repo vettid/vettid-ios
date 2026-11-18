@@ -38,7 +38,10 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
             phaseChanges += 1
             // The account is read again whenever the vault opens (an unlock, the end of onboarding, a start while open).
             if phase == .unlocked, oldValue != .unlocked { onOpened() }
-            if phase != .unlocked, oldValue == .unlocked { forgetOpenLists() } // not kept once it is locked
+            if phase != .unlocked, oldValue == .unlocked {
+                forgetOpenLists() // not kept once it is locked
+                releaseUpdate.vaultClosed() // the release is checked anew at the next opening
+            }
             if phase != oldValue, OwnProfileStep.onPhase(phase) == .forget { forgetOwnProfile() } // IOS-PLAN §4.7
             // IOS-PLAN §4.4 (1): the root screen ends with the lock (``lock()``), "Try again", and when nothing is set up
             // any more (a sign-out, a wipe, a deletion); not in between, so that a refusal during an unlock that includes
@@ -264,7 +267,7 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
             timeScale: { scale.value }, writeFails: config.phoneSecretsWriteFails
         )
         (canary, enclaveRecords) = (Self.canaryManifests(config, member, ref), Self.enclaveRecordStore(config, ref))
-        releaseUpdate = ReleaseUpdateManager(ops: VaultReleaseUpdateOps(ref: ref))
+        releaseUpdate = Self.releaseUpdateManager(ref)
         let timing = config.lockTiming
         let rec = record
         let lockFile = LockRecordFile(

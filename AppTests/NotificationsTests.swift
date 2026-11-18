@@ -56,13 +56,33 @@ struct NotificationShellOpenTests {
         let now = Date(timeIntervalSince1970: 1_000_000)
         let past = OwnerCheckView(state: .ok, deadline: now.addingTimeInterval(-1))
         let ahead = OwnerCheckView(state: .ok, deadline: now.addingTimeInterval(3_600))
-        #expect(AppNotifications.shellOpen(unlocked: true, checkAfterCancel: false, check: ahead, now: now))
-        #expect(!AppNotifications.shellOpen(unlocked: true, checkAfterCancel: false, check: past, now: now))
-        #expect(!AppNotifications.shellOpen(unlocked: true, checkAfterCancel: true, check: ahead, now: now))
-        #expect(!AppNotifications.shellOpen(unlocked: false, checkAfterCancel: false, check: ahead, now: now))
+        #expect(AppNotifications.shellOpen(unlocked: true, checkAfterCancel: false, check: ahead, now: now, releaseRequired: false))
+        #expect(!AppNotifications.shellOpen(unlocked: true, checkAfterCancel: false, check: past, now: now, releaseRequired: false))
+        #expect(!AppNotifications.shellOpen(unlocked: true, checkAfterCancel: true, check: ahead, now: now, releaseRequired: false))
+        #expect(!AppNotifications.shellOpen(unlocked: false, checkAfterCancel: false, check: ahead, now: now, releaseRequired: false))
         // With the shell still mounted, a tap then waits: nothing is opened or marked read.
-        let inFront = AppNotifications.shellOpen(unlocked: true, checkAfterCancel: false, check: past, now: now)
+        let inFront = AppNotifications.shellOpen(unlocked: true, checkAfterCancel: false, check: past, now: now, releaseRequired: false)
         #expect(ShellNotificationsHook.decision(stale: false, active: true, inFront: inFront, found: true, waitOver: false) == .later)
+    }
+
+    /// While the vault must first move to the current release, only the update is shown: nothing posts and a tap waits.
+    @Test func aRequiredUpdateClosesTheShell() {
+        let now = Date(timeIntervalSince1970: 1_000_000)
+        let ahead = OwnerCheckView(state: .ok, deadline: now.addingTimeInterval(3_600))
+        #expect(!AppNotifications.shellOpen(unlocked: true, checkAfterCancel: false, check: ahead, now: now, releaseRequired: true))
+        #expect(!AppNotifications.mayPost(
+            covered: false,
+            shellOpen: AppNotifications.shellOpen(unlocked: true, checkAfterCancel: false, check: ahead, now: now, releaseRequired: true)
+        ))
+    }
+
+    /// What the open vault shows: the gate with the update while behind (also while its release is read again), the gate
+    /// with the check while only checking, the shell otherwise.
+    @Test func theOpenVaultShowsTheGateTheStartingScreenOrTheShell() {
+        #expect(OpenAppScreen.of(behind: true, checking: false) == .releaseGate)
+        #expect(OpenAppScreen.of(behind: true, checking: true) == .releaseGate)
+        #expect(OpenAppScreen.of(behind: false, checking: true) == .releaseCheck)
+        #expect(OpenAppScreen.of(behind: false, checking: false) == .shell)
     }
 
     /// No feed item notification posts while the app lock covers the app, so no name shows over it.

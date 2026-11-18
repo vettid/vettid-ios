@@ -13,12 +13,11 @@ extension VaultManager {
     static func itemsManager(_ manager: VaultManager) -> ItemsManager {
         let ref = ManagerRef()
         ref.manager = manager
-        let now = manager.config.now
         return ItemsManager(
             ops: { VaultItemOps(api: try await memberApi(ref)) },
             quietOps: { VaultItemOps(api: try quietApi(ref)) },
             notes: Self.failureNotes(ref),
-            gated: { ref.manager?.ownerChecks.ownerCheck?.gated(now()) ?? false },
+            gated: { ref.manager?.featuresGated() ?? false },
             gate: { try await ref.manager?.decideFirst() }
         )
     }
@@ -28,12 +27,11 @@ extension VaultManager {
     static func sharingManager(_ manager: VaultManager) -> SharingManager {
         let ref = ManagerRef()
         ref.manager = manager
-        let now = manager.config.now
         return SharingManager(
             ops: { VaultSharingOps(api: try await memberApi(ref)) },
             quietOps: { VaultSharingOps(api: try quietApi(ref)) },
             notes: Self.failureNotes(ref),
-            gated: { ref.manager?.ownerChecks.ownerCheck?.gated(now()) ?? false },
+            gated: { ref.manager?.featuresGated() ?? false },
             onItemsChanged: { try? await ref.manager?.items.refresh(quietly: true) }
         )
     }

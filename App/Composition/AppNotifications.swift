@@ -108,13 +108,17 @@ final class AppNotifications: NSObject, UNUserNotificationCenterDelegate {
         guard let vault else { return false }
         let checks = vault.ownerChecks
         return shellOpen(
-            unlocked: vault.phase == .unlocked, checkAfterCancel: checks.checkAfterCancel, check: checks.ownerCheck, now: Date()
+            unlocked: vault.phase == .unlocked, checkAfterCancel: checks.checkAfterCancel, check: checks.ownerCheck, now: Date(),
+            releaseRequired: vault.releaseUpdate.required
         )
     }
 
-    /// The shell is shown: the vault open, no check after a cancelled recovery, the check not past its deadline at [now].
-    static func shellOpen(unlocked: Bool, checkAfterCancel: Bool, check: OwnerCheckView?, now: Date) -> Bool {
-        unlocked && !checkAfterCancel && !OwnerCheckGate.of(check, now: now).gated
+    /// The shell is shown: the vault open, no check after a cancelled recovery, the check not past its deadline at [now], and
+    /// no update required first (owner decision 2026-11-17: then only the update is shown).
+    static func shellOpen(
+        unlocked: Bool, checkAfterCancel: Bool, check: OwnerCheckView?, now: Date, releaseRequired: Bool
+    ) -> Bool {
+        unlocked && !checkAfterCancel && !OwnerCheckGate.of(check, now: now).gated && !releaseRequired
     }
 
     /// Reads whether the member allows notifications (they may have changed it in the iPhone's Settings).

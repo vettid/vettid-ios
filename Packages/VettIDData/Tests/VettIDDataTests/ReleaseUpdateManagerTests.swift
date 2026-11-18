@@ -43,7 +43,14 @@ import Testing
         /// Runs right after such a report, while the unlock still waits.
         var whileStarting: () -> Void = {}
 
+        /// Waited for inside each read, before it answers (a read held in flight).
+        var duringRead: (() async -> Void)?
+        /// How many reads were asked.
+        var reads = 0
+
         func offer() async throws -> ReleaseUpdateOffer? {
+            reads += 1
+            if let duringRead { await duringRead() }
             if offerFailures > 0 {
                 offerFailures -= 1
                 throw VaultFailure(.network)

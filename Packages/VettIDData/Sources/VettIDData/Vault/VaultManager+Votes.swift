@@ -14,7 +14,7 @@ extension VaultManager {
         return VotesManager(
             ops: { try await memberApi(ref) }, quietOps: { try quietApi(ref) },
             // §3.6.3: a held vault answers `owner_check_required`; nothing is read until the check.
-            gated: { ref.manager?.ownerChecks.ownerCheck?.gated(now()) ?? false },
+            gated: { ref.manager?.featuresGated() ?? false },
             windowUntil: { ref.manager?.unlockWindow },
             openWindow: { password in try await ref.manager?.openUnlockWindow(password: password) },
             closeWindow: { try await ref.manager?.closeUnlockWindow() },

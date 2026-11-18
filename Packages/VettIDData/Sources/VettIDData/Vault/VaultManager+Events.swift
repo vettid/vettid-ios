@@ -131,6 +131,7 @@ extension VaultManager {
             await s.device.flushOutbox()
             // The events a held background did not handle (no list, feed or approval was touched in the background): read again now.
             if catchUp, phase == .unlocked, let s = try? await openSession() {
+                // (While the vault is behind no list is read: they are read when it no longer is, ``followBehind``.)
                 // The lists are read as of now (the vault's time): what comes back from the relay older than this, after its lease, is
                 // covered by the read of its list (``supersededByReread(_:)``). Each list's mark is set the moment that list's read
                 // answered and was applied, not when the others are over: a failed one, one the vault does not have, and one a lock or a
@@ -328,12 +329,18 @@ extension VaultManager {
         if supersededByReread(m) { return }
         // Nothing the vault sends is taken into the app's lists while a lock is pending (as vettid-android).
         if lockGuard.takesEvents() {
+            // Taken also while the vault must first move to the current release: an authentication's verdict (a changed key)
+            // and a pairing's steps are in no list a read gives back.
             connections.onEvent(m)
-            messages.onEvent(m)
-            attachments.onEvent(m)
-            items.onEvent(m)
-            sharing.onEvent(m)
-            activityEvent(m)
+            devicesEvent(m)
+            // Those that only change a list wait for the move: every list is read when it is made (``followBehind``).
+            if !releaseUpdate.holdsFeatures {
+                messages.onEvent(m)
+                attachments.onEvent(m)
+                items.onEvent(m)
+                sharing.onEvent(m)
+                activityEvent(m)
+            }
         }
         switch m.type {
         // §3.6.3: entering the hold ends the credential's unlock window; IOS-PLAN §6.9: no vault content is kept.

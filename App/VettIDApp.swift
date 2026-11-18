@@ -332,24 +332,54 @@ struct AppRoot: View {
             OwnerCheckGateView(
                 vault: vault, path: shell.path, onGated: { shell.shown() }, onCovered: { shell.checkCovers = $0 }
             ) { gate, now in
-                AppShell(
-                    account: vault, vault: vault, ownerChecks: vault.ownerChecks, credential: vault, profiles: vault.profiles,
-                    appLock: appLock, model: shell, gate: gate, now: now,
-                    version: .of(Bundle.main.infoDictionary ?? [:]), installedFrom: InstalledFromBuild.current,
-                    promptReason: AppLockTexts.reason, canary: vault.canary, canaryInbox: canaryInbox,
-                    releaseUpdates: vault.releaseUpdate, releaseNotes: releaseNotes, releaseInbox: releaseInbox,
-                    connections: vault.connections, connectionRequests: vault.connections, inviteInbox: inviteInbox,
-                    messages: vault.messages, attachments: vault.attachments, feed: vault.feed, approvals: vault.approvals,
-                    history: vault.history, historyExport: vault.historyExport, items: vault.items, sharing: vault.sharing,
-                    votes: vault.votes, devices: vault.devices, pairing: vault.pairing, move: move,
-                    calls: calls.map { ShellCalls($0) }
-                ) { openPortal() }
-                .environment(\.accountDeletionURL, AccountDeletion.url(origin: environment.apiOrigin))
-                .modifier(OptionalNotificationsHook(
-                    notifications: notifications, model: shell, feed: vault.feed, checks: vault.ownerChecks
-                ))
+                let screen = OpenAppScreen.of(behind: vault.releaseUpdate.behind, checking: vault.releaseUpdate.checking)
+                switch screen {
+                case .releaseGate, .releaseCheck:
+                    // Until the vault is on the current release (owner decision 2026-11-17), only its update and the ways to
+                    // leave it. Inside the owner check's gate: the update asks for the check first when it is due. What the
+                    // notifications said is taken away, as when the app is covered.
+                    ReleaseRequiredGate(
+                        updates: vault.releaseUpdate, ownerCheck: vault.ownerChecks, notes: releaseNotes, vault: vault,
+                        account: vault, credential: vault, checking: screen == .releaseCheck,
+                        checkFailure: vault.releaseUpdate.checkFailure,
+                        onTryAgain: { Task { await vault.releaseUpdate.refreshOffer() } }
+                    ) { openPortal() }
+                    .environment(\.accountDeletionURL, AccountDeletion.url(origin: environment.apiOrigin))
+                    .onAppear { notifications?.covered() }
+                case .shell:
+                    AppShell(
+                        account: vault, vault: vault, ownerChecks: vault.ownerChecks, credential: vault, profiles: vault.profiles,
+                        appLock: appLock, model: shell, gate: gate, now: now,
+                        version: .of(Bundle.main.infoDictionary ?? [:]), installedFrom: InstalledFromBuild.current,
+                        promptReason: AppLockTexts.reason, canary: vault.canary, canaryInbox: canaryInbox,
+                        releaseUpdates: vault.releaseUpdate, releaseNotes: releaseNotes, releaseInbox: releaseInbox,
+                        connections: vault.connections, connectionRequests: vault.connections, inviteInbox: inviteInbox,
+                        messages: vault.messages, attachments: vault.attachments, feed: vault.feed, approvals: vault.approvals,
+                        history: vault.history, historyExport: vault.historyExport, items: vault.items, sharing: vault.sharing,
+                        votes: vault.votes, devices: vault.devices, pairing: vault.pairing, move: move,
+                        calls: calls.map { ShellCalls($0) }
+                    ) { openPortal() }
+                    .environment(\.accountDeletionURL, AccountDeletion.url(origin: environment.apiOrigin))
+                    .modifier(OptionalNotificationsHook(
+                        notifications: notifications, model: shell, feed: vault.feed, checks: vault.ownerChecks
+                    ))
+                }
             }
         }
+    }
+}
+
+/// What the open vault shows (owner decision 2026-11-17): the release gate with the update while the vault is behind its
+/// release, with "Checking your vault's software" while its release is read (again, until that succeeds), and the shell
+/// otherwise.
+enum OpenAppScreen: Equatable {
+    case releaseGate
+    case releaseCheck
+    case shell
+
+    static func of(behind: Bool, checking: Bool) -> OpenAppScreen {
+        if behind { return .releaseGate }
+        return checking ? .releaseCheck : .shell
     }
 }
 

@@ -43,6 +43,109 @@ import VettIDDataTesting
         #expect(m.releaseUpdate.offer == nil && m.releaseUpdate.offerKnown)
     }
 
+    /// Owner decision 2026-11-17: while a newer `active` release is listed, the update is required and the vault's features are gated as for a
+    /// check past its deadline; once the vault is on release 4, neither.
+    @Test func aNewerReleaseIsRequiredAndGatesTheFeaturesUntilTheVaultMoves() async throws {
+        defer { phone.close() }
+        try await setUp()
+        // The opening's own read of the manifest first (``ReleaseUpdateManager/checking``).
+        #expect(await eventually { !m.releaseUpdate.checking })
+        await m.releaseUpdate.refreshOffer()
+        let offer = try #require(m.releaseUpdate.offer)
+        #expect(m.releaseUpdate.required && m.featuresGated())
+        #expect(m.releaseUpdate.start(pin: pin, offer: offer))
+        await m.releaseUpdate.settle()
+        #expect(try #require(m.releaseUpdate.progress).step == .done)
+        await m.releaseUpdate.refreshOffer()
+        #expect(m.releaseUpdate.offer == nil && m.releaseUpdate.offerKnown)
+        #expect(!m.releaseUpdate.required && !m.featuresGated())
+    }
+
+    /// An unlock while release 4 is listed shows only the release check from its first moment, then the update; once
+    /// nothing newer is listed with the vault still open, every list is read again as after an unlock.
+    @Test func theListsAreReadAgainOnceTheVaultIsNoLongerBehind() async throws {
+        defer { phone.close() }
+        try await setUp()
+        try await m.lock()
+        #expect(try await m.unlock(pin: pin) == .success)
+        #expect(m.releaseUpdate.required, "from the unlock on, while the manifest is read")
+        #expect(await eventually { m.releaseUpdate.offerKnown && m.releaseUpdate.behind })
+        #expect(m.releaseUpdate.required && m.featuresGated())
+        #expect(await eventually { m.listsRead == nil || m.listsReads > 0 })
+        await m.listsRead?.value
+        let before = service.requestsSeen.count
+        service.listsRelease4 = false
+        await m.releaseUpdate.refreshOffer()
+        #expect(!m.releaseUpdate.required && !m.releaseUpdate.behind)
+        #expect(await eventually { service.requestsSeen.dropFirst(before).contains("connection.list") }, "the lists once lifted")
+        #expect(await eventually { service.requestsSeen.dropFirst(before).contains("item.list") }, "the gated items with them")
+    }
+
+    /// While the vault is behind, an authentication's verdict still reaches the connections: a changed key is in no list a
+    /// read gives back, so its warning is not lost behind the update.
+    @Test func aKeyChangeVerdictIsTakenWhileBehind() async throws {
+        defer { phone.close() }
+        try await setUp()
+        await m.releaseUpdate.refreshOffer()
+        #expect(m.releaseUpdate.behind)
+        service.sendEvent("connection.authenticate.result", #"{"connection_id":"c1","authenticated":true,"key_changed":true}"#)
+        #expect(await eventually { m.connections.authentication["c1"]?.keyChanged == true })
+    }
+
+    /// A wipe of the phone while the vault is behind reads no list on its way out.
+    @Test func aWipeWhileBehindReadsNoList() async throws {
+        defer { phone.close() }
+        try await setUp()
+        await m.releaseUpdate.refreshOffer()
+        #expect(m.releaseUpdate.behind)
+        // The opening's own read of the lists is over first: only what the wipe starts is counted.
+        await m.listsRead?.value
+        let before = service.requestsSeen.count
+        try await m.eraseThisPhone()
+        try await Task.sleep(for: .milliseconds(300))
+        #expect(!service.requestsSeen.dropFirst(before).contains("connection.list"))
+        #expect(!m.releaseUpdate.required)
+    }
+
+    /// The vault's release no longer listed while a newer active one is: behind, offered as one that has ended (owner
+    /// decision 2026-11-17).
+    @Test func aReleaseTheManifestNoLongerListsIsBehind() async throws {
+        defer { phone.close() }
+        try await setUp()
+        service.delistsRelease3 = true
+        await m.releaseUpdate.refreshOffer()
+        let offer = try #require(m.releaseUpdate.offer)
+        #expect(offer.current.number == 3 && offer.target.number == 4 && offer.kind == .ended)
+        #expect(m.releaseUpdate.behind && m.releaseUpdate.required)
+    }
+
+    /// Fail closed: an opening whose check cannot fetch the manifest (it went offline after the unlock's own read) keeps
+    /// the check and holds the features (the votes' site work included) while it is read again; once it answers, the app
+    /// opens.
+    @Test func aCheckThatCannotReadTheManifestHoldsTheFeatures() async throws {
+        defer { phone.close() }
+        try await setUp()
+        service.listsRelease4 = false
+        #expect(await eventually { !m.releaseUpdate.checking })
+        service.manifestOffline = true
+        m.releaseUpdate.vaultOpened()
+        await m.releaseUpdate.refreshOffer()
+        #expect(m.releaseUpdate.checkFailed)
+        #expect(m.releaseUpdate.required && m.releaseUpdate.holdsFeatures && m.featuresGated() && m.votes.held())
+        service.manifestOffline = false
+        #expect(await eventually(within: .seconds(10)) { !m.releaseUpdate.checking }, "read again after 2 seconds")
+        #expect(!m.releaseUpdate.required && !m.featuresGated() && !m.votes.held())
+    }
+
+    /// Without a newer release, nothing is required or gated.
+    @Test func theCurrentReleaseIsNotGated() async throws {
+        defer { phone.close() }
+        try await setUp()
+        service.listsRelease4 = false
+        await m.releaseUpdate.refreshOffer()
+        #expect(m.releaseUpdate.offerKnown && !m.releaseUpdate.required && !m.featuresGated())
+    }
+
     /// "Approve and update": the lock, one unlock carrying the approval for release 4 beside its device assertion, `moved`,
     /// then the unlock that reaches release 4 with the same PIN and no approval. The phone records release 4.
     @Test func approveLocksMovesAndOpensOnTheNewRelease() async throws {

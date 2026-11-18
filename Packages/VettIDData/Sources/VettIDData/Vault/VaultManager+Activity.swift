@@ -28,7 +28,7 @@ extension VaultManager {
         let feed = FeedManager(
             ops: { try await memberApi(ref) }, quietOps: { try quietApi(ref) },
             // §3.6.3: nothing of the feed is shown while the vault is held or due.
-            gated: { [now = config.now] in ref.manager?.ownerChecks.ownerCheck?.gated(now()) ?? false },
+            gated: { ref.manager?.featuresGated() ?? false },
             now: config.now
         )
         let approvals = ApprovalsManager(
@@ -58,11 +58,16 @@ extension VaultManager {
         )
     }
 
-    /// One vault event for the feed and the approvals (only while the vault takes events, ``onEvent(_:)``).
+    /// One vault event for the feed, the approvals and the votes (only while the vault takes events and is not behind its
+    /// release, ``onEvent(_:)``).
     func activityEvent(_ m: VaultMessage) {
         feed.onEvent(m)
         approvals.onEvent(m)
         votes.onEvent(m)
+    }
+
+    /// One vault event for the devices and a pairing (only while the vault takes events, ``onEvent(_:)``).
+    func devicesEvent(_ m: VaultMessage) {
         devices.onEvent(m)
         pairing.onEvent(m)
     }
