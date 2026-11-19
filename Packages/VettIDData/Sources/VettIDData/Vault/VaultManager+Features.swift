@@ -104,12 +104,14 @@ extension VaultManager {
 
     /// The vault is no longer open on this phone: what was read from it is dropped (the connections, the requests, the
     /// messages and their photos, the items and tags, the feed, the approvals' lists, History and the member's own profile).
-    func forgetOpenLists() {
+    /// [keepingFeed]: only a status read that could not be made came over the open vault: the feed, its held events and
+    /// its mark are kept for the same opening (``VaultManager/storedPhase``), and cleared if it ends.
+    func forgetOpenLists(keepingFeed: Bool = false) {
         clearHeldEvents()
         alarmEventAt = nil
         listMarks = [:]
         forgetOwnProfile()
-        forgetHeld()
+        forgetHeld(keepingFeed: keepingFeed)
         connections.forgetAuthentication()
         forgetRelay()
         approvals.vaultClosed()

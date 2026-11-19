@@ -81,7 +81,8 @@ extension VaultManager {
     /// profile follows the check's state (``OwnProfileStep``). They are read again when the hold ends
     /// (``refreshAfterHold()``, or this phone's own check's ``refreshListsQuietly()``). Reads on their way are not
     /// published.
-    func forgetHeld() {
+    /// [keepingFeed]: the feed stays (``forgetOpenLists(keepingFeed:)``).
+    func forgetHeld(keepingFeed: Bool = false) {
         asksToNotify = false
         listMarks = [:]
         items.clear()
@@ -89,7 +90,7 @@ extension VaultManager {
         connections.forgetOpenVault(keepingAuthentication: true)
         messages.forgetOpenVault()
         attachments.clear()
-        forgetActivity()
+        forgetActivity(keepingFeed: keepingFeed)
         // The events the device kept for the ones that wait for them carry the same content.
         session?.device.clearInbox()
     }
@@ -180,9 +181,9 @@ extension VaultManager {
         }
     }
 
-    /// The vault is no longer open: the feed, the approvals and History are dropped.
-    func forgetActivity() {
-        feed.clear()
+    /// The vault is no longer open: the feed (unless [keepingFeed]), the approvals and History are dropped.
+    func forgetActivity(keepingFeed: Bool = false) {
+        if !keepingFeed { feed.clear() }
         approvals.forgetOpenVault()
         history.clear()
         votes.clear()
