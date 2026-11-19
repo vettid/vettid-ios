@@ -155,6 +155,20 @@ import VettIDUI
         #expect(UnlockBlock.blocks(for: known).contains(.offer))
         known.noUserGuid = true
         #expect(height(UnlockScreen(state: known, actions: NoUnlockActions())) > 0)
+        // (as vettid-android #412) The release check failed: the words alone, no erase, "Try again".
+        var failed = UnlockState(loading: false)
+        failed.noUserGuid = true
+        failed.keysGone = true
+        failed.preflightError = .network
+        #expect(failed.stuckWordsOnly && !failed.eraseOffered && !failed.stuckNoticeShown)
+        #expect(UnlockScreen.wayForward(failed) == .stuckWords)
+        failed.preflightError = nil
+        failed.preflight = PreflightInfo(routed: release, lastNumber: 3, softwareUpdated: false, rollback: false, offer: nil)
+        #expect(UnlockScreen.wayForward(failed) == .stuck, "a check that answered: Recover and Erase")
+        failed.preflight = nil
+        failed.preflightError = .network
+        #expect(!UnlockBlock.blocks(for: failed).contains(.pin))
+        #expect(height(UnlockScreen(state: failed, actions: NoUnlockActions())) > 0)
     }
 
     /// The support mail carries nothing of the member's.

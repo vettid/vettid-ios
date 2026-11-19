@@ -201,13 +201,29 @@ public struct UnlockScreen: View {
         }
     }
 
-    /// An ended release or a rollback wins: no erase there, whatever else the last answers said.
+    /// The way forward under the unlock's results, one at most.
+    enum WayForward: Equatable { case recoverOnly, notRecognised, stuckWords, stuck, none }
+
+    /// An ended release or a rollback wins: no erase there, whatever else the last answers said. On a phone with no usable
+    /// `user_guid` whose release check failed, the stuck words alone (§6.7.1, as vettid-android #412).
+    static func wayForward(_ state: UnlockState) -> WayForward {
+        if state.recoverOnly { return .recoverOnly }
+        if state.notRecognised { return .notRecognised }
+        if state.stuckWordsOnly { return .stuckWords }
+        if state.stuckNoticeShown { return .stuck }
+        return .none
+    }
+
     @ViewBuilder private var wayForward: some View {
-        if state.recoverOnly {
+        switch Self.wayForward(state) {
+        case .recoverOnly:
             RecoverOnlyNotice(onRecover: onOpenAccountSite, contactSupport: contactSupport)
-        } else if state.notRecognised {
+        case .notRecognised:
             NotRecognisedNotice(erasing: state.erasing, onErase: { actions.askErase() })
-        } else if state.keysGone {
+        case .stuckWords:
+            NoticeCard(.urgent, title: OnboardingStrings.unlockStuckTitle, message: OnboardingStrings.unlockStuckBody)
+                .accessibilityIdentifier("unlock_no_user_guid")
+        case .stuck:
             StuckNotice(
                 erasing: state.erasing, earlierSecret: state.earlierSecret, pinReady: pin.count >= UnlockState.minPinLength,
                 onErase: { actions.askErase() }, onRecover: onOpenAccountSite,
@@ -216,6 +232,8 @@ public struct UnlockScreen: View {
                     actions.submitEarlierSecret()
                 }
             )
+        case .none:
+            EmptyView()
         }
     }
 

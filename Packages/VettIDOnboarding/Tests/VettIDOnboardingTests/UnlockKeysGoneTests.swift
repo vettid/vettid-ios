@@ -167,10 +167,47 @@ import VettIDDataTesting
         let ended = await self.vm()
         #expect(ended.state.recoverOnly && !ended.state.eraseOffered)
 
+        vault.fail["preflight"] = nil
+        vault.preflightInfo = PreflightInfo(
+            routed: FakeVaultRepository.release(3), lastNumber: 4, softwareUpdated: false, rollback: true, offer: nil
+        )
+        let rolledBack = await self.vm()
+        #expect(rolledBack.state.recoverOnly && !rolledBack.state.eraseOffered && !rolledBack.state.stuckWordsOnly)
+
         var s = UnlockState(loading: false)
         s.moveUnconfirmed = UnconfirmedMove(from: FakeVaultRepository.release(4), to: FakeVaultRepository.release(5), failed: true)
         #expect(s.returnOffered)
         s.noUserGuid = true
         #expect(!s.returnOffered && !s.showsPin)
+    }
+
+    /// (§6.7.1, as vettid-android #412) A release check that failed could not rule out an ended release or a rollback: no
+    /// erase, no recover-or-erase notice, the stuck words alone with "Try again". A later check that answers brings the
+    /// notice with Recover and Erase.
+    @Test func aFailedReleaseCheckOffersNoEraseOnAPhoneWithoutAUserGuid() async {
+        vault.userGuidUsable = false
+        vault.fail["preflight"] = FakeVaultRepository.failure(.network)
+        let vm = await vm()
+        #expect(vm.state.preflightError == .network, "\"Try again\" is the primary action")
+        #expect(vm.state.stuckWordsOnly && !vm.state.stuckNoticeShown && !vm.state.eraseOffered)
+        #expect(!vm.state.showsPin, "still no PIN")
+        vm.askErase()
+        #expect(!vm.state.eraseConfirm)
+
+        vault.fail["preflight"] = nil
+        vm.retryPreflight()
+        #expect(!vm.state.stuckWordsOnly && !vm.state.eraseOffered, "nothing while the check runs")
+        await vm.settle()
+        #expect(vm.state.eraseOffered && vm.state.stuckNoticeShown && !vm.state.stuckWordsOnly)
+        vm.askErase()
+        #expect(vm.state.eraseConfirm)
+    }
+
+    /// A phone with its user_guid is not changed: the keys-gone offer after a failed check stays as before.
+    @Test func aPhoneWithAUserGuidKeepsItsOffer() {
+        var s = UnlockState(loading: false)
+        s.keysGone = true
+        s.preflightError = .network
+        #expect(s.eraseOffered && s.stuckNoticeShown && !s.stuckWordsOnly)
     }
 }
