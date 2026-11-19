@@ -23,9 +23,22 @@ extension FeedManager {
     /// The most events, and the most arrivals, held (vettid-android's `ARRIVAL_BUFFER`).
     nonisolated static let heldLimit = 64
 
-    /// The vault opened at [at], on the vault's clock (its messages' `ts`; never the phone's, which may differ by minutes):
-    /// held events the vault sent before are its backlog, and stay silent.
-    public func vaultOpened(at: Date) { openedAt = at }
+    /// The vault opened at [at]: the phone's clock now, until the opening's first answer gives the vault's
+    /// (``openingMarked(_:opening:)``; the vault's messages' `ts` are on its clock, which may differ from the phone's by
+    /// minutes). Held events the vault sent before are its backlog, and stay silent. Returns the opening's number.
+    @discardableResult
+    public func vaultOpened(at: Date) -> Int {
+        opening += 1
+        openedAt = at
+        return opening
+    }
+
+    /// The opening's moment on the vault's clock, as the first answer of [opening] gave it (``VaultDevice``'s
+    /// `beginOpening`): it replaces the phone's clock there, fixed from then on. Nothing for an earlier opening.
+    public func openingMarked(_ at: Date, opening: Int) {
+        guard opening == self.opening else { return }
+        openedAt = at
+    }
 
     /// The check is over but what it held has not come yet: a later event or arrival waits behind it.
     var queuesBehind: Bool { !heldEvents.isEmpty || !heldArrivals.isEmpty }

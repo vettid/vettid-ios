@@ -44,6 +44,40 @@ extension VaultDevice {
     /// Whether a message from the vault arrived in this process: until one does, ``vaultNow()`` is the phone's clock.
     public var knowsVaultTime: Bool { mem.withLock { vaultClock != nil } }
 
+    /// The vault opened (an unlock, a start with it open). The first answer to a request this device first sends from now
+    /// (a fresh id: not a request tried again, nor a stored one, nor a redelivered or cached answer) gives the opening's
+    /// moment on the vault's clock, told once to [onMark] (ANDROID-PLAN 0.1.134 Notification modes 7, IOS-PLAN §6.7). A
+    /// vault time learnt before, any event's `ts` (the mailbox's backlog at a cold start can be days old) and any other
+    /// answer never do. A later opening replaces it.
+    public func beginOpening(onMark: @escaping @Sendable (Date) -> Void) {
+        let up = cfg.uptime()
+        mem.withLock { opening = Opening(began: up, requests: [], onMark: onMark) }
+    }
+
+    /// The most fresh requests an opening waits on before its first answer: far more than an opening sends.
+    static let openingRequestsMax = 256
+
+    /// A request with a fresh id, first sent now.
+    func noteOpeningRequest(_ id: String) {
+        mem.withLock {
+            guard var o = opening, o.requests.count < Self.openingRequestsMax else { return }
+            o.requests.insert(id)
+            opening = o
+        }
+    }
+
+    /// An answer seen for the first time, to [re]: when it is the opening's first answer to one of its fresh requests, the
+    /// opening's moment on the vault's clock (its `ts` less the time since the opening began) is told, once.
+    func noteOpeningAnswer(_ re: String, _ ts: Date) {
+        let up = cfg.uptime()
+        let told: (@Sendable (Date) -> Void, Date)? = mem.withLock {
+            guard let o = opening, o.requests.contains(re) else { return nil }
+            opening = nil
+            return (o.onMark, ts.addingTimeInterval(o.began - up))
+        }
+        if let (tell, at) = told { tell(at) }
+    }
+
     /// Sends [held] again (the same inner id, `exp` and body, in a new envelope, never through the outbox) and waits once
     /// for its answer: the vault answers it from its response cache if it handled it, or handles it once if it never
     /// arrived (§8.2). No answer is ``VaultStateError``.

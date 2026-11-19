@@ -142,9 +142,12 @@ public final class FeedManager: FeedRepository {
     @ObservationIgnored var heldArrivals: [HeldArrival] = []
     /// The reads queued or under way (``read(full:quietly:queued:)``): what was held is released after them.
     @ObservationIgnored var readsRunning = 0
-    /// (Rule 3) When the vault last opened, on the vault's clock (``vaultOpened(at:)``): a held event the feed's read covers
-    /// notifies only if the vault sent it since; one sent before is the mailbox's backlog of what changed while it was away.
+    /// (Rule 3) When the vault last opened (``vaultOpened(at:)``, then ``openingMarked(_:opening:)``): a held event the feed's
+    /// read covers notifies only if the vault sent it since; one sent before is the mailbox's backlog of what changed while
+    /// it was away. Nil before any opening.
     @ObservationIgnored var openedAt: Date?
+    /// Counts the openings: a mark told for an earlier one is not taken.
+    @ObservationIgnored var opening = 0
     /// (Rule 3) The gate lifted: what was held waits for a full read, since what changed while paused was not taken.
     @ObservationIgnored var needsFullRead = false
     /// The `seq` each item was last notified at, while the vault is open: a held event of a change already notified (one

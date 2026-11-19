@@ -257,6 +257,8 @@ extension VaultDevice {
             if let re = inner.re { mem.withLock { pending[re] }?.complete(inner) }
             return
         }
+        // First seen (not a redelivery or a cached re-send): it may be the opening's first answer.
+        if let re = inner.re { noteOpeningAnswer(re, inner.ts) }
         let body = VaultJSON.object(inner.body)
         switch inner.type {
         // §10.3 (0.10.3, 0.10.4): every device.paired carries the device's standing token; it replaces the token of

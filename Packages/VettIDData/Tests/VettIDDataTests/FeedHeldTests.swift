@@ -366,6 +366,27 @@ import VettIDDataTesting
         #expect(state.arrived == [id(item)])
     }
 
+    /// The phone's clock until the opening's first answer gives the vault's (``FeedManager/openingMarked(_:opening:)``),
+    /// for that opening only: a release before it judges by the phone's clock, and a mark told for an earlier opening is
+    /// not taken.
+    @Test func theOpeningsMarkIsThePhonesClockUntilItsFirstAnswerAndOnlyForItsOpening() async throws {
+        ops.add("message.received", at: now)
+        let f = manager()
+        let earlier = f.vaultOpened(at: now.addingTimeInterval(-600))
+        let current = f.vaultOpened(at: now)
+        f.openingMarked(now.addingTimeInterval(-3_600), opening: earlier)
+        #expect(f.openedAt == now, "an earlier opening's mark is not taken")
+        state.checking = true
+        let item = ops.add("connection.added", at: now)
+        f.onEvent(event(item, sent: now.addingTimeInterval(-30)))
+        try await f.refresh()
+        state.checking = false
+        f.releaseHeld()
+        #expect(state.arrived.isEmpty, "released before the first answer: judged by the phone's clock")
+        f.openingMarked(now.addingTimeInterval(-60), opening: current)
+        #expect(f.openedAt == now.addingTimeInterval(-60))
+    }
+
     // MARK: the waiting asks
 
     func approvals() -> [PendingApproval] {
