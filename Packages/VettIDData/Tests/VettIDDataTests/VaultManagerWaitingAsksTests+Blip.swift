@@ -183,7 +183,10 @@ extension VaultManagerWaitingAsksTests {
     /// Nothing more is under way: the lists' read is over and the feed reads nothing.
     func quiet() async throws {
         await m.listsRead?.value
-        #expect(await eventually { m.feed.readsRunning == 0 })
+        // A catch-up or a release just scheduled has had its turn.
+        for _ in 0..<50 { await Task.yield() }
+        #expect(await eventually { m.feed.readsRunning == 0 && !m.feed.catchUpQueued })
+        for _ in 0..<50 { await Task.yield() }
     }
 
     /// The return's catch-up failed: what the check held does not come from the stale feed (a failed read releases nothing);
@@ -291,5 +294,22 @@ extension VaultManagerWaitingAsksTests {
         service.releaseStatusReads()
         try await reading.value
         #expect(m.phase != .unlocked, "\(m.phase)")
+    }
+
+    /// The same, with the status read answering Locked: published, since Locked is right after any lock.
+    @Test func aStatusReadUnderWayThatFindsTheLockIsPublished() async throws {
+        defer { phone.close() }
+        _ = try await connected()
+        try await blip()
+        service.statusForbidden = false
+        service.status("locked")
+        service.holdStatusReads()
+        let reading = Task { try await m.refresh() }
+        #expect(await eventually { service.heldStatusReads == 1 })
+        service.sendEvent("vault.locking", #"{"reason":"test"}"#)
+        #expect(await eventually { !m.openingPaused })
+        service.releaseStatusReads()
+        try await reading.value
+        #expect(m.phase == .locked, "\(m.phase)")
     }
 }

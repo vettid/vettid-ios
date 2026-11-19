@@ -601,7 +601,9 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
         }
         // A reset, a lock, or a newer phase set by an operation meanwhile, wins. (An unlock that a `device.unlinked`
         // reached on its way reads the phase again rather than set its own: ``rereads``.)
-        if gen == record.generation, changes == phaseChanges, locks == lockGeneration { phase = p }
+        // (A lock meanwhile overtakes only an open answer: Locked is right after any lock, and a lock during a paused opening
+        // leaves the phase Unreachable until a read says so.)
+        if gen == record.generation, changes == phaseChanges, locks == lockGeneration || p == .locked { phase = p }
     }
 
     /// The phone's clock, in Unix ms.

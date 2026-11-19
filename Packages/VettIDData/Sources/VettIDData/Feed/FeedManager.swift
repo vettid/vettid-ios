@@ -129,7 +129,7 @@ public final class FeedManager: FeedRepository {
     /// Bumped by ``clear()``: a read that started before it is not applied after it.
     @ObservationIgnored private var generation = 0
     @ObservationIgnored private var reading: Task<Void, any Error>?
-    @ObservationIgnored private var catchUpQueued = false
+    @ObservationIgnored private(set) var catchUpQueued = false
     /// Open from the end of the held or due state until the waiting asks' replay (``openWaitingAsks()``): the items that
     /// arrived meanwhile, which the replay leaves out. Nil when closed.
     @ObservationIgnored var arrivedSinceCheck: Set<String>?
