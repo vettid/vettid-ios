@@ -297,7 +297,10 @@ extension VaultManager: MoveRepository {
         }
         let d = s.device
         // (§6.7.1) Never completed without a valid `user_guid`: this phone could never unlock the vault.
-        guard let guid = (guid ?? d.transferUserGuid).flatMap({ UserGuids.valid($0) ? $0 : nil }) else {
+        // The record's own is the take-over's (written with `movedIn`), after a completion whose start could not be cleared;
+        // never an earlier setup code's.
+        let stored: String? = record.value.movedIn ? record.value.userGuid : nil
+        guard let guid = [guid, d.transferUserGuid, stored].compactMap({ $0 }).first(where: UserGuids.valid) else {
             return .failed(VaultFailure(.other, code: Self.codeTransferSessionEnded))
         }
         do {
@@ -306,25 +309,6 @@ extension VaultManager: MoveRepository {
         } catch {
             return .failed(error)
         }
-    }
-
-    /// How a window that ended without a pairing settles the transfer on [d].
-    private func windowEndedUnpaired(_ end: WindowEnd, _ d: VaultDevice) async -> TransferSettled {
-        if case .rejected = end {
-            // A rejection in the window ends as a rejection, not as a drop at the deadline.
-            await dropTransfer(d)
-            return .failed(PairingRejected())
-        }
-        // The process is ending (``halt()`` cut the window): nothing is decided; the next process runs its own window.
-        if halted { return .failed(CancellationError()) }
-        if case .ended(let drop) = end {
-            // The session ended: reported as ended, never as dropped. On `mailbox_unknown` its handshake is dead and goes;
-            // after a wipe or a sign-out nothing is written (they have it).
-            if drop { await dropTransfer(d) }
-            return .failed(VaultFailure(.other, code: Self.codeTransferSessionEnded))
-        }
-        await dropTransfer(d)
-        return .dropped
     }
 
     /// The `device.paired{transfer}` has arrived: this phone's key is the one the vault bound, the record keeps the member's
@@ -387,6 +371,12 @@ extension VaultManager: MoveRepository {
             // A start that no transfer pinned (the app killed before the handshake was saved, or a drop whose record could
             // not be saved after the device's): nothing waits; the start goes, so that a new code is not refused for it.
             await clearTransferStart(d)
+            return nil
+        }
+        if d.deviceID == nil, d.droppedWithoutUserGuid {
+            // (§6.7.1) The device dropped a malformed `device.paired` before the process ended, and nobody was told: the
+            // background's wait says so ("The move stopped on this phone") and drops the transfer.
+            waitForTransferInBackground()
             return nil
         }
         if d.deviceID == nil, !d.holdsTransferSas, !d.awaitsPairingResp {
@@ -460,7 +450,7 @@ extension VaultManager: MoveRepository {
     /// is reused for that: every scan drops the pending records first (``FreshTransferSecret``).
     /// True when the transfer was dropped and the device's state saved.
     @discardableResult
-    private func dropTransfer(_ d: VaultDevice) async -> Bool {
+    func dropTransfer(_ d: VaultDevice) async -> Bool {
         let key = d.altState.transferAttestKeyID
         guard (try? await d.abandonTransfer()) == true else { return false }
         discardTransferStart(attestKey: key)

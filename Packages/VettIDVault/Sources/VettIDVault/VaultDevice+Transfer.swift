@@ -160,6 +160,10 @@ extension VaultDevice {
     /// restart ends it, and no `hs.fin` can follow).
     public var awaitsPairingResp: Bool { mem.withLock { ini != nil } }
 
+    /// (§6.7.1) A transfer's `device.paired` came without a valid `user_guid` and was dropped unapplied
+    /// (``dropTransferWithoutUserGuid()``); kept until the transfer is abandoned or a new one starts.
+    public var droppedWithoutUserGuid: Bool { mem.withLock { st.transferNoUserGuid == true } }
+
     /// The `user_guid` of a transfer's `device.paired` that was applied and whose take-over is not completed.
     public var transferUserGuid: String? { mem.withLock { st.transferUserGuid } }
 

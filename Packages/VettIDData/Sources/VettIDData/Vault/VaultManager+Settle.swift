@@ -256,6 +256,30 @@ extension VaultManager {
         }
     }
 
+    /// How a window that ended without a pairing settles the transfer on [d].
+    func windowEndedUnpaired(_ end: WindowEnd, _ d: VaultDevice) async -> TransferSettled {
+        // (§6.7.1) Dropped unapplied as a malformed `device.paired` after the window's last look: the move stopped.
+        if d.droppedWithoutUserGuid {
+            await dropTransfer(d)
+            return .failed(VaultFailure(.other, code: Self.codeTransferSessionEnded))
+        }
+        if case .rejected = end {
+            // A rejection in the window ends as a rejection, not as a drop at the deadline.
+            await dropTransfer(d)
+            return .failed(PairingRejected())
+        }
+        // The process is ending (``halt()`` cut the window): nothing is decided; the next process runs its own window.
+        if halted { return .failed(CancellationError()) }
+        if case .ended(let drop) = end {
+            // The session ended: reported as ended, never as dropped. On `mailbox_unknown` its handshake is dead and goes;
+            // after a wipe or a sign-out nothing is written (they have it).
+            if drop { await dropTransfer(d) }
+            return .failed(VaultFailure(.other, code: Self.codeTransferSessionEnded))
+        }
+        await dropTransfer(d)
+        return .dropped
+    }
+
     /// The `device.paired` or `device.pair.rejected` handled, if any: by [d], or by the device of a session opened since
     /// (its collector may have taken it).
     private func pairedOrRejected(_ d: VaultDevice) async -> WindowEnd {

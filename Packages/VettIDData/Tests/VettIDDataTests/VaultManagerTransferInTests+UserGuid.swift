@@ -25,6 +25,20 @@ extension VaultManagerTransferInTests {
         #expect(m.phase != .setup(.finishing))
     }
 
+    /// The device dropped a malformed `device.paired` and the app ended before anyone waited for it: the next start says
+    /// "The move stopped on this phone" (``TransferEnd/stopped``), never a silent drop.
+    @Test func aDropBeforeTheAppEndedIsToldAtTheNextStart() async throws {
+        defer { phone.close() }
+        service.transferWithoutUserGuid = true
+        _ = try await m.transferIn(code: try code())
+        service.approveTransferIn()
+        #expect(await eventually { m.session?.device.droppedWithoutUserGuid == true }, "dropped as it was handled")
+        try await phone.restart()
+        try await m.refresh()
+        #expect(await eventually { m.transferEnd == .stopped }, "\(String(describing: m.transferEnd))")
+        #expect(!deviceHoldsVault && m.record.value.transferStartedMs == nil)
+    }
+
     /// A stored `user_guid` that fails the check (a damaged record) is no `user_guid`: Finish the move and the release update
     /// refuse before their lock (`no_user_guid`), and nothing is locked or sent.
     @Test func aStoredMalformedUserGuidIsRefusedBeforeAnyLock() async throws {

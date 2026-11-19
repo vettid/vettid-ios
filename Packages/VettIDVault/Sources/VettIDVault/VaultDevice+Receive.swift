@@ -265,7 +265,8 @@ extension VaultDevice {
         // hs.resp before maintain() looks at it.
         case "device.paired":
             // (§6.7.1, 0.90.17) A transfer's `device.paired` without `transfer: true` and a valid `user_guid` is malformed:
-            // the transfer is dropped before anything of it is stored or sent, and it is not handed on.
+            // the transfer is dropped before anything of it is stored or sent, and it is not handed on. A transfer is known by
+            // its attested key too (set by every transfer's start), so an answer without the flag is caught as well.
             if mem.withLock({ st.deviceID == nil && (VaultJSON.bool(body, "transfer") == true || alt().transferAttestKeyID != nil) }),
                Self.transferUserGuid(body) == nil {
                 dropTransferWithoutUserGuid()
