@@ -354,6 +354,16 @@ for n in "${ALL[@]}"; do
 done
 
 if [[ ${AUTO_MATCH} -eq 1 ]]; then export TEST_RUNNER_VETTID_STAGING_TRANSFER_AUTO_MATCH=1; fi
+if [[ "${TEST}" == testStagingReleaseGate ]]; then
+  unset_inputs=()
+  for n in VETTID_STAGING_PEER_NAME VETTID_STAGING_ITEM_NAME; do
+    v="TEST_RUNNER_${n}"
+    [[ -n "${!v:-}" ]] || unset_inputs+=("${n}")
+  done
+  if [[ ${#unset_inputs[@]} -gt 0 ]]; then
+    echo "note: not set: ${unset_inputs[*]} (state after the update not checked)"
+  fi
+fi
 RESULT="${CACHE}/results/${TEST}-$(date +%Y%m%d-%H%M%S).xcresult"
 if [[ ${KEEP} -eq 0 ]]; then
   # The bundle holds what was typed: it goes however the run ends.

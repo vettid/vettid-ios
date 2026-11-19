@@ -41,7 +41,28 @@ extension ReleaseUpdateManagerTests {
         await m.settle()
         #expect(m.progress?.step == .done)
         #expect(m.offer == newer, "6 is past the update's 5")
+        ops.release = 5
         m.finish()
         #expect(m.offer == newer)
+        // Read while the vault was on 4, it gates nothing on 5 until a read for 5 (``ReleaseUpdateManager/behind``), as the
+        // opening's own read on the new release does in the test above.
+        #expect(!m.behind && !m.required)
+    }
+
+    /// An offer for a release below the update's target is stale: it goes at Done.
+    @Test func anOlderOfferGoesAtDone() async {
+        let ops = Ops()
+        ops.results = [.moved, .opened]
+        let older = ReleaseUpdateOffer(current: Self.rel(3, "deprecated"), target: Self.rel(4))
+        ops.offerValue = older
+        let m = manager(ops)
+        await m.refreshOffer()
+        #expect(m.offer == older)
+        #expect(m.start(pin: "246802", offer: offer))
+        await m.settle()
+        #expect(m.progress?.step == .done && m.offer == nil, "4 is below the update's 5")
+        ops.release = 5
+        m.finish()
+        #expect(m.offer == nil && !m.behind)
     }
 }

@@ -26,6 +26,8 @@ extension VaultManagerReleaseUpdateTests {
 
         await m.releaseUpdate.refreshOffer()
         let offer = try #require(m.releaseUpdate.offer)
+        await m.listsRead?.value
+        let before = service.requestsSeen.count
         #expect(m.releaseUpdate.start(pin: pin, offer: offer))
         await m.releaseUpdate.settle()
         #expect(try #require(m.releaseUpdate.progress).step == .done)
@@ -36,7 +38,12 @@ extension VaultManagerReleaseUpdateTests {
         #expect(m.phase == .unlocked)
         #expect(m.session?.device === device)
         #expect(m.record.value.vaultID == vaultID && m.record.value.userGuid == userGuid && !userGuid.isEmpty)
-        // The lists read again on the new release hold what was there before.
+        // The lists are read again from the vault on the new release (not only kept in memory), and hold what was there
+        // before; nothing was enrolled again.
+        for list in ["connection.list", "item.list", "message.list"] {
+            #expect(await eventually { service.requestsSeen.dropFirst(before).contains(list) }, "\(list) read again")
+        }
+        #expect(!service.requestsSeen.dropFirst(before).contains { $0.contains("enroll") }, "no enrollment")
         #expect(await eventually { c.connections.map(\.id) == [r.connectionID] })
         #expect(await eventually { m.items.items.map(\.id) == [item] })
         #expect(await eventually { m.messages.messages(r.connectionID).map(\.messageID) == [sent.messageID] })
