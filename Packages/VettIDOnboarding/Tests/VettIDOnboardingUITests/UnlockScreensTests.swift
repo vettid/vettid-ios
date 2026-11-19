@@ -167,6 +167,9 @@ import VettIDUI
         #expect(UnlockScreen.wayForward(failed) == .stuck, "a check that answered: Recover and Erase")
         failed.preflight = nil
         failed.preflightError = .network
+        failed.notRecognised = true
+        #expect(UnlockScreen.wayForward(failed) == .stuckWords, "no dead erase before a check answered")
+        failed.notRecognised = false
         #expect(!UnlockBlock.blocks(for: failed).contains(.pin))
         #expect(height(UnlockScreen(state: failed, actions: NoUnlockActions())) > 0)
     }

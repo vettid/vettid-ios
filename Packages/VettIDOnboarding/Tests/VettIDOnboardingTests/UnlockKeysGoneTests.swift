@@ -203,6 +203,16 @@ import VettIDDataTesting
         #expect(vm.state.eraseConfirm)
     }
 
+    /// A paused service is a check that did not answer either: the words alone and "Try again" (once the pause's wait is
+    /// over), no erase.
+    @Test func aPausedServiceIsNoAnswer() async {
+        vault.userGuidUsable = false
+        vault.fail["preflight"] = FakeVaultRepository.failure(.servicePaused, retry: 30)
+        let paused = await vm()
+        #expect(paused.state.stuckWordsOnly && !paused.state.eraseOffered && paused.state.serviceWaitSeconds > 0)
+        #expect(paused.state.preflightError == .servicePaused, "\"Try again\" once the wait is over")
+    }
+
     /// A phone with its user_guid is not changed: the keys-gone offer after a failed check stays as before.
     @Test func aPhoneWithAUserGuidKeepsItsOffer() {
         var s = UnlockState(loading: false)

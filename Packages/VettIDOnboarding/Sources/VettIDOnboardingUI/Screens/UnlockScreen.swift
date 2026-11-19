@@ -208,7 +208,8 @@ public struct UnlockScreen: View {
     /// `user_guid` whose release check failed, the stuck words alone (§6.7.1, as vettid-android #412).
     static func wayForward(_ state: UnlockState) -> WayForward {
         if state.recoverOnly { return .recoverOnly }
-        if state.notRecognised { return .notRecognised }
+        // Its erase only where it is offered (a phone with no usable user_guid: after a check that answered).
+        if state.notRecognised, state.eraseOffered { return .notRecognised }
         if state.stuckWordsOnly { return .stuckWords }
         if state.stuckNoticeShown { return .stuck }
         return .none
