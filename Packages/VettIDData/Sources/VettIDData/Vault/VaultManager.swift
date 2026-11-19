@@ -447,6 +447,7 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
         // In the background nothing starts the collection again (a lock's retry opens the session): the return to the
         // foreground does (IOS-PLAN §6.6).
         startUnlessBackground(s.device)
+        beginOpeningAgain(s.device)
         observe(s)
         // A start or a reconnection: a change whose answer was lost is decided first (§11.14.9 step 2).
         kickChangeCheck()

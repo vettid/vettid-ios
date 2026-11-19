@@ -257,7 +257,9 @@ extension VaultDevice {
             if let re = inner.re { mem.withLock { pending[re] }?.complete(inner) }
             return
         }
-        // First seen (not a redelivery or a cached re-send): it may be the opening's first answer.
+        // First seen (not a redelivery or a cached re-send): it may be the opening's first answer. (Placed after the dedupe for
+        // clarity; before it would change nothing: a copy of an answer already told finds no opening, and one whose request no
+        // longer waits is not counted, ``noteOpeningAnswer(_:_:)``.)
         if let re = inner.re { noteOpeningAnswer(re, inner.ts) }
         let body = VaultJSON.object(inner.body)
         switch inner.type {
