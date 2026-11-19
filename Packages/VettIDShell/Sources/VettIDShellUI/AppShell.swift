@@ -188,11 +188,7 @@ public struct AppShell: View {
     @ViewBuilder private var changeCheckNotice: some View {
         if lockRefused {
             // "Lock and unlock now" refused on a phone without a usable user_guid: the unlock screen's recover-or-erase words.
-            UrgentBanner(
-                UnlockStuckTexts.title + "\n" + UnlockStuckTexts.body, actionLabel: ShellStrings.ownerCheckNoticeOk,
-                action: { lockRefused = false }
-            )
-            .accessibilityIdentifier("change_check_no_user_guid")
+            LockRefusedBanner(onOk: { lockRefused = false })
         }
         // A change screen waiting for it shows the decision itself.
         if let check = vault.changeCheck, let text = ChangeCheckNotice.text(check, timeScale: vault.timeScale), !vault.changeCheckAwaited {

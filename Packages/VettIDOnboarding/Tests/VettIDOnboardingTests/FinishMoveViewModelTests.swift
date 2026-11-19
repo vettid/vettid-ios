@@ -139,14 +139,23 @@ import VettIDDataTesting
     /// (§6.7.1) No usable `user_guid` on this phone: nothing is locked or sent, the recover-or-erase words are shown, and the
     /// keypad and "Finish the move" stay closed, since no PIN can help (vettid-android #406, #14199).
     @Test func aPhoneWithoutAUserGuidIsToldItCannotOpenTheVault() async {
-        vault.userGuidUsable = false
+        vault.unlockResults = [.failed(.notSupported, code: UnlockAttempt.codeNoUserGuid)]
         let vm = await model()
         #expect(vm.finish(pin: "975310"))
         await vm.settle()
-        #expect(sent.isEmpty, "nothing locked or sent")
         #expect(vm.state.failure == .notSupported && vm.state.noUserGuid && !vm.state.done)
         #expect(!vm.state.pinAllowed, "no Try again that cannot work")
         #expect(!vm.finish(pin: "975310"))
+    }
+
+    /// (§6.7.1) Known when the screen opens: the words at once, the keypad never opened, and nothing locked or sent.
+    @Test func aPhoneKnownWithoutAUserGuidIsToldAtOnce() async {
+        vault.userGuidUsable = false
+        let vm = await model()
+        #expect(vm.state.noUserGuid && !vm.state.pinAllowed && vm.state.failure == nil)
+        #expect(!vm.finish(pin: "975310"))
+        await vm.settle()
+        #expect(sent.isEmpty, "nothing locked or sent")
     }
 
     /// Another `notSupported`, or the code alone, is not a phone without a `user_guid`: the usual text, and the PIN again.

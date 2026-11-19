@@ -430,10 +430,10 @@ struct RecoveryPendingNotice: View {
 
 /// The card of the last "Finish the move" that did not open the vault (release R, §11.14.10), with its Continue; nil when
 /// none is shown. It locked the vault and its unlock failed, or, with no usable user_guid on this phone, it locked nothing
-/// and sent nothing: then the recover-or-erase notice's words, with no erase here (that comes after the next PIN, with its
-/// confirmation), never "does not support this yet". That card is not shown beside the recover-or-erase notice, which says
-/// the same, nor beside the recover-only notice of an ended release or a rollback, which offers no erase and is the way
-/// forward there. Mirrors vettid-android #408.
+/// and sent nothing: then the recover-or-erase notice's words, with no erase of its own, never "does not support this
+/// yet". That card is not shown beside the recover-or-erase notice, which says the same (on such a phone, from the
+/// screen's opening), nor beside the recover-only notice of an ended release or a rollback, which offers no erase and is
+/// the way forward there. Mirrors vettid-android #408.
 struct UnlockMoveCard: Equatable {
     let kind: NoticeKind
     let title: String
@@ -462,6 +462,34 @@ struct UnlockMessageNotice: View {
         !state.eraseOffered && !state.recoverOnly && !state.moveNoUserGuid
     }
 
+    /// The card of a failed unlock; nil where another notice says it.
+    static func failedCard(_ state: UnlockState) -> NoticeContent? {
+        guard case .failed(let kind, let code) = state.message else { return nil }
+        // No usable user_guid (§6.7.1): the recover-or-erase notice says it; where it is not shown, its words alone, with no
+        // actions (owner decision a, 2026-11-18). Never "does not support this yet".
+        if UnlockAttempt.isNoUserGuid(kind, code) {
+            guard noUserGuidShown(state) else { return nil }
+            return NoticeContent(
+                kind: .urgent, title: OnboardingStrings.unlockStuckTitle, message: OnboardingStrings.unlockStuckBody,
+                identifier: "unlock_no_user_guid"
+            )
+        }
+        // An unreadable result is the "not recognised" notice, with its erase action.
+        if code == UnlockState.codeUnreadable && state.notRecognised { return nil }
+        let text = switch code {
+        case UnlockState.codeUnreadable: OnboardingStrings.unlockUnreadable
+        // IOS-PLAN §4.3 point 6: still routed to the release the move left, never the rollback's text.
+        case VaultManager.codeReleaseNotRouted:
+            OnboardingStrings.releaseUpdateRoutePending(Int(state.moveUnconfirmed?.to.number ?? state.preflight?.lastNumber ?? 0))
+        default: kind.message(timeScale: state.timeScale)
+        }
+        // The service paused for maintenance or not there yet: temporary, not alarming.
+        let temporary = kind == .servicePaused || kind == .vaultUnavailable
+        return NoticeContent(
+            kind: temporary ? .warning : .urgent, title: OnboardingStrings.unlockTitle, message: text, identifier: "unlock_failed"
+        )
+    }
+
     var body: some View {
         switch state.message {
         case .moveBackFailed:
@@ -472,29 +500,10 @@ struct UnlockMessageNotice: View {
                 .warning, title: OnboardingStrings.unlockTitle, message: OnboardingStrings.unlockUpdateRefused(code),
                 announce: .assertive
             )
-        // No usable user_guid (§6.7.1): the recover-or-erase notice says it; where it is not shown, its words alone, with no
-        // actions (owner decision a, 2026-11-18). Not beside an ended release or a rollback, whose notice offers no erase,
-        // nor beside the move card of the same failure, which has the same words and its Continue.
-        case .failed(let kind, let code) where UnlockAttempt.isNoUserGuid(kind, code):
-            if Self.noUserGuidShown(state) {
-                NoticeCard(
-                    .urgent, title: OnboardingStrings.unlockStuckTitle, message: OnboardingStrings.unlockStuckBody, announce: .assertive
-                )
-                .accessibilityIdentifier("unlock_no_user_guid")
+        case .failed:
+            if let c = Self.failedCard(state) {
+                NoticeCard(c.kind, title: c.title, message: c.message, announce: .assertive).accessibilityIdentifier(c.identifier)
             }
-        // An unreadable result is the "not recognised" notice, with its erase action.
-        case .failed(let kind, let code) where code != UnlockState.codeUnreadable || !state.notRecognised:
-            let text = switch code {
-            case UnlockState.codeUnreadable: OnboardingStrings.unlockUnreadable
-            // IOS-PLAN §4.3 point 6: still routed to the release the move left, never the rollback's text.
-            case VaultManager.codeReleaseNotRouted:
-                OnboardingStrings.releaseUpdateRoutePending(Int(state.moveUnconfirmed?.to.number ?? state.preflight?.lastNumber ?? 0))
-            default: kind.message(timeScale: state.timeScale)
-            }
-            // The service paused for maintenance or not there yet: temporary, not alarming.
-            let temporary = kind == .servicePaused || kind == .vaultUnavailable
-            NoticeCard(temporary ? .warning : .urgent, title: OnboardingStrings.unlockTitle, message: text, announce: .assertive)
-                .accessibilityIdentifier("unlock_failed")
         default:
             EmptyView()
         }

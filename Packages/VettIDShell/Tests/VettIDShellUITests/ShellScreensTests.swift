@@ -9,6 +9,7 @@ import VettIDDataTesting
 import VettIDHistory
 import VettIDKeys
 import VettIDOnboarding
+import VettIDOnboardingUI
 import VettIDSettings
 import VettIDShell
 @testable import VettIDShellUI
@@ -165,6 +166,24 @@ import VettIDVault
         let at = OwnerCheckNotice(itemID: "2", kind: "owner_check.locked", ref: nil, at: now, urgent: true)
         #expect(OwnerCheckBanners.noticeText(at, count: 3, now: now)
             == "Your vault locked after ten wrong daily checks. (\(ShellTimes.time(now))) And 2 more.")
+    }
+
+    /// (§6.7.1) The banner's "Lock and unlock now" on a phone without a usable `user_guid`: the decision is acknowledged,
+    /// nothing is locked or sent, and the refusal's banner says the unlock screen's recover-or-erase words.
+    @Test func lockAndUnlockNowWithoutAUserGuidLocksNothing() async {
+        let vault = FakeVaultRepository(.unlocked)
+        vault.changeCheck = ChangeCheck(.pin, .ended)
+        vault.userGuidUsable = false
+        #expect(!vault.lockAndUnlockForChange())
+        for _ in 0..<20 { await Task.yield() }
+        #expect(vault.calls.contains("acknowledgeChangeCheck") && !vault.calls.contains("lock") && vault.phase == .unlocked)
+        #expect(LockRefusedBanner.text == "This phone cannot open your vault\n" + UnlockStuckTexts.body)
+        #expect(height(LockRefusedBanner(onOk: {})) > 0)
+        vault.userGuidUsable = true
+        vault.changeCheck = ChangeCheck(.pin, .ended)
+        #expect(vault.lockAndUnlockForChange())
+        for _ in 0..<200 where !vault.calls.contains("lock") { await Task.yield() }
+        #expect(vault.calls.contains("lock"))
     }
 
     /// The release banner (RELEASE-UPDATES §2): vettid-android's texts, "available" or the end-date warning.

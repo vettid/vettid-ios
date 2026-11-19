@@ -109,6 +109,10 @@ import VettIDUI
         #expect(n?.title == "This phone cannot open your vault" && n?.message == OnboardingStrings.unlockStuckBody)
         #expect(!s.pinAllowed, "no Try again that cannot work")
         #expect(FinishMoveContent.failureNotice(FinishMoveState(), timeScale: 1) == nil)
+        // Known when the screen opens, before any attempt: the same words.
+        var known = FinishMoveState()
+        known.noUserGuid = true
+        #expect(FinishMoveContent.failureNotice(known, timeScale: 1) == n)
     }
 
     /// The code is pasted in a field without suggestions, and the PIN is the keypad's: no step has a text field.

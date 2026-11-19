@@ -15,8 +15,9 @@ public struct FinishMoveActions {
     public init() {}
 }
 
-/// The failure card of "Finish the move" (``FinishMoveContent/failureNotice(_:timeScale:)``).
-struct FinishMoveNotice: Equatable {
+/// What a notice card says, for a screen's rule to be checked as it is (``FinishMoveContent/failureNotice(_:timeScale:)``,
+/// ``UnlockMessageNotice/failedCard(_:)``).
+struct NoticeContent: Equatable {
     let kind: NoticeKind
     let title: String
     let message: String
@@ -48,17 +49,17 @@ public struct FinishMoveContent: View {
     }
 
     /// The failure's card: on a phone without a usable `user_guid` (§6.7.1), which can never unlock, the unlock screen's
-    /// recover-or-erase words with no actions here ("Later" leads to the unlock screen, where Recover and Erase are;
-    /// vettid-android #406); otherwise the failure's own text.
-    static func failureNotice(_ state: FinishMoveState, timeScale: UInt64) -> FinishMoveNotice? {
-        guard let failure = state.failure else { return nil }
+    /// recover-or-erase words with no actions here, from the start (vettid-android #406). Nothing was locked, so "Later"
+    /// returns to the open app; otherwise the failure's own text.
+    static func failureNotice(_ state: FinishMoveState, timeScale: UInt64) -> NoticeContent? {
         if state.noUserGuid {
-            return FinishMoveNotice(
+            return NoticeContent(
                 kind: .urgent, title: OnboardingStrings.unlockStuckTitle, message: OnboardingStrings.unlockStuckBody,
                 identifier: "finish_move_no_user_guid"
             )
         }
-        return FinishMoveNotice(
+        guard let failure = state.failure else { return nil }
+        return NoticeContent(
             kind: .warning, title: OnboardingStrings.finishMoveTitle, message: failure.message(timeScale: timeScale),
             identifier: "finish_move_failure"
         )

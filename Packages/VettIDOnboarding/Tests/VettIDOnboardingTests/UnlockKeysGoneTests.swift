@@ -135,4 +135,20 @@ import VettIDDataTesting
             #expect(UnlockViewModel.earlierSecretHelps(other), "\(other)")
         }
     }
+
+    /// (§6.7.1) Known when the screen opens: the recover-or-erase notice at once, and no PIN asked, since none would be
+    /// used.
+    @Test func aPhoneKnownWithoutAUserGuidAsksNoPin() async {
+        vault.userGuidUsable = false
+        let vm = await vm()
+        #expect(vm.state.noUserGuid && vm.state.keysGone && vm.state.stuckNoticeShown && vm.state.eraseOffered)
+        #expect(!vm.state.showsPin && !vm.state.pinAllowed && !vm.state.submitAllowed)
+        vm.setPin("40281795")
+        vm.submit()
+        await vm.settle()
+        #expect(!vault.calls.contains("unlock"), "nothing sent")
+        vm.retryPreflight()
+        await vm.settle()
+        #expect(vm.state.keysGone && !vm.state.showsPin, "a new release check keeps it")
+    }
 }

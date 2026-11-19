@@ -149,6 +149,14 @@ import VettIDData
         #expect(r.calls == ["lock"])
     }
 
+    /// The default "Finish the move" sends nothing on a phone without a usable `user_guid` (§6.7.1): the unlock's refusal.
+    @Test func theDefaultFinishMoveLocksNothingWithoutAUserGuid() async throws {
+        let r = Minimal()
+        r.userGuidUsable = false
+        #expect(try await r.finishMove(pin: "975310") == .failed(.notSupported, code: UnlockAttempt.codeNoUserGuid))
+        #expect(r.calls.isEmpty)
+    }
+
     /// The open app's "Lock and unlock now" for a decided change: acknowledged either way; locked only on a phone that can
     /// unlock again (§6.7.1).
     @Test func theBannersLockAndUnlockLocksNothingWithoutAUserGuid() async {

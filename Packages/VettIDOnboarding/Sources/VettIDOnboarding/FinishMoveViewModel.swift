@@ -12,8 +12,9 @@ public struct FinishMoveState: Equatable, Sendable, CustomStringConvertible {
     /// (VAULT-MESSAGING 0.45.0 §11.14.9 step 2) A PIN or password change is being decided, or the PIN is uncertain: no lock
     /// and unlock with a PIN typed here until it is (the gate's text); nil when the move can be finished.
     public var held: FailureKind?
-    /// (§6.7.1) The unlock refused for want of a usable `user_guid` on this phone (``UnlockAttempt/isNoUserGuid(_:_:)``):
-    /// it can never unlock, so the recover-or-erase words are shown and the keypad stays closed.
+    /// (§6.7.1) This phone has no usable `user_guid` (known when the screen opens, or from the unlock's refusal,
+    /// ``UnlockAttempt/isNoUserGuid(_:_:)``): it can never unlock, so the recover-or-erase words are shown and the keypad
+    /// stays closed.
     public var noUserGuid = false
 
     public init() {}
@@ -54,6 +55,8 @@ public final class FinishMoveViewModel {
 
     public init(vault: any VaultRepository) {
         self.vault = vault
+        // §6.7.1: known before any PIN; the keypad is not opened for a move this phone cannot finish.
+        state.noUserGuid = !vault.userGuidUsable
         keypad.follow(state.pinAllowed) { vault.pinGeneration }
         followers.add(follow(self, read: { $0.vault.finishMoveHold }, apply: { $0.state.held = $1 }))
     }
@@ -93,7 +96,7 @@ public final class FinishMoveViewModel {
             self.state.busy = false
             self.state.done = failure == nil
             self.state.failure = failure
-            self.state.noUserGuid = noUserGuid
+            self.state.noUserGuid = self.state.noUserGuid || noUserGuid
         }
         return true
     }

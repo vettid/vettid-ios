@@ -71,6 +71,9 @@ public struct UnlockState: Equatable, Sendable, CustomStringConvertible, CustomD
     public var notRecognised = false
     /// This phone no longer holds the vault's keys (`device_secret`): recover-or-erase is offered.
     public var keysGone = false
+    /// (§6.7.1) This phone has no usable `user_guid`: it can never unlock. The recover-or-erase notice from the start
+    /// (with ``keysGone``), and no PIN is asked, since none would be used.
+    public var noUserGuid = false
     /// (iPhone, IOS-PLAN §6.3 item 5) With ``keysGone``: a replaced phone-secret record exists, and the member may try it.
     public var earlierSecret = false
     /// The open app was sent here because the relay kept refusing this phone's messages to the vault.
@@ -134,7 +137,7 @@ public struct UnlockState: Equatable, Sendable, CustomStringConvertible, CustomD
     /// the way back, which does not go to the routed release).
     public var pinAllowed: Bool {
         if returnAsksPin { return waitSeconds == 0 && serviceWaitSeconds == 0 && !busy }
-        guard let p = preflight, preflightError == nil else { return false }
+        guard !noUserGuid, let p = preflight, preflightError == nil else { return false }
         return !p.rollback && (!p.softwareUpdated || updateAcknowledged) && waitSeconds == 0 && serviceWaitSeconds == 0 && !busy
     }
 
@@ -142,7 +145,9 @@ public struct UnlockState: Equatable, Sendable, CustomStringConvertible, CustomD
     public var submitAllowed: Bool { pinAllowed && pin.count >= Self.minPinLength && (!checkDue || !password.isEmpty) }
 
     /// The PIN field is shown: the vault's software verified, nothing blocking, no recovery pending.
-    public var showsPin: Bool { returnAsksPin || (!recoverOnly && !recoveryPending && preflight != nil && preflightError == nil) }
+    public var showsPin: Bool {
+        returnAsksPin || (!noUserGuid && !recoverOnly && !recoveryPending && preflight != nil && preflightError == nil)
+    }
 
     /// A recovery's delay at the vault's time scale ("24 hours"; on staging "1 hour").
     public var recoveryText: String { TimeScales.text(TimeScales.recoveryDelay, by: timeScale) }

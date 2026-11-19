@@ -126,6 +126,14 @@ import VettIDUI
         var s = ok
         s.message = .failed(.notSupported, code: UnlockAttempt.codeNoUserGuid)
         #expect(UnlockMessageNotice.noUserGuidShown(s))
+        let card = UnlockMessageNotice.failedCard(s)
+        #expect(card?.identifier == "unlock_no_user_guid" && card?.message == OnboardingStrings.unlockStuckBody)
+        var said = keysGone
+        said.message = s.message
+        #expect(UnlockMessageNotice.failedCard(said) == nil, "never the generic text where another notice says it")
+        var other = ok
+        other.message = .failed(.notSupported, code: "other")
+        #expect(UnlockMessageNotice.failedCard(other)?.message == FailureKind.notSupported.message(timeScale: 1))
         s.keysGone = true
         #expect(!UnlockMessageNotice.noUserGuidShown(s) && s.stuckNoticeShown)
         s.keysGone = false
@@ -137,6 +145,11 @@ import VettIDUI
         var stuck = keysGone
         stuck.message = s.message
         #expect(height(UnlockScreen(state: stuck, actions: NoUnlockActions())) > 0)
+        // Known when the screen opens: no PIN block, the notice only.
+        var known = keysGone
+        known.noUserGuid = true
+        #expect(!UnlockBlock.blocks(for: known).contains(.pin))
+        #expect(height(UnlockScreen(state: known, actions: NoUnlockActions())) > 0)
     }
 
     /// The support mail carries nothing of the member's.

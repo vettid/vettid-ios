@@ -140,7 +140,10 @@ public final class UnlockViewModel: UnlockActions {
         state.loading = true
         state.preflightError = nil
         state.preflight = nil
-        state.keysGone = false
+        // §6.7.1: a phone without a usable user_guid is told at once that it cannot open the vault (recover or erase),
+        // with no PIN asked; nothing will ever add one.
+        state.noUserGuid = !vault.userGuidUsable
+        state.keysGone = state.noUserGuid
         state.earlierSecret = false
         state.eraseConfirm = false
         launch { [self] in
@@ -425,9 +428,9 @@ public final class UnlockViewModel: UnlockActions {
         return code == UnlockState.codeUnreadable || kind == .unauthorized || before
     }
 
-    /// The keys-gone offer: set by `device_secret`, and by the unlock's own `no_user_guid` refusal (§6.7.1: a move an older
-    /// build completed without one, or a damaged record; nothing will ever add it, so this phone cannot unlock; owner
-    /// decision a, 2026-11-18), kept through failures that never reached the vault, cleared by any other answer of the vault.
+    /// The keys-gone offer: set by `device_secret`, and by the unlock's own `no_user_guid` refusal (§6.7.1: nothing will
+    /// ever add a `user_guid`, so this phone cannot unlock; owner decision a, 2026-11-18), kept through failures that never
+    /// reached the vault, cleared by any other answer of the vault.
     static func keysGone(after r: UnlockAttempt, before: Bool) -> Bool {
         guard case .failed(let kind, let code, _) = r else { return false }
         if kind == .deviceSecret || UnlockAttempt.isNoUserGuid(kind, code) { return true }
