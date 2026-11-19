@@ -95,6 +95,10 @@ public struct PairingRejected: Error, Equatable, Sendable {
 /// transfer, whose code is spent. The member scans a new code.
 public struct PairingNotCompleted: Error, Equatable, Sendable {}
 
+/// (VAULT-MESSAGING §6.7.1, 0.90.17) A transfer's `device.paired` without `transfer: true` and a valid `user_guid`: a malformed
+/// answer. The device dropped the transfer before storing or sending anything of it; the move stopped on this phone.
+public struct TransferWithoutUserGuid: Error, Equatable, Sendable {}
+
 /// A pairing or transfer link's token (an open token) was refused by the relay for the `hs.init` (`token_used`,
 /// `token_revoked` or `token_expired`, also after the wait of VAULT-MESSAGING §8.6): the link is spent or has expired.
 public struct OpenTokenRefused: Error, Equatable, Sendable {

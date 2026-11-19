@@ -269,6 +269,9 @@ extension VaultManager {
             return .paired(try await d.awaitTransfer(timeout: 0.05))
         } catch is PairingRejected {
             return .rejected
+        } catch is TransferWithoutUserGuid {
+            // (§6.7.1) Dropped unapplied as it was handled: the transfer ends as a session that ended.
+            return .ended(drop: true)
         } catch {
             return .nothing
         }

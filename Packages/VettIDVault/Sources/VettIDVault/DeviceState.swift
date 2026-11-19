@@ -39,6 +39,10 @@ final class DeviceState: Codable, @unchecked Sendable {
     /// The member's `user_guid` from a transfer's `device.paired` (0.17.0, §6.7.1), kept until the move is completed: a start
     /// after the app was killed between `device.paired` and the take-over still has it. Optional: older states have none.
     var transferUserGuid: String?
+    /// (§6.7.1, 0.90.17) A transfer's `device.paired` came without `transfer: true` and a valid `user_guid`: malformed, and the
+    /// transfer was dropped (``VaultDevice/dropTransferWithoutUserGuid()``). Kept until the wait has said so, or a new transfer
+    /// starts. Optional: older states have none.
+    var transferNoUserGuid: Bool?
     /// (IOS-PLAN 0.1.39 §4.9) The `ctx` of the recovered phone's first handshake that the vault answered (`hs.resp`), kept after the
     /// recovery record goes: the vault's binding is the attested key of the registration it names. Optional: older states have none.
     var recoveryPairedCtx: String?

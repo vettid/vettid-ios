@@ -264,6 +264,13 @@ extension VaultDevice {
         // §10.3 (0.10.3, 0.10.4): every device.paired carries the device's standing token; it replaces the token of
         // hs.resp before maintain() looks at it.
         case "device.paired":
+            // (§6.7.1, 0.90.17) A transfer's `device.paired` without `transfer: true` and a valid `user_guid` is malformed:
+            // the transfer is dropped before anything of it is stored or sent, and it is not handed on.
+            if mem.withLock({ st.deviceID == nil && (VaultJSON.bool(body, "transfer") == true || alt().transferAttestKeyID != nil) }),
+               Self.transferUserGuid(body) == nil {
+                dropTransferWithoutUserGuid()
+                return
+            }
             storeVaultToken(body)
             // §10.2 (0.87.0): device.features after each epoch it activates; the pairing's is this one.
             try? queueFeatures()

@@ -397,15 +397,10 @@ extension VaultDevice {
         }
     }
 
-    static let userGuidMax = 128
-
-    /// The member's `user_guid` from a transfer's `device.paired` (`transfer: true`, 0.17.0 §6.7.1): 1–128 printable
-    /// ASCII characters, so that it fits the unlock's signing string (§11.4). Nil for a plain pairing, or when it is
-    /// absent or fails the check.
+    /// The member's `user_guid` from a transfer's `device.paired` (`transfer: true`, §6.7.1): one that passes
+    /// ``UserGuids/valid(_:)``. Nil for a plain pairing, or when it is absent or fails the check.
     static func transferUserGuid(_ o: JsonObject) -> String? {
-        guard VaultJSON.bool(o, "transfer") == true, let g = VaultJSON.string(o, "user_guid") else { return nil }
-        let b = Array(g.utf8)
-        guard (1...userGuidMax).contains(b.count), b.allSatisfy({ (0x21...0x7E).contains($0) }) else { return nil }
+        guard VaultJSON.bool(o, "transfer") == true, let g = VaultJSON.string(o, "user_guid"), UserGuids.valid(g) else { return nil }
         return g
     }
 

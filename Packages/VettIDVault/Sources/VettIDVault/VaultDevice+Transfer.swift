@@ -75,6 +75,7 @@ extension VaultDevice {
                 let profile = JsonBuilder().string("name", mem.withLock { st.name }).bytes()
                 mem.withLock {
                     st.signerSeen = false
+                    st.transferNoUserGuid = nil
                     var a = alt()
                     a.transferAttestKeyID = attest.iosKeyID
                     setAlt(a)
@@ -173,9 +174,22 @@ extension VaultDevice {
         }
     }
 
+    /// (§6.7.1, 0.90.17) A transfer's `device.paired` without `transfer: true` and a valid `user_guid`: the handshake goes
+    /// (``dropPairing()``), nothing of the answer is applied, and the transfer's wait ends with ``TransferWithoutUserGuid``
+    /// (also one that starts later, until the transfer is abandoned or a new one starts). Callers hold ``lock`` and save.
+    func dropTransferWithoutUserGuid() {
+        dropPairing()
+        let waiters: [OneShot<Bool>] = mem.withLock {
+            st.transferNoUserGuid = true
+            defer { inboxWaiters.removeAll() }
+            return inboxWaiters
+        }
+        for w in waiters { w.complete(true) }
+    }
+
     /// Waits for the transfer's `device.paired` (the old app's approval completes the transfer, §6.7.1) or
-    /// `device.pair.rejected` (``PairingRejected``). Returns the member's `user_guid` from it (0.17.0), which this phone's
-    /// unlocks need, or nil when the vault sent none (a release before 0.17.0): the transfer is complete either way.
+    /// `device.pair.rejected` (``PairingRejected``). Returns the member's `user_guid` from it, which this phone's unlocks
+    /// need; one without a valid `user_guid` was dropped as it was handled (``TransferWithoutUserGuid``).
     public func awaitTransfer(timeout: TimeInterval) async throws -> String? {
         try await awaitPaired(timeout: timeout)
     }
@@ -192,6 +206,7 @@ extension VaultDevice {
             dropPairing()
             mem.withLock {
                 st.vault = nil
+                st.transferNoUserGuid = nil
                 sas = nil
                 var a = alt()
                 a.transferAttestKeyID = nil
