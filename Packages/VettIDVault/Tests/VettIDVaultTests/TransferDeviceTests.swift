@@ -165,6 +165,33 @@ final class RecordingAttester: Attester, @unchecked Sendable {
         #expect(try await again.abandonTransfer() == false && again.hasVault)
     }
 
+    /// (§6.7.1, 0.90.17) A transfer's `device.paired` without a valid `user_guid` is malformed: nothing of it is applied or
+    /// stored (no device id, no vault token), the handshake goes, the drop's mark is saved, and a wait under way ends with
+    /// ``TransferWithoutUserGuid`` (one that starts later too).
+    @Test func aPairedTransferWithoutAUserGuidIsDroppedUnapplied() async throws {
+        let store = InMemoryDeviceStateStore()
+        let secrets = DeviceSecrets(identity: Ed25519PrivateKey.generate(), kem: try KemPrivateKey.generate(), relay: Ed25519PrivateKey.generate(), apiKey: [UInt8](repeating: 0x30, count: 91))
+        let d = try await VaultDevice.create(base.config(store), secrets: secrets)
+        let v = try FakeVault(relayURL: base.relay.baseURL)
+        let (qr, inviteID) = try code(v, d)
+        try await d.startTransfer(link: try qr.link(), attester: TestIOSAttester()) { _, _ in nil }
+        try await d.handle(try v.respond(try await base.relay.nextDeposit().payload, d, ctx: inviteID))
+        try v.fin(try await base.relay.nextDeposit().payload, d)
+        let waiting = Task { [d] in try await d.awaitTransfer(timeout: 30) }
+        try await Task.sleep(for: .milliseconds(50))
+        try await d.handle(try v.seal("device.paired", #"{"device_id":"dev-2","role":"app","vault_id":"\#(v.vaultID)","transfer":true,"user_guid":"a b","token":"tok"}"#))
+        #expect(d.deviceID == nil && !d.paired && d.transferUserGuid == nil, "not applied")
+        #expect(d.droppedWithoutUserGuid)
+        #expect(!d.holdsTransferSas && !d.awaitsPairingResp, "the handshake goes")
+        await #expect(throws: TransferWithoutUserGuid.self) { _ = try await waiting.value }
+        await #expect(throws: TransferWithoutUserGuid.self) { _ = try await d.awaitTransfer(timeout: 1) }
+        // Saved: the next start finds the mark.
+        let again = try #require(try VaultDevice.load(base.config(store), secrets: secrets))
+        #expect(again.droppedWithoutUserGuid && again.deviceID == nil)
+        // Abandoning clears it.
+        #expect(try await again.abandonTransfer() && !again.droppedWithoutUserGuid)
+    }
+
     /// One collect, `wait=0` (VAULT-MESSAGING §11.14.10 rule 5): the `device.paired` that waits in the mailbox is applied; the
     /// message is acked.
     @Test func oneCollectAppliesAPairedTransferThatWaits() async throws {

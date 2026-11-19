@@ -298,7 +298,8 @@ extension VaultManager: MoveRepository {
         let d = s.device
         // (§6.7.1) Never completed without a valid `user_guid`: this phone could never unlock the vault.
         // The record's own is the take-over's (written with `movedIn`), after a completion whose start could not be cleared;
-        // never an earlier setup code's.
+        // never an earlier setup code's. Unreachable today without a valid one: the device refuses every `device.paired`
+        // without it before applying it, so a paired device always holds one (defence in depth).
         let stored: String? = record.value.movedIn ? record.value.userGuid : nil
         guard let guid = [guid, d.transferUserGuid, stored].compactMap({ $0 }).first(where: UserGuids.valid) else {
             return .failed(VaultFailure(.other, code: Self.codeTransferSessionEnded))

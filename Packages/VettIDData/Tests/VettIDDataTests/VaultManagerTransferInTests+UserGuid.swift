@@ -22,7 +22,27 @@ extension VaultManagerTransferInTests {
         #expect(!deviceHoldsVault && !m.record.value.finishMovePending && m.record.value.userGuid.isEmpty, "nothing stored")
         #expect(!service.requestsSeen.dropFirst(seen).contains("device.features"), "nothing sent")
         #expect(phone.attester.discarded == phone.attester.attested, "the attested key goes")
+        #expect(!pendingRecord && m.record.value.transferStartedMs == nil, "the epoch-1 secret and the start go")
         #expect(m.phase != .setup(.finishing))
+    }
+
+    /// A malformed answer collected in the settlement window at the deadline: the move stopped ("The move stopped on this
+    /// phone"), never "no response".
+    @Test func aMalformedAnswerInTheWindowStopsTheMove() async throws {
+        defer { phone.close() }
+        service.transferWithoutUserGuid = true
+        _ = try await scanned()
+        phone.clockAhead = 600
+        await suspendCollector()
+        service.approveTransferIn()
+        let waiting = Task { try await m.awaitTransferIn() }
+        #expect(await deadlineWaiting())
+        phone.clockAhead = 700
+        phone.deadlinePauses.release()
+        let failure = await vaultFailure { _ = try await waiting.value }
+        #expect(failure?.code == VaultManager.codeTransferSessionEnded, "\(String(describing: failure))")
+        #expect(!deviceHoldsVault && !pendingRecord && m.record.value.transferStartedMs == nil)
+        #expect(phone.attester.discarded == phone.attester.attested)
     }
 
     /// The device dropped a malformed `device.paired` and the app ended before anyone waited for it: the next start says
