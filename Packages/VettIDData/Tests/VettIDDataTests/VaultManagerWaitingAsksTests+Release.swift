@@ -78,6 +78,22 @@ extension VaultManagerWaitingAsksTests {
         #expect(mark.timeIntervalSinceNow > 60, "the vault's clock, two minutes ahead: \(mark.timeIntervalSinceNow)")
     }
 
+    /// A device made while the opening is paused (only Unreachable since Unlocked) begins it again too: the same opening goes
+    /// on at the return.
+    @Test func aDeviceMadeDuringAPausedOpeningBeginsItAgain() async throws {
+        defer { phone.close() }
+        _ = try await connected()
+        #expect(await eventually { m.feed.markFixed })
+        m.feed.markFixed = false
+        service.statusForbidden = true
+        try await m.refresh()
+        #expect(m.openingPaused)
+        try await m.dropSession(forget: false)
+        _ = try await m.openSession()
+        let fresh = try #require(m.session?.device)
+        #expect(fresh.mem.withLock { fresh.opening } != nil, "begun again during the pause")
+    }
+
     /// A cold start with the vault open: what the mailbox delivers first is the backlog of what changed while the app was
     /// away (here a day old on the vault's clock), and stays silent; the opening's moment is the vault's clock at its first
     /// answer, never a vault time learnt from the backlog; an item the vault sends after the opening notifies

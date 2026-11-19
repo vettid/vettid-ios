@@ -45,7 +45,9 @@ extension FeedManager {
     /// The opening's moment on the vault's clock, as the first answer of [opening] gave it (``VaultDevice``'s
     /// `beginOpening`): it replaces the phone's clock there, fixed from then on. Nothing for an earlier opening.
     public func openingMarked(_ at: Date, opening: Int) {
-        guard opening == self.opening else { return }
+        // Fixed from then on: a second answer (an earlier device's, landing after a new one began the opening again) is not
+        // taken.
+        guard opening == self.opening, !markFixed else { return }
         openedAt = at
         markFixed = true
     }

@@ -227,6 +227,8 @@ public final class FeedManager: FeedRepository {
         heldArrivals = []
         needsFullRead = false
         catchUpOwed = false
+        // `markFixed` and `openedUptime` stay: the next opening resets them, and no opening is begun again while the vault is
+        // not open (``VaultManager``'s phase guard).
         lastNotified = [:]
         closeWaitingAsks()
         load = .notLoaded
