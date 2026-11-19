@@ -19,6 +19,8 @@ public final class FakeVaultRepository: CustomStringConvertible {
     public var calls: [String] = []
     /// A failure the next call of that name throws (once).
     public var fail: [String: VaultFailure] = [:]
+    /// The next call of a name throws this error, one that is no ``VaultFailure`` (a test's), once.
+    public var failOther: [String: any Error] = [:]
     /// What the unlocks answer, in order; an empty queue answers ``UnlockAttempt/success``.
     public var unlockResults: [UnlockAttempt] = []
     /// Awaited by an unlock before it answers (a long wait; a cancelled one throws).
@@ -298,6 +300,7 @@ public final class FakeVaultRepository: CustomStringConvertible {
     func call(_ name: String) throws {
         calls.append(name)
         if let f = fail.removeValue(forKey: name) { throw f }
+        if let e = failOther.removeValue(forKey: name) { throw e }
     }
 
     /// A release whose PCR0 is its number, two digits at least, repeated.

@@ -213,6 +213,50 @@ import VettIDDataTesting
         #expect(paused.state.preflightError == .servicePaused, "\"Try again\" once the wait is over")
     }
 
+    /// A failure that is no vault answer (no ``VaultFailure``) is a check that did not answer: "Try again" (`.other`), the
+    /// words alone, no erase.
+    @Test func aFailureThatIsNoVaultAnswerOffersTryAgain() async {
+        struct Odd: Error {}
+        vault.userGuidUsable = false
+        vault.failOther["preflight"] = Odd()
+        let vm = await vm()
+        #expect(vm.state.preflightError == .other, "\"Try again\"")
+        #expect(vm.state.stuckWordsOnly && !vm.state.eraseOffered)
+    }
+
+    /// Each part of ``UnlockState/eraseReady`` on a phone with no usable `user_guid`: no erase while the check runs (even with
+    /// an earlier answer), after a failed one (even with an answer kept), or with no answer at all.
+    @Test func eachGuardOfTheEraseHolds() {
+        let answered = PreflightInfo(
+            routed: FakeVaultRepository.release(3), lastNumber: 3, softwareUpdated: false, rollback: false, offer: nil
+        )
+        var s = UnlockState(loading: true)
+        s.noUserGuid = true
+        s.keysGone = true
+        s.preflight = answered
+        #expect(!s.eraseOffered, "loading")
+        s.loading = false
+        s.preflightError = .network
+        #expect(!s.eraseOffered, "a failed check")
+        s.preflightError = nil
+        s.preflight = nil
+        #expect(!s.eraseOffered, "no answer")
+        s.preflight = answered
+        #expect(s.eraseOffered, "an answer")
+    }
+
+    /// A failed check and a "Finish the move" refused `no_user_guid`: the move card says it, so the words alone are not
+    /// shown a second time.
+    @Test func theWordsAreNotShownBesideTheMoveCard() {
+        var s = UnlockState(loading: false)
+        s.noUserGuid = true
+        s.keysGone = true
+        s.preflightError = .network
+        #expect(s.stuckWordsOnly)
+        s.moveFailure = MoveFailure(.notSupported, code: UnlockAttempt.codeNoUserGuid)
+        #expect(!s.stuckWordsOnly && !s.eraseOffered)
+    }
+
     /// A phone with its user_guid is not changed: the keys-gone offer after a failed check stays as before.
     @Test func aPhoneWithAUserGuidKeepsItsOffer() {
         var s = UnlockState(loading: false)

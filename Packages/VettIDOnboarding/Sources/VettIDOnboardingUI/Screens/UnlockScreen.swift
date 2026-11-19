@@ -222,7 +222,7 @@ public struct UnlockScreen: View {
         case .notRecognised:
             NotRecognisedNotice(erasing: state.erasing, onErase: { actions.askErase() })
         case .stuckWords:
-            NoticeCard(.urgent, title: OnboardingStrings.unlockStuckTitle, message: OnboardingStrings.unlockStuckBody)
+            NoticeCard(.urgent, title: OnboardingStrings.unlockStuckTitle, message: OnboardingStrings.unlockStuckBody, announce: .polite)
                 .accessibilityIdentifier("unlock_no_user_guid")
         case .stuck:
             StuckNotice(
