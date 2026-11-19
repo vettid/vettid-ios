@@ -187,6 +187,18 @@ import VettIDUI
         failed.notRecognised = false
         #expect(!UnlockBlock.blocks(for: failed).contains(.pin))
         #expect(height(UnlockScreen(state: failed, actions: NoUnlockActions())) > 0)
+        // The link is drawn: the notice is taller than the words alone.
+        let words = NoticeCard(.urgent, title: OnboardingStrings.unlockStuckTitle, message: OnboardingStrings.unlockStuckBody)
+        #expect(height(StuckWordsNotice(onRecover: {})) > height(words))
+        #expect(height(RecoverLink(onRecover: {})) > 0)
+        // A failed check and a "Finish the move" refused `no_user_guid`: the move card says the words; Recover beside it,
+        // no erase.
+        failed.moveFailure = MoveFailure(.notSupported, code: UnlockAttempt.codeNoUserGuid)
+        #expect(UnlockScreen.wayForward(failed) == .recoverBesideMove && UnlockScreen.wayForward(failed).offersRecover)
+        #expect(!failed.eraseOffered && !failed.stuckWordsOnly)
+        failed.preflightError = nil
+        failed.preflight = PreflightInfo(routed: release, lastNumber: 3, softwareUpdated: false, rollback: false, offer: nil)
+        #expect(UnlockScreen.wayForward(failed) == .stuck, "after an answer: the notice with Recover and Erase")
     }
 
     /// The support mail carries nothing of the member's.
