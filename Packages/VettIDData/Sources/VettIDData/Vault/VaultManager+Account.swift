@@ -126,7 +126,7 @@ extension VaultManager {
         }
     }
 
-    /// The phase moved from [oldValue] to [phase]. (ANDROID-PLAN 0.1.134, as vettid-android #411) Unlocked, then only
+    /// The phase moved from [oldValue] to [phase]. (chosen; not in the spec: as vettid-android #411) Unlocked, then only
     /// Unreachable, then Unlocked is the same opening: a status read that could not be made closed nothing. The feed is kept
     /// meanwhile, with its mark; any other phase in between ends the opening, and the feed with it.
     func openOrClose(_ phase: AppPhase, was oldValue: AppPhase) {
@@ -135,7 +135,7 @@ extension VaultManager {
         // The account is read again whenever the vault opens (an unlock, the end of onboarding, a start while open).
         if phase == .unlocked, oldValue != .unlocked { onOpened(continued: continued) }
         if phase != .unlocked, oldValue == .unlocked {
-            forgetOpenLists(keepingFeed: openingPaused) // not kept once it is locked
+            forgetOpenLists(keepingFeed: openingPaused) // not kept once it is locked; the feed, while the opening is paused
             releaseUpdate.vaultClosed() // the release is checked anew at the next opening
         }
         if continued, !openingPaused, phase != .unlocked { feed.clear() }
@@ -157,14 +157,16 @@ extension VaultManager {
         // The same opening after only a status read that failed (as vettid-android #411): its mark is kept, so what the
         // vault sent meanwhile is judged against it (the vault was open before, so it has one). The release is checked
         // again all the same.
-        if !continued {
+        if continued {
+            feed.openingContinued()
+        } else {
             let opening = feed.vaultOpened(at: config.now())
             session?.device.beginOpening { [weak self] at in
                 Task { @MainActor in self?.feed.openingMarked(at, opening: opening) }
             }
         }
         releaseUpdate.vaultOpened()
-        refreshListsQuietly()
+        refreshListsQuietly(readingFeed: !continued)
         // The clone alarm is read after every unlock, whatever event was or was not received (a held background's, a process that
         // ended): `credential.version` shows it (§3.5.9).
         Task { [weak self] in
@@ -181,12 +183,6 @@ extension VaultManager {
 }
 
 extension AppPhase {
-    /// ``unreachable(_:longUnreachable:)``, whatever its kind.
-    var isUnreachable: Bool {
-        if case .unreachable = self { return true }
-        return false
-    }
-
     /// Unreachable over an open vault, the same opening if it opens again next: any kind but a wipe that did not finish
     /// (``FailureKind/eraseFailed``), which ends it.
     var pausesOpening: Bool {

@@ -185,8 +185,14 @@ extension VaultManager {
 
     /// The vault is no longer open: the feed (unless [keepingFeed]), the approvals and History are dropped.
     func forgetActivity(keepingFeed: Bool = false) {
-        // A kept feed still closes the passed check's waiting-asks window, as ``forgetHeld(keepingFeed:)`` ends its replay.
-        if keepingFeed { feed.closeWaitingAsks() } else { feed.clear() }
+        // A kept feed still closes the passed check's waiting-asks window, and drops the replays it held, as
+        // ``forgetHeld(keepingFeed:)`` ends the replay and drops its `pending.list`.
+        if keepingFeed {
+            feed.closeWaitingAsks()
+            feed.dropReplayedArrivals()
+        } else {
+            feed.clear()
+        }
         approvals.forgetOpenVault()
         history.clear()
         votes.clear()

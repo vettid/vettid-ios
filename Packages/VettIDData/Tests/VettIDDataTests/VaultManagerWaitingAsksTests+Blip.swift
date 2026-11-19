@@ -4,7 +4,7 @@ import Testing
 import VettIDDataTesting
 import VettIDVault
 
-/// (ANDROID-PLAN 0.1.134, as vettid-android #411) Unlocked, then only Unreachable, then Unlocked is the same opening: a
+/// (chosen; not in the spec: as vettid-android #411) Unlocked, then only Unreachable, then Unlocked is the same opening: a
 /// status read that could not be made closed nothing. The feed (its cursor, what it notified, what it holds) and the
 /// opening's mark are kept, what the vault sent meanwhile notifies as it would have, and the release is checked again. Any
 /// other phase in between ends the opening.
@@ -13,7 +13,7 @@ extension VaultManagerWaitingAsksTests {
     func blip() async throws {
         service.statusForbidden = true
         try await m.refresh()
-        #expect(m.phase.isUnreachable, "\(m.phase)")
+        #expect({ if case .unreachable = m.phase { true } else { false } }(), "\(m.phase)")
     }
 
     /// The status read works again: the vault is open.
@@ -159,5 +159,119 @@ extension VaultManagerWaitingAsksTests {
         service.status("unlocked")
         try await m.refresh()
         #expect(m.phase == .unlocked && m.feed.openedAt == mark && m.feed.opening == opening)
+    }
+
+    /// The check passes at once after the gap: what it held before comes only after the return's catch-up, from the feed
+    /// as it is now. An item read on another device meanwhile (its `feed.updated` came while the failing check held the
+    /// feed) gives no alert.
+    @Test func anItemReadElsewhereDuringTheGapGivesNoAlert() async throws {
+        defer { phone.close() }
+        let id = try await connected()
+        await failReleaseCheck()
+        let item = try service.feedItemArrives("message.received", connectionID: id)
+        #expect(await eventually { m.feed.heldEvents.count == 1 })
+        try service.otherDeviceSetsFeedStatus(item, "read")
+        try await blip()
+        service.release3ListedAs = 3
+        try await back()
+        #expect(await eventually { !m.releaseUpdate.checking && m.feed.heldEvents.isEmpty })
+        try await settled()
+        #expect(m.feed.items.first { $0.itemID == item }?.status == "read")
+        #expect(live.isEmpty, "read elsewhere: \(live)")
+    }
+
+    /// The return's catch-up failed: what the check held does not come from the stale feed (a failed read releases nothing);
+    /// it comes after the next read that lands, from the feed as it is then.
+    @Test func aFailedCatchUpAtTheReturnReleasesNothing() async throws {
+        defer { phone.close() }
+        let id = try await connected()
+        await failReleaseCheck()
+        let item = try service.feedItemArrives("message.received", connectionID: id)
+        #expect(await eventually { m.feed.heldEvents.count == 1 })
+        try service.otherDeviceSetsFeedStatus(item, "read")
+        try await blip()
+        service.release3ListedAs = 3
+        service.failNext("feed.list")
+        try await back()
+        #expect(await eventually { !m.releaseUpdate.checking })
+        try await settled()
+        #expect(live.isEmpty, "not from the stale feed: \(live)")
+        #expect(m.feed.heldEvents.count == 1, "still held")
+        m.feed.catchUp()
+        #expect(await eventually { m.feed.heldEvents.isEmpty })
+        try await settled()
+        #expect(live.isEmpty, "read elsewhere: \(live)")
+    }
+
+    /// The return reads the feed on from its kept cursor (not in full): an item sent during the gap whose `feed.event`
+    /// comes only after the check notifies once, as an arrival of that read.
+    @Test func anItemOfTheGapWhoseEventComesLateNotifiesOnce() async throws {
+        defer { phone.close() }
+        let id = try await connected()
+        try await blip()
+        let item = service.feedItemListedOnly("message.received", connectionID: id)
+        try await back()
+        #expect(await eventually { live.count == 1 }, "\(live)")
+        try await settled()
+        try service.sendFeedEvent(item)
+        try await settled()
+        #expect(live.count == 1, "once: \(live)")
+    }
+
+    /// A lock during the gap ends the opening although the phase stays Unreachable: the feed and what it held go, and the
+    /// return is a new opening.
+    @Test func aLockDuringTheGapEndsTheOpening() async throws {
+        defer { phone.close() }
+        let id = try await connected()
+        await failReleaseCheck()
+        _ = try service.feedItemArrives("message.received", connectionID: id)
+        #expect(await eventually { m.feed.heldEvents.count == 1 })
+        let opening = m.feed.opening
+        try await blip()
+        service.sendEvent("vault.locking", #"{"reason":"test"}"#)
+        #expect(await eventually { !m.openingPaused })
+        #expect(m.feed.heldEvents.isEmpty && m.feed.load == .notLoaded, "dropped, as at any lock")
+        try await back()
+        #expect(m.feed.opening == opening + 1, "a new opening")
+        await passReleaseCheck()
+        try await settled()
+        #expect(live.isEmpty, "what was held before the lock never notifies: \(live)")
+    }
+
+    /// A lock found by a status read during the gap ends the opening too.
+    @Test func aLockFoundByAReadDuringTheGapEndsTheOpening() async throws {
+        defer { phone.close() }
+        _ = try await connected()
+        try await blip()
+        m.lockedByProbe()
+        #expect(!m.openingPaused && m.feed.load == .notLoaded)
+    }
+
+    /// Unreachable that did not follow an open vault (a start, a lock) is no paused opening: the next Unlocked is a new
+    /// opening.
+    @Test func unreachableAfterALockIsANewOpening() async throws {
+        defer { phone.close() }
+        _ = try await connected()
+        let opening = m.feed.opening
+        service.status("locked")
+        try await m.refresh()
+        #expect(m.phase == .locked)
+        try await blip()
+        #expect(!m.openingPaused)
+        service.status("unlocked")
+        try await back()
+        #expect(m.feed.opening == opening + 1)
+    }
+
+    /// The waiting asks a passed check replayed and the release check held go at the pause, with their `pending.list`.
+    @Test func thePauseDropsHeldReplays() async throws {
+        defer { phone.close() }
+        _ = try await connected()
+        let item = FeedItem(
+            itemID: "ask-1", seq: 999, kind: "approval.pending", at: "2026-11-19T12:00:00Z", status: "active", priority: "high"
+        )
+        m.feed.heldArrivals = [HeldArrival(item: item, replayed: true), HeldArrival(item: item, replayed: false)]
+        try await blip()
+        #expect(m.feed.heldArrivals.map(\.replayed) == [false])
     }
 }

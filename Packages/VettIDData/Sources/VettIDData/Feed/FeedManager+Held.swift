@@ -40,6 +40,18 @@ extension FeedManager {
         openedAt = at
     }
 
+    /// (chosen; not in the spec: as vettid-android #411) The vault is open again after only a status read that failed: the
+    /// kept feed is read on from its cursor, not in full, so an item the vault sent meanwhile arrives as one (held while the
+    /// release is checked) even if its event comes late; and what was held comes only after that read, from the feed as it
+    /// is now (an item read on another device meanwhile is not notified).
+    public func openingContinued() {
+        catchUpOwed = true
+        catchUp()
+    }
+
+    /// The opening is paused: the waiting asks replayed after a passed check go, as their `pending.list` does.
+    func dropReplayedArrivals() { heldArrivals.removeAll { $0.replayed } }
+
     /// The check is over but what it held has not come yet: a later event or arrival waits behind it.
     var queuesBehind: Bool { !heldEvents.isEmpty || !heldArrivals.isEmpty }
 
@@ -89,7 +101,7 @@ extension FeedManager {
             return
         }
         guard readsRunning == 0 else { return }
-        guard load == .loaded, !needsFullRead else {
+        guard load == .loaded, !needsFullRead, !catchUpOwed else {
             if readIfNeeded { catchUp() }
             return
         }

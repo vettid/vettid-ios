@@ -150,6 +150,9 @@ public final class FeedManager: FeedRepository {
     @ObservationIgnored var opening = 0
     /// (Rule 3) The gate lifted: what was held waits for a full read, since what changed while paused was not taken.
     @ObservationIgnored var needsFullRead = false
+    /// (chosen; not in the spec: as vettid-android #411) A continued opening's catch-up from the kept cursor is owed: what
+    /// the release check held waits for it (``openingContinued()``).
+    @ObservationIgnored var catchUpOwed = false
     /// The `seq` each item was last notified at, while the vault is open: a held event of a change already notified (one
     /// delivered live, then again during a check that began again) does not notify it twice.
     @ObservationIgnored var lastNotified: [String: Int64] = [:]
@@ -219,6 +222,7 @@ public final class FeedManager: FeedRepository {
         heldEvents = []
         heldArrivals = []
         needsFullRead = false
+        catchUpOwed = false
         lastNotified = [:]
         closeWaitingAsks()
         load = .notLoaded
@@ -301,6 +305,7 @@ public final class FeedManager: FeedRepository {
             apply(changed)
             cursor = max(full ? 0 : cursor, seq)
             load = .loaded
+            catchUpOwed = false
             guard !full else {
                 needsFullRead = false
                 return fullReadForWaitingAsks()
