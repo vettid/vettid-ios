@@ -197,6 +197,11 @@ public final class VaultDevice: @unchecked Sendable {
     var quieted = false
     /// The newest `ts` of a message from the vault and the monotonic time it arrived (in memory only).
     var vaultClock: (ts: Date, at: TimeInterval)?
+    /// The vault's clock as the first answer after ``beginOpening()`` set it (its `ts` and the monotonic time it arrived), in
+    /// memory only; nil before that answer, and before any opening in this process.
+    var openingAnswer: (ts: Date, at: TimeInterval)?
+    /// Set by ``beginOpening()``: an answer counts for ``openingAnswer`` only after it.
+    var openingBegun = false
     /// The newest verified `ts` of a handshake message from the vault and the monotonic time it arrived (in memory only):
     /// the keys' clock reads it besides ``vaultClock`` (``keyClockLocked()``).
     var keyStamp: (ts: Date, at: TimeInterval)?

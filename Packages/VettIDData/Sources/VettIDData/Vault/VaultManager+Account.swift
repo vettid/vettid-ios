@@ -134,9 +134,14 @@ extension VaultManager {
         approvals.vaultOpened()
         // The open app shows nothing of the vault until its release is known (``ReleaseUpdateManager/required``). The lists
         // are read at once, as before (skipped while the vault is behind, and read when it no longer is: ``followBehind``).
-        // The feed's mark, on the vault's clock as its messages' `ts` are: a held event the vault sent before it is the
-        // mailbox's backlog, never notified.
-        feed.vaultOpened(at: session?.device.vaultNow() ?? config.now())
+        // The feed's mark: this moment on the vault's clock, as its messages' `ts` are, converted with the first answer of
+        // this opening (a vault time learnt before it, or an event's `ts`, can be the mailbox's days-old backlog at a cold
+        // start), else the phone's clock now. A held event the vault sent before it is the backlog, never notified.
+        let device = session?.device
+        device?.beginOpening()
+        let phone = config.now()
+        let up = device?.uptimeNow()
+        feed.vaultOpened { [weak device] in up.flatMap { device?.vaultTime(atUptime: $0) } ?? phone }
         releaseUpdate.vaultOpened()
         refreshListsQuietly()
         // The clone alarm is read after every unlock, whatever event was or was not received (a held background's, a process that

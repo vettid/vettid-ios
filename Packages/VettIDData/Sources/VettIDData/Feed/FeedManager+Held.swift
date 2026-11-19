@@ -25,7 +25,11 @@ extension FeedManager {
 
     /// The vault opened at [at], on the vault's clock (its messages' `ts`; never the phone's, which may differ by minutes):
     /// held events the vault sent before are its backlog, and stay silent.
-    public func vaultOpened(at: Date) { openedAt = at }
+    public func vaultOpened(at: Date) { openedMark = { at } }
+
+    /// The vault opened: [mark] gives that moment on the vault's clock when what was held is released, so an answer that
+    /// comes after the opening (the first of this opening, IOS-PLAN §6.7) still sets it.
+    public func vaultOpened(mark: @escaping @MainActor () -> Date) { openedMark = mark }
 
     /// The check is over but what it held has not come yet: a later event or arrival waits behind it.
     var queuesBehind: Bool { !heldEvents.isEmpty || !heldArrivals.isEmpty }
@@ -93,6 +97,7 @@ extension FeedManager {
         heldArrivals = []
         heldEvents = []
         var notified = lastNotified
+        let openedAt = openedAt
         for a in arrivals {
             guard let now = byID[a.item.itemID], now.status == Self.statusActive else { continue }
             notified[now.itemID] = now.seq

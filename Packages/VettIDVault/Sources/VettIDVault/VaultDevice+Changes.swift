@@ -44,6 +44,35 @@ extension VaultDevice {
     /// Whether a message from the vault arrived in this process: until one does, ``vaultNow()`` is the phone's clock.
     public var knowsVaultTime: Bool { mem.withLock { vaultClock != nil } }
 
+    /// The vault opened (an unlock, a start with it open): from now, the first answer from the vault sets the clock an
+    /// opening's moment is read on (``vaultTime(atUptime:)``). A vault time learnt before, and any event's `ts` (the
+    /// mailbox's backlog at a cold start can be days old), never does (ANDROID-PLAN 0.1.134 Notification modes 7, IOS-PLAN
+    /// §6.7).
+    public func beginOpening() {
+        mem.withLock {
+            openingBegun = true
+            openingAnswer = nil
+        }
+    }
+
+    /// The first answer after ``beginOpening()``: its `ts` and when it arrived.
+    func noteOpeningAnswer(_ ts: Date) {
+        let up = cfg.uptime()
+        mem.withLock {
+            guard openingBegun, openingAnswer == nil else { return }
+            openingAnswer = (ts, up)
+        }
+    }
+
+    /// The phone's monotonic clock now, to record a moment ``vaultTime(atUptime:)`` reads later.
+    public func uptimeNow() -> TimeInterval { cfg.uptime() }
+
+    /// The moment [uptime] (``uptimeNow()``) on the vault's clock, as the first answer of this opening set it; nil before
+    /// that answer.
+    public func vaultTime(atUptime uptime: TimeInterval) -> Date? {
+        mem.withLock { openingAnswer.map { $0.ts.addingTimeInterval(uptime - $0.at) } }
+    }
+
     /// Sends [held] again (the same inner id, `exp` and body, in a new envelope, never through the outbox) and waits once
     /// for its answer: the vault answers it from its response cache if it handled it, or handles it once if it never
     /// arrived (§8.2). No answer is ``VaultStateError``.

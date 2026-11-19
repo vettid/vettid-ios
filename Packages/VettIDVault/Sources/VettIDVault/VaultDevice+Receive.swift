@@ -243,6 +243,7 @@ extension VaultDevice {
             throw LeaveUnacked("held while a call keeps the collection in the background")
         }
         noteVaultTime(inner.ts)
+        if inner.re != nil { noteOpeningAnswer(inner.ts) }
         // An answer (also a cached one sent again, also one that comes after its wait ended) settles its request.
         if let re = inner.re { settled(re, at: inner.ts) }
         let firstTime: Bool = mem.withLock {

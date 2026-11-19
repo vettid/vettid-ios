@@ -52,6 +52,30 @@ extension VaultManagerWaitingAsksTests {
         #expect(await eventually { live.count == 1 }, "\(live)")
     }
 
+    /// A cold start with the vault open: what the mailbox delivers first is the backlog of what changed while the app was
+    /// away, older than the opening on the vault's clock, and stays silent; an item the vault sends after the opening
+    /// notifies (ANDROID-PLAN 0.1.134 Notification modes 7, IOS-PLAN §6.7: the mark from the first answer of this opening).
+    @Test func aColdStartsBacklogStaysSilentAndAFreshItemNotifies() async throws {
+        defer { phone.close() }
+        service.stampsOnVaultClock = true
+        service.freezeVaultClock()
+        let id = try await connected()
+        try await phone.restart {
+            _ = try service.feedItemArrives("message.received", connectionID: id)
+            _ = try service.feedItemArrives("message.received", connectionID: id)
+            // The app was away a while (within the requests' validity, which the vault's clock judges).
+            service.advanceVaultClock(90)
+        }
+        try await m.refresh()
+        #expect(await eventually { m.phase == .unlocked && m.feed.load == .loaded && !m.releaseUpdate.checking })
+        // The opening's reads are over (an item that comes during a full read is read, not notified, as at any time).
+        try await settled()
+        #expect(live.isEmpty, "the backlog is silent: \(live)")
+        service.advanceVaultClock(30)
+        _ = try service.feedItemArrives("message.received", connectionID: id)
+        #expect(await eventually { live.count == 1 }, "\(live)")
+    }
+
     @Test func aCheckPassedElsewhereWhileAFailingReleaseCheckHoldsReplaysAfterTheLift() async throws {
         defer { phone.close() }
         let id = try await connected()

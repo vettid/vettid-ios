@@ -348,8 +348,12 @@ public final class TestVaultPhone {
     /// The app killed and started again: a new manager over the same keys and files. The old manager is halted first
     /// (``VaultManager/halt()``): a process death ends what it had on the way, so nothing of it may send or write once the
     /// new one runs.
-    public func restart() async throws {
+    public func restart() async throws { try await restart(meanwhile: {}) }
+
+    /// ``restart()``, with [meanwhile] run while no process runs (the vault sends what the phone collects at its start).
+    public func restart(meanwhile: () throws -> Void) async throws {
         try await haltProcess()
+        try meanwhile()
         attester.newProcess()
         var config = try Self.configured(
             service, appKeys, seedWrap, wrapped, phoneKeys, fileKeys, protectedData, directory, gate, clock,
