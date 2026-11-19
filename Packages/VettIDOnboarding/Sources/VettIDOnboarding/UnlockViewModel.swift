@@ -248,7 +248,9 @@ public final class UnlockViewModel: UnlockActions {
                 state.erasing = false
                 state.message = .failed(e.kind, code: e.code)
             } catch {
+                // Never a silent failure: any other one is said too.
                 state.erasing = false
+                state.message = .failed(.other, code: nil)
             }
         }
     }
