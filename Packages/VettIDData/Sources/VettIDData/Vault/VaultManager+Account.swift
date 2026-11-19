@@ -131,7 +131,7 @@ extension VaultManager {
     /// meanwhile, with its mark; any other phase in between ends the opening, and the feed with it.
     func openOrClose(_ phase: AppPhase, was oldValue: AppPhase) {
         let continued = openingPaused
-        openingPaused = phase.isUnreachable && (oldValue == .unlocked || openingPaused)
+        openingPaused = phase.pausesOpening && (oldValue == .unlocked || openingPaused)
         // The account is read again whenever the vault opens (an unlock, the end of onboarding, a start while open).
         if phase == .unlocked, oldValue != .unlocked { onOpened(continued: continued) }
         if phase != .unlocked, oldValue == .unlocked {
@@ -184,6 +184,13 @@ extension AppPhase {
     /// ``unreachable(_:longUnreachable:)``, whatever its kind.
     var isUnreachable: Bool {
         if case .unreachable = self { return true }
+        return false
+    }
+
+    /// Unreachable over an open vault, the same opening if it opens again next: any kind but a wipe that did not finish
+    /// (``FailureKind/eraseFailed``), which ends it.
+    var pausesOpening: Bool {
+        if case .unreachable(let kind, _) = self { return kind != .eraseFailed }
         return false
     }
 }
