@@ -188,13 +188,10 @@ final class StagingTests: VaultUITestCase {
             return fail(app, "The update did not finish: \(outcome ?? "still running after \(Int(Self.releaseUpdate)) s").")
         }
         tapPrimary(app)
-        switch waitForAny(app, ["app_shell", "owner_check", "release_required"], timeout: Self.network) {
-        case "owner_check": ownerCheck(app, pin: pin, password: password)
-        case "app_shell": break
-        default: return fail(app, "The app did not open on the new release.")
-        }
+        guard openedAfterUpdate(app, pin: pin, password: password) else { return }
         expect(app, "app_shell", timeout: Self.network)
         snap(app, "8-open")
+        keptAfterUpdate(app)
         lock(app)
     }
 

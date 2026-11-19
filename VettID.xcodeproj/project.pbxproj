@@ -46,6 +46,7 @@
 		39B37FECFC4A4C167B610AFD /* AppNotifications.swift in Sources */ = {isa = PBXBuildFile; fileRef = D699240BD1D9309A3E11DD26 /* AppNotifications.swift */; };
 		3BDC50D1B60B3C9D8BFF60CF /* OnboardingCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = F75EB86F0AEDA6ABA253BBC1 /* OnboardingCatalog.swift */; };
 		3DA939459B79AF971E911C98 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 18D27D877D6472CB1E622763 /* AppDelegate.swift */; };
+		3E536FB22BDF591219171CB0 /* StagingTests+ReleaseGate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24559846CBCA58120178ADCA /* StagingTests+ReleaseGate.swift */; };
 		4458E614973C93BE7AB0089C /* AppLockGate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5CBB4C9A8E482B333CED7362 /* AppLockGate.swift */; };
 		4790B24DD7B2AF69BB6923F1 /* SecureHardware.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5BC7B2415F948B243F5CAD54 /* SecureHardware.swift */; };
 		48C14D9734DD1B7FCF3CF6B0 /* AppLockWindowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB1D13186B27047D3E39486C /* AppLockWindowTests.swift */; };
@@ -197,6 +198,7 @@
 		1E1921FE67777CBB6E43F45E /* vettid_general.caf */ = {isa = PBXFileReference; path = vettid_general.caf; sourceTree = "<group>"; };
 		1E64F5D58939E907529DC4FA /* StagingTests+SignIn.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StagingTests+SignIn.swift"; sourceTree = "<group>"; };
 		230165DE55462B18B29FACFD /* DevStackTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DevStackTests.swift; sourceTree = "<group>"; };
+		24559846CBCA58120178ADCA /* StagingTests+ReleaseGate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StagingTests+ReleaseGate.swift"; sourceTree = "<group>"; };
 		27784FA957AF2CC5794ED472 /* SecureInputTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecureInputTests.swift; sourceTree = "<group>"; };
 		2AA52F91061EA0543A5AE9B8 /* VettIDTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = VettIDTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		2B11C310596A4F2C26AACAFC /* DevStack.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = DevStack.xcconfig; sourceTree = "<group>"; };
@@ -400,6 +402,7 @@
 				9506AF3AA287477B16E8612D /* StagingTests+Mesh.swift */,
 				2D4DA90211D97D9417FAC02C /* StagingTests+Messages.swift */,
 				1AFE8FE46F7ABE0D9CA0684B /* StagingTests+Photos.swift */,
+				24559846CBCA58120178ADCA /* StagingTests+ReleaseGate.swift */,
 				1E64F5D58939E907529DC4FA /* StagingTests+SignIn.swift */,
 				9812A6CD3A1425C23018950A /* StagingTests+Transfer.swift */,
 				73029356B90552AC0C29EE9F /* StagingUITests.xctestplan */,
@@ -926,6 +929,7 @@
 				EB2DE1A4E67EB0C6E529D097 /* StagingTests+Mesh.swift in Sources */,
 				0E4BA253AB8E8655B797C7F6 /* StagingTests+Messages.swift in Sources */,
 				92ABE83488BD43FFAE0F21B4 /* StagingTests+Photos.swift in Sources */,
+				3E536FB22BDF591219171CB0 /* StagingTests+ReleaseGate.swift in Sources */,
 				0312DA9D2B04CA6C9CCBA677 /* StagingTests+SignIn.swift in Sources */,
 				9677BF2DC1585290382C8F93 /* StagingTests+Transfer.swift in Sources */,
 				16CC7F1AD834271FC0C79440 /* StagingTests.swift in Sources */,
