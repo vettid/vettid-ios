@@ -46,7 +46,7 @@ struct VoteContent: View {
                 // Plain text: no links, no markup. The whole text scrolls with the screen and is never truncated.
                 Text(verbatim: text).vettIDFont(.bodyLarge).accessibilityIdentifier("vote_text")
                 if let w = facts.writtenBy { Text(verbatim: w).vettIDFont(.bodySmall).foregroundStyle(colors.onSurfaceVariant) }
-                ForEach([facts.quorum, facts.binding].compactMap { $0 }, id: \.self) { line in
+                ForEach(facts.facts, id: \.self) { line in
                     Text(verbatim: line).vettIDFont(.bodyMedium)
                 }
                 if let c = facts.closes { Text(verbatim: c).vettIDFont(.bodyMedium).accessibilityIdentifier("vote_closes") }

@@ -639,6 +639,50 @@
         }
       }
     },
+    "vote_outcome_decided": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Decided: %@"
+          }
+        }
+      }
+    },
+    "vote_outcome_no_quorum": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No quorum: too few members voted."
+          }
+        }
+      }
+    },
+    "vote_outcome_not_decided": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not decided: no choice met the rule."
+          }
+        }
+      }
+    },
+    "vote_outcome_tied": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tied: no choice decided."
+          }
+        }
+      }
+    },
     "vote_password_body": {
       "extractionState": "manual",
       "localizations": {
@@ -1130,6 +1174,116 @@
           "stringUnit": {
             "state": "translated",
             "value": "Opens %@"
+          }
+        }
+      }
+    },
+    "vote_rule_all_cast": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Decided only if all the votes, not counting abstentions, are for one choice."
+          }
+        }
+      }
+    },
+    "vote_rule_all_elig": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Decided only if all eligible members vote for one choice. Not voting counts against."
+          }
+        }
+      }
+    },
+    "vote_rule_all_voted": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Decided only if all ballots are for one choice. Abstaining counts against."
+          }
+        }
+      }
+    },
+    "vote_rule_majority_cast": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Decided by more than half of the votes, not counting abstentions."
+          }
+        }
+      }
+    },
+    "vote_rule_majority_elig": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Decided by more than half of all eligible members. Not voting counts against."
+          }
+        }
+      }
+    },
+    "vote_rule_majority_voted": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Decided by more than half of all ballots. Abstaining counts against."
+          }
+        }
+      }
+    },
+    "vote_rule_plurality": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Decided by the most votes. A tie at the top decides nothing."
+          }
+        }
+      }
+    },
+    "vote_rule_threshold_cast": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Decided by at least %@ of the votes, not counting abstentions."
+          }
+        }
+      }
+    },
+    "vote_rule_threshold_elig": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Decided by at least %@ of all eligible members. Not voting counts against."
+          }
+        }
+      }
+    },
+    "vote_rule_threshold_voted": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Decided by at least %@ of all ballots. Abstaining counts against."
           }
         }
       }

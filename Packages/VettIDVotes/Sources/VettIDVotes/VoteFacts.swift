@@ -36,7 +36,12 @@ public struct VoteFacts: Equatable, Sendable {
     public var proposalText: String?
     public var writtenBy: String?
     public var quorum: String?
+    /// How the vote is decided (BALLOT-PROTOCOL 0.14.0 §3.5), from the vault's own `vote.get`: shown before the member
+    /// votes, under the quorum line.
+    public var rule: String?
     public var binding: String?
+    /// The lines under the proposal, in order: the quorum, how it's decided, whether it's binding.
+    public var facts: [String] { [quorum, rule, binding].compactMap { $0 } }
     public var closes: String?
     public var extended: String?
     /// The states in words, in order.
@@ -51,8 +56,8 @@ public struct VoteFacts: Equatable, Sendable {
     public var checkOutcome: VoteMessage?
     /// "Your choice: …", once cast.
     public var yourChoice: String?
-    /// The verified results' lines (a title, then rows, turnout, quorum and the unhandled messages); nil before the check,
-    /// and when the rest of the published results don't add up.
+    /// The verified results' lines (a title, the outcome, then rows, turnout, quorum and the unhandled messages); nil before
+    /// the check, and when the rest of the published results don't add up.
     public var results: [String]?
     /// The choices in the order sent, with their labels as sent.
     public var choices: [String] = []
@@ -80,6 +85,7 @@ public struct VoteFacts: Equatable, Sendable {
             f.proposalText = d.text
             f.writtenBy = VoteStrings.voteWrittenBy(service)
             f.quorum = d.quorumText.map { VoteStrings.voteQuorumLine(AccountNames.isolateOrNull($0) ?? "") }
+            f.rule = d.decision.flatMap(rule)
             f.binding = d.binding.map { $0 ? VoteStrings.voteBindingYes : VoteStrings.voteBindingNo }
             f.closes = summary.closesAt.map { VoteStrings.voteClosesLine(VoteFormat.full($0)) }
             if d.extensions > 0, let closes = summary.closesAt { f.extended = VoteStrings.voteExtended(VoteFormat.full(closes)) }
@@ -145,6 +151,9 @@ public struct VoteFacts: Equatable, Sendable {
     private static func results(_ d: VoteDetail, _ service: String) -> [String]? {
         guard let tally = d.tally else { return nil }
         var lines = [VoteStrings.voteResultsTitle]
+        // The outcome first (BALLOT-PROTOCOL §7.1), as the vault recomputed it; the unhandled messages stay at the end of
+        // the same lines.
+        if let o = d.outcome, let line = outcome(o, d.choices) { lines.append(line) }
         for c in d.choices {
             if let n = tally[c.id] { lines.append(VoteStrings.voteResultsRow(AccountNames.isolateOrNull(c.label) ?? c.id, Int(n))) }
         }
@@ -158,6 +167,60 @@ public struct VoteFacts: Equatable, Sendable {
             if c.unhandled > 0 { lines.append(VoteStrings.voteResultsUnhandled(Int(c.unhandled), service)) }
         }
         return lines
+    }
+
+    /// How the vote is decided, in the owner's words (#14031, #14043, #14068, #14071): the rule and, for a majority or a threshold,
+    /// what it is of. A threshold of 1/1 says "all". Nil for a decision BALLOT-PROTOCOL §3.5 does not allow (the vault
+    /// refuses those on arrival), so no wrong rule is ever shown.
+    static func rule(_ d: VoteDecision) -> String? {
+        if case .plurality = d.rule { return VoteStrings.voteRulePlurality }
+        guard let base = d.base else { return nil }
+        let words = RuleWords.of(base)
+        switch d.rule {
+        case .majority: return words.majority
+        case .threshold(let num, let den) where num == den: return words.all
+        case .threshold(let num, let den): return words.atLeast("\(num)/\(den)")
+        case .plurality: return nil
+        }
+    }
+
+    /// A base's three lines: a majority of it, at least a fraction of it, and all of it.
+    private struct RuleWords {
+        let majority: String
+        let all: String
+        let atLeast: (String) -> String
+
+        static func of(_ base: VoteDecision.Base) -> RuleWords {
+            switch base {
+            case .cast:
+                RuleWords(
+                    majority: VoteStrings.voteRuleMajorityCast, all: VoteStrings.voteRuleAllCast, atLeast: VoteStrings.voteRuleThresholdCast
+                )
+            case .voted:
+                RuleWords(
+                    majority: VoteStrings.voteRuleMajorityVoted, all: VoteStrings.voteRuleAllVoted,
+                    atLeast: VoteStrings.voteRuleThresholdVoted
+                )
+            case .elig:
+                RuleWords(
+                    majority: VoteStrings.voteRuleMajorityElig, all: VoteStrings.voteRuleAllElig,
+                    atLeast: VoteStrings.voteRuleThresholdElig
+                )
+            }
+        }
+    }
+
+    /// The outcome's line: the decided choice by its label as shown with the choices (its id when its label shows nothing).
+    /// Nil for `decided` with a choice that is not one of the vote's real choices (abstain never is), so no wrong line shows.
+    static func outcome(_ o: VoteOutcome, _ choices: [VoteChoice]) -> String? {
+        switch o.status {
+        case .decided:
+            guard o.choice != VoteChoice.abstain, let c = choices.first(where: { $0.id == o.choice }) else { return nil }
+            return VoteStrings.voteOutcomeDecided(AccountNames.isolateOrNull(c.label) ?? c.id)
+        case .notDecided: return VoteStrings.voteOutcomeNotDecided
+        case .tied: return VoteStrings.voteOutcomeTied
+        case .noQuorum: return VoteStrings.voteOutcomeNoQuorum
+        }
     }
 
     /// A cast the vault refused or did not answer: said plainly (the plan's words for each code), never silent. No answer:
