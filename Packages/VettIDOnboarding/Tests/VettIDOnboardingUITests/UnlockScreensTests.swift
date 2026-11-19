@@ -155,13 +155,28 @@ import VettIDUI
         #expect(UnlockBlock.blocks(for: known).contains(.offer))
         known.noUserGuid = true
         #expect(height(UnlockScreen(state: known, actions: NoUnlockActions())) > 0)
-        // (as vettid-android #412) The release check failed: the words alone, no erase, "Try again".
+    }
+
+    /// (§6.7.1, as vettid-android #412) The release check failed on a phone with no usable `user_guid`: the stuck words with
+    /// "Recover your vault" (owner decision a, 2026-11-19), no erase, no PIN; a check that answered brings the erase.
+    @Test func aFailedCheckShowsTheWordsAndRecover() {
         var failed = UnlockState(loading: false)
         failed.noUserGuid = true
         failed.keysGone = true
         failed.preflightError = .network
         #expect(failed.stuckWordsOnly && !failed.eraseOffered && !failed.stuckNoticeShown)
         #expect(UnlockScreen.wayForward(failed) == .stuckWords)
+        // Owner decision a (2026-11-19): Recover after a failed check; no erase and no confirmation.
+        #expect(UnlockScreen.wayForward(failed).offersRecover && !failed.eraseOffered)
+        var asked = failed
+        asked.eraseConfirm = true
+        #expect(!(asked.eraseConfirm && asked.eraseOffered), "the confirmation's binding stays closed")
+        for (name, r) in recoverOnly {
+            var ro = r
+            ro.noUserGuid = true
+            ro.preflightError = ro.preflightError ?? .network
+            #expect(UnlockScreen.wayForward(ro) == .recoverOnly && !ro.eraseOffered, "\(name): unchanged")
+        }
         failed.preflightError = nil
         failed.preflight = PreflightInfo(routed: release, lastNumber: 3, softwareUpdated: false, rollback: false, offer: nil)
         #expect(UnlockScreen.wayForward(failed) == .stuck, "a check that answered: Recover and Erase")

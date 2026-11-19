@@ -202,7 +202,13 @@ public struct UnlockScreen: View {
     }
 
     /// The way forward under the unlock's results, one at most.
-    enum WayForward: Equatable { case recoverOnly, notRecognised, stuckWords, stuck, none }
+    enum WayForward: Equatable {
+        case recoverOnly, notRecognised, stuckWords, stuck, none
+
+        /// "Recover your vault" is offered (on a phone with no usable `user_guid`, also after a failed check: owner decision
+        /// a, 2026-11-19). The erase only where ``UnlockState/eraseOffered``.
+        var offersRecover: Bool { self == .recoverOnly || self == .stuckWords || self == .stuck }
+    }
 
     /// An ended release or a rollback wins: no erase there, whatever else the last answers said. On a phone with no usable
     /// `user_guid` whose release check failed, the stuck words alone (§6.7.1, as vettid-android #412).
@@ -222,8 +228,12 @@ public struct UnlockScreen: View {
         case .notRecognised:
             NotRecognisedNotice(erasing: state.erasing, onErase: { actions.askErase() })
         case .stuckWords:
-            NoticeCard(.urgent, title: OnboardingStrings.unlockStuckTitle, message: OnboardingStrings.unlockStuckBody, announce: .polite)
-                .accessibilityIdentifier("unlock_no_user_guid")
+            // Owner decision a (2026-11-19): "Recover your vault" already, beside "Try again"; the erase waits for a check
+            // that answered.
+            NoticeCard(.urgent, title: OnboardingStrings.unlockStuckTitle, message: OnboardingStrings.unlockStuckBody, announce: .polite) {
+                TextLink(OnboardingStrings.unlockRecover, identifier: "recover_vault", action: onOpenAccountSite)
+            }
+            .accessibilityIdentifier("unlock_no_user_guid")
         case .stuck:
             StuckNotice(
                 erasing: state.erasing, earlierSecret: state.earlierSecret, pinReady: pin.count >= UnlockState.minPinLength,
