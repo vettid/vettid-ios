@@ -396,6 +396,28 @@ import VettIDDataTesting
         await rollback.settle()
         #expect(notes.asked == [6])
     }
+
+    /// (§6.7.1) A step that failed for want of a usable `user_guid`, with the vault open: no PIN and no "Try again", which
+    /// could never work (vettid-android #14199). Another `notSupported`, or the code alone, still allows them.
+    @Test func noTryAgainOnAPhoneWithoutAUserGuid() async {
+        let updates = FakeReleaseUpdates(offer: offer)
+        let vm = ReleaseUpdateFlowViewModel(updates: updates)
+        var p = UpdateProgress(step: .failed, from: rel(4), to: rel(5), failure: .notSupported, waitSeconds: 0)
+        p.failureCode = UnlockAttempt.codeNoUserGuid
+        p.vaultOpen = true
+        updates.progress = p
+        await vm.settle()
+        #expect(p.noUserGuid && !vm.state.pinAllowed && !vm.state.retryAllowed(pinTyped: 6))
+        #expect(!vm.retry(pin: "246802") && updates.calls.isEmpty)
+
+        for (kind, code) in [(FailureKind.notSupported, "other"), (.other, UnlockAttempt.codeNoUserGuid)] {
+            p.failure = kind
+            p.failureCode = code
+            updates.progress = p
+            await vm.settle()
+            #expect(!p.noUserGuid && vm.state.retryAllowed(pinTyped: 6), "\(kind) \(code)")
+        }
+    }
 }
 
 /// One second of a countdown at a time, moved on only by the test.

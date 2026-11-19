@@ -95,6 +95,8 @@ public struct AppShell: View {
     /// The member's own profile photo (VAULT-MESSAGING §10.8), decoded once per photo, for the top bar's avatar, the avatar
     /// sheet and the account card (vettid-android `rememberProfilePhoto(ownPhoto)`).
     @State private var ownPhoto: UIImage?
+    /// "Lock and unlock now" was refused, with nothing locked (no usable `user_guid`, §6.7.1), until "OK".
+    @State private var lockRefused = false
     /// The tags' colours while the vault is open (owner decision 2026-10-09): made with the shell, so nothing runs while
     /// the vault is locked.
     @State var tagColors: TagColorsKeeper?
@@ -184,16 +186,22 @@ public struct AppShell: View {
 
     /// A lost answer's decision reached while its screen was closed (VAULT-MESSAGING §11.14.9): once, until "OK".
     @ViewBuilder private var changeCheckNotice: some View {
+        if lockRefused {
+            // "Lock and unlock now" refused on a phone without a usable user_guid: the unlock screen's recover-or-erase words.
+            UrgentBanner(
+                UnlockStuckTexts.title + "\n" + UnlockStuckTexts.body, actionLabel: ShellStrings.ownerCheckNoticeOk,
+                action: { lockRefused = false }
+            )
+            .accessibilityIdentifier("change_check_no_user_guid")
+        }
         // A change screen waiting for it shows the decision itself.
         if let check = vault.changeCheck, let text = ChangeCheckNotice.text(check, timeScale: vault.timeScale), !vault.changeCheckAwaited {
             if ChangeCheckNotice.offersLockAndUnlock(check) {
                 // The PIN is uncertain: the unlock's two prompts settle it at no cost (§11.14.9 step 3).
                 UrgentBanner(
                     text, actionLabel: ChangeCheckNotice.lockAndUnlock, onDismiss: { vault.acknowledgeChangeCheck() },
-                    action: {
-                        vault.acknowledgeChangeCheck()
-                        Task { try? await vault.lock() }
-                    }
+                    // §6.7.1: without a usable user_guid nothing is locked or sent; this phone could never unlock again.
+                    action: { if !vault.lockAndUnlockForChange() { lockRefused = true } }
                 )
                 .accessibilityIdentifier("change_check_notice")
             } else if ChangeCheckNotice.urgent(check) {

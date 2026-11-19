@@ -62,7 +62,7 @@ extension VaultManager {
     /// This phone can open the vault: it holds the vault's `user_guid` (§6.7.1; §11.4 needs it). The unlock refuses without
     /// it (`no_user_guid`), and so do the flows that lock first (Finish the move, the release update), before their lock:
     /// they would lock a vault this phone cannot open again.
-    var userGuidUsable: Bool { !record.value.userGuid.isEmpty }
+    public var userGuidUsable: Bool { !record.value.userGuid.isEmpty }
 
     /// ``userGuidUsable``'s refusal, as the unlock answers it.
     static let refusedWithoutUserGuid = UnlockAttempt.failed(.notSupported, code: UnlockAttempt.codeNoUserGuid)

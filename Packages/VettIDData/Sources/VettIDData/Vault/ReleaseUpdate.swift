@@ -247,6 +247,10 @@ public struct UpdateProgress: Equatable, Sendable {
 
     /// A step that waits for the member (a PIN, a choice, or "Continue").
     public var waiting: Bool { !step.running }
+
+    /// The step failed for want of a usable `user_guid` on this phone (``UnlockAttempt/isNoUserGuid(_:_:)``): no PIN and no
+    /// "Try again" can work, so neither is offered.
+    public var noUserGuid: Bool { UnlockAttempt.isNoUserGuid(failure, failureCode) }
 }
 
 /// The proactive release update: the offer the shell and Settings show, and the one-step update. Mirrors vettid-android

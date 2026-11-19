@@ -90,7 +90,7 @@ public struct UnlockState: Equatable, Sendable, CustomStringConvertible, CustomD
     /// (Release R) The vault has a phone secret: cancelling a recovery from here sends the owner check at once.
     public var phoneSecret = false
     /// (Release R, §11.14.10) Why the last "Finish the move" did not open the vault.
-    public var moveFailure: FailureKind?
+    public var moveFailure: MoveFailure?
     /// (VAULT-MESSAGING §11.14.9 "A lost answer" step 5) Which PIN is asked for: while a PIN change is unresolved, the
     /// previous PIN, then the new one after the vault showed that it holds the change.
     public var pinStep: UnlockPinStep = .pin
@@ -117,6 +117,12 @@ public struct UnlockState: Equatable, Sendable, CustomStringConvertible, CustomD
 
     /// "Erase VettID from this phone" is offered: never on a ``recoverOnly`` screen, which wins.
     public var eraseOffered: Bool { !recoverOnly && (notRecognised || keysGone) }
+
+    /// The recover-or-erase notice of a phone without the vault's keys is on the screen (the screen's own choice).
+    public var stuckNoticeShown: Bool { !recoverOnly && !notRecognised && keysGone }
+
+    /// The last "Finish the move" was refused for want of a usable `user_guid` (``MoveFailure/noUserGuid``).
+    public var moveNoUserGuid: Bool { moveFailure?.noUserGuid == true }
 
     /// Whether "Try again" (after a failed release check) may be pressed now.
     public var retryAllowed: Bool { serviceWaitSeconds == 0 && !loading }

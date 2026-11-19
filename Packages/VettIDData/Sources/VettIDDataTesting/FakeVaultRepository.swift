@@ -127,7 +127,9 @@ public final class FakeVaultRepository: CustomStringConvertible {
     public var finishingMove = false
     /// The end of a kept transfer is due and has no definite answer (``VaultRepository/keptCheckPending``).
     public var keptCheckPending = false
-    public var finishMoveFailure: FailureKind?
+    public var finishMoveFailure: MoveFailure?
+    /// This phone holds a `user_guid` it can unlock with (``VaultRepository/userGuidUsable``); a test clears it.
+    public var userGuidUsable = true
     public var movedBack = false
     public var rotateOffered = false
     /// (0.84.0) The latest `vault.status` has `relay: "refused"`, set by a test.

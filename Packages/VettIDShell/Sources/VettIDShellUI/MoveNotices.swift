@@ -9,7 +9,8 @@ import VettIDUI
 /// screen the unlock itself finishes it); the old phone that took the vault back ("The move didn't finish" succeeded, or the 7-day check found it still the
 /// vault's app) and the keys removed from the old phone are each told once, until "OK"; the waiting check (the vault has not
 /// confirmed the move) stays while it lasts. The
-/// sheet stays through the lock and unlock it sends (and cannot be dismissed while they run). Mirrors vettid-android
+/// sheet stays through the lock and unlock it sends (and cannot be dismissed while they run); without a usable `user_guid`
+/// (§6.7.1) it sends neither, the vault stays open, and the sheet shows the failure itself. Mirrors vettid-android
 /// `MoveNotices`. Drawn by the root above every phase, so that the notice of a wipe (``movedAway``) is seen on the welcome screen.
 public struct MoveNotices: View {
     @Environment(\.vettIDColors) private var colors

@@ -139,7 +139,9 @@ public struct ReleaseUpdateFlowState: Equatable, Sendable {
         self.progress = progress
     }
 
-    public var pinAllowed: Bool { waitSeconds == 0 && progress?.waiting == true }
+    /// The keypad (and with it "Try again") can be used: never after a step failed for want of a usable `user_guid`, which
+    /// no PIN can change.
+    public var pinAllowed: Bool { waitSeconds == 0 && progress?.waiting == true && progress?.noUserGuid != true }
 
     public func retryAllowed(pinTyped: Int) -> Bool { pinAllowed && pinTyped >= UnlockState.minPinLength }
 }

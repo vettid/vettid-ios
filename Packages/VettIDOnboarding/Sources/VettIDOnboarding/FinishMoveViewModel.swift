@@ -12,20 +12,24 @@ public struct FinishMoveState: Equatable, Sendable, CustomStringConvertible {
     /// (VAULT-MESSAGING 0.45.0 §11.14.9 step 2) A PIN or password change is being decided, or the PIN is uncertain: no lock
     /// and unlock with a PIN typed here until it is (the gate's text); nil when the move can be finished.
     public var held: FailureKind?
+    /// (§6.7.1) The unlock refused for want of a usable `user_guid` on this phone (``UnlockAttempt/isNoUserGuid(_:_:)``):
+    /// it can never unlock, so the recover-or-erase words are shown and the keypad stays closed.
+    public var noUserGuid = false
 
     public init() {}
 
-    /// The keypad can be used: not held, not running, not done.
-    public var pinAllowed: Bool { held == nil && !busy && !done }
+    /// The keypad can be used: not held, not running, not done, and not on a phone that can never unlock.
+    public var pinAllowed: Bool { held == nil && !busy && !done && !noUserGuid }
 
     public var description: String {
         "FinishMoveState(busy: \(busy), done: \(done), failure: \(failure.map { "\($0)" } ?? "nil"), "
-            + "held: \(held.map { "\($0)" } ?? "nil"))"
+            + "noUserGuid: \(noUserGuid), held: \(held.map { "\($0)" } ?? "nil"))"
     }
 }
 
 /// Right after the transfer's `device.paired` and the credential: `vault.lock`, then `vault.unlock` with this phone's own
-/// secret, which reads the stored header and state and so proves that both writes of the transfer are durable.
+/// secret, which reads the stored header and state and so proves that both writes of the transfer are durable. On a phone
+/// without a usable `user_guid` (§6.7.1) nothing is locked or sent: it can never unlock, and the screen says so.
 /// `transfer_incomplete`: "The move to this phone did not finish. Approve it again on your old phone." It can wait
 /// ("Later"): the app asks again at every start, in a banner of the open app, until an unlock from storage succeeds
 /// (``VaultRepository/finishMovePending``); an unlock on the unlock screen does the same. Mirrors vettid-android
@@ -75,8 +79,11 @@ public final class FinishMoveViewModel {
         state.failure = nil
         work.launch { [weak self, vault] in
             let failure: FailureKind?
+            var noUserGuid = false
             do {
-                failure = Self.failure(of: try await vault.finishMove(pin: pin, taken: taken))
+                let r = try await vault.finishMove(pin: pin, taken: taken)
+                failure = Self.failure(of: r)
+                if case .failed(let kind, let code, _) = r { noUserGuid = UnlockAttempt.isNoUserGuid(kind, code) }
             } catch let e as VaultFailure {
                 failure = e.kind
             } catch {
@@ -86,6 +93,7 @@ public final class FinishMoveViewModel {
             self.state.busy = false
             self.state.done = failure == nil
             self.state.failure = failure
+            self.state.noUserGuid = noUserGuid
         }
         return true
     }

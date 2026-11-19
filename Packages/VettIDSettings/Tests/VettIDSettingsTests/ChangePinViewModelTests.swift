@@ -190,6 +190,20 @@ import VettIDDataTesting
         #expect(m.state.error == .renewUnconfirmed && m.offersLockAndUnlock)
     }
 
+    /// (§6.7.1) "Lock and unlock now" on a phone without a usable `user_guid`: nothing is locked or sent (the unlock would
+    /// refuse, and the vault would stay locked), the recover-or-erase words are said, and the action is no longer offered.
+    @Test func lockAndUnlockNowLocksNothingWithoutAUserGuid() async {
+        repo.fail["changePin"] = FakeVaultRepository.failure(.renewUnconfirmed, code: VaultManager.codeRenewUnconfirmed)
+        repo.userGuidUsable = false
+        let m = ChangePinViewModel(vault: repo)
+        await send(m)
+        #expect(m.offersLockAndUnlock)
+        m.lockAndUnlock()
+        await m.settle()
+        #expect(!repo.calls.contains("lock"), "nothing locked")
+        #expect(m.state.noUserGuid && !m.offersLockAndUnlock)
+    }
+
     /// The change's own call decided it not applied (or `stale_credential`): said so, the new PIN kept.
     @Test func aChangeDecidedNotAppliedAtOnce() async {
         repo.fail["changePin"] = FakeVaultRepository.failure(.other, code: VaultManager.codeChangeNotApplied)

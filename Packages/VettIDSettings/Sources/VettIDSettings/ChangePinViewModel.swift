@@ -25,6 +25,9 @@ public struct ChangePinState: Equatable, Sendable, CustomStringConvertible, Cust
     public var same = false
     public var busy = false
     public var error: FailureKind?
+    /// (§6.7.1) "Lock and unlock now" was refused, with nothing locked: this phone has no usable `user_guid`, so it could
+    /// never unlock again. The unlock screen's recover-or-erase words are shown, and the action is no longer offered.
+    public var noUserGuid = false
     public var done = false
     /// (Release R, VAULT-MESSAGING §11.14.9) `pin.change` is a credential operation: the password too, and the phone's next
     /// secret. Its answer gives the recovery 10 new attempts.
@@ -177,13 +180,19 @@ public final class ChangePinViewModel {
     /// Whether the screen offers "Lock and unlock now" (VAULT-MESSAGING 0.45.0 §11.14.9 step 3, 0.46.0 step 1): the PIN is
     /// uncertain, or a new phone secret could not be decided; the unlock's two prompts settle either at no cost.
     public var offersLockAndUnlock: Bool {
-        state.check == .ended || state.error == .pinUncertain || state.error == .renewUnconfirmed
+        !state.noUserGuid && (state.check == .ended || state.error == .pinUncertain || state.error == .renewUnconfirmed)
     }
 
-    /// "Lock and unlock now": the vault is locked, and the unlock screen that follows asks for each PIN in turn.
+    /// "Lock and unlock now": the vault is locked, and the unlock screen that follows asks for each PIN in turn. On a phone
+    /// without a usable `user_guid` (§6.7.1) nothing is locked or sent: the unlock would refuse, and the vault would stay
+    /// locked with no way back from this phone.
     public func lockAndUnlock() {
+        guard vault.userGuidUsable else {
+            state.noUserGuid = true
+            return
+        }
         let vault = vault
-        work.launch { try? await vault.lock() }
+        work.launch { _ = try? await vault.lockForUnlock() }
     }
 
     /// Leaving the screen, or the app leaving the foreground: nothing typed stays. A change on its way stays busy (its

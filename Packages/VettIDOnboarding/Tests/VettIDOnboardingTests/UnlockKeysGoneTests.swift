@@ -117,4 +117,22 @@ import VettIDDataTesting
         await submit(vm)
         #expect(vm.state.keysGone && !vm.state.earlierSecret)
     }
+
+    /// (§6.7.1, owner decision a, 2026-11-18) No usable `user_guid`: this phone can never unlock, so the recover-or-erase
+    /// notice is shown, its erase confirmed, and no earlier secret is offered (none adds a `user_guid`). The kind or the code
+    /// alone is not it. Mirrors vettid-android `UnlockStuckTest`.
+    @Test func aPhoneWithoutAUserGuidIsOfferedRecoverOrErase() async {
+        vault.earlierSecretOffered = true
+        vault.unlockResults = [.failed(.notSupported, code: UnlockAttempt.codeNoUserGuid)]
+        let vm = await vm()
+        await submit(vm)
+        #expect(vm.state.keysGone && vm.state.stuckNoticeShown && vm.state.eraseOffered && !vm.state.earlierSecret)
+        vm.askErase()
+        #expect(vm.state.eraseConfirm)
+
+        for other in [UnlockAttempt.failed(.notSupported, code: "other"), .failed(.other, code: UnlockAttempt.codeNoUserGuid)] {
+            #expect(!UnlockViewModel.keysGone(after: other, before: false), "\(other)")
+            #expect(UnlockViewModel.earlierSecretHelps(other), "\(other)")
+        }
+    }
 }

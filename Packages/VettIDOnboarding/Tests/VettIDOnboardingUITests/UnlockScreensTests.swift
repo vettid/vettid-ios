@@ -81,6 +81,64 @@ import VettIDUI
         }
     }
 
+    /// (§6.7.1) The move card of a "Finish the move" refused for want of a usable `user_guid` says the recover-or-erase
+    /// words with its Continue, and goes where they are already said: beside the recover-or-erase notice, or the
+    /// recover-only notice of an ended release or a rollback. Any other move failure stays everywhere, with its own text.
+    /// Mirrors vettid-android `UnlockStuckTest` (#408).
+    @Test func theMoveCardOfAPhoneWithoutAUserGuid() {
+        let noGuid = MoveFailure(.notSupported, code: UnlockAttempt.codeNoUserGuid)
+        var s = ok
+        s.moveFailure = noGuid
+        let card = UnlockMoveCard(s)
+        #expect(card?.kind == .urgent && card?.title == "This phone cannot open your vault")
+        #expect(card?.message == OnboardingStrings.unlockStuckBody)
+        var stuck = keysGone
+        stuck.moveFailure = noGuid
+        #expect(stuck.stuckNoticeShown && UnlockMoveCard(stuck) == nil, "not twice")
+        for (name, r) in recoverOnly {
+            var withCard = r
+            withCard.moveFailure = noGuid
+            #expect(UnlockMoveCard(withCard) == nil, "\(name): no erase advice beside the recover-only notice")
+        }
+        // Not recognised: its own notice offers the erase, and says other words; the card stays.
+        var unknown = keysGone
+        unknown.notRecognised = true
+        unknown.moveFailure = noGuid
+        #expect(!unknown.stuckNoticeShown && UnlockMoveCard(unknown) != nil)
+
+        let other = MoveFailure(.transferIncomplete, code: "transfer_incomplete")
+        for base in [ok, keysGone] + Array(recoverOnly.values) {
+            var t = base
+            t.moveFailure = other
+            let c = UnlockMoveCard(t)
+            #expect(c?.kind == .warning && c?.title == OnboardingStrings.finishMoveTitle)
+            #expect(c?.message == FailureKind.transferIncomplete.message(timeScale: 1))
+        }
+        for state in [s, stuck] {
+            #expect(height(UnlockScreen(state: state, actions: NoUnlockActions())) > 0)
+        }
+    }
+
+    /// (§6.7.1, owner decision a, 2026-11-18) A `no_user_guid` refusal: the recover-or-erase notice says it, so its own card
+    /// is shown only where no notice offers the erase or the way forward, and not beside the move card of the same
+    /// failure.
+    @Test func theNoUserGuidCardIsShownOnlyWhereNothingElseSaysIt() {
+        var s = ok
+        s.message = .failed(.notSupported, code: UnlockAttempt.codeNoUserGuid)
+        #expect(UnlockMessageNotice.noUserGuidShown(s))
+        s.keysGone = true
+        #expect(!UnlockMessageNotice.noUserGuidShown(s) && s.stuckNoticeShown)
+        s.keysGone = false
+        s.moveFailure = MoveFailure(.notSupported, code: UnlockAttempt.codeNoUserGuid)
+        #expect(!UnlockMessageNotice.noUserGuidShown(s))
+        for (name, r) in recoverOnly {
+            #expect(!UnlockMessageNotice.noUserGuidShown(r), "\(name)")
+        }
+        var stuck = keysGone
+        stuck.message = s.message
+        #expect(height(UnlockScreen(state: stuck, actions: NoUnlockActions())) > 0)
+    }
+
     /// The support mail carries nothing of the member's.
     @Test func theSupportMailCarriesNothingOfTheMembers() {
         #expect(SupportMail.url.absoluteString == "mailto:support@vettid.org?subject=VettID%3A%20help%20with%20my%20vault")
@@ -224,4 +282,5 @@ import VettIDUI
 
     private func textFields(in view: UIView) -> [UITextField] { views(in: view).compactMap { $0 as? UITextField } }
 }
+
 #endif

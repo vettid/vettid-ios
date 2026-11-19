@@ -241,6 +241,8 @@ func refusalText(_ code: String, _ to: Int) -> String {
 /// What a failed step says, at the vault's [timeScale].
 func updateFailureText(_ p: UpdateProgress, timeScale: UInt64) -> String {
     if p.failureCode == ReleaseUpdateManager.codeChangeHeld { return (p.failure ?? .changeUnresolved).message(timeScale: timeScale) }
+    // §6.7.1: this phone can never unlock; the unlock screen's recover-or-erase words (vettid-android #406).
+    if p.noUserGuid { return OnboardingStrings.unlockStuckBody }
     if p.failure == .badPin { return OnboardingStrings.unlockBadPin }
     if p.failure == .backoff { return OnboardingStrings.releaseUpdateBackoff }
     if p.failureCode == ReleaseUpdateManager.codeReleaseStarting { return OnboardingStrings.releaseUpdateStartFailed }

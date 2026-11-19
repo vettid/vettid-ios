@@ -425,19 +425,21 @@ public final class UnlockViewModel: UnlockActions {
         return code == UnlockState.codeUnreadable || kind == .unauthorized || before
     }
 
-    /// The keys-gone offer: set by `device_secret`, kept through failures that never reached the vault, cleared by any
-    /// other answer of the vault.
+    /// The keys-gone offer: set by `device_secret`, and by the unlock's own `no_user_guid` refusal (§6.7.1: a move an older
+    /// build completed without one, or a damaged record; nothing will ever add it, so this phone cannot unlock; owner
+    /// decision a, 2026-11-18), kept through failures that never reached the vault, cleared by any other answer of the vault.
     static func keysGone(after r: UnlockAttempt, before: Bool) -> Bool {
-        guard case .failed(let kind, _, _) = r else { return false }
-        if kind == .deviceSecret { return true }
+        guard case .failed(let kind, let code, _) = r else { return false }
+        if kind == .deviceSecret || UnlockAttempt.isNoUserGuid(kind, code) { return true }
         return UnlockMessage.transientFailures.contains(kind) ? before : false
     }
 
     /// Whether an earlier phone secret could help (IOS-PLAN §6.3 item 5): not when the App Attest key is gone (§6.2),
     /// which no secret replaces.
     static func earlierSecretHelps(_ r: UnlockAttempt) -> Bool {
-        guard case .failed(_, let code, _) = r else { return true }
-        return code != VaultFailure.codeAppAttestKeyGone
+        guard case .failed(let kind, let code, _) = r else { return true }
+        // Nor without a usable `user_guid`, which no secret adds: the unlock refuses before anything is sent.
+        return code != VaultFailure.codeAppAttestKeyGone && !UnlockAttempt.isNoUserGuid(kind, code)
     }
 
     /// The `signer_refused` notice: set by that answer, cleared by any other sealed answer, kept through failures.

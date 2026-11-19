@@ -152,8 +152,14 @@ enum UnlockCatalog {
             s.keptTransfer = true
             s.message = .moveBackFailed
         }
-        add("move_failure", "Finish the move did not finish") { $0.moveFailure = .transferIncomplete }
-        add("no_user_guid", "Moved from an older release") { $0.message = .failed(.notSupported, code: UnlockAttempt.codeNoUserGuid) }
+        add("move_failure", "Finish the move did not finish") { $0.moveFailure = MoveFailure(.transferIncomplete) }
+        add("move_no_user_guid", "Finish the move: no user_guid") {
+            $0.moveFailure = MoveFailure(.notSupported, code: UnlockAttempt.codeNoUserGuid)
+        }
+        add("no_user_guid", "No user_guid: recover or erase") {
+            $0.message = .failed(.notSupported, code: UnlockAttempt.codeNoUserGuid)
+            $0.keysGone = true
+        }
         all.append(Entry(id: "starting", title: "Opening VettID", screen: .starting))
         let stuck = [
             Stuck(id: "unreachable", title: "Cannot connect", kind: .network),

@@ -36,6 +36,7 @@ import VettIDData
             return .success
         }
         func lock() async throws { calls.append("lock") }
+        var userGuidUsable = true
         func forgetPairingPin() { calls.append("forgetPairingPin") }
         func overview() async throws -> VaultOverview { throw VaultFailure(.other) }
         func changePin(pin: String, newPin: String) async throws { calls.append("changePin") }
@@ -134,5 +135,31 @@ import VettIDData
         try await r.createCredential(password: "p", backup: true, pin: "1") { _ in }
         try await r.changePassword("p", newPassword: "q", pin: "1")
         #expect(r.calls == ["unlock(true)", "unlock(false)", "unlock(false)", "createCredential", "changePassword"])
+    }
+
+    /// "Lock and unlock now" (§11.14.9 step 3) locks only on a phone that can unlock again (§6.7.1): without a usable
+    /// `user_guid`, nothing is locked or sent.
+    @Test func lockAndUnlockNowLocksNothingWithoutAUserGuid() async throws {
+        let r = Minimal()
+        r.userGuidUsable = false
+        #expect(try await !r.lockForUnlock())
+        #expect(r.calls.isEmpty)
+        r.userGuidUsable = true
+        #expect(try await r.lockForUnlock())
+        #expect(r.calls == ["lock"])
+    }
+
+    /// The open app's "Lock and unlock now" for a decided change: acknowledged either way; locked only on a phone that can
+    /// unlock again (§6.7.1).
+    @Test func theBannersLockAndUnlockLocksNothingWithoutAUserGuid() async {
+        let r = Minimal()
+        r.userGuidUsable = false
+        #expect(!r.lockAndUnlockForChange())
+        for _ in 0..<20 { await Task.yield() }
+        #expect(r.calls.isEmpty)
+        r.userGuidUsable = true
+        #expect(r.lockAndUnlockForChange())
+        for _ in 0..<200 where r.calls.isEmpty { await Task.yield() }
+        #expect(r.calls == ["lock"])
     }
 }

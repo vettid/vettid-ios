@@ -155,16 +155,6 @@ extension OnboardingStrings {
             bundle: .module
         )
     }
-    static var unlockNoUserGuid: String {
-        String(
-            localized: "unlock_no_user_guid",
-            defaultValue: """
-                This phone cannot unlock your vault yet: it was moved here while your vault ran an older release. It can \
-                unlock once your vault is updated.
-                """,
-            bundle: .module
-        )
-    }
     static var unlockUnreadable: String {
         String(
             localized: "unlock_unreadable",
