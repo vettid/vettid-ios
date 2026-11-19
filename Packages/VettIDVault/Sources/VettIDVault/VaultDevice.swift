@@ -197,11 +197,17 @@ public final class VaultDevice: @unchecked Sendable {
     var quieted = false
     /// The newest `ts` of a message from the vault and the monotonic time it arrived (in memory only).
     var vaultClock: (ts: Date, at: TimeInterval)?
-    /// The vault's clock as the first answer after ``beginOpening()`` set it (its `ts` and the monotonic time it arrived), in
-    /// memory only; nil before that answer, and before any opening in this process.
-    var openingAnswer: (ts: Date, at: TimeInterval)?
-    /// Set by ``beginOpening()``: an answer counts for ``openingAnswer`` only after it.
-    var openingBegun = false
+    /// The opening under way (``beginOpening(onMark:)``), in memory only: when it began on the monotonic clock, the ids of
+    /// the requests first sent since, and whom to tell the opening's moment on the vault's clock once one of them is
+    /// answered (nil once told, and before any opening).
+    var opening: Opening?
+
+    /// An opening under way: see ``opening``.
+    struct Opening {
+        let began: TimeInterval
+        var requests: Set<String>
+        let onMark: @Sendable (Date) -> Void
+    }
     /// The newest verified `ts` of a handshake message from the vault and the monotonic time it arrived (in memory only):
     /// the keys' clock reads it besides ``vaultClock`` (``keyClockLocked()``).
     var keyStamp: (ts: Date, at: TimeInterval)?

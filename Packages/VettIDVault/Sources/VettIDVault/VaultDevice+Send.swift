@@ -371,6 +371,8 @@ extension VaultDevice {
         _ type: String, body: [UInt8], timeout: TimeInterval?, innerID: String?, exp: Date?, retries: Int
     ) async throws -> VaultMessage {
         let id = innerID ?? Ulid.new(now())
+        // A request first made now (not one tried again under an id it already had) may give the opening its clock.
+        if innerID == nil { noteOpeningRequest(id) }
         let d = OneShot<Inner>()
         mem.withLock { pending[id] = d }
         defer { mem.withLock { _ = pending.removeValue(forKey: id) } }
