@@ -138,7 +138,9 @@
 # VETTID_STAGING_PEER_NAME, with VETTID_STAGING_PHOTO_EXISTING=1 optional (testStagingPhotoReceive takes the newest photo
 # already in the conversation and checks its viewer) and VETTID_STAGING_PHOTO_TIMEOUT optional (the seconds they wait for the delivery or the
 # arrival; 180 without it). testStagingInvite, testStagingRotate and testStagingLook need only PIN and PASSWORD;
-# testStagingApproveRequest also VETTID_STAGING_SAFETY_CODE; testStagingSendAll VETTID_STAGING_PEER_NAME,
+# testStagingApproveRequest also VETTID_STAGING_SAFETY_CODE; testStagingReleaseGate optionally VETTID_STAGING_PEER_NAME
+# and VETTID_STAGING_ITEM_NAME (after the update, Connections and Messages must still show that connection and Vault that
+# item); testStagingSendAll VETTID_STAGING_PEER_NAME,
 # VETTID_STAGING_MESSAGE and VETTID_STAGING_EXPECT; testStagingWaitMessage VETTID_STAGING_PEER_NAME and
 # VETTID_STAGING_EXPECT; testStagingSignIn VETTID_STAGING_MATCH_CODE, with VETTID_STAGING_SIGNIN_LOCK=1 optional;
 # testStagingCheck, testStagingCallPlace and testStagingCallAnswer VETTID_STAGING_PEER_NAME (testStagingCallAnswer answers
@@ -187,7 +189,7 @@ NAMES=(VETTID_STAGING_EMAIL VETTID_STAGING_CODE VETTID_STAGING_PIN VETTID_STAGIN
 # The connect, message and photo tests' inputs: optional, never counted as missing for the others.
 OPTIONAL=(VETTID_STAGING_LINK VETTID_STAGING_TRANSFER_CODE VETTID_STAGING_TRANSFER_TIMEOUT VETTID_STAGING_SAFETY_CODE VETTID_STAGING_PEER_NAME VETTID_STAGING_MESSAGE VETTID_STAGING_EXPECT
   VETTID_STAGING_PHOTO_TIMEOUT VETTID_STAGING_PHOTO_EXISTING VETTID_STAGING_WAIT VETTID_STAGING_MATCH_CODE
-  VETTID_STAGING_SIGNIN_LOCK VETTID_STAGING_CALL_SECONDS VETTID_STAGING_CALL_WAIT)
+  VETTID_STAGING_SIGNIN_LOCK VETTID_STAGING_CALL_SECONDS VETTID_STAGING_CALL_WAIT VETTID_STAGING_ITEM_NAME)
 ALL=("${NAMES[@]}" "${OPTIONAL[@]}")
 BUNDLE_ID=com.vettid.app.staging
 
@@ -373,7 +375,8 @@ xcodebuild test-without-building \
       @s = sort { length($b) <=> length($a) } grep { length }
         map { my $v = $ENV{"TEST_RUNNER_$_"} // ""; ($v, ($_ eq "VETTID_STAGING_PEER_NAME" ? map { my $n = (split /=/, $_, 2)[0]; $n =~ s/^\s+|\s+$//g; $n } split(/;/, $v) : ())) }
         qw(VETTID_STAGING_EMAIL VETTID_STAGING_CODE VETTID_STAGING_PIN VETTID_STAGING_PASSWORD VETTID_STAGING_LINK
-           VETTID_STAGING_TRANSFER_CODE VETTID_STAGING_PEER_NAME VETTID_STAGING_MESSAGE VETTID_STAGING_EXPECT)
+           VETTID_STAGING_TRANSFER_CODE VETTID_STAGING_PEER_NAME VETTID_STAGING_MESSAGE VETTID_STAGING_EXPECT
+           VETTID_STAGING_ITEM_NAME)
     }
     # The connect, message and photo tests report lines: the code, the state or the answer alone, never anything else of the
     # line.

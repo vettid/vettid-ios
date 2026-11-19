@@ -327,9 +327,9 @@ public final class ReleaseUpdateManager: ReleaseUpdateRepository {
         // Never in the middle of an unlock: its answer decides what the vault is.
         if running { return }
         job = nil
-        let done = progress?.step == .done
+        let done = progress.flatMap { $0.step == .done ? $0.to.number : nil }
         progress = nil
-        if done { offer = nil }
+        if let done { offerGone(movedTo: done) }
         noteBehind()
     }
 
@@ -450,8 +450,15 @@ public final class ReleaseUpdateManager: ReleaseUpdateRepository {
 
     private func done() {
         set { $0.step = .done; $0.vaultOpen = true; $0.canAbandon = false }
-        offer = nil
+        if let to = progress?.to.number { offerGone(movedTo: to) }
         noteBehind()
+    }
+
+    /// The update itself moved the vault to [movedTo]: the offer goes, unless it is already a newer one (read meanwhile, or
+    /// by the opening on the new release: the vault is behind again), and the gate follows. Mirrors vettid-android
+    /// `offerGone`.
+    private func offerGone(movedTo: UInt64) {
+        if (offer?.target.number ?? .max) <= movedTo { offer = nil }
     }
 
     private func newReleaseFailed(_ r: UpdateStepResult) {
