@@ -402,6 +402,8 @@ extension VaultManager {
     func endPausedOpening() {
         guard openingPaused else { return }
         openingPaused = false
+        // A status read under way, begun before the lock, does not publish Unlocked over it (``refresh()``).
+        lockGeneration += 1
         feed.clear()
     }
 

@@ -290,7 +290,6 @@ extension FakeVaultService {
         try locked { try addFeedItem(kind, priority: priority, connectionID: connectionID, ref: ref) }
     }
 
-    /// Another device of the owner changed an item's status: this phone gets `sync.event{feed.updated}`.
     /// A feed item listed in `feed.list` whose `feed.event` is not sent yet (a relay slower than the reads):
     /// ``sendFeedEvent(_:)`` sends it later.
     public func feedItemListedOnly(_ kind: String, connectionID: String? = nil) -> String {
@@ -313,6 +312,7 @@ extension FakeVaultService {
         }
     }
 
+    /// Another device of the owner changed an item's status: this phone gets `sync.event{feed.updated}`.
     public func otherDeviceSetsFeedStatus(_ itemID: String, _ status: String) throws {
         try locked {
             guard let i = activity.items.firstIndex(where: { $0.id == itemID }) else { return }

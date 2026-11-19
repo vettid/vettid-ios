@@ -271,6 +271,12 @@ public final class FeedManager: FeedRepository {
 
     public func refresh() async throws { try await read(full: true, quietly: false) }
 
+    /// A continued opening's catch-up is still owed (it failed): read on from the cursor once more, awaited.
+    public func readOnIfOwed() async {
+        guard catchUpOwed else { return }
+        try? await read(full: false, quietly: true)
+    }
+
     /// One paged read after the reads before it ([full]: from 0, replacing everything).
     private func read(full: Bool, quietly: Bool, queued: Bool = false) async throws {
         let before = reading

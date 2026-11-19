@@ -147,7 +147,8 @@ extension VaultManager {
                 if covered.share { answered(.shares) }
                 if covered.critical { answered(.critical) }
             }
-            if readingFeed { await feed.openNow() }
+            // A continued opening's catch-up that failed is tried once more here, after the other lists (bounded: one).
+            if readingFeed { await feed.openNow() } else { await feed.readOnIfOwed() }
             await messages.refreshConversationsQuietly()
             // The items last (chosen; not in the spec: vettid-android reads them beside the others): nothing that expires
             // waits behind them, and no screen needs them before the member opens the Vault.
