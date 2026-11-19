@@ -151,4 +151,26 @@ import VettIDDataTesting
         await vm.settle()
         #expect(vm.state.keysGone && !vm.state.showsPin, "a new release check keeps it")
     }
+
+    /// (§6.7.1) The erase is offered only once the release check has answered, so an ended release or a rollback found by
+    /// it wins (no erase); and no "Return to release N", which would ask for a PIN.
+    @Test func noEraseBeforeTheReleaseCheckAnswers() async {
+        vault.userGuidUsable = false
+        let vm = UnlockViewModel(vault: vault, account: vault)
+        #expect(vm.state.loading && vm.state.noUserGuid && !vm.state.eraseOffered && !vm.state.showsPin)
+        vm.askErase()
+        #expect(!vm.state.eraseConfirm)
+        await vm.settle()
+        #expect(vm.state.eraseOffered)
+
+        vault.fail["preflight"] = FakeVaultRepository.failure(.releaseEnded)
+        let ended = await self.vm()
+        #expect(ended.state.recoverOnly && !ended.state.eraseOffered)
+
+        var s = UnlockState(loading: false)
+        s.moveUnconfirmed = UnconfirmedMove(from: FakeVaultRepository.release(4), to: FakeVaultRepository.release(5), failed: true)
+        #expect(s.returnOffered)
+        s.noUserGuid = true
+        #expect(!s.returnOffered && !s.showsPin)
+    }
 }

@@ -140,13 +140,16 @@ public final class UnlockViewModel: UnlockActions {
         state.loading = true
         state.preflightError = nil
         state.preflight = nil
-        // §6.7.1: a phone without a usable user_guid is told at once that it cannot open the vault (recover or erase),
-        // with no PIN asked; nothing will ever add one.
+        // §6.7.1: a phone without a usable user_guid is told that it cannot open the vault (recover or erase) as soon as
+        // the release check has answered (an ended release or a rollback wins), with no PIN asked; nothing will ever add
+        // one.
         state.noUserGuid = !vault.userGuidUsable
-        state.keysGone = state.noUserGuid
+        state.keysGone = false
         state.earlierSecret = false
         state.eraseConfirm = false
         launch { [self] in
+            // Whatever the check's answer: the erase is offered only once it is known whether recover-only wins.
+            defer { state.keysGone = state.keysGone || state.noUserGuid }
             do {
                 let p = try await vault.preflight()
                 state.loading = false

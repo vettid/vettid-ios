@@ -213,6 +213,8 @@ public final class ReleaseUpdateManager: ReleaseUpdateRepository {
 
     public func ownerCheckDue() -> Bool { ops.ownerCheckDue() }
 
+    public var userGuidUsable: Bool { ops.userGuidUsable() }
+
     public var changeHold: FailureKind? { ops.changeHold() }
 
     public func dismissBanner(at: Date) {

@@ -292,6 +292,9 @@ struct UpdateRetryScreen: View {
             : required ? OnboardingStrings.releaseUpdateContinue : OnboardingStrings.releaseUpdateNotNow
     }
 
+    /// §6.7.1: no PIN and no "Try again" on a phone that can never unlock; they are not shown.
+    static func hidesPin(_ p: UpdateProgress, _ state: ReleaseUpdateFlowState) -> Bool { p.noUserGuid || state.noUserGuid }
+
     var body: some View {
         let p = progress
         let badPin = p.step == .badPin
@@ -304,8 +307,7 @@ struct UpdateRetryScreen: View {
         } else {
             OnboardingStrings.releaseUpdateFailedBodyLocked(from)
         }
-        // §6.7.1: no PIN and no "Try again" on a phone that can never unlock; they are not shown.
-        let stuck = p.noUserGuid
+        let stuck = Self.hidesPin(p, state)
         FormScaffold(
             title: badPin ? OnboardingStrings.releaseUpdateTitle : OnboardingStrings.releaseUpdateFailedTitle,
             message: body,

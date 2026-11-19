@@ -284,6 +284,10 @@ public protocol ReleaseUpdateRepository: AnyObject, Observable, Sendable {
     /// Whether the owner check must come first (§3.6.5).
     func ownerCheckDue() -> Bool
 
+    /// This phone holds a `user_guid` it can unlock with (§6.7.1): without one, no update can reopen the vault, and no PIN
+    /// is asked for one.
+    var userGuidUsable: Bool { get }
+
     /// (VAULT-MESSAGING §11.14.9 step 2) Which PIN the vault expects, as a generation (``PhoneSecrets/pinGeneration``):
     /// a screen reads it when its keypad becomes usable and hands it over with the PIN; an unlock sends nothing once it
     /// moved since (``VaultManager/codePinTakenBefore``).

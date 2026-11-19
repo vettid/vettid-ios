@@ -77,7 +77,8 @@ public struct UnlockScreen: View {
     private var primaryLabel: String? {
         if state.returnAsksPin, let m = state.moveUnconfirmed { return OnboardingStrings.releaseUpdateReturn(Int(m.from.number)) }
         if state.preflightError != nil && !blocked { return OnboardingStrings.unlockRetry }
-        if blocked || state.recoveryPending { return nil }
+        // §6.7.1: nothing to send from a phone that can never unlock.
+        if blocked || state.recoveryPending || state.noUserGuid { return nil }
         return OnboardingStrings.unlockSubmit
     }
 
@@ -242,7 +243,8 @@ enum UnlockBlock: Hashable {
         if state.returnAsksPin { out.append(.returnCancel) }
         out.append(.wayForward)
         // Last: after the PIN and every result of the unlock, as the Android app does.
-        if let p = state.preflight, p.offer != nil, !p.rollback { out.append(.offer) }
+        // Not on a phone that can never unlock (§6.7.1): no approval can go with an unlock.
+        if let p = state.preflight, p.offer != nil, !p.rollback, !state.noUserGuid { out.append(.offer) }
         return out
     }
 }
@@ -323,7 +325,7 @@ struct UnlockNotices: View {
                 message: OnboardingStrings.unlockIdleLocked(idle.afterSeconds) + (state.stagingNote.map { "\n\n" + $0 } ?? "")
             )
             .accessibilityIdentifier("unlock_idle_locked")
-        } else if state.checkDue {
+        } else if state.checkDue && !state.noUserGuid {
             NoticeCard(.info, title: OnboardingStrings.unlockOwnerCheckTitle, message: OnboardingStrings.unlockOwnerCheckBody)
                 .accessibilityIdentifier("unlock_owner_check")
         }

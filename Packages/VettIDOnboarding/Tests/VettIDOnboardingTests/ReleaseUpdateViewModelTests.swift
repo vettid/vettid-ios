@@ -418,6 +418,23 @@ import VettIDDataTesting
             #expect(!p.noUserGuid && vm.state.retryAllowed(pinTyped: 6), "\(kind) \(code)")
         }
     }
+
+    /// (§6.7.1) On a phone without a usable `user_guid`, no update could reopen the vault: no PIN is asked on the offer,
+    /// nothing is approved, and the update's own screens open no keypad (the way back and a retry after the move included).
+    @Test func noPinIsAskedOnAPhoneWithoutAUserGuid() async {
+        let updates = FakeReleaseUpdates(offer: offer)
+        updates.userGuidUsable = false
+        let vm = ReleaseUpdateViewModel(updates: updates, ownerCheck: vault, notes: FakeReleaseNotes())
+        await vm.settle()
+        #expect(vm.state.noUserGuid && !vm.state.pinAllowed && !vm.state.submitAllowed(pinTyped: 6))
+        #expect(!vm.approve(pin: "246802") && updates.calls.isEmpty)
+
+        let flow = ReleaseUpdateFlowViewModel(updates: updates)
+        updates.progress = UpdateProgress(step: .newReleaseFailed, from: rel(4), to: rel(5), failure: .network, canAbandon: true)
+        await flow.settle()
+        #expect(flow.state.noUserGuid && !flow.state.pinAllowed && !flow.retry(pin: "246802"))
+        #expect(updates.calls.isEmpty)
+    }
 }
 
 /// One second of a countdown at a time, moved on only by the test.

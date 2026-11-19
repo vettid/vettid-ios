@@ -149,6 +149,11 @@ import VettIDUI
         var known = keysGone
         known.noUserGuid = true
         #expect(!UnlockBlock.blocks(for: known).contains(.pin))
+        known.preflight = PreflightInfo(routed: release, lastNumber: 3, softwareUpdated: false, rollback: false, offer: release)
+        #expect(!UnlockBlock.blocks(for: known).contains(.offer), "no approval goes with an unlock that cannot happen")
+        known.noUserGuid = false
+        #expect(UnlockBlock.blocks(for: known).contains(.offer))
+        known.noUserGuid = true
         #expect(height(UnlockScreen(state: known, actions: NoUnlockActions())) > 0)
     }
 

@@ -131,7 +131,7 @@ public struct UnlockState: Equatable, Sendable, CustomStringConvertible, CustomD
     public var retryAllowed: Bool { serviceWaitSeconds == 0 && !loading }
 
     /// (IOS-PLAN §4.3 point 3) "Return to release N" is offered: the marker of an unconfirmed move has `failed`.
-    public var returnOffered: Bool { moveUnconfirmed?.failed == true && !recoveryPending }
+    public var returnOffered: Bool { moveUnconfirmed?.failed == true && !recoveryPending && !noUserGuid }
 
     /// Whether the PIN may be entered and sent now: never while the last check of the vault's software failed (except for
     /// the way back, which does not go to the routed release).

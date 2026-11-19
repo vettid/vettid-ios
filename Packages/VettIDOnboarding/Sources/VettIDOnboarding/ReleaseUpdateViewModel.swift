@@ -13,20 +13,24 @@ public struct ReleaseUpdateState: Equatable, Sendable {
     public var notes: ReleaseNotes?
     /// (VAULT-MESSAGING §11.14.9) A PIN or password change is undecided: why the update waits, in the change gate's words.
     public var changeHold: FailureKind?
+    /// (§6.7.1) This phone has no usable `user_guid`: no update could reopen the vault, so no PIN is asked; the unlock
+    /// screen's recover-or-erase words are shown.
+    public var noUserGuid = false
 
     public init(
         loading: Bool = true, offer: ReleaseUpdateOffer? = nil, checkDue: Bool = false, notes: ReleaseNotes? = nil,
-        changeHold: FailureKind? = nil
+        changeHold: FailureKind? = nil, noUserGuid: Bool = false
     ) {
         self.loading = loading
         self.offer = offer
         self.checkDue = checkDue
         self.notes = notes
         self.changeHold = changeHold
+        self.noUserGuid = noUserGuid
     }
 
-    /// Whether the PIN may be typed: neither the owner check nor an undecided change comes first.
-    public var pinAllowed: Bool { !checkDue && changeHold == nil }
+    /// Whether the PIN may be typed: neither the owner check nor an undecided change comes first, and the phone can unlock.
+    public var pinAllowed: Bool { !checkDue && changeHold == nil && !noUserGuid }
 
     /// Whether "Approve and update" may be pressed with [pinTyped] digits on the keypad.
     public func submitAllowed(pinTyped: Int) -> Bool { offer != nil && pinAllowed && pinTyped >= UnlockState.minPinLength }
@@ -58,7 +62,9 @@ public final class ReleaseUpdateViewModel {
     ) {
         self.updates = updates
         releaseNotes = notes
-        state = ReleaseUpdateState(loading: updates.offer == nil, offer: updates.offer, changeHold: updates.changeHold)
+        state = ReleaseUpdateState(
+            loading: updates.offer == nil, offer: updates.offer, changeHold: updates.changeHold, noUserGuid: !updates.userGuidUsable
+        )
         keypad.follow(state.pinAllowed, updates)
         followers.add(follow(self, read: { $0.updates.offer }, apply: { $0.offerChanged($1) }))
         followers.add(follow(self, read: { $0.updates.changeHold }, apply: { $0.state.changeHold = $1 }))
@@ -134,14 +140,19 @@ public struct ReleaseUpdateFlowState: Equatable, Sendable {
     public var abandonConfirm = false
     /// The update is required (``ReleaseUpdateRepository/required``): a failed step goes back to the update, not "Not now".
     public var required = false
+    /// (§6.7.1) This phone has no usable `user_guid` (``ReleaseUpdateRepository/userGuidUsable``).
+    public var noUserGuid = false
 
-    public init(progress: UpdateProgress? = nil) {
+    public init(progress: UpdateProgress? = nil, noUserGuid: Bool = false) {
         self.progress = progress
+        self.noUserGuid = noUserGuid
     }
 
-    /// The keypad (and with it "Try again") can be used: never after a step failed for want of a usable `user_guid`, which
-    /// no PIN can change.
-    public var pinAllowed: Bool { waitSeconds == 0 && progress?.waiting == true && progress?.noUserGuid != true }
+    /// The keypad (and with it "Try again", the way back, a retry after the move) can be used: never on a phone without a
+    /// usable `user_guid`, nor after a step failed for want of one, which no PIN can change.
+    public var pinAllowed: Bool {
+        waitSeconds == 0 && progress?.waiting == true && progress?.noUserGuid != true && !noUserGuid
+    }
 
     public func retryAllowed(pinTyped: Int) -> Bool { pinAllowed && pinTyped >= UnlockState.minPinLength }
 }
@@ -168,7 +179,7 @@ public final class ReleaseUpdateFlowViewModel {
     ) {
         self.updates = updates
         self.tick = tick
-        state = ReleaseUpdateFlowState(progress: updates.progress)
+        state = ReleaseUpdateFlowState(progress: updates.progress, noUserGuid: !updates.userGuidUsable)
         state.required = updates.required
         keypad.follow(state.pinAllowed, updates)
         followers.add(follow(self, read: { $0.updates.progress }, apply: { $0.progressChanged($1) }))

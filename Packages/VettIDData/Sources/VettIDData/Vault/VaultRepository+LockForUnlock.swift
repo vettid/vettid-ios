@@ -10,6 +10,14 @@ public protocol UserGuidCheck {
 
 // "Lock and unlock now" (VAULT-MESSAGING §11.14.9 step 3) only on a phone that can unlock again (§6.7.1).
 public extension VaultRepository {
+    /// The default "Finish the move" (``VaultRepository/finishMove(pin:)``): `vault.lock`, then the unlock; on a phone
+    /// without a usable `user_guid`, neither: the unlock's refusal at once.
+    func finishMove(pin: String) async throws -> UnlockAttempt {
+        guard userGuidUsable else { return .failed(.notSupported, code: UnlockAttempt.codeNoUserGuid) }
+        try await lock()
+        return try await unlock(pin: pin, approve: nil, cancelRecovery: false)
+    }
+
     /// "Lock and unlock now" (VAULT-MESSAGING §11.14.9 step 3): the vault is locked, and the unlock screen that follows asks
     /// for each PIN. False, with nothing locked or sent, when this phone could not unlock again (``userGuidUsable``): it
     /// would lock a vault it can never open.

@@ -82,6 +82,17 @@ import VettIDUI
         #expect(height(ReleaseUpdateFlowContent(state: state)) > 0)
         window.isHidden = true
 
+        #expect(UpdateRetryScreen.hidesPin(p, state), "no keypad and no Try again")
+        // Known from the repository, after any other failure: the same.
+        let known = UpdateProgress(step: .failed, from: rel(4), to: rel(5), failure: .network)
+        #expect(!UpdateRetryScreen.hidesPin(known, ReleaseUpdateFlowState(progress: known)))
+        #expect(UpdateRetryScreen.hidesPin(known, ReleaseUpdateFlowState(progress: known, noUserGuid: true)))
+        // The offer: no PIN and no "Approve and update", the words instead.
+        let offer = ReleaseUpdateOffer(current: rel(4), target: rel(5))
+        let stuck = ReleaseUpdateState(loading: false, offer: offer, noUserGuid: true)
+        #expect(!stuck.pinAllowed && !stuck.submitAllowed(pinTyped: 6))
+        #expect(height(ReleaseUpdateContent(state: stuck, onApprove: { _ in true }, onBack: {})) > 0)
+
         p.failureCode = "other"
         #expect(updateFailureText(p, timeScale: 1) == FailureKind.notSupported.message(timeScale: 1))
         p.failure = .other

@@ -369,11 +369,6 @@ public extension VaultRepository {
     var transferKeptSince: Date? { nil }
     var finishMovePending: Bool { false }
 
-    func finishMove(pin: String) async throws -> UnlockAttempt {
-        try await lock()
-        return try await unlock(pin: pin, approve: nil, cancelRecovery: false)
-    }
-
     var finishingMove: Bool { false }
     var finishMoveFailure: MoveFailure? { nil }
     func acknowledgeFinishMoveFailure() {}
