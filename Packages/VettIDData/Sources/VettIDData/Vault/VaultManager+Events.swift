@@ -378,6 +378,7 @@ extension VaultManager {
     /// no longer is. (One whose place in time is not known confirms nothing: the status read will.)
     private func locking(_ m: VaultMessage) {
         unlockWindow = nil
+        endPausedOpening()
         if lockNotices.confirms(m, bound: lockGuard.keeper.boundUnlockID) { lockGuard.keeper.confirmed() }
         switch phase {
         case .unlocked, .setup: phase = .locked
@@ -389,10 +390,19 @@ extension VaultManager {
     /// app moves to its locked screen, as for a `vault.locking`.
     func lockedByProbe() {
         unlockWindow = nil
+        endPausedOpening()
         switch phase {
         case .unlocked, .setup: phase = .locked
         default: break
         }
+    }
+
+    /// A lock ends a paused opening (``openingPaused``) even while the phase stays Unreachable: the feed and what it held
+    /// go, as at any lock, and the next return to Unlocked is a new opening.
+    func endPausedOpening() {
+        guard openingPaused else { return }
+        openingPaused = false
+        feed.clear()
     }
 
     /// `credential.alarm` (§3.5.9): it ends the unlock window.

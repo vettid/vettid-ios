@@ -126,8 +126,24 @@ extension VaultManager {
         }
     }
 
-    /// The vault opened (an unlock, the end of onboarding, a start while open): the account is read again.
-    func onOpened() {
+    /// The phase moved from [oldValue] to [phase]. (chosen; not in the spec: as vettid-android #411) Unlocked, then only
+    /// Unreachable, then Unlocked is the same opening: a status read that could not be made closed nothing. The feed is kept
+    /// meanwhile, with its mark; any other phase in between ends the opening, and the feed with it.
+    func openOrClose(_ phase: AppPhase, was oldValue: AppPhase) {
+        let continued = openingPaused
+        openingPaused = phase.pausesOpening && (oldValue == .unlocked || openingPaused)
+        // The account is read again whenever the vault opens (an unlock, the end of onboarding, a start while open).
+        if phase == .unlocked, oldValue != .unlocked { onOpened(continued: continued) }
+        if phase != .unlocked, oldValue == .unlocked {
+            forgetOpenLists(keepingFeed: openingPaused) // not kept once it is locked; the feed, while the opening is paused
+            releaseUpdate.vaultClosed() // the release is checked anew at the next opening
+        }
+        if continued, !openingPaused, phase != .unlocked { feed.clear() }
+    }
+
+    /// The vault opened (an unlock, the end of onboarding, a start while open): the account is read again. [continued]: only
+    /// a status read that could not be made came since the vault was last open, so the feed's opening goes on.
+    func onOpened(continued: Bool = false) {
         Task { [weak self] in await self?.refreshAccount() }
         // (VAULT-MESSAGING 0.70.0 §10.4.2) A vault that did not know `pending.list` is asked again after each unlock, not
         // after a passed owner check.
@@ -138,12 +154,19 @@ extension VaultManager {
         // the first answer to a request of this opening comes (a vault time learnt before it, or an event's `ts`, can be the
         // mailbox's days-old backlog at a cold start). Fixed in the feed, so a device let go meanwhile (a background)
         // changes nothing. A held event the vault sent before it is the backlog, never notified.
-        let opening = feed.vaultOpened(at: config.now())
-        session?.device.beginOpening { [weak self] at in
-            Task { @MainActor in self?.feed.openingMarked(at, opening: opening) }
+        // The same opening after only a status read that failed (as vettid-android #411): its mark is kept, so what the
+        // vault sent meanwhile is judged against it (the vault was open before, so it has one). The release is checked
+        // again all the same.
+        if continued {
+            feed.openingContinued()
+        } else {
+            let opening = feed.vaultOpened(at: config.now())
+            session?.device.beginOpening { [weak self] at in
+                Task { @MainActor in self?.feed.openingMarked(at, opening: opening) }
+            }
         }
         releaseUpdate.vaultOpened()
-        refreshListsQuietly()
+        refreshListsQuietly(readingFeed: !continued)
         // The clone alarm is read after every unlock, whatever event was or was not received (a held background's, a process that
         // ended): `credential.version` shows it (§3.5.9).
         Task { [weak self] in
@@ -156,5 +179,14 @@ extension VaultManager {
         kickChangeCheck()
         // The proactive release notice (ANDROID-PLAN "Vault update"): the manifest, read after every unlock.
         Task { [weak self] in await self?.releaseUpdate.refreshOffer() }
+    }
+}
+
+extension AppPhase {
+    /// Unreachable over an open vault, the same opening if it opens again next: any kind but a wipe that did not finish
+    /// (``FailureKind/eraseFailed``), which ends it.
+    var pausesOpening: Bool {
+        if case .unreachable(let kind, _) = self { return kind != .eraseFailed }
+        return false
     }
 }

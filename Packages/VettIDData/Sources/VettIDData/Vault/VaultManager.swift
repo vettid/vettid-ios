@@ -36,12 +36,7 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
         didSet {
             let phase = storedPhase
             phaseChanges += 1
-            // The account is read again whenever the vault opens (an unlock, the end of onboarding, a start while open).
-            if phase == .unlocked, oldValue != .unlocked { onOpened() }
-            if phase != .unlocked, oldValue == .unlocked {
-                forgetOpenLists() // not kept once it is locked
-                releaseUpdate.vaultClosed() // the release is checked anew at the next opening
-            }
+            openOrClose(phase, was: oldValue)
             if phase != oldValue, OwnProfileStep.onPhase(phase) == .forget { forgetOwnProfile() } // IOS-PLAN §4.7
             // IOS-PLAN §4.4 (1): the root screen ends with the lock (``lock()``), "Try again", and when nothing is set up
             // any more (a sign-out, a wipe, a deletion); not in between, so that a refusal during an unlock that includes
@@ -107,6 +102,9 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
     @ObservationIgnored var sessionGeneration = 0
     /// Bumped by every change of ``phase``: a refresh that started before one does not overwrite it.
     @ObservationIgnored private var phaseChanges = 0
+    /// The phase went from ``AppPhase/unlocked`` to ``AppPhase/unreachable(_:longUnreachable:)`` only: the opening goes on
+    /// (the feed and its mark kept) if the vault is open again next.
+    @ObservationIgnored var openingPaused = false
 
     // The member's lock (VAULT-LOCK as vettid-android implements it) and what follows the vault's events.
     @ObservationIgnored let lockPorts: ManagerLockPorts

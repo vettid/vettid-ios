@@ -104,12 +104,14 @@ extension VaultManager {
 
     /// The vault is no longer open on this phone: what was read from it is dropped (the connections, the requests, the
     /// messages and their photos, the items and tags, the feed, the approvals' lists, History and the member's own profile).
-    func forgetOpenLists() {
+    /// [keepingFeed]: only a status read that could not be made came over the open vault: the feed, its held events and
+    /// its mark are kept for the same opening (``VaultManager/storedPhase``), and cleared if it ends.
+    func forgetOpenLists(keepingFeed: Bool = false) {
         clearHeldEvents()
         alarmEventAt = nil
         listMarks = [:]
         forgetOwnProfile()
-        forgetHeld()
+        forgetHeld(keepingFeed: keepingFeed)
         connections.forgetAuthentication()
         forgetRelay()
         approvals.vaultClosed()
@@ -121,7 +123,8 @@ extension VaultManager {
     /// for the screens.
     /// [onAnswered]: told of each list whose events are patches, the moment its own read answered and was applied (and no newer read
     /// of the lists began, and the vault is still open): a list that failed, or that the vault does not have, is not told.
-    func refreshListsQuietly(onAnswered: (@MainActor (_ list: ReReadList) -> Void)? = nil) {
+    /// [readingFeed]: false at a continued opening, whose feed reads on from its kept cursor (``FeedManager/openingContinued()``).
+    func refreshListsQuietly(readingFeed: Bool = true, onAnswered: (@MainActor (_ list: ReReadList) -> Void)? = nil) {
         // No list is read while the features are held (the vault behind its release, or not yet checked after a failed read):
         // they are read when they no longer are (``followBehind``).
         guard !releaseUpdate.holdsFeatures else { return }
@@ -144,7 +147,7 @@ extension VaultManager {
                 if covered.share { answered(.shares) }
                 if covered.critical { answered(.critical) }
             }
-            await feed.openNow()
+            if readingFeed { await feed.openNow() }
             await messages.refreshConversationsQuietly()
             // The items last (chosen; not in the spec: vettid-android reads them beside the others): nothing that expires
             // waits behind them, and no screen needs them before the member opens the Vault.

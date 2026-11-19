@@ -30,7 +30,9 @@ extension VaultManager {
             // §3.6.3: nothing of the feed is shown while the vault is held or due.
             gated: { ref.manager?.featuresGated() ?? false },
             // Rule 3: while the release is checked its events and arrivals wait; told when the check is over (followBehind).
-            checking: { ref.manager?.releaseUpdate.checking ?? false },
+            // While the opening is paused (``VaultManager/openingPaused``) no check runs: what comes then waits too, for the
+            // check that restarts at the return (fail closed, as within the opening).
+            checking: { ref.manager.map { $0.releaseUpdate.checking || $0.openingPaused } ?? false },
             paused: { ref.manager?.releaseUpdate.holdsFeatures ?? false },
             ownerGated: { ref.manager?.ownerCheckGated ?? false },
             now: config.now
@@ -81,7 +83,8 @@ extension VaultManager {
     /// profile follows the check's state (``OwnProfileStep``). They are read again when the hold ends
     /// (``refreshAfterHold()``, or this phone's own check's ``refreshListsQuietly()``). Reads on their way are not
     /// published.
-    func forgetHeld() {
+    /// [keepingFeed]: the feed stays (``forgetOpenLists(keepingFeed:)``).
+    func forgetHeld(keepingFeed: Bool = false) {
         asksToNotify = false
         listMarks = [:]
         items.clear()
@@ -89,7 +92,7 @@ extension VaultManager {
         connections.forgetOpenVault(keepingAuthentication: true)
         messages.forgetOpenVault()
         attachments.clear()
-        forgetActivity()
+        forgetActivity(keepingFeed: keepingFeed)
         // The events the device kept for the ones that wait for them carry the same content.
         session?.device.clearInbox()
     }
@@ -180,9 +183,16 @@ extension VaultManager {
         }
     }
 
-    /// The vault is no longer open: the feed, the approvals and History are dropped.
-    func forgetActivity() {
-        feed.clear()
+    /// The vault is no longer open: the feed (unless [keepingFeed]), the approvals and History are dropped.
+    func forgetActivity(keepingFeed: Bool = false) {
+        // A kept feed still closes the passed check's waiting-asks window, and drops the replays it held, as
+        // ``forgetHeld(keepingFeed:)`` ends the replay and drops its `pending.list`.
+        if keepingFeed {
+            feed.closeWaitingAsks()
+            feed.dropReplayedArrivals()
+        } else {
+            feed.clear()
+        }
         approvals.forgetOpenVault()
         history.clear()
         votes.clear()

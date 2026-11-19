@@ -291,6 +291,28 @@ extension FakeVaultService {
     }
 
     /// Another device of the owner changed an item's status: this phone gets `sync.event{feed.updated}`.
+    /// A feed item listed in `feed.list` whose `feed.event` is not sent yet (a relay slower than the reads):
+    /// ``sendFeedEvent(_:)`` sends it later.
+    public func feedItemListedOnly(_ kind: String, connectionID: String? = nil) -> String {
+        locked {
+            activity.feedSeq += 1
+            let it = FakeActivity.Item(
+                id: Ulid.new(), seq: activity.feedSeq, kind: kind, at: Date(), status: "active", priority: "normal",
+                connectionID: connectionID, ref: nil
+            )
+            activity.items.append(it)
+            return it.id
+        }
+    }
+
+    /// The `feed.event` of a listed item, sent now.
+    public func sendFeedEvent(_ itemID: String) throws {
+        try locked {
+            guard let it = activity.items.first(where: { $0.id == itemID }) else { return }
+            try reply("feed.event", Self.feedJSON(it))
+        }
+    }
+
     public func otherDeviceSetsFeedStatus(_ itemID: String, _ status: String) throws {
         try locked {
             guard let i = activity.items.firstIndex(where: { $0.id == itemID }) else { return }
