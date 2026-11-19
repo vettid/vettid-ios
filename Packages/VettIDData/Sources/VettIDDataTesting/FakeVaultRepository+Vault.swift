@@ -135,13 +135,14 @@ extension FakeVaultRepository: VaultRepository {
     }
 
     /// As the vault manager: held (the gate's text, nothing sent), else a PIN taken before a change is sent nothing, else
-    /// `vault.lock` and the unlock.
+    /// without a usable `user_guid` the unlock's refusal with nothing locked or sent, else `vault.lock` and the unlock.
     public func finishMove(pin: String, taken: Int?) async throws -> UnlockAttempt {
         if let finishMoveHold { throw VaultFailure(finishMoveHold, code: "change_checking") }
         finishMoveTaken.append(taken)
         if let taken, taken != pinGeneration {
             return .failed(.credentialUnsettled, code: "pin_taken_before_change")
         }
+        if !userGuidUsable { return .failed(.notSupported, code: UnlockAttempt.codeNoUserGuid) }
         try await lock()
         return try await unlock(pin: pin, approve: nil, cancelRecovery: false)
     }

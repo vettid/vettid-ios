@@ -132,10 +132,10 @@ public extension AccountRepository {
     func refreshAccount() async {}
 }
 
-/// The vault on this device: enrollment, unlock and lock, status, PIN, deletion, recovery. Mirrors vettid-android
-/// `VaultRepository`.
+/// The vault on this device: enrollment, unlock and lock, status, PIN, deletion, recovery. Mirrors vettid-android `VaultRepository`.
 @MainActor
-public protocol VaultRepository: AnyObject, Observable, Sendable, RelayNoticeRepository, TransferEndNotice, CredentialKeyRepository {
+public protocol VaultRepository:
+    AnyObject, Observable, Sendable, RelayNoticeRepository, TransferEndNotice, CredentialKeyRepository, UserGuidCheck {
     /// The open app was sent to the unlock screen because the relay kept refusing this phone's messages to the vault
     /// (`token_revoked`): the vault may no longer know it. Not proof: the PIN asks the enclave. Cleared by any sealed
     /// unlock result or message from the vault.
@@ -247,7 +247,7 @@ public protocol VaultRepository: AnyObject, Observable, Sendable, RelayNoticeRep
 
     /// (Release R) Why the last ``finishMove(pin:)`` did not open the vault (`transfer_incomplete`, a wrong PIN, a wait,
     /// the network), for the unlock screen that follows it; nil after a success or ``acknowledgeFinishMoveFailure()``.
-    var finishMoveFailure: FailureKind? { get }
+    var finishMoveFailure: MoveFailure? { get }
 
     func acknowledgeFinishMoveFailure()
 
@@ -369,13 +369,8 @@ public extension VaultRepository {
     var transferKeptSince: Date? { nil }
     var finishMovePending: Bool { false }
 
-    func finishMove(pin: String) async throws -> UnlockAttempt {
-        try await lock()
-        return try await unlock(pin: pin, approve: nil, cancelRecovery: false)
-    }
-
     var finishingMove: Bool { false }
-    var finishMoveFailure: FailureKind? { nil }
+    var finishMoveFailure: MoveFailure? { nil }
     func acknowledgeFinishMoveFailure() {}
     var movedBack: Bool { false }
     func acknowledgeMovedBack() {}

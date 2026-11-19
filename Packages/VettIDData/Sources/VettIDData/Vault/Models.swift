@@ -233,6 +233,12 @@ public enum UnlockAttempt: Equatable, Sendable {
     /// a direct transfer from a vault release whose `device.paired` did not carry one (§6.7.1).
     public static let codeNoUserGuid = "no_user_guid"
 
+    /// The unlock's own guard refused for want of a usable `user_guid` (``codeNoUserGuid``): both the kind and the code,
+    /// nothing else. This phone can never unlock then. Mirrors vettid-android `isNoUserGuid`.
+    public static func isNoUserGuid(_ kind: FailureKind?, _ code: String?) -> Bool {
+        kind == .notSupported && code == codeNoUserGuid
+    }
+
     case success
     case badPin(retryAfterSeconds: Int64)
     case backoff(retryAfterSeconds: Int64)

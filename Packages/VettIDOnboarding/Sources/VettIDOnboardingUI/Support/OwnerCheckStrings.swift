@@ -273,6 +273,13 @@ extension OnboardingStrings {
     }
 }
 
+/// The unlock screen's recover-or-erase words (`unlock_stuck_title`, `unlock_stuck_body`), for the other screens that tell a
+/// phone without a usable `user_guid` (§6.7.1) that it can never open the vault ("Lock and unlock now").
+public enum UnlockStuckTexts {
+    public static var title: String { OnboardingStrings.unlockStuckTitle }
+    public static var body: String { OnboardingStrings.unlockStuckBody }
+}
+
 /// The app lock's prompt text (`LAContext.localizedReason`), for the app's root.
 public enum AppLockTexts {
     public static var reason: String { OnboardingStrings.appLockPromptTitle }

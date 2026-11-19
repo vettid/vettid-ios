@@ -78,7 +78,10 @@ import VettIDUI
         failed.failure = .transferIncomplete
         var done = FinishMoveState()
         done.done = true
-        failures += [held, running, failed, done]
+        var noGuid = FinishMoveState()
+        noGuid.failure = .notSupported
+        noGuid.noUserGuid = true
+        failures += [held, running, failed, done, noGuid]
         for s in failures {
             #expect(height(FinishMoveContent(state: s)) > 0)
         }
@@ -90,6 +93,26 @@ import VettIDUI
         for s in [fresh, pendingMove] {
             #expect(height(MovedInScreen(state: s, vault: vault, finish: {})) > 0)
         }
+    }
+
+    /// (§6.7.1) "Finish the move" on a phone without a usable `user_guid`: the unlock screen's recover-or-erase words with
+    /// no actions, and the keypad and "Finish the move" closed. Another `notSupported` keeps its own text, and the PIN
+    /// (vettid-android #406, #14199).
+    @Test func aPhoneWithoutAUserGuidIsToldItCannotOpenTheVault() {
+        var s = FinishMoveState()
+        s.failure = .notSupported
+        #expect(FinishMoveContent.failureNotice(s, timeScale: 1)?.message == FailureKind.notSupported.message(timeScale: 1))
+        #expect(FinishMoveContent.failureNotice(s, timeScale: 1)?.identifier == "finish_move_failure" && s.pinAllowed)
+        s.noUserGuid = true
+        let n = FinishMoveContent.failureNotice(s, timeScale: 1)
+        #expect(n?.kind == .urgent && n?.identifier == "finish_move_no_user_guid")
+        #expect(n?.title == "This phone cannot open your vault" && n?.message == OnboardingStrings.unlockStuckBody)
+        #expect(!s.pinAllowed, "no Try again that cannot work")
+        #expect(FinishMoveContent.failureNotice(FinishMoveState(), timeScale: 1) == nil)
+        // Known when the screen opens, before any attempt: the same words.
+        var known = FinishMoveState()
+        known.noUserGuid = true
+        #expect(FinishMoveContent.failureNotice(known, timeScale: 1) == n)
     }
 
     /// The code is pasted in a field without suggestions, and the PIN is the keypad's: no step has a text field.

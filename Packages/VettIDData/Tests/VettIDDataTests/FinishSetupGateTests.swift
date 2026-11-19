@@ -16,9 +16,21 @@ import Testing
 
     @Test func theFailureOfAMoveThatDidNotFinish() {
         #expect(FinishSetupGate.failure(of: .success) == nil)
-        #expect(FinishSetupGate.failure(of: .badPin(retryAfterSeconds: 0)) == .badPin)
-        #expect(FinishSetupGate.failure(of: .backoff(retryAfterSeconds: 30)) == .backoff)
-        #expect(FinishSetupGate.failure(of: .failed(.transferIncomplete, code: "transfer_incomplete")) == .transferIncomplete)
-        #expect(FinishSetupGate.failure(of: .stateRollback) == .other)
+        #expect(FinishSetupGate.failure(of: .badPin(retryAfterSeconds: 0))?.kind == .badPin)
+        #expect(FinishSetupGate.failure(of: .backoff(retryAfterSeconds: 30))?.kind == .backoff)
+        #expect(
+            FinishSetupGate.failure(of: .failed(.transferIncomplete, code: "transfer_incomplete"))
+                == MoveFailure(.transferIncomplete, code: "transfer_incomplete")
+        )
+        #expect(FinishSetupGate.failure(of: .stateRollback) == MoveFailure(.other))
+    }
+
+    /// (§6.7.1) The unlock's own `no_user_guid` refusal keeps its code, so the screens tell it apart; the kind alone or the
+    /// code alone is not it.
+    @Test func aRefusalWithoutAUserGuidKeepsItsCode() {
+        let f = FinishSetupGate.failure(of: .failed(.notSupported, code: UnlockAttempt.codeNoUserGuid))
+        #expect(f == MoveFailure(.notSupported, code: UnlockAttempt.codeNoUserGuid) && f?.noUserGuid == true)
+        #expect(FinishSetupGate.failure(of: .failed(.notSupported, code: "other"))?.noUserGuid == false)
+        #expect(FinishSetupGate.failure(of: .failed(.other, code: UnlockAttempt.codeNoUserGuid))?.noUserGuid == false)
     }
 }

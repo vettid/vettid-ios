@@ -161,6 +161,9 @@ import VettIDUI
         var done = ChangePinState(withPassword: true)
         done.done = true
         states.append(done)
+        var noGuid = ChangePinState()
+        noGuid.noUserGuid = true
+        states.append(noGuid)
         for s in states {
             #expect(height(ChangePinContent(state: s)) > 0)
         }

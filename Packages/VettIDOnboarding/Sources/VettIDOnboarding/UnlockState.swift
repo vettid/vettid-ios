@@ -71,6 +71,9 @@ public struct UnlockState: Equatable, Sendable, CustomStringConvertible, CustomD
     public var notRecognised = false
     /// This phone no longer holds the vault's keys (`device_secret`): recover-or-erase is offered.
     public var keysGone = false
+    /// (§6.7.1) This phone has no usable `user_guid`: it can never unlock. The recover-or-erase notice from the start
+    /// (with ``keysGone``), and no PIN is asked, since none would be used.
+    public var noUserGuid = false
     /// (iPhone, IOS-PLAN §6.3 item 5) With ``keysGone``: a replaced phone-secret record exists, and the member may try it.
     public var earlierSecret = false
     /// The open app was sent here because the relay kept refusing this phone's messages to the vault.
@@ -90,7 +93,7 @@ public struct UnlockState: Equatable, Sendable, CustomStringConvertible, CustomD
     /// (Release R) The vault has a phone secret: cancelling a recovery from here sends the owner check at once.
     public var phoneSecret = false
     /// (Release R, §11.14.10) Why the last "Finish the move" did not open the vault.
-    public var moveFailure: FailureKind?
+    public var moveFailure: MoveFailure?
     /// (VAULT-MESSAGING §11.14.9 "A lost answer" step 5) Which PIN is asked for: while a PIN change is unresolved, the
     /// previous PIN, then the new one after the vault showed that it holds the change.
     public var pinStep: UnlockPinStep = .pin
@@ -118,17 +121,23 @@ public struct UnlockState: Equatable, Sendable, CustomStringConvertible, CustomD
     /// "Erase VettID from this phone" is offered: never on a ``recoverOnly`` screen, which wins.
     public var eraseOffered: Bool { !recoverOnly && (notRecognised || keysGone) }
 
+    /// The recover-or-erase notice of a phone without the vault's keys is on the screen (the screen's own choice).
+    public var stuckNoticeShown: Bool { !recoverOnly && !notRecognised && keysGone }
+
+    /// The last "Finish the move" was refused for want of a usable `user_guid` (``MoveFailure/noUserGuid``).
+    public var moveNoUserGuid: Bool { moveFailure?.noUserGuid == true }
+
     /// Whether "Try again" (after a failed release check) may be pressed now.
     public var retryAllowed: Bool { serviceWaitSeconds == 0 && !loading }
 
     /// (IOS-PLAN §4.3 point 3) "Return to release N" is offered: the marker of an unconfirmed move has `failed`.
-    public var returnOffered: Bool { moveUnconfirmed?.failed == true && !recoveryPending }
+    public var returnOffered: Bool { moveUnconfirmed?.failed == true && !recoveryPending && !noUserGuid }
 
     /// Whether the PIN may be entered and sent now: never while the last check of the vault's software failed (except for
     /// the way back, which does not go to the routed release).
     public var pinAllowed: Bool {
         if returnAsksPin { return waitSeconds == 0 && serviceWaitSeconds == 0 && !busy }
-        guard let p = preflight, preflightError == nil else { return false }
+        guard !noUserGuid, let p = preflight, preflightError == nil else { return false }
         return !p.rollback && (!p.softwareUpdated || updateAcknowledged) && waitSeconds == 0 && serviceWaitSeconds == 0 && !busy
     }
 
@@ -136,7 +145,9 @@ public struct UnlockState: Equatable, Sendable, CustomStringConvertible, CustomD
     public var submitAllowed: Bool { pinAllowed && pin.count >= Self.minPinLength && (!checkDue || !password.isEmpty) }
 
     /// The PIN field is shown: the vault's software verified, nothing blocking, no recovery pending.
-    public var showsPin: Bool { returnAsksPin || (!recoverOnly && !recoveryPending && preflight != nil && preflightError == nil) }
+    public var showsPin: Bool {
+        returnAsksPin || (!noUserGuid && !recoverOnly && !recoveryPending && preflight != nil && preflightError == nil)
+    }
 
     /// A recovery's delay at the vault's time scale ("24 hours"; on staging "1 hour").
     public var recoveryText: String { TimeScales.text(TimeScales.recoveryDelay, by: timeScale) }

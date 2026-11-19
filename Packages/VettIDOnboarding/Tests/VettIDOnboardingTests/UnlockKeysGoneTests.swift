@@ -117,4 +117,60 @@ import VettIDDataTesting
         await submit(vm)
         #expect(vm.state.keysGone && !vm.state.earlierSecret)
     }
+
+    /// (§6.7.1, owner decision a, 2026-11-18) No usable `user_guid`: this phone can never unlock, so the recover-or-erase
+    /// notice is shown, its erase confirmed, and no earlier secret is offered (none adds a `user_guid`). The kind or the code
+    /// alone is not it. Mirrors vettid-android `UnlockStuckTest`.
+    @Test func aPhoneWithoutAUserGuidIsOfferedRecoverOrErase() async {
+        vault.earlierSecretOffered = true
+        vault.unlockResults = [.failed(.notSupported, code: UnlockAttempt.codeNoUserGuid)]
+        let vm = await vm()
+        await submit(vm)
+        #expect(vm.state.keysGone && vm.state.stuckNoticeShown && vm.state.eraseOffered && !vm.state.earlierSecret)
+        vm.askErase()
+        #expect(vm.state.eraseConfirm)
+
+        for other in [UnlockAttempt.failed(.notSupported, code: "other"), .failed(.other, code: UnlockAttempt.codeNoUserGuid)] {
+            #expect(!UnlockViewModel.keysGone(after: other, before: false), "\(other)")
+            #expect(UnlockViewModel.earlierSecretHelps(other), "\(other)")
+        }
+    }
+
+    /// (§6.7.1) Known when the screen opens: the recover-or-erase notice at once, and no PIN asked, since none would be
+    /// used.
+    @Test func aPhoneKnownWithoutAUserGuidAsksNoPin() async {
+        vault.userGuidUsable = false
+        let vm = await vm()
+        #expect(vm.state.noUserGuid && vm.state.keysGone && vm.state.stuckNoticeShown && vm.state.eraseOffered)
+        #expect(!vm.state.showsPin && !vm.state.pinAllowed && !vm.state.submitAllowed)
+        vm.setPin("40281795")
+        vm.submit()
+        await vm.settle()
+        #expect(!vault.calls.contains("unlock"), "nothing sent")
+        vm.retryPreflight()
+        await vm.settle()
+        #expect(vm.state.keysGone && !vm.state.showsPin, "a new release check keeps it")
+    }
+
+    /// (§6.7.1) The erase is offered only once the release check has answered, so an ended release or a rollback found by
+    /// it wins (no erase); and no "Return to release N", which would ask for a PIN.
+    @Test func noEraseBeforeTheReleaseCheckAnswers() async {
+        vault.userGuidUsable = false
+        let vm = UnlockViewModel(vault: vault, account: vault)
+        #expect(vm.state.loading && vm.state.noUserGuid && !vm.state.eraseOffered && !vm.state.showsPin)
+        vm.askErase()
+        #expect(!vm.state.eraseConfirm)
+        await vm.settle()
+        #expect(vm.state.eraseOffered)
+
+        vault.fail["preflight"] = FakeVaultRepository.failure(.releaseEnded)
+        let ended = await self.vm()
+        #expect(ended.state.recoverOnly && !ended.state.eraseOffered)
+
+        var s = UnlockState(loading: false)
+        s.moveUnconfirmed = UnconfirmedMove(from: FakeVaultRepository.release(4), to: FakeVaultRepository.release(5), failed: true)
+        #expect(s.returnOffered)
+        s.noUserGuid = true
+        #expect(!s.returnOffered && !s.showsPin)
+    }
 }

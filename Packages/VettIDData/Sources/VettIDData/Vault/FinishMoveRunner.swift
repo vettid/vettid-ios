@@ -2,7 +2,8 @@ import Foundation
 import Observation
 
 /// "Finish the move" (release R, VAULT-MESSAGING §11.14.10 step 4): `vault.lock`, then `vault.unlock` with this phone's own
-/// secret. **Once asked for, it completes**, as the member's lock does (``LockSequence``): the run is a task of its own, so a
+/// secret; on a phone without a usable `user_guid` (§6.7.1), neither: the unlock's refusal at once, the vault left open.
+/// **Once asked for, it completes**, as the member's lock does (``LockSequence``): the run is a task of its own, so a
 /// screen that goes away (the hold's bound sends the root to the unlock screen and clears the screen that asked) does not
 /// stop it; the unlock goes on, opens the vault and publishes its phase, or its failure lands in ``failure`` for the unlock
 /// screen. (A caller that is cancelled still waits for the run's answer in this port: Swift cannot stop an `await` on a
@@ -21,7 +22,7 @@ public final class FinishMoveRunner {
     public private(set) var finishing = false
 
     /// Why the last run did not open the vault; nil after a success, ``clearFailure()`` or before any run.
-    public private(set) var failure: FailureKind?
+    public private(set) var failure: MoveFailure?
 
     @ObservationIgnored private let hold: Duration
     @ObservationIgnored private let sleep: @Sendable (Duration) async throws -> Void
@@ -133,9 +134,9 @@ public final class FinishMoveRunner {
             if id != runID {
                 // Let go of by release(): nothing of it is told.
             } else if let e = error as? VaultFailure {
-                failure = e.kind
+                failure = MoveFailure(e.kind, code: e.code)
             } else if !(error is CancellationError) {
-                failure = .other
+                failure = MoveFailure(.other)
             }
             throw error
         }

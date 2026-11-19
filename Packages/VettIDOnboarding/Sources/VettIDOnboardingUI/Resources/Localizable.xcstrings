@@ -1597,17 +1597,6 @@
         }
       }
     },
-    "unlock_no_user_guid": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "This phone cannot unlock your vault yet: it was moved here while your vault ran an older release. It can unlock once your vault is updated."
-          }
-        }
-      }
-    },
     "unlock_not_recognised_body": {
       "extractionState": "manual",
       "localizations": {

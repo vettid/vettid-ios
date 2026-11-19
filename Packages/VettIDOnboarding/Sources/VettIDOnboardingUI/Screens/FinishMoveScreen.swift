@@ -15,6 +15,15 @@ public struct FinishMoveActions {
     public init() {}
 }
 
+/// What a notice card says, for a screen's rule to be checked as it is (``FinishMoveContent/failureNotice(_:timeScale:)``,
+/// ``UnlockMessageNotice/failedCard(_:)``).
+struct NoticeContent: Equatable {
+    let kind: NoticeKind
+    let title: String
+    let message: String
+    let identifier: String
+}
+
 /// "Finish the move" on the new phone (VAULT-MESSAGING 0.33.0 §11.14.10 step 4), for [state] (stateless): the PIN on the
 /// in-app keypad (IOS-PLAN §6.5), the hold and the failure, "Later" and the result. [onDone] leaves the pane ("Later", and
 /// "Continue" after the move finished). Digits typed before a hold go with it, and the keypad is also emptied when the app
@@ -37,6 +46,23 @@ public struct FinishMoveContent: View {
         self.actions = actions
         self.onDone = onDone
         _pin = State(initialValue: pin)
+    }
+
+    /// The failure's card: on a phone without a usable `user_guid` (§6.7.1), which can never unlock, the unlock screen's
+    /// recover-or-erase words with no actions here, from the start (vettid-android #406). Nothing was locked, so "Later"
+    /// returns to the open app; otherwise the failure's own text.
+    static func failureNotice(_ state: FinishMoveState, timeScale: UInt64) -> NoticeContent? {
+        if state.noUserGuid {
+            return NoticeContent(
+                kind: .urgent, title: OnboardingStrings.unlockStuckTitle, message: OnboardingStrings.unlockStuckBody,
+                identifier: "finish_move_no_user_guid"
+            )
+        }
+        guard let failure = state.failure else { return nil }
+        return NoticeContent(
+            kind: .warning, title: OnboardingStrings.finishMoveTitle, message: failure.message(timeScale: timeScale),
+            identifier: "finish_move_failure"
+        )
     }
 
     private var canFinish: Bool { pin.count >= FinishMoveViewModel.minPin && state.pinAllowed }
@@ -88,12 +114,8 @@ public struct FinishMoveContent: View {
             NoticeCard(.warning, title: OnboardingStrings.finishMoveTitle, message: held.message(timeScale: timeScale), announce: .polite)
                 .accessibilityIdentifier("finish_move_held")
         }
-        if let failure = state.failure {
-            NoticeCard(
-                .warning, title: OnboardingStrings.finishMoveTitle, message: failure.message(timeScale: timeScale),
-                announce: .assertive
-            )
-                .accessibilityIdentifier("finish_move_failure")
+        if let n = Self.failureNotice(state, timeScale: timeScale) {
+            NoticeCard(n.kind, title: n.title, message: n.message, announce: .assertive).accessibilityIdentifier(n.identifier)
         }
         HStack(spacing: Spacing.m) {
             Button(action: onDone) {

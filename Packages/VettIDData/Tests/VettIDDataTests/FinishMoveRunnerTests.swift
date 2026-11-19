@@ -64,7 +64,7 @@ import VettIDDataTesting
         f.answer.complete(.success)
         #expect(try await f.runner.run(pin: "975310") == refused)
         #expect(f.locked == 0 && f.unlocks == 0, "neither locked nor unlocked")
-        #expect(f.outcomes == [refused] && f.runner.failure == .notSupported && !f.runner.finishing && !f.rotateOffered)
+        #expect(f.outcomes == [refused] && f.runner.failure?.noUserGuid == true && !f.runner.finishing && !f.rotateOffered)
     }
 
     @Test func aScreenThatGoesAwayStillGetsTheVaultOpened() async throws {
@@ -88,14 +88,14 @@ import VettIDDataTesting
         caller.cancel()
         f.answer.complete(.failed(.transferIncomplete, code: "transfer_incomplete"))
         await f.clock.runCurrent()
-        #expect(f.runner.failure == .transferIncomplete && !f.runner.finishing && !f.rotateOffered)
+        #expect(f.runner.failure?.kind == .transferIncomplete && !f.runner.finishing && !f.rotateOffered)
     }
 
     @Test func aWrongPinAndABackoffAreTheFailuresOfTheUnlockScreen() async throws {
         let f = Fixture()
         f.answer.complete(.badPin(retryAfterSeconds: 0))
         #expect(try await f.runner.run(pin: "111111") == .badPin(retryAfterSeconds: 0))
-        #expect(f.runner.failure == .badPin)
+        #expect(f.runner.failure?.kind == .badPin)
         f.runner.clearFailure()
         #expect(f.runner.failure == nil)
     }
@@ -110,14 +110,14 @@ import VettIDDataTesting
         } catch {
             Issue.record("\(error)")
         }
-        #expect(f.runner.failure == .network && !f.runner.finishing)
+        #expect(f.runner.failure?.kind == .network && !f.runner.finishing)
     }
 
     @Test func anyOtherErrorIsRecordedAsOther() async {
         struct Odd: Error {}
         let f = Fixture { _ in throw Odd() }
         _ = try? await f.runner.run(pin: "975310")
-        #expect(f.runner.failure == .other)
+        #expect(f.runner.failure?.kind == .other)
     }
 
     @Test func aSuccessOffersTheRotation() async throws {

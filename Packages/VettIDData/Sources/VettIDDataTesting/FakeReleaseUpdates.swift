@@ -35,6 +35,8 @@ public final class FakeReleaseUpdates: ReleaseUpdateRepository {
     }
 
     public func ownerCheckDue() -> Bool { checkDue }
+    /// This phone holds a usable `user_guid` (``ReleaseUpdateRepository/userGuidUsable``); a test clears it.
+    public var userGuidUsable = true
 
     public func dismissBanner(at: Date) {
         guard let o = offer else { return }

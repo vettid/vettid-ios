@@ -241,6 +241,8 @@ func refusalText(_ code: String, _ to: Int) -> String {
 /// What a failed step says, at the vault's [timeScale].
 func updateFailureText(_ p: UpdateProgress, timeScale: UInt64) -> String {
     if p.failureCode == ReleaseUpdateManager.codeChangeHeld { return (p.failure ?? .changeUnresolved).message(timeScale: timeScale) }
+    // §6.7.1: this phone can never unlock; the unlock screen's recover-or-erase words (vettid-android #406).
+    if p.noUserGuid { return OnboardingStrings.unlockStuckBody }
     if p.failure == .badPin { return OnboardingStrings.unlockBadPin }
     if p.failure == .backoff { return OnboardingStrings.releaseUpdateBackoff }
     if p.failureCode == ReleaseUpdateManager.codeReleaseStarting { return OnboardingStrings.releaseUpdateStartFailed }
@@ -290,6 +292,9 @@ struct UpdateRetryScreen: View {
             : required ? OnboardingStrings.releaseUpdateContinue : OnboardingStrings.releaseUpdateNotNow
     }
 
+    /// §6.7.1: no PIN and no "Try again" on a phone that can never unlock; they are not shown.
+    static func hidesPin(_ p: UpdateProgress, _ state: ReleaseUpdateFlowState) -> Bool { p.noUserGuid || state.noUserGuid }
+
     var body: some View {
         let p = progress
         let badPin = p.step == .badPin
@@ -302,10 +307,11 @@ struct UpdateRetryScreen: View {
         } else {
             OnboardingStrings.releaseUpdateFailedBodyLocked(from)
         }
+        let stuck = Self.hidesPin(p, state)
         FormScaffold(
             title: badPin ? OnboardingStrings.releaseUpdateTitle : OnboardingStrings.releaseUpdateFailedTitle,
             message: body,
-            primaryLabel: badPin ? OnboardingStrings.releaseUpdateApprove : OnboardingStrings.releaseUpdateRetry,
+            primaryLabel: stuck ? nil : badPin ? OnboardingStrings.releaseUpdateApprove : OnboardingStrings.releaseUpdateRetry,
             primaryEnabled: state.retryAllowed(pinTyped: pin.count),
             secondaryLabel: Self.secondaryLabel(vaultOpen: p.vaultOpen, required: state.required),
             onPrimary: retry, onSecondary: onSecondary, header: { UpdateGlyph() }
@@ -314,11 +320,12 @@ struct UpdateRetryScreen: View {
                 // (§11.14.9) Also on the PIN step: a change being decided holds the update ("still checking").
                 if p.step == .failed || p.failureCode == ReleaseUpdateManager.codeChangeHeld {
                     NoticeCard(
-                        .warning, title: OnboardingStrings.releaseUpdateFailedTitle, message: updateFailureText(p, timeScale: timeScale),
-                        announce: .assertive
+                        stuck ? .urgent : .warning,
+                        title: stuck ? OnboardingStrings.unlockStuckTitle : OnboardingStrings.releaseUpdateFailedTitle,
+                        message: updateFailureText(p, timeScale: timeScale), announce: .assertive
                     )
                 }
-                UpdatePin(progress: p, state: state, pin: pin)
+                if !stuck { UpdatePin(progress: p, state: state, pin: pin) }
             }
         }
         .accessibilityIdentifier(badPin ? "release_update_bad_pin" : "release_update_failed")

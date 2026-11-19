@@ -67,6 +67,39 @@ import VettIDUI
         }
     }
 
+    /// (§6.7.1) A step that failed for want of a usable `user_guid` says the unlock screen's recover-or-erase words, never
+    /// "does not support this yet", and the vault-open screen renders with the PIN and "Try again" closed. Another
+    /// `notSupported`, or the code alone, keeps its usual text (vettid-android #406, #14199).
+    @Test func aPhoneWithoutAUserGuidIsToldItCannotOpenTheVault() {
+        var p = UpdateProgress(step: .failed, from: rel(4), to: rel(5), failure: .notSupported)
+        p.failureCode = UnlockAttempt.codeNoUserGuid
+        p.vaultOpen = true
+        #expect(updateFailureText(p, timeScale: 1) == OnboardingStrings.unlockStuckBody)
+        let state = ReleaseUpdateFlowState(progress: p)
+        #expect(!state.pinAllowed && !state.retryAllowed(pinTyped: 6))
+        let window = host(ReleaseUpdateFlowContent(state: state))
+        #expect(textFields(in: window).isEmpty)
+        #expect(height(ReleaseUpdateFlowContent(state: state)) > 0)
+        window.isHidden = true
+
+        #expect(UpdateRetryScreen.hidesPin(p, state), "no keypad and no Try again")
+        // Known from the repository, after any other failure: the same.
+        let known = UpdateProgress(step: .failed, from: rel(4), to: rel(5), failure: .network)
+        #expect(!UpdateRetryScreen.hidesPin(known, ReleaseUpdateFlowState(progress: known)))
+        #expect(UpdateRetryScreen.hidesPin(known, ReleaseUpdateFlowState(progress: known, noUserGuid: true)))
+        // The offer: no PIN and no "Approve and update", the words instead.
+        let offer = ReleaseUpdateOffer(current: rel(4), target: rel(5))
+        let stuck = ReleaseUpdateState(loading: false, offer: offer, noUserGuid: true)
+        #expect(!stuck.pinAllowed && !stuck.submitAllowed(pinTyped: 6))
+        #expect(height(ReleaseUpdateContent(state: stuck, onApprove: { _ in true }, onBack: {})) > 0)
+
+        p.failureCode = "other"
+        #expect(updateFailureText(p, timeScale: 1) == FailureKind.notSupported.message(timeScale: 1))
+        p.failure = .other
+        p.failureCode = UnlockAttempt.codeNoUserGuid
+        #expect(updateFailureText(p, timeScale: 1) == FailureKind.other.message(timeScale: 1))
+    }
+
     /// Every step of the update has its screen; those that ask for the PIN have no keyboard.
     @Test func everyStepHasItsScreen() {
         let steps: [UpdateStep] = [.locking, .approving, .reopening, .done, .refused, .badPin, .failed, .newReleaseFailed, .abandoning, .abandoned]

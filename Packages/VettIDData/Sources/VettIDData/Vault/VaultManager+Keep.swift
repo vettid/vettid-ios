@@ -240,14 +240,15 @@ extension VaultManager {
 
     public var finishingMove: Bool { finishMoveRunner.finishing }
 
-    public var finishMoveFailure: FailureKind? { finishMoveRunner.failure }
+    public var finishMoveFailure: MoveFailure? { finishMoveRunner.failure }
 
     public func acknowledgeFinishMoveFailure() { finishMoveRunner.clearFailure() }
 
     /// "Finish the move" (release R, §11.14.10): `vault.lock`, then `vault.unlock` with this phone's own secret, which reads
     /// the stored header and state and so proves that both writes of the transfer are durable. Refused while a change is on
     /// its way or unresolved, or the PIN uncertain (VAULT-MESSAGING 0.46.0 §11.14.9 step 2), with the hold's text; a PIN
-    /// taken before a change neither locks the vault nor is sent. Then it runs in the ``FinishMoveRunner``: **once asked
+    /// taken before a change neither locks the vault nor is sent, and so does any PIN on a phone without a usable
+    /// `user_guid` (§6.7.1: the unlock's refusal at once, the vault left open). Then it runs in the ``FinishMoveRunner``: **once asked
     /// for, it completes**, also when the screen that asked goes away.
     public func finishMove(pin: String, taken: Int?) async throws -> UnlockAttempt {
         let taken = taken ?? phoneSecrets.pinGeneration

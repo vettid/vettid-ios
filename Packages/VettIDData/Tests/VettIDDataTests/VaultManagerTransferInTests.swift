@@ -434,7 +434,7 @@ import VettIDDataTesting
         service.unlockAnswers(.sealed("transfer_incomplete"))
         let r = try await m.finishMove(pin: pin)
         #expect(r == .failed(.transferIncomplete, code: "transfer_incomplete"))
-        #expect(m.finishMoveFailure == .transferIncomplete && m.finishMovePending && !m.rotateOffered)
+        #expect(m.finishMoveFailure?.kind == .transferIncomplete && m.finishMovePending && !m.rotateOffered)
         m.acknowledgeFinishMoveFailure()
         #expect(m.finishMoveFailure == nil)
         // It can be tried again, and finishes.
@@ -447,7 +447,7 @@ import VettIDDataTesting
         try await transferred()
         let r = try await m.finishMove(pin: "111111")
         if case .badPin = r {} else { Issue.record("\(r)") }
-        #expect(m.finishMoveFailure == .badPin && m.finishMovePending)
+        #expect(m.finishMoveFailure?.kind == .badPin && m.finishMovePending)
     }
 
     /// Once asked for, the move completes: the screen that asked going away only stops waiting.

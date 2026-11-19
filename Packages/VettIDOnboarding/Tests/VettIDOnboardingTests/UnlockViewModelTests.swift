@@ -138,9 +138,9 @@ import VettIDDataTesting
 
     /// Release R: a "Finish the move" that did not open the vault says why on the unlock screen it leads to.
     @Test func aFailedFinishTheMoveIsShownHere() async {
-        vault.finishMoveFailure = .transferIncomplete
+        vault.finishMoveFailure = MoveFailure(.transferIncomplete, code: "transfer_incomplete")
         let vm = await vm()
-        #expect(vm.state.moveFailure == .transferIncomplete)
+        #expect(vm.state.moveFailure == MoveFailure(.transferIncomplete, code: "transfer_incomplete"))
         vm.dismissMoveFailure()
         await vm.settle()
         #expect(vm.state.moveFailure == nil)

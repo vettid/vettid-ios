@@ -74,7 +74,7 @@ public struct ReleaseUpdateContent: View {
         FormScaffold(
             title: OnboardingStrings.releaseUpdateTitle,
             message: offer.map { OnboardingStrings.releaseUpdateBody(Int($0.target.number)) },
-            primaryLabel: offer != nil ? OnboardingStrings.releaseUpdateApprove : nil,
+            primaryLabel: offer != nil && !state.noUserGuid ? OnboardingStrings.releaseUpdateApprove : nil,
             primaryEnabled: state.submitAllowed(pinTyped: pin.count),
             busy: state.loading && offer == nil,
             onPrimary: approve,
@@ -100,8 +100,14 @@ public struct ReleaseUpdateContent: View {
                         )
                             .accessibilityIdentifier("release_update_change_unresolved")
                     }
-                    PinEntry(label: OnboardingStrings.unlockPinLabel, buffer: pin, identifier: "release_update_pin")
-                        .disabled(!state.pinAllowed)
+                    if state.noUserGuid {
+                        // §6.7.1: no update could reopen the vault; the unlock screen's words, and no PIN.
+                        NoticeCard(.urgent, title: OnboardingStrings.unlockStuckTitle, message: OnboardingStrings.unlockStuckBody)
+                            .accessibilityIdentifier("release_update_no_user_guid")
+                    } else {
+                        PinEntry(label: OnboardingStrings.unlockPinLabel, buffer: pin, identifier: "release_update_pin")
+                            .disabled(!state.pinAllowed)
+                    }
                 } else if state.loading {
                     CheckingLine(label: OnboardingStrings.unlockChecking)
                 } else {

@@ -113,6 +113,11 @@ public struct ChangePinContent: View {
                     NoticeCard(.urgent, title: Self.failureTitle(error), message: error.message(timeScale: timeScale))
                         .accessibilityIdentifier("error")
                 }
+                if state.noUserGuid {
+                    // §6.7.1: "Lock and unlock now" locked nothing; this phone can never open the vault.
+                    NoticeCard(.urgent, title: UnlockStuckTexts.title, message: UnlockStuckTexts.body, announce: .assertive)
+                        .accessibilityIdentifier("change_pin_no_user_guid")
+                }
                 if actions.offersLockAndUnlock {
                     SecondaryButton(PinStrings.pinLockUnlock, action: actions.onLockAndUnlock)
                         .accessibilityIdentifier("change_pin_lock_unlock")
