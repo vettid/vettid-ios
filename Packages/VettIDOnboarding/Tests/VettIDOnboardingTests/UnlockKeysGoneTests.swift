@@ -167,10 +167,101 @@ import VettIDDataTesting
         let ended = await self.vm()
         #expect(ended.state.recoverOnly && !ended.state.eraseOffered)
 
+        vault.fail["preflight"] = nil
+        vault.preflightInfo = PreflightInfo(
+            routed: FakeVaultRepository.release(3), lastNumber: 4, softwareUpdated: false, rollback: true, offer: nil
+        )
+        let rolledBack = await self.vm()
+        #expect(rolledBack.state.recoverOnly && !rolledBack.state.eraseOffered && !rolledBack.state.stuckWordsOnly)
+
         var s = UnlockState(loading: false)
         s.moveUnconfirmed = UnconfirmedMove(from: FakeVaultRepository.release(4), to: FakeVaultRepository.release(5), failed: true)
         #expect(s.returnOffered)
         s.noUserGuid = true
         #expect(!s.returnOffered && !s.showsPin)
+    }
+
+    /// (§6.7.1, as vettid-android #412) A release check that failed could not rule out an ended release or a rollback: no
+    /// erase, no recover-or-erase notice, the stuck words alone with "Try again". A later check that answers brings the
+    /// notice with Recover and Erase.
+    @Test func aFailedReleaseCheckOffersNoEraseOnAPhoneWithoutAUserGuid() async {
+        vault.userGuidUsable = false
+        vault.fail["preflight"] = FakeVaultRepository.failure(.network)
+        let vm = await vm()
+        #expect(vm.state.preflightError == .network, "\"Try again\" is the primary action")
+        #expect(vm.state.stuckWordsOnly && !vm.state.stuckNoticeShown && !vm.state.eraseOffered)
+        #expect(!vm.state.showsPin, "still no PIN")
+        vm.askErase()
+        #expect(!vm.state.eraseConfirm)
+
+        vault.fail["preflight"] = nil
+        vm.retryPreflight()
+        #expect(!vm.state.stuckWordsOnly && !vm.state.eraseOffered, "nothing while the check runs")
+        await vm.settle()
+        #expect(vm.state.eraseOffered && vm.state.stuckNoticeShown && !vm.state.stuckWordsOnly)
+        vm.askErase()
+        #expect(vm.state.eraseConfirm)
+    }
+
+    /// A paused service is a check that did not answer either: the words alone and "Try again" (once the pause's wait is
+    /// over), no erase.
+    @Test func aPausedServiceIsNoAnswer() async {
+        vault.userGuidUsable = false
+        vault.fail["preflight"] = FakeVaultRepository.failure(.servicePaused, retry: 30)
+        let paused = await vm()
+        #expect(paused.state.stuckWordsOnly && !paused.state.eraseOffered && paused.state.serviceWaitSeconds > 0)
+        #expect(paused.state.preflightError == .servicePaused, "\"Try again\" once the wait is over")
+    }
+
+    /// A failure that is no vault answer (no ``VaultFailure``) is a check that did not answer: "Try again" (`.other`), the
+    /// words alone, no erase.
+    @Test func aFailureThatIsNoVaultAnswerOffersTryAgain() async {
+        struct Odd: Error {}
+        vault.userGuidUsable = false
+        vault.failOther["preflight"] = Odd()
+        let vm = await vm()
+        #expect(vm.state.preflightError == .other, "\"Try again\"")
+        #expect(vm.state.stuckWordsOnly && !vm.state.eraseOffered)
+    }
+
+    /// Each part of ``UnlockState/eraseReady`` on a phone with no usable `user_guid`: no erase while the check runs (even with
+    /// an earlier answer), after a failed one (even with an answer kept), or with no answer at all.
+    @Test func eachGuardOfTheEraseHolds() {
+        let answered = PreflightInfo(
+            routed: FakeVaultRepository.release(3), lastNumber: 3, softwareUpdated: false, rollback: false, offer: nil
+        )
+        var s = UnlockState(loading: true)
+        s.noUserGuid = true
+        s.keysGone = true
+        s.preflight = answered
+        #expect(!s.eraseOffered, "loading")
+        s.loading = false
+        s.preflightError = .network
+        #expect(!s.eraseOffered, "a failed check")
+        s.preflightError = nil
+        s.preflight = nil
+        #expect(!s.eraseOffered, "no answer")
+        s.preflight = answered
+        #expect(s.eraseOffered, "an answer")
+    }
+
+    /// A failed check and a "Finish the move" refused `no_user_guid`: the move card says it, so the words alone are not
+    /// shown a second time.
+    @Test func theWordsAreNotShownBesideTheMoveCard() {
+        var s = UnlockState(loading: false)
+        s.noUserGuid = true
+        s.keysGone = true
+        s.preflightError = .network
+        #expect(s.stuckWordsOnly)
+        s.moveFailure = MoveFailure(.notSupported, code: UnlockAttempt.codeNoUserGuid)
+        #expect(!s.stuckWordsOnly && !s.eraseOffered)
+    }
+
+    /// A phone with its user_guid is not changed: the keys-gone offer after a failed check stays as before.
+    @Test func aPhoneWithAUserGuidKeepsItsOffer() {
+        var s = UnlockState(loading: false)
+        s.keysGone = true
+        s.preflightError = .network
+        #expect(s.eraseOffered && s.stuckNoticeShown && !s.stuckWordsOnly)
     }
 }

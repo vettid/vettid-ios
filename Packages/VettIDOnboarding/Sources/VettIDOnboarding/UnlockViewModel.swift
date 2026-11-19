@@ -165,7 +165,9 @@ public final class UnlockViewModel: UnlockActions {
                 state.approveOffer = false
                 if e.kind == .servicePaused { startServiceWait(e.retryAfterSeconds) }
             } catch {
+                // Any other failure is a check that did not answer too: "Try again" (never a screen with no way on).
                 state.loading = false
+                state.preflightError = .other
                 state.approveOffer = false
             }
         }

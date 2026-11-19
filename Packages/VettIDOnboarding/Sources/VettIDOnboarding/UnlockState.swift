@@ -119,10 +119,20 @@ public struct UnlockState: Equatable, Sendable, CustomStringConvertible, CustomD
     public var recoverOnly: Bool { preflightError == .releaseEnded || preflight?.rollback == true || stateRollback }
 
     /// "Erase VettID from this phone" is offered: never on a ``recoverOnly`` screen, which wins.
-    public var eraseOffered: Bool { !recoverOnly && (notRecognised || keysGone) }
+    public var eraseOffered: Bool { eraseReady && !recoverOnly && (notRecognised || keysGone) }
 
     /// The recover-or-erase notice of a phone without the vault's keys is on the screen (the screen's own choice).
-    public var stuckNoticeShown: Bool { !recoverOnly && !notRecognised && keysGone }
+    public var stuckNoticeShown: Bool { eraseReady && !recoverOnly && !notRecognised && keysGone }
+
+    /// (§6.7.1) An erase may be offered: on a phone with no usable `user_guid`, only after a release check that answered. A
+    /// failed one could not rule out an ended release or a rollback, where erasing would not help. Mirrors vettid-android
+    /// `eraseReady` (#412).
+    var eraseReady: Bool { !noUserGuid || !loading && preflight != nil && preflightError == nil }
+
+    /// (§6.7.1) The recover-or-erase words alone, with no actions: this phone has no usable `user_guid`, but the notice with
+    /// its actions is not shown (the release check failed: "Try again"). Not beside an ended release or a rollback, nor
+    /// beside the move card of the same failure. Mirrors vettid-android `stuckWordsOnly` (#412).
+    public var stuckWordsOnly: Bool { noUserGuid && !loading && !eraseOffered && !recoverOnly && !moveNoUserGuid }
 
     /// The last "Finish the move" was refused for want of a usable `user_guid` (``MoveFailure/noUserGuid``).
     public var moveNoUserGuid: Bool { moveFailure?.noUserGuid == true }

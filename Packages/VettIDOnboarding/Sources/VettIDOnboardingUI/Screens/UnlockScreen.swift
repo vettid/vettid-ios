@@ -201,13 +201,40 @@ public struct UnlockScreen: View {
         }
     }
 
-    /// An ended release or a rollback wins: no erase there, whatever else the last answers said.
+    /// The way forward under the unlock's results, one at most.
+    enum WayForward: Equatable {
+        /// [recoverBesideMove]: the move card of a "Finish the move" refused `no_user_guid` says the words; after a failed
+        /// check, "Recover your vault" comes beside it (no erase).
+        case recoverOnly, notRecognised, stuckWords, recoverBesideMove, stuck, none
+
+        /// "Recover your vault" is offered (on a phone with no usable `user_guid`, also after a failed check: owner decision
+        /// a, 2026-11-19). The erase only where ``UnlockState/eraseOffered``.
+        var offersRecover: Bool { self != .notRecognised && self != .none }
+    }
+
+    /// An ended release or a rollback wins: no erase there, whatever else the last answers said. On a phone with no usable
+    /// `user_guid` whose release check failed, the stuck words alone (§6.7.1, as vettid-android #412).
+    static func wayForward(_ state: UnlockState) -> WayForward {
+        if state.recoverOnly { return .recoverOnly }
+        // Its erase only where it is offered (a phone with no usable user_guid: after a check that answered).
+        if state.notRecognised, state.eraseOffered { return .notRecognised }
+        if state.stuckWordsOnly { return .stuckWords }
+        if state.moveNoUserGuid, !state.loading, !state.eraseOffered { return .recoverBesideMove }
+        if state.stuckNoticeShown { return .stuck }
+        return .none
+    }
+
     @ViewBuilder private var wayForward: some View {
-        if state.recoverOnly {
+        switch Self.wayForward(state) {
+        case .recoverOnly:
             RecoverOnlyNotice(onRecover: onOpenAccountSite, contactSupport: contactSupport)
-        } else if state.notRecognised {
+        case .notRecognised:
             NotRecognisedNotice(erasing: state.erasing, onErase: { actions.askErase() })
-        } else if state.keysGone {
+        case .stuckWords:
+            StuckWordsNotice(onRecover: onOpenAccountSite)
+        case .recoverBesideMove:
+            RecoverLink(onRecover: onOpenAccountSite)
+        case .stuck:
             StuckNotice(
                 erasing: state.erasing, earlierSecret: state.earlierSecret, pinReady: pin.count >= UnlockState.minPinLength,
                 onErase: { actions.askErase() }, onRecover: onOpenAccountSite,
@@ -216,6 +243,8 @@ public struct UnlockScreen: View {
                     actions.submitEarlierSecret()
                 }
             )
+        case .none:
+            EmptyView()
         }
     }
 

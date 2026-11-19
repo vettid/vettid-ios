@@ -303,6 +303,28 @@ struct StuckNotice: View {
     }
 }
 
+/// (§6.7.1) A phone with no usable `user_guid` whose release check failed: the stuck words with "Recover your vault" (owner
+/// decision a, 2026-11-19), beside "Try again"; the erase waits for a check that answered.
+struct StuckWordsNotice: View {
+    let onRecover: @MainActor () -> Void
+
+    var body: some View {
+        NoticeCard(.urgent, title: OnboardingStrings.unlockStuckTitle, message: OnboardingStrings.unlockStuckBody, announce: .polite) {
+            RecoverLink(onRecover: onRecover)
+        }
+        .accessibilityIdentifier("unlock_no_user_guid")
+    }
+}
+
+/// "Recover your vault" (the account site), alone: beside a card that already says why.
+struct RecoverLink: View {
+    let onRecover: @MainActor () -> Void
+
+    var body: some View {
+        TextLink(OnboardingStrings.unlockRecover, identifier: "recover_vault", action: onRecover)
+    }
+}
+
 /// The vault cannot be opened and erasing this phone would not help (an ended release, a rollback): "Recover your vault"
 /// first, "Contact support" second (without a mail app the address is shown to copy). No erase.
 struct RecoverOnlyNotice: View {
