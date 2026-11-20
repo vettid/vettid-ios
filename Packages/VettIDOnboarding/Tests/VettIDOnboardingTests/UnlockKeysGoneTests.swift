@@ -287,4 +287,22 @@ import VettIDDataTesting
         vm.retryPreflight()
         #expect(vm.state.message == nil)
     }
+
+    /// Each erase attempt starts clean: two identical failures, with no message between them (the second is new, and said
+    /// again).
+    @Test func eachEraseAttemptStartsClean() async {
+        vault.userGuidUsable = false
+        let vm = await vm()
+        vault.fail["eraseThisPhone"] = FakeVaultRepository.failure(.network)
+        vm.askErase()
+        vm.confirmErase()
+        await vm.settle()
+        #expect(vm.state.message == .failed(.network, code: nil))
+        vault.fail["eraseThisPhone"] = FakeVaultRepository.failure(.network)
+        vm.askErase()
+        vm.confirmErase()
+        #expect(vm.state.message == nil, "cleared as the attempt begins")
+        await vm.settle()
+        #expect(vm.state.message == .failed(.network, code: nil))
+    }
 }
