@@ -264,4 +264,27 @@ import VettIDDataTesting
         s.preflightError = .network
         #expect(s.eraseOffered && s.stuckNoticeShown && !s.stuckWordsOnly)
     }
+
+    /// (§6.7.1) A failed erase on a phone with no usable `user_guid` is said: a vault failure's own message, and any other
+    /// failure's too (never silent).
+    @Test(arguments: [true, false])
+    func aFailedEraseIsSaid(_ vaultFailure: Bool) async {
+        struct Odd: Error {}
+        vault.userGuidUsable = false
+        let vm = await vm()
+        #expect(vm.state.eraseOffered)
+        if vaultFailure {
+            vault.fail["eraseThisPhone"] = FakeVaultRepository.failure(.network)
+        } else {
+            vault.failOther["eraseThisPhone"] = Odd()
+        }
+        vm.askErase()
+        vm.confirmErase()
+        await vm.settle()
+        #expect(!vm.state.erasing)
+        #expect(vm.state.message == .failed(vaultFailure ? .network : .other, code: nil), "\(String(describing: vm.state.message))")
+        // A new check: the old failure goes (it may offer no erase).
+        vm.retryPreflight()
+        #expect(vm.state.message == nil)
+    }
 }

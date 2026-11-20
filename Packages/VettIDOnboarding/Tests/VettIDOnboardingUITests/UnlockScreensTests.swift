@@ -201,6 +201,71 @@ import VettIDUI
         #expect(UnlockScreen.wayForward(failed) == .stuck, "after an answer: the notice with Recover and Erase")
     }
 
+    /// Each way forward draws its own view (and none draws nothing); a phone with a user_guid never gets
+    /// ``UnlockScreen/WayForward/recoverBesideMove``.
+    @Test func eachWayForwardIsDrawn() {
+        let answered = PreflightInfo(routed: release, lastNumber: 3, softwareUpdated: false, rollback: false, offer: nil)
+        var stuck = UnlockState(loading: false)
+        stuck.noUserGuid = true
+        stuck.keysGone = true
+        stuck.preflight = answered
+        var words = stuck
+        words.preflight = nil
+        words.preflightError = .network
+        var beside = words
+        beside.moveFailure = MoveFailure(.notSupported, code: UnlockAttempt.codeNoUserGuid)
+        var recognised = UnlockState(loading: false)
+        recognised.notRecognised = true
+        let cases: [(UnlockState, UnlockScreen.WayForward)] = [
+            (stuck, .stuck), (words, .stuckWords), (beside, .recoverBesideMove), (recognised, .notRecognised),
+            (recoverOnly["release ended"] ?? ok, .recoverOnly), (ok, .none),
+        ]
+        let expected: [UnlockScreen.WayForward: CGFloat] = [
+            .stuck: height(StuckNotice(
+                erasing: false, earlierSecret: false, pinReady: false, onErase: {}, onRecover: {}, onEarlierSecret: {}
+            )),
+            .stuckWords: height(StuckWordsNotice(onRecover: {})),
+            .recoverBesideMove: height(RecoverLink(onRecover: {})),
+            .notRecognised: height(NotRecognisedNotice(erasing: false, onErase: {})),
+            .recoverOnly: height(RecoverOnlyNotice(onRecover: {}, contactSupport: { _ in })),
+            .none: 0,
+        ]
+        #expect(Set(expected.values).count == expected.count, "each way forward is told apart: \(expected)")
+        for (s, way) in cases {
+            #expect(UnlockScreen.wayForward(s) == way)
+            let view = UnlockWayForward(
+                state: s, actions: NoUnlockActions(), pinReady: false, onRecover: {}, contactSupport: { _ in }, onEarlierSecret: {}
+            )
+            let h = height(view)
+            #expect(way == .none ? h == 0 : h > 0, "\(way): \(h)")
+            // The right view: as tall as the one its case draws (the five differ, above), so no case draws another's.
+            #expect(h == (expected[way] ?? 0), "\(way): \(h) vs \(expected[way] ?? 0)")
+        }
+        // A phone with a user_guid whose move was refused `no_user_guid` (its keys still held, so no erase on offer).
+        var guid = beside
+        guid.noUserGuid = false
+        guid.keysGone = false
+        #expect(!guid.eraseOffered && guid.moveNoUserGuid)
+        #expect(UnlockScreen.wayForward(guid) != .recoverBesideMove, "a phone with a user_guid")
+    }
+
+    /// (§6.7.1) A failed erase on a phone with no usable `user_guid` (no PIN block) is said above the way forward.
+    @Test func aFailedEraseIsShownWithoutThePinBlock() {
+        var s = UnlockState(loading: false)
+        s.noUserGuid = true
+        s.keysGone = true
+        s.preflight = PreflightInfo(routed: release, lastNumber: 3, softwareUpdated: false, rollback: false, offer: nil)
+        #expect(!s.showsPin && UnlockScreen.messageAboveWayForward(s))
+        s.message = .failed(.other, code: nil)
+        #expect(height(UnlockMessageNotice(state: s)) > 0, "the failure is drawn")
+        // A phone with a user_guid and no PIN block (a recovery pending): above the way forward too.
+        var pending = ok
+        pending.recoveryPending = true
+        #expect(!pending.showsPin && UnlockScreen.messageAboveWayForward(pending))
+        // With the PIN block: under the PIN, not twice.
+        #expect(ok.showsPin && !UnlockScreen.messageAboveWayForward(ok))
+    }
+
     /// The support mail carries nothing of the member's.
     @Test func theSupportMailCarriesNothingOfTheMembers() {
         #expect(SupportMail.url.absoluteString == "mailto:support@vettid.org?subject=VettID%3A%20help%20with%20my%20vault")

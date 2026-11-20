@@ -303,6 +303,36 @@ struct StuckNotice: View {
     }
 }
 
+/// The unlock screen's way forward (``UnlockScreen/wayForward(_:)``), one view at most.
+struct UnlockWayForward: View {
+    let state: UnlockState
+    let actions: any UnlockActions
+    let pinReady: Bool
+    let onRecover: @MainActor () -> Void
+    let contactSupport: @MainActor (_ done: @escaping @MainActor (Bool) -> Void) -> Void
+    let onEarlierSecret: @MainActor () -> Void
+
+    var body: some View {
+        switch UnlockScreen.wayForward(state) {
+        case .recoverOnly:
+            RecoverOnlyNotice(onRecover: onRecover, contactSupport: contactSupport)
+        case .notRecognised:
+            NotRecognisedNotice(erasing: state.erasing, onErase: { actions.askErase() })
+        case .stuckWords:
+            StuckWordsNotice(onRecover: onRecover)
+        case .recoverBesideMove:
+            RecoverLink(onRecover: onRecover)
+        case .stuck:
+            StuckNotice(
+                erasing: state.erasing, earlierSecret: state.earlierSecret, pinReady: pinReady,
+                onErase: { actions.askErase() }, onRecover: onRecover, onEarlierSecret: onEarlierSecret
+            )
+        case .none:
+            EmptyView()
+        }
+    }
+}
+
 /// (§6.7.1) A phone with no usable `user_guid` whose release check failed: the stuck words with "Recover your vault" (owner
 /// decision a, 2026-11-19), beside "Try again"; the erase waits for a check that answered.
 struct StuckWordsNotice: View {

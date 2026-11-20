@@ -121,7 +121,17 @@ public struct UnlockScreen: View {
                         )
                     case .returnCancel:
                         TextLink(OnboardingStrings.releaseUpdateNotNow, identifier: "unlock_return_cancel") { actions.cancelReturn() }
-                    case .wayForward: wayForward
+                    case .wayForward:
+                        // Without the PIN block (a phone with no usable user_guid), a failed erase's message shows here.
+                        if Self.messageAboveWayForward(state) { UnlockMessageNotice(state: state) }
+                        UnlockWayForward(
+                            state: state, actions: actions, pinReady: pin.count >= UnlockState.minPinLength,
+                            onRecover: onOpenAccountSite, contactSupport: contactSupport,
+                            onEarlierSecret: {
+                                actions.setPin(pin.take())
+                                actions.submitEarlierSecret()
+                            }
+                        )
                     }
                 }
             }
@@ -212,6 +222,10 @@ public struct UnlockScreen: View {
         var offersRecover: Bool { self != .notRecognised && self != .none }
     }
 
+    /// The unlock's message (a failed erase's, ``UnlockViewModel/confirmErase()``) is shown above the way forward wherever
+    /// there is no PIN block to show it under (a phone with no usable `user_guid`, a recovery pending, a failed check).
+    static func messageAboveWayForward(_ state: UnlockState) -> Bool { !state.showsPin }
+
     /// An ended release or a rollback wins: no erase there, whatever else the last answers said. On a phone with no usable
     /// `user_guid` whose release check failed, the stuck words alone (§6.7.1, as vettid-android #412).
     static func wayForward(_ state: UnlockState) -> WayForward {
@@ -219,33 +233,9 @@ public struct UnlockScreen: View {
         // Its erase only where it is offered (a phone with no usable user_guid: after a check that answered).
         if state.notRecognised, state.eraseOffered { return .notRecognised }
         if state.stuckWordsOnly { return .stuckWords }
-        if state.moveNoUserGuid, !state.loading, !state.eraseOffered { return .recoverBesideMove }
+        if state.noUserGuid, state.moveNoUserGuid, !state.loading, !state.eraseOffered { return .recoverBesideMove }
         if state.stuckNoticeShown { return .stuck }
         return .none
-    }
-
-    @ViewBuilder private var wayForward: some View {
-        switch Self.wayForward(state) {
-        case .recoverOnly:
-            RecoverOnlyNotice(onRecover: onOpenAccountSite, contactSupport: contactSupport)
-        case .notRecognised:
-            NotRecognisedNotice(erasing: state.erasing, onErase: { actions.askErase() })
-        case .stuckWords:
-            StuckWordsNotice(onRecover: onOpenAccountSite)
-        case .recoverBesideMove:
-            RecoverLink(onRecover: onOpenAccountSite)
-        case .stuck:
-            StuckNotice(
-                erasing: state.erasing, earlierSecret: state.earlierSecret, pinReady: pin.count >= UnlockState.minPinLength,
-                onErase: { actions.askErase() }, onRecover: onOpenAccountSite,
-                onEarlierSecret: {
-                    actions.setPin(pin.take())
-                    actions.submitEarlierSecret()
-                }
-            )
-        case .none:
-            EmptyView()
-        }
     }
 
     private func forgetSecrets() {

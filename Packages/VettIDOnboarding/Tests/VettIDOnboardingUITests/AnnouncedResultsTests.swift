@@ -64,6 +64,18 @@ import VettIDOnboarding
         #expect(await spoken(UnlockScreen(state: s, actions: NoUnlockActions()), text, .assertive))
     }
 
+    /// (§6.7.1) On a phone with no usable `user_guid` (no PIN block), a failed erase is shown and spoken on the screen.
+    @Test func aFailedEraseWithoutAUserGuidIsSpoken() async {
+        var s = UnlockState(loading: false)
+        s.noUserGuid = true
+        s.keysGone = true
+        let release = ReleaseView(number: 3, pcr0: String(repeating: "03", count: 48), status: "active", endsAt: nil, notes: "")
+        s.preflight = PreflightInfo(routed: release, lastNumber: 3, softwareUpdated: false, rollback: false, offer: nil)
+        s.message = .failed(.other, code: nil)
+        let text = "\(OnboardingStrings.unlockTitle). \(FailureKind.other.message(timeScale: 1))"
+        #expect(await spoken(UnlockScreen(state: s, actions: NoUnlockActions()), text, .assertive))
+    }
+
     @Test func theOwnerCheckResultsAreSpokenAtOnce() async {
         var wrong = check
         wrong.pinKept = true
