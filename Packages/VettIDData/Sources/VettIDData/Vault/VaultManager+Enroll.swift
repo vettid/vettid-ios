@@ -227,10 +227,12 @@ extension VaultManager {
     /// pending, and never before `vault.enroll.confirm` was answered. "Finish the move", which also holds it, comes with
     /// I3.3.
     /// A provisional vault not confirmed yet (a restart before the answer, and no status read published it open since: one
-    /// overtaken by a lock, or the vault locked and then unlocked) is confirmed first, by the phone whose enrollment made it.
+    /// overtaken by a lock, or the vault locked and then unlocked) is confirmed first, by the paired phone whose enrollment
+    /// made it, and only when the gate would let the setup end.
     public func finishSetup() async throws {
         let local = record.value
-        if phase == .setup(.finishing), !local.enrollConfirmed, local.enrolledHere, let s = session {
+        let gateOpen = phase == .setup(.finishing) && !lockGuard.holdsPhone && !finishMoveRunner.finishing
+        if gateOpen, !local.enrollConfirmed, local.enrolledHere, let s = session, s.device.deviceID != nil {
             try await guarded { try await confirmEnrollment(s, backup: local.backupChoice) { _ in } }
         }
         _ = try finishSetupGated()
