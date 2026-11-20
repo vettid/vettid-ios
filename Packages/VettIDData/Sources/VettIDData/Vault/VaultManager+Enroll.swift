@@ -231,7 +231,7 @@ extension VaultManager {
     /// made it, and only when the gate would let the setup end.
     public func finishSetup() async throws {
         let local = record.value
-        let gateOpen = phase == .setup(.finishing) && !lockGuard.holdsPhone && !finishMoveRunner.finishing
+        let gateOpen = FinishSetupGate.allows(phase, lockPending: lockGuard.holdsPhone, finishingMove: finishMoveRunner.finishing)
         if gateOpen, !local.enrollConfirmed, local.enrolledHere, let s = session, s.device.deviceID != nil {
             try await guarded { try await confirmEnrollment(s, backup: local.backupChoice) { _ in } }
         }
