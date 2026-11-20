@@ -216,14 +216,20 @@ extension VaultManager {
 
     /// The background time iOS gave ran out (its expiration handler, called just before the app is suspended): the
     /// collection stops now, synchronously, as at the end of ``onBackground(budget:)``, whose work the handler then cancels,
-    /// rather than in a task that may not run before the suspension. Not when the app came back meanwhile, nor while a call
-    /// holds the collection (the call keeps the app running), nor twice.
-    public func backgroundExpired() {
-        guard let l = leaving, l.began == foregrounds, !l.expired, backgroundWorks > 0 else { return }
-        guard heldBackground == nil, collectionHeld?() != true else { return }
+    /// rather than in a task that may not run before the suspension. [began]: ``foregroundReturns`` when that leaving began
+    /// (another leaving's expiration stops nothing). Not when the app came back meanwhile, nor while a call holds the
+    /// collection (the call keeps the app running; one that ended during the work no longer does), nor twice.
+    public func backgroundExpired(began: Int) {
+        guard let l = leaving, l.began == began, began == foregrounds, !l.expired, !backgrounded, backgroundWorks > 0 else {
+            return
+        }
+        guard collectionHeld?() != true else { return }
         leaving = (l.began, true)
         finishBackground()
     }
+
+    /// Counts the returns to the foreground: taken when the app leaves it, it names that leaving (``backgroundExpired(began:)``).
+    public var foregroundReturns: Int { foregrounds }
 
     /// Starts a device's collection unless the app is in the background; while a call holds the background it collects by long poll.
     func startUnlessBackground(_ d: VaultDevice) {
@@ -542,7 +548,9 @@ extension VaultManager {
     func noteProbeLock() { locksHeard.probes += 1 }
 
     /// A lock heard of during the read that began at [start] and newer than it: on the vault's clock, after it; on the
-    /// phone's, within ``lockSkewAllowance`` of it. A probe's always.
+    /// phone's, within ``lockSkewAllowance`` of it. A probe's always. A lock timed before that does not count even when it
+    /// is heard during the read: the vault's status was read after it, so an open answer then is the vault opened again
+    /// since (a mailbox's old locks, or one delivered again).
     func lockedSince(_ start: ReadStart) -> Bool {
         if locksHeard.probes != start.heard.probes { return true }
         guard let l = locksHeard.latest, l != start.heard.latest else { return false }

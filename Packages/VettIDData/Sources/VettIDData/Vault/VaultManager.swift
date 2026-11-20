@@ -711,6 +711,10 @@ extension VaultManager {
             } catch let f as VaultFailure {
                 p = unreachable(f)
             }
+            // A lock heard since the read began, during the steps too, is the newest word over the vault this answer opened,
+            // whatever the steps returned: Locked, not "can't connect". (Judged as the read's answer is: a mailbox's old
+            // `vault.locking` has expired, 60 s after it was sent, and is dropped before it is heard.)
+            if lockedSince(began) { p = .locked }
             guard let after = published(p) else { return }
             phase = after
         } else {

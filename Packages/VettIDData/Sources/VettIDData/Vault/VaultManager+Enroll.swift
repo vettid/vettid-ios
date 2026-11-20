@@ -232,9 +232,14 @@ extension VaultManager {
     public func finishSetup() async throws {
         let local = record.value
         let gateOpen = FinishSetupGate.allows(phase, lockPending: lockGuard.holdsPhone, finishingMove: finishMoveRunner.finishing)
-        if gateOpen, !local.enrollConfirmed, local.enrolledHere, let s = session, s.device.deviceID != nil {
-            try await guarded { try await confirmEnrollment(s, backup: local.backupChoice) { _ in } }
+        if gateOpen, !local.enrollConfirmed, local.enrolledHere {
+            // The session as it is now (opened again after a background, say): a failure is said, as any.
+            try await guarded {
+                let s = try await openSession()
+                if s.device.deviceID != nil { try await confirmEnrollment(s, backup: local.backupChoice) { _ in } }
+            }
         }
+        // A gate that refuses now (a lock asked for meanwhile) leaves the phase as it is, and says nothing more.
         _ = try finishSetupGated()
     }
 
