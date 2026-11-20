@@ -283,5 +283,8 @@ import VettIDDataTesting
         await vm.settle()
         #expect(!vm.state.erasing)
         #expect(vm.state.message == .failed(vaultFailure ? .network : .other, code: nil), "\(String(describing: vm.state.message))")
+        // A new check: the old failure goes (it may offer no erase).
+        vm.retryPreflight()
+        #expect(vm.state.message == nil)
     }
 }

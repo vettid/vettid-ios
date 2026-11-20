@@ -144,6 +144,9 @@ public final class UnlockViewModel: UnlockActions {
         // the release check has answered (an ended release or a rollback wins), with no PIN asked; nothing will ever add
         // one.
         state.noUserGuid = !vault.userGuidUsable
+        // On a phone with no usable user_guid the only message is a failed erase's (no keypad clears it): not kept past a new
+        // check, which may offer no erase.
+        if state.noUserGuid { state.message = nil }
         state.keysGone = false
         state.earlierSecret = false
         state.eraseConfirm = false
