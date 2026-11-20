@@ -61,6 +61,9 @@ public struct UnlockState: Equatable, Sendable, CustomStringConvertible, CustomD
     /// Seconds until the paused vault service asked to be tried again (MEMBER-API 1.2.0). Nothing retries by itself.
     public var serviceWaitSeconds: Int64 = 0
     public var recoveryPending = false
+    /// The PIN sent with "Cancel the recovery and unlock" was wrong (the vault applies the cancel only after a correct PIN,
+    /// so the recovery is still pending): the keypad asks for another, with its backoff, and the cancel sends it.
+    public var cancelPinWrong = false
     /// (STAGING-TIME-SCALE §5.2) The vault's time scale: the screen's waits are shown divided by it.
     public var timeScale: UInt64 = 1
     public var stateRollback = false
@@ -111,8 +114,15 @@ public struct UnlockState: Equatable, Sendable, CustomStringConvertible, CustomD
         self.phoneSecret = phoneSecret
     }
 
-    /// "Cancel the recovery and unlock" may be pressed: with a phone secret, once the password is entered.
-    public var cancelAllowed: Bool { recoveryPending && !busy && (!phoneSecret || !password.isEmpty) }
+    /// "Cancel the recovery and unlock" may be pressed: with a phone secret, once the password is entered; after a wrong
+    /// PIN on it (``cancelPinWrong``), once a new PIN may be sent and [pinTyped] digits are enough.
+    public func cancelAllowed(pinTyped: Int) -> Bool {
+        guard recoveryPending, !busy, !phoneSecret || !password.isEmpty else { return false }
+        return !cancelPinWrong || waitSeconds == 0 && serviceWaitSeconds == 0 && pinTyped >= Self.minPinLength
+    }
+
+    /// ``cancelAllowed(pinTyped:)`` with the PIN handed over.
+    public var cancelAllowed: Bool { cancelAllowed(pinTyped: pin.count) }
 
     /// The vault cannot be opened from here and erasing this phone would not help: an ended release, or a rollback of
     /// the release or of the vault's state. "Recover your vault" and support only.
@@ -154,9 +164,11 @@ public struct UnlockState: Equatable, Sendable, CustomStringConvertible, CustomD
     /// Whether the unlock may be sent: a PIN, and with a check due, the password too.
     public var submitAllowed: Bool { pinAllowed && pin.count >= Self.minPinLength && (!checkDue || !password.isEmpty) }
 
-    /// The PIN field is shown: the vault's software verified, nothing blocking, no recovery pending.
+    /// The PIN field is shown: the vault's software verified, nothing blocking, no recovery pending (unless the PIN sent
+    /// to cancel it was wrong: another is typed there).
     public var showsPin: Bool {
-        returnAsksPin || (!noUserGuid && !recoverOnly && !recoveryPending && preflight != nil && preflightError == nil)
+        returnAsksPin || (!noUserGuid && !recoverOnly && (!recoveryPending || cancelPinWrong) && preflight != nil
+            && preflightError == nil)
     }
 
     /// A recovery's delay at the vault's time scale ("24 hours"; on staging "1 hour").

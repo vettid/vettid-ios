@@ -210,6 +210,8 @@ public final class UnlockViewModel: UnlockActions {
 
     public func submit() {
         if state.returnAsksPin { return returnWithPin() }
+        // While a recovery is pending, the PIN typed after a wrong one goes with the cancel (the only way to send it).
+        if state.recoveryPending { return cancelRecoveryAndUnlock() }
         attempt(.unlock(cancelRecovery: false))
     }
 
@@ -402,17 +404,15 @@ public final class UnlockViewModel: UnlockActions {
         case .success:
             state.pin = ""
             state.recoveryPending = false
+            state.cancelPinWrong = false
         // §11.14.9 step 5: the vault holds the PIN change's candidate; the new PIN is asked for (nothing was counted).
         case .newPinNeeded:
             state.pin = ""
             state.pinStep = .new
         case .badPin(let wait):
-            state.pin = ""
-            state.message = .badPin
-            startBackoff(wait)
+            pinRefused(wait, badPin: true)
         case .backoff(let wait):
-            state.pin = ""
-            startBackoff(wait)
+            pinRefused(wait, badPin: false)
         // The PIN stays in memory so that "Cancel the recovery and unlock" can send it again.
         case .recoveryPending:
             state.recoveryPending = true
@@ -467,6 +467,15 @@ public final class UnlockViewModel: UnlockActions {
     }
 
     // MARK: - Countdowns
+
+    /// `bad_pin` ([badPin]) or `backoff`: the PIN goes and the wait starts. Only the cancel is sent while a recovery is
+    /// pending: its PIN was refused, and another is asked for (``UnlockState/cancelPinWrong``).
+    private func pinRefused(_ wait: Int64, badPin: Bool) {
+        state.pin = ""
+        if badPin { state.message = .badPin }
+        if state.recoveryPending { state.cancelPinWrong = true }
+        startBackoff(wait)
+    }
 
     private func startBackoff(_ seconds: Int64) {
         guard seconds > 0 else { return }

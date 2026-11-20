@@ -393,6 +393,22 @@ import VettIDUI
         #expect(OnboardingStrings.ownerCheckLock == "Lock vault")
     }
 
+    /// A wrong PIN on "Cancel the recovery and unlock": the PIN block is back, with the wrong-PIN text and the backoff's
+    /// countdown in it, so its separate wrong-PIN card is neither drawn nor announced.
+    @Test func aWrongPinOnTheCancelShowsThePinBlockAndItsWait() {
+        var s = ok
+        s.recoveryPending = true
+        s.message = .badPin
+        #expect(!UnlockBlock.blocks(for: s).contains(.pin))
+        #expect(height(UnlockMessageNotice(state: s)) > 0, "without the PIN block, the card says it")
+        s.cancelPinWrong = true
+        #expect(UnlockBlock.blocks(for: s).contains(.pin))
+        #expect(height(UnlockMessageNotice(state: s)) == 0, "the PIN block says it")
+        #expect(height(UnlockWaitLine(state: s)) == 0)
+        s.waitSeconds = 30
+        #expect(height(UnlockWaitLine(state: s)) > 0, "the countdown, in the PIN block")
+    }
+
     private func height(_ view: some View) -> CGFloat {
         UIHostingController(rootView: view.vettIDTheme()).sizeThatFits(in: CGSize(width: 390, height: 844)).height
     }
