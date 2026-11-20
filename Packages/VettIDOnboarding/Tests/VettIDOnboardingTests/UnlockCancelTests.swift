@@ -48,20 +48,87 @@ extension UnlockViewModelTests {
         #expect(!vm.state.recoveryPending && !vm.state.cancelPinWrong)
     }
 
-    /// The keypad's own submit goes with the cancel: the plain unlock would only be answered `recovery_pending` again.
-    @Test func theKeypadsSubmitAfterAWrongCancelPinIsTheCancel() async {
-        let vm = await cancelledWithAWrongPin()
-        await submit(vm)
-        #expect(vault.lastCancelRecovery && vault.phase == .unlocked)
-    }
-
-    /// The backoff holds the cancel until it ends; the screen shows its countdown in the PIN block.
+    /// The backoff holds the cancel until it ends, in the view model too; the screen shows its countdown in the PIN block.
     @Test func theBackoffHoldsTheCancel() async {
         let vm = await cancelledWithAWrongPin(wait: 30)
         #expect(vm.state.waitSeconds > 0 && vm.state.showsPin)
         #expect(!vm.state.cancelAllowed(pinTyped: 8), "not during the wait")
+        vm.setPin("11112222")
+        vm.cancelRecoveryAndUnlock()
+        await vm.settle()
+        #expect(vault.lastPin != "11112222", "nothing sent during the wait")
         await ticker.advance(30, vm)
         #expect(vm.state.waitSeconds == 0 && vm.state.cancelAllowed(pinTyped: 8))
+    }
+
+    /// While a recovery is pending, a plain submit sends nothing: only the member's cancel goes.
+    @Test func aSubmitWhileARecoveryIsPendingSendsNothing() async {
+        let vm = await cancelledWithAWrongPin()
+        vault.lastPin = nil
+        vault.lastCancelRecovery = false
+        await submit(vm)
+        #expect(vault.lastPin == nil && !vault.lastCancelRecovery && vm.state.recoveryPending)
+    }
+
+    /// `backoff` on the cancel (no wrong-PIN text) asks for another PIN as `bad_pin` does.
+    @Test func aBackoffOnTheCancelAsksForAnotherPin() async {
+        vault.unlockResults = [.recoveryPending, .backoff(retryAfterSeconds: 0)]
+        let vm = await vm()
+        await submit(vm)
+        vm.cancelRecoveryAndUnlock()
+        await vm.settle()
+        #expect(vm.state.cancelPinWrong && vm.state.message != .badPin && vm.state.showsPin && vm.state.pin.isEmpty)
+    }
+
+    /// A failure answering the cancel after a wrong PIN: the PIN goes, the keypad stays, another PIN is asked for.
+    @Test func aFailedCancelAfterAWrongPinKeepsTheKeypad() async {
+        vault.unlockResults = [.recoveryPending, .badPin(retryAfterSeconds: 0), .failed(.network, code: nil)]
+        let vm = await cancelledWithAWrongPin()
+        vm.setPin("40281795")
+        vm.cancelRecoveryAndUnlock()
+        await vm.settle()
+        #expect(vm.state.recoveryPending && vm.state.cancelPinWrong && vm.state.pin.isEmpty && vm.state.showsPin)
+        #expect(!vm.state.cancelAllowed(pinTyped: 0) && vm.state.cancelAllowed(pinTyped: 8))
+    }
+
+    /// The PIN kept from the `recovery_pending` answer is gone (a trip to the background, "Cancel" on a slow answer, a
+    /// failure): the cancel is not enabled for an empty PIN, the keypad asks for one, and the cancel sends it.
+    @Test func aCancelWhoseKeptPinIsGoneAsksForOne() async {
+        for clear in ["background", "failure"] {
+            let vault = FakeVaultRepository(.locked)
+            vault.unlockResults = clear == "failure" ? [.recoveryPending, .failed(.network, code: nil)] : [.recoveryPending]
+            let vm = UnlockViewModel(vault: vault, account: vault, tick: ticker.tick)
+            await vm.settle()
+            vm.setPin("40281795")
+            vm.submit()
+            await vm.settle()
+            #expect(!vm.state.showsPin && vm.state.cancelAllowed(pinTyped: 0), "the kept PIN goes with the cancel")
+            if clear == "background" {
+                vm.forgetSecrets()
+            } else {
+                vm.cancelRecoveryAndUnlock()
+                await vm.settle()
+            }
+            #expect(vm.state.cancelPinNeeded && vm.state.showsPin && !vm.state.cancelAllowed(pinTyped: 0), "\(clear)")
+            vm.setPin("40281795")
+            vm.cancelRecoveryAndUnlock()
+            await vm.settle()
+            #expect(vault.lastCancelRecovery && vault.phase == .unlocked, "\(clear)")
+        }
+    }
+
+    /// A vault past its owner-check deadline, with no phone secret: the cancel waits for the password, as the unlock does,
+    /// so the button is never enabled for a cancel the view model would refuse.
+    @Test func aDueCheckHoldsTheCancelUntilThePassword() async {
+        vault.unlockResults = [.recoveryPending]
+        let vm = await vm()
+        vm.ownerCheck(due: true, lockedByChecks: false)
+        vm.setPassword("the password")
+        await submit(vm)
+        #expect(vm.state.recoveryPending && vm.state.cancelPasswordNeeded && vm.state.password.isEmpty)
+        #expect(!vm.state.cancelAllowed(pinTyped: 8))
+        vm.setPassword("the password")
+        #expect(vm.state.cancelAllowed(pinTyped: 0))
     }
 
     /// With a phone secret, typing the password clears the wrong-PIN text, not the way to type another PIN.

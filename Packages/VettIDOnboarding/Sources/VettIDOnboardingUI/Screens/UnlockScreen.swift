@@ -109,9 +109,7 @@ public struct UnlockScreen: View {
                     switch block {
                     case .notices:
                         UnlockNotices(state: state, actions: actions, pinTyped: pin.count) {
-                            // After a wrong PIN on the cancel, the PIN typed on the keypad goes with it.
-                            if state.cancelPinWrong { actions.setPin(pin.take()) }
-                            actions.cancelRecoveryAndUnlock()
+                            Self.cancelRecovery(state, pin, actions)
                         }
                     case .pin:
                         pinEntry
@@ -207,6 +205,13 @@ public struct UnlockScreen: View {
             .disabled(!state.pinAllowed)
             .accessibilityIdentifier("unlock_password")
         }
+    }
+
+    /// "Cancel the recovery and unlock": when the cancel needs a PIN typed (``UnlockState/cancelPinNeeded``), the keypad's
+    /// goes with it; otherwise the PIN kept from the `recovery_pending` answer does, and the keypad's is not taken.
+    static func cancelRecovery(_ state: UnlockState, _ pin: PinBuffer, _ actions: any UnlockActions) {
+        if state.cancelPinNeeded { actions.setPin(pin.take()) }
+        actions.cancelRecoveryAndUnlock()
     }
 
     /// The way forward under the unlock's results, one at most.
@@ -431,7 +436,11 @@ struct RecoveryPendingNotice: View {
     var cancel: (@MainActor () -> Void)?
     @Environment(\.vettIDColors) private var colors
 
-    private func cancelNow() { if let cancel { cancel() } else { actions.cancelRecoveryAndUnlock() } }
+    /// Only when the button would be enabled: the return key of the password field too.
+    private func cancelNow() {
+        guard state.cancelAllowed(pinTyped: pinTyped) else { return }
+        if let cancel { cancel() } else { actions.cancelRecoveryAndUnlock() }
+    }
 
     var body: some View {
         NoticeCard(.urgent, title: OnboardingStrings.unlockRecoveryTitle, message: OnboardingStrings.unlockRecoveryBody) {
@@ -444,7 +453,7 @@ struct RecoveryPendingNotice: View {
             .accessibilityIdentifier("recovery_cancel")
         }
         .accessibilityIdentifier("recovery_pending")
-        if state.phoneSecret {
+        if state.cancelPasswordNeeded {
             SecretField(
                 OnboardingStrings.unlockPasswordLabel,
                 text: Binding(get: { state.password }, set: { actions.setPassword($0) }),

@@ -114,11 +114,20 @@ public struct UnlockState: Equatable, Sendable, CustomStringConvertible, CustomD
         self.phoneSecret = phoneSecret
     }
 
-    /// "Cancel the recovery and unlock" may be pressed: with a phone secret, once the password is entered; after a wrong
-    /// PIN on it (``cancelPinWrong``), once a new PIN may be sent and [pinTyped] digits are enough.
+    /// The cancel needs a PIN typed on the keypad: its last PIN was wrong (``cancelPinWrong``), or the PIN kept from the
+    /// `recovery_pending` answer is gone (a trip to the background, "Cancel" on a slow answer, a failure that cleared it).
+    public var cancelPinNeeded: Bool { recoveryPending && (cancelPinWrong || pin.isEmpty) }
+
+    /// The cancel needs the password: a phone secret's owner check goes with it, and a vault past its owner-check deadline
+    /// asks for it with any PIN (``submitAllowed``).
+    public var cancelPasswordNeeded: Bool { phoneSecret || checkDue }
+
+    /// "Cancel the recovery and unlock" may be pressed: what ``submitAllowed`` asks of the PIN it sends (the kept one, or
+    /// `pinTyped` digits typed on the keypad when ``cancelPinNeeded``), so the button is never enabled for a cancel that
+    /// would be refused.
     public func cancelAllowed(pinTyped: Int) -> Bool {
-        guard recoveryPending, !busy, !phoneSecret || !password.isEmpty else { return false }
-        return !cancelPinWrong || waitSeconds == 0 && serviceWaitSeconds == 0 && pinTyped >= Self.minPinLength
+        guard recoveryPending, pinAllowed, !erasing, !cancelPasswordNeeded || !password.isEmpty else { return false }
+        return (cancelPinNeeded ? pinTyped : pin.count) >= Self.minPinLength
     }
 
     /// ``cancelAllowed(pinTyped:)`` with the PIN handed over.
@@ -164,10 +173,10 @@ public struct UnlockState: Equatable, Sendable, CustomStringConvertible, CustomD
     /// Whether the unlock may be sent: a PIN, and with a check due, the password too.
     public var submitAllowed: Bool { pinAllowed && pin.count >= Self.minPinLength && (!checkDue || !password.isEmpty) }
 
-    /// The PIN field is shown: the vault's software verified, nothing blocking, no recovery pending (unless the PIN sent
-    /// to cancel it was wrong: another is typed there).
+    /// The PIN field is shown: the vault's software verified, nothing blocking, no recovery pending (unless its cancel
+    /// needs a PIN typed: ``cancelPinNeeded``).
     public var showsPin: Bool {
-        returnAsksPin || (!noUserGuid && !recoverOnly && (!recoveryPending || cancelPinWrong) && preflight != nil
+        returnAsksPin || (!noUserGuid && !recoverOnly && (!recoveryPending || cancelPinNeeded) && preflight != nil
             && preflightError == nil)
     }
 

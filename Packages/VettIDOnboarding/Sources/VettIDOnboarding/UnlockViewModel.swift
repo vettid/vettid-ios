@@ -210,8 +210,9 @@ public final class UnlockViewModel: UnlockActions {
 
     public func submit() {
         if state.returnAsksPin { return returnWithPin() }
-        // While a recovery is pending, the PIN typed after a wrong one goes with the cancel (the only way to send it).
-        if state.recoveryPending { return cancelRecoveryAndUnlock() }
+        // While a recovery is pending only its cancel is sent (``cancelRecoveryAndUnlock()``): a plain unlock would only be
+        // answered `recovery_pending` again, and nothing should turn into the cancel without the member choosing it.
+        guard !state.recoveryPending else { return }
         attempt(.unlock(cancelRecovery: false))
     }
 
@@ -468,7 +469,7 @@ public final class UnlockViewModel: UnlockActions {
 
     // MARK: - Countdowns
 
-    /// `bad_pin` ([badPin]) or `backoff`: the PIN goes and the wait starts. Only the cancel is sent while a recovery is
+    /// `bad_pin` (`badPin`) or `backoff`: the PIN goes and the wait starts. Only the cancel is sent while a recovery is
     /// pending: its PIN was refused, and another is asked for (``UnlockState/cancelPinWrong``).
     private func pinRefused(_ wait: Int64, badPin: Bool) {
         state.pin = ""
