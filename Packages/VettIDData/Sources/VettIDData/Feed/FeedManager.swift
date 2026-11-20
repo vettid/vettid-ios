@@ -278,7 +278,7 @@ public final class FeedManager: FeedRepository {
     public func refresh() async throws { try await read(full: true, quietly: false) }
 
     /// A continued opening's catch-up is still owed (it failed): read on from the cursor once more, awaited.
-    public func readOnIfOwed() async {
+    func readOnIfOwed() async {
         guard catchUpOwed else { return }
         try? await read(full: false, quietly: true)
     }

@@ -111,7 +111,10 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
     @ObservationIgnored let lockGuard: LockGuard
     @ObservationIgnored let locking: LockSequence
     @ObservationIgnored let lockNotices = LockNotices()
-    /// Bumped by every lock the member asks for: an unlock or a refresh that began before it publishes no open phase.
+    /// Bumped by this phone's lock (``beginLock``), by a lock that ends a paused opening (``endPausedOpening()``) and by the
+    /// deletion's close (``closeForDeleting``). Work that began before a bump publishes nothing open after it: a status read
+    /// (``refresh()``: only a Locked answer is published), an unlock's last steps, a recovery's or an enrollment's end, and a
+    /// failure's `credential_required` handling (``VaultManager+Failures``).
     @ObservationIgnored var lockGeneration = 0
     /// The newest lock this phone heard of, on the vault's clock: a `vault.locking`'s `ts` (also one dropped as another
     /// opening's: it is still a lock), or the moment a status read found the vault locked. A status read, or an unlock's
