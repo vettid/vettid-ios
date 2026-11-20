@@ -66,6 +66,9 @@ extension VaultManager: MoveRepository {
                 $0.transferIn = true
                 $0.transferStartedMs = started
                 $0.transferCode = codeID
+                // (§6.7.1) A setup code redeemed before is not this transfer's: its `user_guid` goes; the transfer's own
+                // comes with its `device.paired`.
+                $0.userGuid = ""
             }
             let path = TransferPath()
             let fresh = FreshTransferSecret(secrets: phoneSecrets, policy: config.trust.timeScales, path: path)
@@ -146,7 +149,8 @@ extension VaultManager: MoveRepository {
     /// Waits for the old phone's approval, then takes the credential over (§6.7.1 step 5). ``FailureKind/rejected`` when
     /// rejected; ``FailureKind/noResponse`` at the deadline, 11 minutes after the `hs.init` (§11.14.10 rule 5), when the
     /// settlement window's collects (``collectBeforeDrop(_:)``, 0.85.2) bring no `device.paired` or rejection; a session
-    /// that ended, or a `device.paired` without a valid `user_guid` (§6.7.1), is ``codeTransferSessionEnded``. A fin refused
+    /// that ended, or a `device.paired` without a valid `user_guid` (§6.7.1), is ``codeTransferSessionEnded``; a paired one whose
+    /// record lost it, the unlock's `no_user_guid`. A fin refused
     /// for good (``PairingNotCompleted``) before the deadline drops the transfer too. Any other failure before the deadline
     /// is rethrown and the transfer kept. True once completed, always with the member's `user_guid`.
     public func awaitTransferIn() async throws -> Bool {
@@ -414,13 +418,6 @@ extension VaultManager: MoveRepository {
             throw error
         }
         return record.value
-    }
-
-    /// (§6.7.1) A paired transfer whose record has no valid `user_guid` (a damaged one) is never completed: the start goes on
-    /// with the phase the vault's status gives, so the unlock screen says this phone cannot open the vault (recover or
-    /// erase), rather than "can't connect" at every start.
-    static func pairedWithoutUserGuid(_ error: any Error) -> Bool {
-        (error as? VaultFailure).map { UnlockAttempt.isNoUserGuid($0.kind, $0.code) } ?? false
     }
 
     /// Drops a transfer this phone started and has not completed: the handshake, the pinned vault, the attested key and the

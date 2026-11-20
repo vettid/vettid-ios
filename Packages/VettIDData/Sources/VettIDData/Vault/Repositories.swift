@@ -493,9 +493,10 @@ public protocol MoveRepository: AnyObject, Sendable, PairingPinKeeper, TransferI
     func transferIn(code: String) async throws -> String
 
     /// Waits for the old phone's approval, then takes the credential over (`credential.get`, `credential.ack`,
-    /// `credential.utk.get`). ``FailureKind/rejected`` when the owner rejected it; ``FailureKind/noResponse`` after 10
-    /// minutes. True once completed, always with the member's `user_guid` (§6.7.1): a transfer answer without a valid one
-    /// stops the move (``VaultManager/codeTransferSessionEnded``).
+    /// `credential.utk.get`). ``FailureKind/rejected`` when the owner rejected it; ``FailureKind/noResponse`` at the deadline,
+    /// 11 minutes after the `hs.init` (§11.14.10 rule 5). True once completed, always with the member's `user_guid` (§6.7.1):
+    /// a transfer answer without a valid one stops the move (``VaultManager/codeTransferSessionEnded``), and a paired one
+    /// whose record lost it is the unlock's `no_user_guid` (``UnlockAttempt/isNoUserGuid(_:_:)``).
     func awaitTransferIn() async throws -> Bool
 
     /// Drops a transfer this phone started and has not completed.

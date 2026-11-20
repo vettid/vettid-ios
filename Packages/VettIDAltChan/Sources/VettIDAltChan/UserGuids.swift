@@ -1,4 +1,5 @@
 import Foundation
+import VettIDCrypto
 
 /// The member's `user_guid` (VAULT-MESSAGING §6.7.1, §11.4, §11.11.7, §11.12.1): 1–128 printable ASCII characters
 /// (0x21–0x7E), so that it fits the signing strings of the unlock, the enrollment and the recovery. The one check for every
@@ -11,9 +12,6 @@ public enum UserGuids {
 
     public static func valid(_ g: String) -> Bool { printable(g, maxLength: maxLength) }
 
-    /// 1–[maxLength] printable ASCII characters (0x21–0x7E): the rule of a `user_guid` and of a recovery QR's vault id.
-    static func printable(_ s: String, maxLength: Int) -> Bool {
-        let b = Array(s.utf8)
-        return (1...maxLength).contains(b.count) && b.allSatisfy { (0x21...0x7E).contains($0) }
-    }
+    /// The signing strings' one rule (``AltChannel/printable(_:maxLength:)``).
+    static func printable(_ s: String, maxLength: Int) -> Bool { AltChannel.printable(s, maxLength: maxLength) }
 }

@@ -59,6 +59,15 @@ extension VaultManagerTransferInTests {
         #expect(!deviceHoldsVault && m.record.value.transferStartedMs == nil)
     }
 
+    /// A transfer started after a setup code was redeemed: the setup code's `user_guid` is not the transfer's, and goes.
+    @Test func aTransferDropsAnEarlierSetupCodesUserGuid() async throws {
+        defer { phone.close() }
+        _ = try await m.redeemSetupCode(.secret(service.secret))
+        #expect(!m.record.value.userGuid.isEmpty)
+        _ = try await m.transferIn(code: try code())
+        #expect(m.record.value.userGuid.isEmpty && !m.userGuidUsable)
+    }
+
     /// A stored `user_guid` that fails the check (a damaged record) is no `user_guid`: Finish the move and the release update
     /// refuse before their lock (`no_user_guid`), and nothing is locked or sent.
     @Test func aStoredMalformedUserGuidIsRefusedBeforeAnyLock() async throws {
@@ -88,19 +97,23 @@ extension VaultManagerTransferInTests {
         defer { phone.close() }
         _ = try await scanned()
         let d = try #require(m.session?.device)
-        service.refuse("credential.get", with: "forbidden", times: 1)
         service.approveTransferIn()
         #expect(await eventually { d.deviceID != nil })
-        // The record damaged: the paired device's kept user_guid gone (nothing else runs on it now).
+        // The record damaged: the paired device's kept user_guid gone (nothing else runs on it now); the record holds a
+        // valid one that is not the transfer's (as an earlier setup code's would be).
         d.mem.withLock { d.st.transferUserGuid = nil }
         try d.save()
+        try m.record.update(since: m.record.generation) { $0.userGuid = "guid-of-a-setup-code" }
         try await phone.restart()
+        let sent = service.requestsSeen.count
         try await m.refresh()
         // Locked: the unlock screen's stuck notice (no PIN), whatever the vault's status (here "unlocked").
         #expect(m.phase == .locked, "\(m.phase)")
-        #expect(!m.userGuidUsable && !m.record.value.movedIn)
+        #expect(!m.userGuidUsable && !m.record.value.movedIn, "the record's user_guid is not the transfer's")
         try await m.refresh()
         #expect(m.phase == .locked, "the same at every start")
+        let later = Array(service.requestsSeen.dropFirst(sent))
+        #expect(!later.contains("vault.unlock") && !later.contains("vault.lock") && !later.contains("credential.get"), "\(later)")
     }
 }
 

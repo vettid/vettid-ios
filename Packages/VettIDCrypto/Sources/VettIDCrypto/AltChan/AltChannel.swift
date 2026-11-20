@@ -34,7 +34,14 @@ public enum AltChannel {
     }
 
     static func validVaultID(_ s: String, allowEmpty: Bool) -> Bool {
-        s.isEmpty ? allowEmpty : s.utf8.count <= 128 && s.utf8.allSatisfy { (0x21...0x7E).contains($0) }
+        s.isEmpty ? allowEmpty : printable(s, maxLength: 128)
+    }
+
+    /// 1–[maxLength] printable ASCII characters (0x21–0x7E): the one rule of a `user_guid` and a vault id in the signing
+    /// strings (§11.4, §6.7.1).
+    public static func printable(_ s: String, maxLength: Int) -> Bool {
+        let b = Array(s.utf8)
+        return (1...maxLength).contains(b.count) && b.allSatisfy { (0x21...0x7E).contains($0) }
     }
 
     /// Inputs of the unlock signing string (§11.4).

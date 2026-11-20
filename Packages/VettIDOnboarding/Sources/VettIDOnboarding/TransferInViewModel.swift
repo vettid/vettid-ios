@@ -214,7 +214,8 @@ public final class TransferInViewModel: TransferInActions {
         ticker?.cancel()
         state.relayBusy = false
         state.sas = nil
-        if e.code == VaultManager.codeTransferSessionEnded {
+        // (§6.7.1, decision of 2026-11-18) A transfer that cannot complete for want of a `user_guid` stopped on this phone.
+        if e.code == VaultManager.codeTransferSessionEnded || UnlockAttempt.isNoUserGuid(e.kind, e.code) {
             state.step = .stopped
             return
         }

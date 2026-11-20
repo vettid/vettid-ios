@@ -139,6 +139,17 @@ import VettIDDataTesting
         #expect(vm.state.step == .done && vm.state.phoneSecret)
     }
 
+    /// (§6.7.1) A paired transfer that cannot complete for want of a `user_guid` (the unlock's `no_user_guid`) stopped on this
+    /// phone.
+    @Test func aTransferWithoutAUserGuidStopped() async throws {
+        vault.fail["awaitTransferIn"] = FakeVaultRepository.failure(.notSupported, code: UnlockAttempt.codeNoUserGuid)
+        let vm = model()
+        vm.scan()
+        vm.scanned(try qr())
+        await clock.runCurrent()
+        #expect(await eventually { vm.state.step == .stopped }, "\(vm.state.step)")
+    }
+
     @Test func rejectedOnTheOldPhone() async throws {
         let vm = model()
         vm.scan()
