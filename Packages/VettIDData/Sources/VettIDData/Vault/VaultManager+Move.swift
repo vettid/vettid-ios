@@ -66,9 +66,6 @@ extension VaultManager: MoveRepository {
                 $0.transferIn = true
                 $0.transferStartedMs = started
                 $0.transferCode = codeID
-                // (§6.7.1) A setup code redeemed before is not this transfer's: its `user_guid` goes; the transfer's own
-                // comes with its `device.paired`.
-                $0.userGuid = ""
             }
             let path = TransferPath()
             let fresh = FreshTransferSecret(secrets: phoneSecrets, policy: config.trust.timeScales, path: path)

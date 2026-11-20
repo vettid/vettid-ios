@@ -59,13 +59,29 @@ extension VaultManagerTransferInTests {
         #expect(!deviceHoldsVault && m.record.value.transferStartedMs == nil)
     }
 
-    /// A transfer started after a setup code was redeemed: the setup code's `user_guid` is not the transfer's, and goes.
-    @Test func aTransferDropsAnEarlierSetupCodesUserGuid() async throws {
+    /// A transfer scanned after a setup code was redeemed, then abandoned: the redeemed code is kept (no new code needed),
+    /// and while the transfer was under way its `user_guid` was not usable. A completed transfer writes its own.
+    @Test func anAbandonedTransferKeepsARedeemedCode() async throws {
         defer { phone.close() }
         _ = try await m.redeemSetupCode(.secret(service.secret))
-        #expect(!m.record.value.userGuid.isEmpty)
+        let guid = m.record.value.userGuid
+        #expect(!guid.isEmpty)
         _ = try await m.transferIn(code: try code())
-        #expect(m.record.value.userGuid.isEmpty && !m.userGuidUsable)
+        #expect(!m.userGuidUsable, "not the transfer's while it is under way")
+        try await m.abandonTransferIn()
+        #expect(m.record.value.userGuid == guid && m.record.value.transferStartedMs == nil)
+        try await m.refresh()
+        #expect(m.phase == .setup(.newVault), "\(m.phase)")
+    }
+
+    /// A moved phone whose take-over could not clear its start: the setup's completion clears it, and the phone stays usable
+    /// (never the stuck notice on a working phone).
+    @Test func aMovedPhoneWhoseStartStayedIsUsable() async throws {
+        defer { phone.close() }
+        try await transferred()
+        try m.record.update(since: m.record.generation) { $0.transferStartedMs = 1 } // as if the take-over's clear failed
+        try await m.finishSetup()
+        #expect(m.record.value.transferStartedMs == nil && m.userGuidUsable)
     }
 
     /// A stored `user_guid` that fails the check (a damaged record) is no `user_guid`: Finish the move and the release update
@@ -114,6 +130,7 @@ extension VaultManagerTransferInTests {
         #expect(m.phase == .locked, "the same at every start")
         let later = Array(service.requestsSeen.dropFirst(sent))
         #expect(!later.contains("vault.unlock") && !later.contains("vault.lock") && !later.contains("credential.get"), "\(later)")
+        #expect(!later.contains("vault.status"), "the guard comes before any status read: \(later)")
     }
 }
 

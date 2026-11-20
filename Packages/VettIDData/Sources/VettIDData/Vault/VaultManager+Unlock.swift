@@ -62,10 +62,11 @@ extension VaultManager {
     /// This phone can open the vault: it holds the vault's `user_guid` (§6.7.1; §11.4 needs it). The unlock refuses without
     /// it (`no_user_guid`), and so do the flows that lock first (Finish the move, the release update), before their lock:
     /// they would lock a vault this phone cannot open again.
-    /// Never while a transfer to this phone is not completed (its start stored, not moved in): no `user_guid` of the record
-    /// is the transfer's then.
+    /// Never while a transfer to this phone is not completed (its start stored, neither moved in nor set up): no `user_guid`
+    /// of the record is the transfer's then.
     public var userGuidUsable: Bool {
-        UserGuids.valid(record.value.userGuid) && (record.value.transferStartedMs == nil || record.value.movedIn)
+        let r = record.value
+        return UserGuids.valid(r.userGuid) && (r.transferStartedMs == nil || r.movedIn || r.setupComplete)
     }
 
     /// ``userGuidUsable``'s refusal, as the unlock answers it.
@@ -176,7 +177,7 @@ extension VaultManager {
             let f = VaultFailures.map(error) as? VaultFailure
             return UnlockStepOutcome(.failed(f?.kind ?? .other, code: f?.code))
         }
-        // §6.7.1 (0.17.0): a phone a transfer set up from an older vault release has no user_guid (§11.4 needs it).
+        // §6.7.1: no usable user_guid (§11.4 needs it): a damaged record, or a transfer not completed.
         guard userGuidUsable else { return UnlockStepOutcome(.failed(.notSupported, code: UnlockAttempt.codeNoUserGuid)) }
         // §11.14.9 step 5: while a PIN change is unresolved, the previous PIN with the current record, then the new one.
         refreshPinStep()
