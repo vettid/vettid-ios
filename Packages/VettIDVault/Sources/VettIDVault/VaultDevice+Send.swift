@@ -440,6 +440,7 @@ extension VaultDevice {
                 if let i = inbox.firstIndex(where: { types.contains($0.type) && match($0) }) { return (inbox.remove(at: i), nil) }
                 // A pairing that waits for device.paired cannot finish: its fin did not reach the vault.
                 if types.contains("device.paired"), finFailed { throw PairingNotCompleted() }
+                if types.contains("device.paired"), st.transferNoUserGuid == true { throw TransferWithoutUserGuid() }
                 let w = OneShot<Bool>()
                 inboxWaiters.append(w)
                 return (nil, w)

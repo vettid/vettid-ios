@@ -186,8 +186,16 @@ public final class MemberApiClient: Sendable {
     private func redeemed(_ o: JsonObject?) throws -> Redeemed {
         let r = try required(o)
         return Redeemed(
-            vaultID: try r.string("vault_id"), userGuid: try r.string("user_guid"), emailHint: try r.optString("email_hint") ?? ""
+            vaultID: try r.string("vault_id"), userGuid: try Self.userGuid(r), emailHint: try r.optString("email_hint") ?? ""
         )
+    }
+
+    /// (§6.7.1) An answer's `user_guid`: one that fails ``UserGuids/valid(_:)`` makes the answer malformed, as a missing one
+    /// does, so nothing of it is stored or used.
+    static func userGuid(_ o: JsonObject) throws -> String {
+        let g = try o.string("user_guid")
+        guard UserGuids.valid(g) else { throw CryptoError.format("user_guid") }
+        return g
     }
 
     // MARK: - Vault (alternate channel)
@@ -369,7 +377,7 @@ public final class MemberApiClient: Sendable {
         let body = JsonBuilder().string("vault_id", vaultID).string("recovery_id", recoveryID).base64("app_key", appKey).build()
         let o = try required(try await call("POST", Self.claimPath, body: body, vault: vaultID))
         return Claimed(
-            userGuid: try o.string("user_guid"), emailHint: try o.optString("email_hint") ?? "",
+            userGuid: try Self.userGuid(o), emailHint: try o.optString("email_hint") ?? "",
             vaultID: try o.optString("vault_id"), recoveryID: try o.optString("recovery_id")
         )
     }
@@ -381,7 +389,7 @@ public final class MemberApiClient: Sendable {
         let body = JsonBuilder().string("locator", locator).base64("app_key", appKey).build()
         let o = try required(try await call("POST", Self.claimPath, body: body, vault: ""))
         return Claimed(
-            userGuid: try o.string("user_guid"), emailHint: try o.optString("email_hint") ?? "",
+            userGuid: try Self.userGuid(o), emailHint: try o.optString("email_hint") ?? "",
             vaultID: try o.string("vault_id"), recoveryID: try o.string("recovery_id")
         )
     }

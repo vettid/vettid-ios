@@ -87,6 +87,31 @@ final class Box<T: Sendable>: @unchecked Sendable {
         #expect(try verify(server.requests[3]).vault == Self.vid)
     }
 
+    /// (VAULT-MESSAGING §6.7.1, §11.11.7, §11.12.1) The one `user_guid` check: 1–128 printable ASCII (0x21–0x7E).
+    @Test(arguments: [
+        ("guid-1", true), ("a", true), (String(repeating: "a", count: 128), true), ("!~", true),
+        ("", false), (String(repeating: "a", count: 129), false), ("a b", false), ("usér", false), ("a\u{1}", false), ("a\u{7F}", false),
+    ])
+    func theUserGuidCheck(_ g: String, _ valid: Bool) {
+        #expect(UserGuids.valid(g) == valid)
+    }
+
+    /// An answer whose `user_guid` fails the check is malformed, as one without it: the redeem and both recovery claims throw
+    /// ``CryptoError``, so nothing of it is stored or used.
+    @Test(arguments: [#""user_guid":"","#, #""user_guid":"a b","#, #""user_guid":"\#(String(repeating: "a", count: 129))","#, ""])
+    func anAnswerWithAMalformedUserGuidIsRefused(_ field: String) async throws {
+        let a = api(appAuth(Box("previous-vault")))
+        let rest = #""email_hint":"s***@example.org","vault_id":"\#(Self.vid)","recovery_id":"01JA0RECVERY0000000000001X"}"#
+        server.enqueue(.json(200, "{" + field + rest))
+        await #expect(throws: CryptoError.self) { _ = try await a.redeemSecret("AbCdEfGhIjKlMnOpQrStUv", appKey: try appKey.spki()) }
+        server.enqueue(.json(200, "{" + field + rest))
+        await #expect(throws: CryptoError.self) {
+            _ = try await a.recoveryClaim(vaultID: "qr-vault", recoveryID: "01JA0RECVERY0000000000001X", appKey: try appKey.spki())
+        }
+        server.enqueue(.json(200, "{" + field + rest))
+        await #expect(throws: CryptoError.self) { _ = try await a.recoveryClaim(locator: "7ZK3M9QX2HTD", appKey: try appKey.spki()) }
+    }
+
     /// MEMBER-API 2.4.0: the claim by locator sends exactly `{locator, app_key}` with an empty `vault`.
     @Test func theClaimByLocator() async throws {
         let a = api(appAuth(Box("previous-vault")))

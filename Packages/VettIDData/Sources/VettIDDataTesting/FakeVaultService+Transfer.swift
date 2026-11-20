@@ -18,6 +18,9 @@ struct FakeTransferStore {
     var holdApproval = false
     var ignoresInit = false
     var withoutUserGuid = false
+    /// The `user_guid` sent instead of the member's (a malformed one), and whether `transfer: true` is left out.
+    var sentUserGuid: String?
+    var unflagged = false
     var unlockSecret: [UInt8]?
     var inits: [FakeVaultService.TransferInitSeen] = []
     var paired = false
@@ -161,10 +164,22 @@ extension FakeVaultService {
         set { locked { transfer.ignoresInit = newValue } }
     }
 
-    /// A vault release before 0.17.0: `device.paired` carries no `user_guid`.
+    /// A malformed transfer answer (§6.7.1): `device.paired` carries no `user_guid`.
     public var transferWithoutUserGuid: Bool {
         get { locked { transfer.withoutUserGuid } }
         set { locked { transfer.withoutUserGuid = newValue } }
+    }
+
+    /// A malformed transfer answer (§6.7.1): `device.paired` carries this `user_guid` instead of the member's.
+    public var transferSendsUserGuid: String? {
+        get { locked { transfer.sentUserGuid } }
+        set { locked { transfer.sentUserGuid = newValue } }
+    }
+
+    /// A malformed transfer answer (§6.7.1): `device.paired` has no `transfer: true`.
+    public var transferUnflagged: Bool {
+        get { locked { transfer.unflagged } }
+        set { locked { transfer.unflagged = newValue } }
     }
 
     /// The old phone approved: the vault completes the transfer and sends the new phone `device.paired{transfer}`.
@@ -210,8 +225,10 @@ extension FakeVaultService {
         guard transfer.inviteID != nil, !transfer.paired else { return }
         transfer.paired = true
         vaultSecret = transfer.unlockSecret
-        let guid = transfer.withoutUserGuid ? "" : #","user_guid":"\#(userGuid)""#
-        try reply("device.paired", #"{"device_id":"dev-2","role":"app","vault_id":"\#(vaultID)","release":"\#(Self.pcr0)","release_number":3,"transfer":true\#(guid),"credential_version":\#(credentialVersion)}"#)
+        let sent = String(bytes: try JSONEncoder().encode(transfer.sentUserGuid ?? userGuid), encoding: .utf8) ?? ""
+        let guid = transfer.withoutUserGuid ? "" : #","user_guid":\#(sent)"#
+        let flag = transfer.unflagged ? "" : #","transfer":true"#
+        try reply("device.paired", #"{"device_id":"dev-2","role":"app","vault_id":"\#(vaultID)","release":"\#(Self.pcr0)","release_number":3\#(flag)\#(guid),"credential_version":\#(credentialVersion)}"#)
     }
 
     // MARK: - The old phone's side

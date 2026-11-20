@@ -143,16 +143,12 @@ extension VaultManager: MoveRepository {
         }
     }
 
-    /// Waits for the old phone's approval, then takes the credential over (`credential.get`, `credential.ack`,
-    /// `credential.utk.get`, §6.7.1 step 5). ``FailureKind/rejected`` when the owner rejected it; ``FailureKind/noResponse``
-    /// at the deadline, **11 minutes after the `hs.init` was started** (§11.14.10 rule 5, owner decision 2026-10-23: one
-    /// deadline, stored with the transfer, which no user action extends). At the deadline, and not before, the mailbox is
-    /// collected for the settlement window (``collectBeforeDrop(_:)``, VAULT-MESSAGING 0.85.2): a `device.paired{transfer}`
-    /// the collects bring is applied and the move completes instead; a rejection is ``FailureKind/rejected``; a session that
-    /// ended is ``codeTransferSessionEnded``; otherwise the transfer is dropped. A fin the relay refused for good at its first
-    /// deposit (``PairingNotCompleted``) before the deadline drops the transfer too; after it the window runs all the same.
-    /// Any other failure before the deadline is rethrown and the transfer kept. True when the vault gave this phone the
-    /// member's `user_guid` (§6.7.1, 0.17.0), which its unlocks need.
+    /// Waits for the old phone's approval, then takes the credential over (§6.7.1 step 5). ``FailureKind/rejected`` when
+    /// rejected; ``FailureKind/noResponse`` at the deadline, 11 minutes after the `hs.init` (§11.14.10 rule 5), when the
+    /// settlement window's collects (``collectBeforeDrop(_:)``, 0.85.2) bring no `device.paired` or rejection; a session
+    /// that ended, or a `device.paired` without a valid `user_guid` (§6.7.1), is ``codeTransferSessionEnded``. A fin refused
+    /// for good (``PairingNotCompleted``) before the deadline drops the transfer too. Any other failure before the deadline
+    /// is rethrown and the transfer kept. True once completed, always with the member's `user_guid`.
     public func awaitTransferIn() async throws -> Bool {
         do {
             return try await awaitTransferInOnce()
@@ -200,6 +196,10 @@ extension VaultManager: MoveRepository {
                 // The fin was refused for good at its first deposit: the pairing cannot finish; the same.
                 await dropTransfer(s.device)
                 throw notCompleted
+            } catch is TransferWithoutUserGuid {
+                // (§6.7.1) A malformed `device.paired`, dropped unapplied: the move stopped on this phone.
+                await dropTransfer(s.device)
+                throw VaultFailure(.other, code: Self.codeTransferSessionEnded)
             }
             switch settled {
             case .completed(let guid): return guid != nil
@@ -237,7 +237,7 @@ extension VaultManager: MoveRepository {
                     return try await group.next() ?? .deadline
                 }
             } catch {
-                if error is CancellationError || error is PairingRejected { throw error }
+                if error is CancellationError || error is PairingRejected || error is TransferWithoutUserGuid { throw error }
                 // Before the deadline a failure is thrown (a refused fin, ``PairingNotCompleted``, drops the transfer); at or
                 // after it the wait is over and the collect of rule 5 runs, whatever the failure was.
                 if config.now() < deadline { throw error }
@@ -296,7 +296,14 @@ extension VaultManager: MoveRepository {
             return .failed(VaultFailure(.other, code: Self.codeTransferSessionEnded))
         }
         let d = s.device
-        guid = guid ?? d.transferUserGuid
+        // (§6.7.1) Never completed without a valid `user_guid`: this phone could never unlock the vault.
+        // The record's own is the take-over's (written with `movedIn`), after a completion whose start could not be cleared;
+        // never an earlier setup code's. Unreachable today without a valid one: the device refuses every `device.paired`
+        // without it before applying it, so a paired device always holds one (defence in depth).
+        let stored: String? = record.value.movedIn ? record.value.userGuid : nil
+        guard let guid = [guid, d.transferUserGuid, stored].compactMap({ $0 }).first(where: UserGuids.valid) else {
+            return .failed(VaultFailure(.other, code: Self.codeTransferSessionEnded))
+        }
         do {
             try await completeTransferIn(s, guid: guid)
             return .completed(guid: guid)
@@ -305,37 +312,18 @@ extension VaultManager: MoveRepository {
         }
     }
 
-    /// How a window that ended without a pairing settles the transfer on [d].
-    private func windowEndedUnpaired(_ end: WindowEnd, _ d: VaultDevice) async -> TransferSettled {
-        if case .rejected = end {
-            // A rejection in the window ends as a rejection, not as a drop at the deadline.
-            await dropTransfer(d)
-            return .failed(PairingRejected())
-        }
-        // The process is ending (``halt()`` cut the window): nothing is decided; the next process runs its own window.
-        if halted { return .failed(CancellationError()) }
-        if case .ended(let drop) = end {
-            // The session ended: reported as ended, never as dropped. On `mailbox_unknown` its handshake is dead and goes;
-            // after a wipe or a sign-out nothing is written (they have it).
-            if drop { await dropTransfer(d) }
-            return .failed(VaultFailure(.other, code: Self.codeTransferSessionEnded))
-        }
-        await dropTransfer(d)
-        return .dropped
-    }
-
     /// The `device.paired{transfer}` has arrived: this phone's key is the one the vault bound, the record keeps the member's
     /// `user_guid` and the move to finish (§11.14.10: "Finish the move" is asked until an unlock from storage with this
     /// phone's secret), and the credential is taken over (§6.7.1 step 5). The transfer's clock is removed only when the
     /// take-over is done, so that a start after the app was killed meanwhile does it again (a paired transfer completes at any
     /// later start, whatever its age).
-    private func completeTransferIn(_ s: VaultSession, guid: String?) async throws {
+    private func completeTransferIn(_ s: VaultSession, guid: String) async throws {
         let d = s.device
         let rec = record.generation
         // This phone's attested App Attest key is the one the vault bound now (IOS-PLAN §6.2).
         if let k = d.altState.enrolledAttestKeyID { try? config.attester.confirm(keyID: k) }
         try record.update(since: rec) {
-            if let guid { $0.userGuid = guid }
+            $0.userGuid = guid
             if let vid = d.vaultID { $0.vaultID = vid }
             $0.finishMovePending = true
             $0.movedIn = true
@@ -384,6 +372,12 @@ extension VaultManager: MoveRepository {
             // A start that no transfer pinned (the app killed before the handshake was saved, or a drop whose record could
             // not be saved after the device's): nothing waits; the start goes, so that a new code is not refused for it.
             await clearTransferStart(d)
+            return nil
+        }
+        if d.deviceID == nil, d.droppedWithoutUserGuid {
+            // (§6.7.1) The device dropped a malformed `device.paired` before the process ended, and nobody was told: the
+            // background's wait says so ("The move stopped on this phone") and drops the transfer.
+            waitForTransferInBackground()
             return nil
         }
         if d.deviceID == nil, !d.holdsTransferSas, !d.awaitsPairingResp {
@@ -457,7 +451,7 @@ extension VaultManager: MoveRepository {
     /// is reused for that: every scan drops the pending records first (``FreshTransferSecret``).
     /// True when the transfer was dropped and the device's state saved.
     @discardableResult
-    private func dropTransfer(_ d: VaultDevice) async -> Bool {
+    func dropTransfer(_ d: VaultDevice) async -> Bool {
         let key = d.altState.transferAttestKeyID
         guard (try? await d.abandonTransfer()) == true else { return false }
         discardTransferStart(attestKey: key)
