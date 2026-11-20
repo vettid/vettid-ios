@@ -525,6 +525,10 @@ struct UnlockMessageNotice: View {
             if let c = Self.failedCard(state) {
                 NoticeCard(c.kind, title: c.title, message: c.message, announce: .assertive).accessibilityIdentifier(c.identifier)
             }
+        case .badPin where !state.showsPin:
+            // A wrong PIN with no PIN block to say it (cancelling a recovery and unlocking): its card, above the way forward.
+            NoticeCard(.urgent, title: OnboardingStrings.unlockTitle, message: OnboardingStrings.unlockBadPin, announce: .assertive)
+                .accessibilityIdentifier("unlock_bad_pin")
         default:
             EmptyView()
         }

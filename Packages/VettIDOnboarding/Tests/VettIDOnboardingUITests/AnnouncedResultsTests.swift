@@ -76,6 +76,25 @@ import VettIDOnboarding
         #expect(await spoken(UnlockScreen(state: s, actions: NoUnlockActions()), text, .assertive))
     }
 
+    /// A recovery pending (no PIN block): a failure is shown and spoken above the way forward, also on a phone with a
+    /// user_guid.
+    @Test func aFailureWhileARecoveryIsPendingIsSpoken() async {
+        var s = unlock
+        s.recoveryPending = true
+        s.message = .failed(.network, code: nil)
+        let text = "\(OnboardingStrings.unlockTitle). \(FailureKind.network.message(timeScale: 1))"
+        #expect(await spoken(UnlockScreen(state: s, actions: NoUnlockActions()), text, .assertive))
+    }
+
+    /// A wrong PIN when cancelling a recovery and unlocking (no PIN block): said and spoken.
+    @Test func aWrongPinWhileARecoveryIsPendingIsSpoken() async {
+        var s = unlock
+        s.recoveryPending = true
+        s.message = .badPin
+        let text = "\(OnboardingStrings.unlockTitle). \(OnboardingStrings.unlockBadPin)"
+        #expect(await spoken(UnlockScreen(state: s, actions: NoUnlockActions()), text, .assertive))
+    }
+
     @Test func theOwnerCheckResultsAreSpokenAtOnce() async {
         var wrong = check
         wrong.pinKept = true
