@@ -41,6 +41,17 @@ extension VaultManagerFailureTests {
         #expect(confirmsSent == sent && !service.confirmed)
     }
 
+    /// Not on the final onboarding screen: the vault open, its session too, and only the gate keeps the confirmation back.
+    @Test func finishingOffTheFinishingStepSendsNoConfirmation() async throws {
+        defer { phone.close() }
+        try await finishingUnconfirmed()
+        let sent = confirmsSent
+        m.phase = .setup(.needsCredential)
+        _ = await vaultFailure { try await m.finishSetup() }
+        #expect(confirmsSent == sent && !service.confirmed)
+        #expect(m.phase == .setup(.needsCredential), "the gate leaves the phase as it is")
+    }
+
     /// Only the phone whose enrollment made the vault confirms it: another is refused, as before.
     @Test func finishingOnAnotherPhoneSendsNoConfirmation() async throws {
         defer { phone.close() }
