@@ -196,7 +196,7 @@ public struct UnlockScreen: View {
         .padding(.top, Spacing.s)
         UnlockWaitLine(state: state)
         // While a recovery is pending its notice has the password field (the cancel's), not this one.
-        if state.checkDue && !state.recoveryPending {
+        if Self.pinBlockAsksPassword(state) {
             SecretField(
                 OnboardingStrings.unlockPasswordLabel,
                 text: Binding(get: { state.password }, set: { actions.setPassword($0) }),
@@ -206,6 +206,10 @@ public struct UnlockScreen: View {
             .accessibilityIdentifier("unlock_password")
         }
     }
+
+    /// The PIN block's password field: when the owner check is due, except while a recovery is pending, whose notice has the
+    /// cancel's own (``UnlockState/cancelPasswordNeeded``), never two.
+    static func pinBlockAsksPassword(_ state: UnlockState) -> Bool { state.checkDue && !state.recoveryPending }
 
     /// "Cancel the recovery and unlock": when the cancel needs a PIN typed (``UnlockState/cancelPinNeeded``), the keypad's
     /// goes with it; otherwise the PIN kept from the `recovery_pending` answer does, and the keypad's is not taken.
@@ -437,7 +441,7 @@ struct RecoveryPendingNotice: View {
     @Environment(\.vettIDColors) private var colors
 
     /// Only when the button would be enabled: the return key of the password field too.
-    private func cancelNow() {
+    func cancelNow() {
         guard state.cancelAllowed(pinTyped: pinTyped) else { return }
         if let cancel { cancel() } else { actions.cancelRecoveryAndUnlock() }
     }

@@ -194,6 +194,7 @@ public final class UnlockViewModel: UnlockActions {
     // MARK: - The PIN and the password
 
     public func setPin(_ v: String) {
+        if state.cancelPinNeeded, !v.isEmpty { state.cancelPinTyped = true }
         state.pin = String(v.filter { $0.isASCII && $0.isNumber }.prefix(UnlockState.maxPin))
         state.message = nil
     }
@@ -406,6 +407,7 @@ public final class UnlockViewModel: UnlockActions {
             state.pin = ""
             state.recoveryPending = false
             state.cancelPinWrong = false
+            state.cancelPinTyped = false
         // §11.14.9 step 5: the vault holds the PIN change's candidate; the new PIN is asked for (nothing was counted).
         case .newPinNeeded:
             state.pin = ""

@@ -427,6 +427,27 @@ import VettIDUI
         }
     }
 
+    /// The notice's password field's return key sends only what the button would: not with a partial PIN typed.
+    @Test func theNoticesReturnKeyCancelsOnlyWhenTheButtonWould() {
+        var s = ok
+        s.recoveryPending = true
+        s.cancelPinWrong = true
+        for (typed, sent) in [(3, false), (8, true)] {
+            var called = false
+            RecoveryPendingNotice(state: s, actions: NoUnlockActions(), pinTyped: typed) { called = true }.cancelNow()
+            #expect(called == sent, "\(typed) digits")
+        }
+    }
+
+    /// One password field at most: the PIN block's only when no recovery is pending.
+    @Test func thePinBlockAsksThePasswordOnlyWithoutARecovery() {
+        var s = ok
+        s.checkDue = true
+        #expect(UnlockScreen.pinBlockAsksPassword(s))
+        s.recoveryPending = true
+        #expect(!UnlockScreen.pinBlockAsksPassword(s))
+    }
+
     /// The recovery notice has the password field whenever the cancel needs one: a phone secret, or a due owner check.
     @Test func theRecoveryNoticeAsksThePasswordWhenTheCancelNeedsIt() {
         var s = ok

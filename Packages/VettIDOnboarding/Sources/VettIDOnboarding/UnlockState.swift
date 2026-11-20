@@ -64,6 +64,8 @@ public struct UnlockState: Equatable, Sendable, CustomStringConvertible, CustomD
     /// The PIN sent with "Cancel the recovery and unlock" was wrong (the vault applies the cancel only after a correct PIN,
     /// so the recovery is still pending): the keypad asks for another, with its backoff, and the cancel sends it.
     public var cancelPinWrong = false
+    /// A PIN typed on the keypad was handed to the cancel (its kept one was gone): the keypad stays up while it is sent.
+    public var cancelPinTyped = false
     /// (STAGING-TIME-SCALE §5.2) The vault's time scale: the screen's waits are shown divided by it.
     public var timeScale: UInt64 = 1
     public var stateRollback = false
@@ -116,7 +118,7 @@ public struct UnlockState: Equatable, Sendable, CustomStringConvertible, CustomD
 
     /// The cancel needs a PIN typed on the keypad: its last PIN was wrong (``cancelPinWrong``), or the PIN kept from the
     /// `recovery_pending` answer is gone (a trip to the background, "Cancel" on a slow answer, a failure that cleared it).
-    public var cancelPinNeeded: Bool { recoveryPending && (cancelPinWrong || pin.isEmpty) }
+    public var cancelPinNeeded: Bool { recoveryPending && (cancelPinWrong || cancelPinTyped || pin.isEmpty) }
 
     /// The cancel needs the password: a phone secret's owner check goes with it, and a vault past its owner-check deadline
     /// asks for it with any PIN (``submitAllowed``).
@@ -174,9 +176,9 @@ public struct UnlockState: Equatable, Sendable, CustomStringConvertible, CustomD
     public var submitAllowed: Bool { pinAllowed && pin.count >= Self.minPinLength && (!checkDue || !password.isEmpty) }
 
     /// The PIN field is shown: the vault's software verified, nothing blocking, no recovery pending (unless its cancel
-    /// needs a PIN typed: ``cancelPinNeeded``).
+    /// needs a PIN typed: ``cancelPinNeeded``, and no erase is running).
     public var showsPin: Bool {
-        returnAsksPin || (!noUserGuid && !recoverOnly && (!recoveryPending || cancelPinNeeded) && preflight != nil
+        returnAsksPin || (!noUserGuid && !recoverOnly && (!recoveryPending || cancelPinNeeded && !erasing) && preflight != nil
             && preflightError == nil)
     }
 

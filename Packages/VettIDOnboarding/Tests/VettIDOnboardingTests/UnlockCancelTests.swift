@@ -117,6 +117,45 @@ extension UnlockViewModelTests {
         }
     }
 
+    /// The PIN typed for the cancel keeps the keypad up while it is sent (no jump, no lost focus).
+    @Test func aTypedCancelPinKeepsTheKeypadUp() async {
+        vault.unlockResults = [.recoveryPending]
+        let vm = await vm()
+        await submit(vm)
+        vm.forgetSecrets()
+        vm.setPin("40281795")
+        #expect(vm.state.cancelPinNeeded && vm.state.showsPin && vm.state.cancelAllowed)
+        vm.cancelRecoveryAndUnlock()
+        await vm.settle()
+        #expect(vault.phase == .unlocked && !vm.state.cancelPinTyped && !vm.state.cancelPinNeeded)
+    }
+
+    /// "Cancel" on a slow cancel drops the kept PIN: the keypad asks for one.
+    @Test func cancellingASlowCancelAsksForAPin() async {
+        vault.unlockResults = [.recoveryPending]
+        let vm = UnlockViewModel(vault: vault, account: vault, tick: ticker.tick, slowAfter: {})
+        await vm.settle()
+        await submit(vm)
+        vault.unlockWait = { try await Task.sleep(for: .seconds(60)) }
+        vm.cancelRecoveryAndUnlock()
+        for _ in 0..<200 where !vm.state.slowUnlock { await Task.yield() }
+        vm.cancelUnlock()
+        await vm.settle()
+        #expect(vm.state.cancelPinNeeded && vm.state.showsPin && !vm.state.cancelAllowed(pinTyped: 0))
+    }
+
+    /// During an erase the cancel is never allowed and the keypad is not shown.
+    @Test func anEraseHoldsTheCancelAndItsKeypad() async {
+        vault.unlockResults = [.recoveryPending]
+        let vm = await vm()
+        await submit(vm)
+        var s = vm.state
+        s.erasing = true
+        #expect(!s.cancelAllowed(pinTyped: 8))
+        s.pin = ""
+        #expect(!s.showsPin && !s.cancelAllowed(pinTyped: 8))
+    }
+
     /// A vault past its owner-check deadline, with no phone secret: the cancel waits for the password, as the unlock does,
     /// so the button is never enabled for a cancel the view model would refuse.
     @Test func aDueCheckHoldsTheCancelUntilThePassword() async {
