@@ -397,13 +397,13 @@ extension VaultManagerWaitingAsksTests {
         service.stampsOnVaultClock = true
         _ = try await connected()
         try await phone.restart()
-        // The read is under way when an older lock (a backlog's: stamped 5 s before it began) is collected.
+        // The read is under way when an older lock (a backlog's: stamped two hours before it began) is collected.
         service.holdStatusReads()
         let reading = Task { try await m.refresh() }
         #expect(await eventually { service.heldStatusReads == 1 })
-        service.advanceVaultClock(-5)
+        service.advanceVaultClock(-7200)
         service.sendEvent("vault.locking", #"{"reason":"test"}"#)
-        service.advanceVaultClock(5)
+        service.advanceVaultClock(7200)
         #expect(await eventually { m.latestLockAt != nil })
         service.releaseStatusReads()
         try await reading.value
@@ -424,5 +424,56 @@ extension VaultManagerWaitingAsksTests {
             _ = await eventually { m.latestLockAt != before }
         }
         #expect(m.phase == .locked, "\(m.phase)")
+    }
+
+    /// A cold start with the phone's clock ahead of the vault's (by seconds, and by more than the envelope's 5 minutes): a
+    /// lock during the read still counts, and the read's Unlocked gives Locked.
+    @Test(arguments: [3.0, 600.0])
+    func aLockDuringAColdStartsReadCountsWithThePhoneAhead(_ ahead: TimeInterval) async throws {
+        defer { phone.close() }
+        service.stampsOnVaultClock = true
+        _ = try await connected()
+        try await phone.restart()
+        phone.clockAhead = ahead
+        service.holdStatusReads()
+        let reading = Task { try await m.refresh() }
+        #expect(await eventually { service.heldStatusReads == 1 })
+        service.sendEvent("vault.locking", #"{"reason":"test"}"#)
+        #expect(await eventually { m.latestLockAt != nil })
+        service.releaseStatusReads()
+        try await reading.value
+        #expect(m.phase == .locked, "\(ahead): \(m.phase)")
+    }
+
+    /// A probe's lock counts whatever the clocks: during a read with the phone ahead, and during an unlock's last steps.
+    @Test func aProbesLockCountsWhateverTheClocks() async throws {
+        defer { phone.close() }
+        service.stampsOnVaultClock = true
+        _ = try await connected()
+        try await phone.restart()
+        phone.clockAhead = 600
+        service.holdStatusReads()
+        let reading = Task { try await m.refresh() }
+        #expect(await eventually { service.heldStatusReads == 1 })
+        m.lockedByProbe()
+        service.releaseStatusReads()
+        try await reading.value
+        #expect(m.phase == .locked, "\(m.phase)")
+        phone.clockAhead = 0
+        _ = await m.unlockStep(pin: pin, options: UnlockOptions()) { m.lockedByProbe() }
+        #expect(m.phase == .locked, "\(m.phase)")
+    }
+
+    /// A lock heard before a read on the phone's clock (the device let go, as after a background) is not the read's: when
+    /// another device has opened the vault since, the read's Unlocked stands.
+    @Test func aLockHeardBeforeAPhoneClockReadIsNotItsOwn() async throws {
+        defer { phone.close() }
+        _ = try await connected()
+        service.sendEvent("vault.locking", #"{"reason":"test"}"#)
+        #expect(await eventually { m.latestLockAt != nil && m.phase == .locked })
+        service.status("unlocked") // another device opened it since
+        try await m.dropSession(forget: false)
+        try await m.refresh()
+        #expect(m.phase == .unlocked, "\(m.phase)")
     }
 }

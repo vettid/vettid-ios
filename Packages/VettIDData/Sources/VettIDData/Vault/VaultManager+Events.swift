@@ -393,7 +393,7 @@ extension VaultManager {
     /// app moves to its locked screen, as for a `vault.locking`.
     func lockedByProbe() {
         unlockWindow = nil
-        noteLockSeen(at: vaultNowOrPhone)
+        noteProbeLock()
         endPausedOpening()
         switch phase {
         case .unlocked, .setup: phase = .locked
@@ -487,35 +487,77 @@ extension VaultManager {
     }
 }
 
-// The locks heard of, by time (``VaultManager/latestLockAt``).
+/// The locks this phone heard of (``VaultManager/locksHeard``): the newest `vault.locking`'s time on the vault's clock, and how
+/// many probes found the vault locked (a probe's "locked" is now: after any read or unlock under way).
+struct LocksHeard: Equatable {
+    var latest: Date?
+    var probes = 0
+}
+
+/// Where a read (or an unlock's last steps) began: its moment, whether that is on the vault's clock, and the locks heard
+/// before it.
+struct ReadStart {
+    let at: Date
+    let onVaultClock: Bool
+    let heard: LocksHeard
+}
+
+// The locks heard of, by time (``VaultManager/locksHeard``).
 extension VaultManager {
-    /// Now on the vault's clock, as this phone knows it: the phone's own clock before any message from the vault (a cold
-    /// start), so a lock is then judged across the two clocks' skew (seconds with network time; the outcome, Locked, is
-    /// recoverable).
+    /// The newest `vault.locking` heard of, on the vault's clock.
+    var latestLockAt: Date? { locksHeard.latest }
+
+    /// Before the phone knows the vault's clock (a cold start, a new device after a background), a read begins on the
+    /// phone's: a lock heard during it then counts if it is no older than this before it, so a phone clock ahead of the
+    /// vault's (beyond the envelope's 5 minutes too) cannot hide it, while a mailbox's days-old locks stay out.
+    static let lockSkewAllowance: TimeInterval = 3600
+
+    /// Now: on the vault's clock when this phone knows it, else the phone's.
     var vaultNowOrPhone: Date { session?.device.vaultNow() ?? config.now() }
+
+    func readStart() -> ReadStart {
+        let known = session?.device.knowsVaultTime == true
+        return ReadStart(at: vaultNowOrPhone, onVaultClock: known, heard: locksHeard)
+    }
 
     /// A lock heard of at [at] (vault time).
     func noteLockSeen(at: Date) {
-        if latestLockAt.map({ at > $0 }) ?? true { latestLockAt = at }
+        if locksHeard.latest.map({ at > $0 }) ?? true { locksHeard.latest = at }
     }
 
-    /// A lock heard of after [began] (vault time).
-    func lockedSince(_ began: Date) -> Bool { latestLockAt.map { $0 > began } ?? false }
+    /// A probe found the vault locked: after anything under way.
+    func noteProbeLock() { locksHeard.probes += 1 }
+
+    /// A lock heard of during the read that began at [start] and newer than it: on the vault's clock, after it; on the
+    /// phone's, within ``lockSkewAllowance`` of it. A probe's always.
+    func lockedSince(_ start: ReadStart) -> Bool {
+        if locksHeard.probes != start.heard.probes { return true }
+        guard let l = locksHeard.latest, l != start.heard.latest else { return false }
+        return l > (start.onVaultClock ? start.at : start.at.addingTimeInterval(-Self.lockSkewAllowance))
+    }
 
     /// An answer that says the vault is open: Unlocked, or, on a paired device (whose answer came from the vault's status),
     /// the setup steps that read it open (finishing, a credential). An unpaired device's "a credential" step is no status
-    /// answer, and is never turned into Locked.
+    /// answer, and is never turned into Locked. (The session read here is the one `evaluate` used: nothing awaits between.)
     func opensVault(_ p: AppPhase) -> Bool {
         if p == .unlocked { return true }
         guard p == .setup(.finishing) || p == .setup(.needsCredential) else { return false }
         return session?.device.deviceID != nil
     }
 
-    /// A lock the vault made after an unlock opened it at [openedAt] (another device, or the vault itself, during the steps
-    /// before the open app): the phase is Locked, not the open app. True when it was.
-    func lockedAfterOpening(_ openedAt: Date?) -> Bool {
-        guard let at = openedAt, lockedSince(at) else { return false }
-        phase = .locked
-        return true
+    /// A lock the vault made after an unlock opened it at [openedAt] (vault time; another device, or the vault itself, during
+    /// the steps before the open app), or a probe's since [heard] (the locks heard when those steps began). An unknown moment
+    /// counts any lock heard since. The phase is then Locked, not the open app. True when it was.
+    func lockedAfterOpening(_ openedAt: Date?, since heard: LocksHeard) -> Bool {
+        let locked: Bool
+        if locksHeard.probes != heard.probes {
+            locked = true
+        } else if let at = openedAt {
+            locked = locksHeard.latest.map { $0 > at } ?? false
+        } else {
+            locked = locksHeard.latest != heard.latest
+        }
+        if locked { phase = .locked }
+        return locked
     }
 }
