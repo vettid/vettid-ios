@@ -302,7 +302,7 @@ extension VaultManager: MoveRepository {
         // without it before applying it, so a paired device always holds one (defence in depth).
         let stored: String? = record.value.movedIn ? record.value.userGuid : nil
         guard let guid = [guid, d.transferUserGuid, stored].compactMap({ $0 }).first(where: UserGuids.valid) else {
-            return .failed(VaultFailure(.other, code: Self.codeTransferSessionEnded))
+            return .failed(VaultFailure(.notSupported, code: UnlockAttempt.codeNoUserGuid))
         }
         do {
             try await completeTransferIn(s, guid: guid)
@@ -408,12 +408,19 @@ extension VaultManager: MoveRepository {
     /// is taken over again here, at every evaluation, and its failure is thrown: such a phone is never shown "create a
     /// credential" (the vault has one). [resumed]: what this start's resume settled, if it ran.
     func recordAfterResume(_ s: VaultSession, resumed: TransferSettled?) async throws -> LocalAccount {
-        if case .failed(let error)? = resumed { throw error }
+        if case .failed(let error)? = resumed, !Self.pairedWithoutUserGuid(error) { throw error }
         if resumed == nil, s.device.deviceID != nil, record.value.transferStartedMs != nil,
-           case .failed(let error) = await settleTransfer(s, collect: false, guid: nil) {
+           case .failed(let error) = await settleTransfer(s, collect: false, guid: nil), !Self.pairedWithoutUserGuid(error) {
             throw error
         }
         return record.value
+    }
+
+    /// (§6.7.1) A paired transfer whose record has no valid `user_guid` (a damaged one) is never completed: the start goes on
+    /// with the phase the vault's status gives, so the unlock screen says this phone cannot open the vault (recover or
+    /// erase), rather than "can't connect" at every start.
+    static func pairedWithoutUserGuid(_ error: any Error) -> Bool {
+        (error as? VaultFailure).map { UnlockAttempt.isNoUserGuid($0.kind, $0.code) } ?? false
     }
 
     /// Drops a transfer this phone started and has not completed: the handshake, the pinned vault, the attested key and the

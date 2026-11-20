@@ -638,6 +638,9 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
             // A redeemed code: enroll. The enrollment itself answers vault_exists for a vault this phone does not hold.
             return current.userGuid.isEmpty ? .signedOut : .setup(.newVault)
         }
+        // (§6.7.1) A paired transfer whose take-over never ran, its record without a valid `user_guid` (a damaged one): never
+        // completed, and never "create a credential" either; the unlock screen says this phone cannot open the vault.
+        if current.transferStartedMs != nil, !current.movedIn, !UserGuids.valid(current.userGuid) { return .locked }
         return try await pairedPhase(s, current)
     }
 

@@ -185,9 +185,9 @@ public final class TransferInViewModel: TransferInActions {
             }
         }
         defer { busy.cancel() }
-        let canUnlock: Bool
         do {
-            canUnlock = try await move.awaitTransferIn()
+            // (§6.7.1) Always true once completed: a transfer without a valid `user_guid` fails instead.
+            _ = try await move.awaitTransferIn()
         } catch {
             if !Task.isCancelled { w.model?.approvalFailed(failure(of: error)) }
             return
@@ -197,7 +197,6 @@ public final class TransferInViewModel: TransferInActions {
         vm.state.relayBusy = false
         vm.state.step = .done
         vm.state.sas = nil
-        vm.state.canUnlockLater = canUnlock
         vm.state.phoneSecret = vault.usesPhoneSecret
     }
 

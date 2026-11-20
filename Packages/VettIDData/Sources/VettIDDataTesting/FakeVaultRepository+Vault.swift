@@ -318,7 +318,7 @@ extension FakeVaultRepository: MoveRepository {
         try call("awaitTransferIn")
         try await transferApproval.value()
         phase = .setup(.finishing)
-        return transferGaveUserGuid
+        return true
     }
 
     public func transferInRelayBusyUpdates() -> AsyncStream<Bool> { relayBusy.stream() }

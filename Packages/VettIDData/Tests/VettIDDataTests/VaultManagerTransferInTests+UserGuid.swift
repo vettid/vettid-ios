@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import VettIDData
 import VettIDDataTesting
-import VettIDVault
+@testable import VettIDVault
 
 /// (VAULT-MESSAGING §6.7.1, 0.90.17) One `user_guid` check (1–128 printable ASCII) for every transfer answer and every
 /// stored value. Mirrors vettid-android #404.
@@ -79,6 +79,28 @@ extension VaultManagerTransferInTests {
         let sent = service.requestsSeen.dropFirst(seen)
         #expect(!sent.contains("vault.lock") && !sent.contains("vault.unlock"), "\(Array(sent))")
         #expect(m.releaseUpdate.progress?.failureCode == UnlockAttempt.codeNoUserGuid)
+    }
+
+    /// (§6.7.1) A paired transfer whose record has no valid `user_guid` (a damaged one) is never completed, and the start goes
+    /// on, Locked: the unlock screen then says this phone cannot open the vault (recover or erase), never "can't connect" at
+    /// every start, nor "create a credential".
+    @Test func aDamagedPairedRecordGoesToTheStuckNotice() async throws {
+        defer { phone.close() }
+        _ = try await scanned()
+        let d = try #require(m.session?.device)
+        service.refuse("credential.get", with: "forbidden", times: 1)
+        service.approveTransferIn()
+        #expect(await eventually { d.deviceID != nil })
+        // The record damaged: the paired device's kept user_guid gone (nothing else runs on it now).
+        d.mem.withLock { d.st.transferUserGuid = nil }
+        try d.save()
+        try await phone.restart()
+        try await m.refresh()
+        // Locked: the unlock screen's stuck notice (no PIN), whatever the vault's status (here "unlocked").
+        #expect(m.phase == .locked, "\(m.phase)")
+        #expect(!m.userGuidUsable && !m.record.value.movedIn)
+        try await m.refresh()
+        #expect(m.phase == .locked, "the same at every start")
     }
 }
 

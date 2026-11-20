@@ -67,9 +67,7 @@ public struct RecoveryCode: Equatable, Sendable, CustomStringConvertible, Custom
     }
 
     /// As the enclave's `validVaultID`: 1–128 printable ASCII characters.
-    private static func validVaultID(_ s: String) -> Bool {
-        (1...128).contains(s.utf8.count) && s.utf8.allSatisfy { (0x21...0x7E).contains($0) }
-    }
+    private static func validVaultID(_ s: String) -> Bool { UserGuids.printable(s, maxLength: 128) }
 }
 
 /// The recovery code's form (§11.11.2): 20 random bytes as 32 Crockford base32 characters (`0-9A-HJKMNP-TV-Z`, upper

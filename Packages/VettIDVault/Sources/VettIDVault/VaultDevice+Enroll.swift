@@ -284,6 +284,9 @@ extension VaultDevice {
         deviceAttest: DeviceAttest? = nil, id: String? = nil, apiKey: [UInt8]? = nil, unlockSecret: [UInt8]? = nil
     ) throws -> PreparedInit {
         let v = try mem.withLock { try requireVault() }
+        // (§6.7.1) A new handshake (a pairing, an enrollment, a recovery's, a transfer's): an earlier transfer's drop for
+        // want of a `user_guid` no longer ends its waits.
+        mem.withLock { st.transferNoUserGuid = nil }
         let tok = try mintForVault()
         let i = try Initiator.create(InitiatorConfig(
             purpose: purpose, ctx: ctx, identity: secrets.identity, staticKem: secrets.kem.publicKey, relay: relayAddr,

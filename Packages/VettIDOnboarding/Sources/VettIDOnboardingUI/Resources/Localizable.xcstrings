@@ -4033,17 +4033,6 @@
         }
       }
     },
-    "onboarding_moved_transferred_no_guid_body": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Your vault now works with the credential on this phone. Your old phone erases VettID as soon as it hears from your vault. Your vault runs an older release, so this phone cannot unlock it after it locks until your vault is updated."
-          }
-        }
-      }
-    },
     "onboarding_moved_go": {
       "extractionState": "manual",
       "localizations": {

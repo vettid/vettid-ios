@@ -9,8 +9,11 @@ import Foundation
 public enum UserGuids {
     public static let maxLength = 128
 
-    public static func valid(_ g: String) -> Bool {
-        let b = Array(g.utf8)
+    public static func valid(_ g: String) -> Bool { printable(g, maxLength: maxLength) }
+
+    /// 1–[maxLength] printable ASCII characters (0x21–0x7E): the rule of a `user_guid` and of a recovery QR's vault id.
+    static func printable(_ s: String, maxLength: Int) -> Bool {
+        let b = Array(s.utf8)
         return (1...maxLength).contains(b.count) && b.allSatisfy { (0x21...0x7E).contains($0) }
     }
 }

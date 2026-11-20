@@ -285,18 +285,6 @@ enum MoveStrings {
         )
     }
 
-    static var onboardingMovedTransferredNoGuidBody: String {
-        String(
-            localized: "onboarding_moved_transferred_no_guid_body",
-            defaultValue: """
-                Your vault now works with the credential on this phone. Your old phone erases VettID as soon as it \
-                hears from your vault. Your vault runs an older release, so this phone cannot unlock it after it \
-                locks until your vault is updated.
-                """,
-            bundle: .module
-        )
-    }
-
     static var onboardingMovedGo: String {
         String(localized: "onboarding_moved_go", defaultValue: "Go to VettID", bundle: .module)
     }
