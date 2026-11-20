@@ -20,6 +20,22 @@ extension VoteSiteTests {
         return voteObj(#"{"proposal_id":"\#(pid)","connection_id":"\#(conn)","title":"Adopt the budget","state":"closed","text":"t","choices":[{"id":"yes","label":"Yes"}],"record_tag":"\#(Base64s.encodeStd(VoteResultsFixture.tag))","extensions":0,"tally":\#(tally),"counts":{"ballots":1,"eligible":2,"removed":0,"unhandled":0}\#(o)}"#)
     }
 
+    /// The first submit compares the vault's outcome too: good results whose outcome is not the vault's are still submitted
+    /// (the row is the vault's to judge), and said not to add up.
+    @Test func anOutcomeOtherThanTheVaultsIsSubmittedAndSaidNotToAddUp() async throws {
+        let ops = FakeVoteOps()
+        ops.list = listing(closedPending())
+        ops.detail = verifiedDetail(outcome: #"{"choice":null,"quorum_met":true,"status":"not_decided"}"#)
+        let m = siteManager(ops)
+        try await m.refresh()
+        VoteResultsFixture.publish(site, pid)
+        vault.submitAnswer = #"{"proposal_id":"\#(pid)","check":{"state":"verified"}}"#
+        #expect(try await m.checkResults(key) == .submitted(.verified))
+        let body = try StrictJson.parseObject(try #require(vault.submits.last))
+        #expect(try body.base64("results") == VoteResultsFixture.results)
+        #expect(m.hints[key] == VoteHint(resultsDontAddUp: true, observerVerdict: false, verdictKept: true))
+    }
+
     /// The vault's own outcome (`vote.get`, VAULT-MESSAGING §10.19.6 step 1) is compared as its tally and counts are: the
     /// same outcome passes; another (another status, or another choice decided) is results that don't add up.
     @Test func anOutcomeOtherThanTheVaultsIsAProblem() async throws {

@@ -74,7 +74,7 @@ public enum VoteRows {
         let choices: Set<String>
         let proposalID: String
         /// The proposal's choice ids in order, its `decision` and quorum, its `eligible`, and the results' `outcome`
-        /// (BALLOT-PROTOCOL 0.14.0 §3.5, §7.1), for the outcome recomputed (§8.4 step 4).
+        /// (BALLOT-PROTOCOL 0.14.1 §3.5, §7.1), for the outcome recomputed (§8.4 step 4).
         let choiceOrder: [String]
         let decision: VoteOutcomes.Decision
         let minBallots: UInt64
@@ -187,7 +187,7 @@ public enum VoteRows {
         try checkOutcome(observed)
     }
 
-    /// §8.4 step 4 (BALLOT-PROTOCOL 0.14.0): the results' outcome is the one the proposal's rule gives for the tally the
+    /// §8.4 step 4 (BALLOT-PROTOCOL 0.14.1): the results' outcome is the one the proposal's rule gives for the tally the
     /// rows just confirmed (§7.1).
     private static func checkOutcome(_ o: Observed) throws {
         let recomputed: VoteOutcomes.Outcome

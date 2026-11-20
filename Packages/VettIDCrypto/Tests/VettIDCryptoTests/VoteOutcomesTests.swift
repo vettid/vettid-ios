@@ -45,6 +45,8 @@ struct VoteOutcomesTests {
             let decision = try VoteOutcomes.decision(c.obj("decision"))
             let got: VoteOutcomes.Outcome? = try? {
                 var tally: [String: UInt64] = [:]
+                // A count that is not a non-negative integer ("refused: a negative count") is refused here, by the strict
+                // reading the observer's own `tally` gets (`asUint`), before `recompute` sees it.
                 for (id, n) in try c.obj("tally").members { tally[id] = try n.asUint(min: 0, max: StrictJson.maxSafeInteger) }
                 let t = BallotTally(
                     choices: try c.array("choices").map { try $0.asString() }, counts: tally,
@@ -60,6 +62,23 @@ struct VoteOutcomesTests {
                 #expect(got == want, "\(name)")
             }
         }
+    }
+
+    /// The bounds of vettid-vault's `Decide`: 1 to 100,000 eligible and at most 17 choices; outside them the tally is
+    /// refused.
+    @Test func aTallyOutsideDecidesBoundsIsRefused() throws {
+        let majority = try VoteOutcomes.decision(StrictJson.parseObject(Array(#"{"base":"cast","rule":"majority","threshold":null}"#.utf8)))
+        func tally(eligible: UInt64, choices: Int) -> BallotTally {
+            let ids = (0..<choices - 1).map { "c\($0)" } + ["abstain"]
+            var counts = Dictionary(uniqueKeysWithValues: ids.map { ($0, UInt64(0)) })
+            counts["c0"] = 1
+            return BallotTally(choices: ids, counts: counts, ballots: 1, eligible: eligible)
+        }
+        #expect((try? VoteOutcomes.recompute(majority, minBallots: 1, tally(eligible: 100_000, choices: 17))) != nil)
+        let none = BallotTally(choices: ["c0", "abstain"], counts: ["c0": 0, "abstain": 0], ballots: 0, eligible: 0)
+        #expect(throws: CryptoError.self) { try VoteOutcomes.recompute(majority, minBallots: 0, none) }
+        #expect(throws: CryptoError.self) { try VoteOutcomes.recompute(majority, minBallots: 1, tally(eligible: 100_001, choices: 2)) }
+        #expect(throws: CryptoError.self) { try VoteOutcomes.recompute(majority, minBallots: 1, tally(eligible: 10, choices: 18)) }
     }
 
     private var decided: VectorDoc { get throws { try v.sub("documents_decided") } }
@@ -119,8 +138,8 @@ struct VoteOutcomesTests {
         #expect(try check(results.replacingOccurrences(of: doc, with: allowed.base64EncodedString()), d) != ResultsProblem("proposal"))
     }
 
-    /// A proposal without `removed_may_vote`, or without a valid `decision` (absent, or one §3.5 refuses), is a problem
-    /// with the proposal too.
+    /// A proposal without `removed_may_vote`, or with one that is not the boolean `false` (a string, a number), or without
+    /// a valid `decision` (absent, or one §3.5 refuses), is a problem with the proposal too.
     @Test func aProposalWithoutRemovedMayVoteOrAValidDecisionIsRefused() throws {
         let d = try decided
         let results = try d.str("results")
@@ -132,8 +151,10 @@ struct VoteOutcomesTests {
             proposal.replacingOccurrences(of: #","removed_may_vote":false"#, with: ""),
             proposal.replacingCharacters(in: decision, with: ""),
             proposal.replacingOccurrences(of: #""rule":"majority""#, with: #""rule":"unanimity""#),
+            proposal.replacingOccurrences(of: #""removed_may_vote":false"#, with: #""removed_may_vote":"false""#),
+            proposal.replacingOccurrences(of: #""removed_may_vote":false"#, with: #""removed_may_vote":0"#),
         ].filter { $0 != proposal }
-        #expect(variants.count >= 3)
+        #expect(variants.count >= 5)
         for v in variants {
             let changed = results.replacingOccurrences(of: doc, with: Data(v.utf8).base64EncodedString())
             #expect(try check(changed, d) == ResultsProblem("proposal"), "\(v)")
