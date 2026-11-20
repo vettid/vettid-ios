@@ -590,37 +590,6 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
 
     // MARK: - The phase
 
-    public func refresh() async throws {
-        let gen = record.generation
-        let changes = phaseChanges
-        let locks = lockGeneration
-        let began = readStart()
-        let p: AppPhase
-        do {
-            p = try await guarded { try await evaluate() }
-        } catch let f as VaultFailure {
-            // What the phone stores for the vault could not be read: said as that, with the way out, rather than as
-            // "cannot connect".
-            let kind = f.code == VaultFailures.codeKeystore ? FailureKind.localState : f.kind
-            // Nothing has reached the vault service for a long time: erase-or-recover beside "Try again".
-            let last = [record.value.lastContactMs, record.value.lastOpenedMs].compactMap { $0 }.max()
-            let long = StuckScreens.longUnreachable(kind, lastContactMs: last, nowMs: nowMs, timeScale: record.value.timeScale)
-            p = .unreachable(kind, longUnreachable: long)
-        }
-        // A reset, a lock, or a newer phase set by an operation meanwhile, wins. (An unlock that a `device.unlinked`
-        // reached on its way reads the phase again rather than set its own: ``rereads``.)
-        // (A lock meanwhile overtakes only an open answer: Locked is right after any lock, and a lock during a paused opening
-        // leaves the phase Unreachable until a read says so.)
-        // A lock heard of after the read began (an event or a probe, whatever the phase) overtakes an open answer, which then
-        // reads Locked (the lock is the newest word): Unlocked, and the setup steps of an open vault, as `vault.locking` itself
-        // turns them. Any other answer is published as it is (never a phone left on Starting).
-        // (The open answer's own steps, the owner check's `onOpened` and a provisional vault's confirmation, ran inside
-        // `evaluate` before this: both are idempotent and harmless for a vault that just locked; moving them after this guard
-        // is left to a follow-up.)
-        let answer = lockedSince(began) && opensVault(p) ? AppPhase.locked : p
-        if gen == record.generation, changes == phaseChanges, locks == lockGeneration || answer == .locked { phase = answer }
-    }
-
     /// The phone's clock, in Unix ms.
     var nowMs: Int64 { Int64((config.now().timeIntervalSince1970 * 1000).rounded(.down)) }
 
@@ -694,5 +663,39 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
         // Only the phone whose enrollment made the vault confirms it.
         if !local.enrollConfirmed, local.enrolledHere { try await confirmEnrollment(s, backup: local.backupChoice) { _ in } }
         return local.setupComplete ? .unlocked : .setup(.finishing)
+    }
+}
+
+// The phase read.
+extension VaultManager {
+    public func refresh() async throws {
+        let gen = record.generation
+        let changes = phaseChanges
+        let locks = lockGeneration
+        let began = readStart()
+        let p: AppPhase
+        do {
+            p = try await guarded { try await evaluate() }
+        } catch let f as VaultFailure {
+            // What the phone stores for the vault could not be read: said as that, with the way out, rather than as
+            // "cannot connect".
+            let kind = f.code == VaultFailures.codeKeystore ? FailureKind.localState : f.kind
+            // Nothing has reached the vault service for a long time: erase-or-recover beside "Try again".
+            let last = [record.value.lastContactMs, record.value.lastOpenedMs].compactMap { $0 }.max()
+            let long = StuckScreens.longUnreachable(kind, lastContactMs: last, nowMs: nowMs, timeScale: record.value.timeScale)
+            p = .unreachable(kind, longUnreachable: long)
+        }
+        // A reset, a lock, or a newer phase set by an operation meanwhile, wins. (An unlock that a `device.unlinked`
+        // reached on its way reads the phase again rather than set its own: ``rereads``.)
+        // (A lock meanwhile overtakes only an open answer: Locked is right after any lock, and a lock during a paused opening
+        // leaves the phase Unreachable until a read says so.)
+        // A lock heard of after the read began (an event or a probe, whatever the phase) overtakes an open answer, which then
+        // reads Locked (the lock is the newest word): Unlocked, and the setup steps of an open vault, as `vault.locking` itself
+        // turns them. Any other answer is published as it is (never a phone left on Starting).
+        // (The open answer's own steps, the owner check's `onOpened` and a provisional vault's confirmation, ran inside
+        // `evaluate` before this: both are idempotent and harmless for a vault that just locked; moving them after this guard
+        // is left to a follow-up.)
+        let answer = lockedSince(began) && opensVault(p) ? AppPhase.locked : p
+        if gen == record.generation, changes == phaseChanges, locks == lockGeneration || answer == .locked { phase = answer }
     }
 } // swiftlint:disable:this file_length
