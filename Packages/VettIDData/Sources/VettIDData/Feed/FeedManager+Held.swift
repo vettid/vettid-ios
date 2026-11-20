@@ -27,17 +27,29 @@ extension FeedManager {
     /// (``openingMarked(_:opening:)``; the vault's messages' `ts` are on its clock, which may differ from the phone's by
     /// minutes). Held events the vault sent before are its backlog, and stay silent. Returns the opening's number.
     @discardableResult
-    public func vaultOpened(at: Date) -> Int {
+    public func vaultOpened(at: Date, uptime: TimeInterval? = nil) -> Int {
         opening += 1
         openedAt = at
+        openedUptime = uptime
+        markFixed = false
         return opening
+    }
+
+    /// The opening to begin again on a new device: its number and monotonic moment, while its mark is still the phone's
+    /// clock (no answer of it came before its device was let go). Nil once fixed, or before any opening.
+    public var openingToBeginAgain: (opening: Int, uptime: TimeInterval)? {
+        guard !markFixed, opening > 0, let up = openedUptime else { return nil }
+        return (opening, up)
     }
 
     /// The opening's moment on the vault's clock, as the first answer of [opening] gave it (``VaultDevice``'s
     /// `beginOpening`): it replaces the phone's clock there, fixed from then on. Nothing for an earlier opening.
     public func openingMarked(_ at: Date, opening: Int) {
-        guard opening == self.opening else { return }
+        // Fixed from then on: a second answer (an earlier device's, landing after a new one began the opening again) is not
+        // taken.
+        guard opening == self.opening, !markFixed else { return }
         openedAt = at
+        markFixed = true
     }
 
     /// (chosen; not in the spec: as vettid-android #411) The vault is open again after only a status read that failed: the

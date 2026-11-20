@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import VettIDData
 import VettIDDataTesting
-import VettIDVault
+@testable import VettIDVault
 
 /// (Rule 3) The release check and the notifications, end to end: an item that arrives while a failing check holds the
 /// features notifies once the check passes, and a passed owner check's waiting-asks replay that comes due meanwhile runs
@@ -43,6 +43,8 @@ extension VaultManagerWaitingAsksTests {
         service.stampsOnVaultClock = true
         service.advanceVaultClock(skew)
         let id = try await connected()
+        // The mark is stored after a main-actor hop: waited for, not raced.
+        #expect(await eventually { m.feed.markFixed })
         let mark = try #require(m.feed.openedAt)
         #expect(abs(mark.timeIntervalSinceNow - skew) < 30, "the vault's clock, not the phone's: \(mark.timeIntervalSinceNow)")
         await failReleaseCheck()
@@ -50,6 +52,46 @@ extension VaultManagerWaitingAsksTests {
         try await Task.sleep(for: .milliseconds(200))
         await passReleaseCheck()
         #expect(await eventually { live.count == 1 }, "\(live)")
+    }
+
+    /// A new device of this process while the opening's mark is still the phone's clock (no answer came before the first
+    /// device was let go): the opening begins again on it, so its first answer puts the mark on the vault's clock.
+    @Test func aNewDeviceBeginsTheOpeningAgainWhileTheMarkIsThePhones() async throws {
+        defer { phone.close() }
+        service.stampsOnVaultClock = true
+        service.advanceVaultClock(120)
+        _ = try await connected()
+        #expect(await eventually { m.feed.markFixed })
+        // Fixed already: a new device does not begin the opening again.
+        try await m.dropSession(forget: false)
+        _ = try await m.openSession()
+        let fresh = try #require(m.session?.device)
+        #expect(fresh.mem.withLock { fresh.opening } == nil, "not begun again")
+        // As if no answer had come before the device was let go: the phone's clock, not fixed.
+        m.feed.markFixed = false
+        m.feed.openedAt = Date()
+        try await m.dropSession(forget: false)
+        _ = try await m.openSession()
+        try await m.connections.refresh(quietly: true)
+        #expect(await eventually { m.feed.markFixed }, "begun again on the new device")
+        let mark = try #require(m.feed.openedAt)
+        #expect(mark.timeIntervalSinceNow > 60, "the vault's clock, two minutes ahead: \(mark.timeIntervalSinceNow)")
+    }
+
+    /// A device made while the opening is paused (only Unreachable since Unlocked) begins it again too: the same opening goes
+    /// on at the return.
+    @Test func aDeviceMadeDuringAPausedOpeningBeginsItAgain() async throws {
+        defer { phone.close() }
+        _ = try await connected()
+        #expect(await eventually { m.feed.markFixed })
+        m.feed.markFixed = false
+        service.statusForbidden = true
+        try await m.refresh()
+        #expect(m.openingPaused)
+        try await m.dropSession(forget: false)
+        _ = try await m.openSession()
+        let fresh = try #require(m.session?.device)
+        #expect(fresh.mem.withLock { fresh.opening } != nil, "begun again during the pause")
     }
 
     /// A cold start with the vault open: what the mailbox delivers first is the backlog of what changed while the app was

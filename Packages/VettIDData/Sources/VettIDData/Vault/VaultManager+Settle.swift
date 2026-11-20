@@ -398,6 +398,7 @@ extension VaultManager {
         session = held
         memberVault.set(device: held.device)
         startUnlessBackground(held.device)
+        beginOpeningAgain(held.device) // (a transfer is waited for before the vault is open: nothing today, by the phase guard)
         observe(held)
         return held
     }

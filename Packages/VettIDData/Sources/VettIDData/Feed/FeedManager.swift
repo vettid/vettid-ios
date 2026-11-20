@@ -148,6 +148,10 @@ public final class FeedManager: FeedRepository {
     @ObservationIgnored var openedAt: Date?
     /// Counts the openings: a mark told for an earlier one is not taken.
     @ObservationIgnored var opening = 0
+    /// The opening's moment on the monotonic clock, and whether its mark is on the vault's clock yet: until it is, a new device
+    /// of this process begins the opening again from that moment (``VaultManager``'s session).
+    @ObservationIgnored var openedUptime: TimeInterval?
+    @ObservationIgnored var markFixed = false
     /// (Rule 3) The gate lifted: what was held waits for a full read, since what changed while paused was not taken.
     @ObservationIgnored var needsFullRead = false
     /// (chosen; not in the spec: as vettid-android #411) A continued opening's catch-up from the kept cursor is owed: what
@@ -223,6 +227,8 @@ public final class FeedManager: FeedRepository {
         heldArrivals = []
         needsFullRead = false
         catchUpOwed = false
+        // `markFixed` and `openedUptime` stay: the next opening resets them, and no opening is begun again while the vault is
+        // not open (``VaultManager``'s phase guard).
         lastNotified = [:]
         closeWaitingAsks()
         load = .notLoaded

@@ -387,6 +387,18 @@ import VettIDDataTesting
         #expect(f.openedAt == now.addingTimeInterval(-60))
     }
 
+    /// A mark is fixed once: a second answer for the same opening (an earlier device's, landing after a new one began the
+    /// opening again) is not taken.
+    @Test func theMarkIsFixedOnce() {
+        let f = manager()
+        let n = f.vaultOpened(at: now, uptime: 100)
+        #expect(f.openingToBeginAgain?.opening == n)
+        f.openingMarked(now.addingTimeInterval(-60), opening: n)
+        #expect(f.markFixed && f.openingToBeginAgain == nil)
+        f.openingMarked(now.addingTimeInterval(-30), opening: n)
+        #expect(f.openedAt == now.addingTimeInterval(-60))
+    }
+
     // MARK: the waiting asks
 
     func approvals() -> [PendingApproval] {

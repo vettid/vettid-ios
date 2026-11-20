@@ -160,7 +160,7 @@ extension VaultManager {
         if continued {
             feed.openingContinued()
         } else {
-            let opening = feed.vaultOpened(at: config.now())
+            let opening = feed.vaultOpened(at: config.now(), uptime: config.uptime())
             session?.device.beginOpening { [weak self] at in
                 Task { @MainActor in self?.feed.openingMarked(at, opening: opening) }
             }
@@ -179,6 +179,19 @@ extension VaultManager {
         kickChangeCheck()
         // The proactive release notice (ANDROID-PLAN "Vault update"): the manifest, read after every unlock.
         Task { [weak self] in await self?.releaseUpdate.refreshOffer() }
+    }
+}
+
+extension VaultManager {
+    /// A new device of this process while the vault is open and the opening's mark is still the phone's clock (offline, or a
+    /// background before its first answer): the opening begins again on it, from its original moment on the monotonic
+    /// clock, so that its first answer still puts the mark on the vault's clock.
+    func beginOpeningAgain(_ d: VaultDevice) {
+        // Also while the opening is paused (only Unreachable since Unlocked): the same opening goes on at the return.
+        guard phase == .unlocked || openingPaused, let again = feed.openingToBeginAgain else { return }
+        d.beginOpening(began: again.uptime) { [weak self] at in
+            Task { @MainActor in self?.feed.openingMarked(at, opening: again.opening) }
+        }
     }
 }
 

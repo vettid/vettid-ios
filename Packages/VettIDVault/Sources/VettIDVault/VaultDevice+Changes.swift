@@ -48,9 +48,10 @@ extension VaultDevice {
     /// (a fresh id: not a request tried again, nor a stored one, nor a redelivered or cached answer) gives the opening's
     /// moment on the vault's clock, told once to [onMark] (ANDROID-PLAN 0.1.134 Notification modes 7, IOS-PLAN §6.7). A
     /// vault time learnt before, any event's `ts` (the mailbox's backlog at a cold start can be days old) and any other
-    /// answer never do. A later opening replaces it.
-    public func beginOpening(onMark: @escaping @Sendable (Date) -> Void) {
-        let up = cfg.uptime()
+    /// answer never do. A later opening replaces it. [began]: the opening's moment on the monotonic clock when it began on
+    /// an earlier device of this process (its mark not yet on the vault's clock); now when nil.
+    public func beginOpening(began: TimeInterval? = nil, onMark: @escaping @Sendable (Date) -> Void) {
+        let up = began ?? cfg.uptime()
         mem.withLock { opening = Opening(began: up, requests: [], onMark: onMark) }
     }
 
@@ -66,12 +67,14 @@ extension VaultDevice {
         }
     }
 
-    /// An answer seen for the first time, to [re]: when it is the opening's first answer to one of its fresh requests, the
-    /// opening's moment on the vault's clock (its `ts` less the time since the opening began) is told, once.
+    /// An answer seen for the first time, to [re]: when it is the opening's first answer to one of its fresh requests whose
+    /// request still waits for it (a late-collected answer, its wait ended, could pull the mark earlier than the request's
+    /// timeout allows), the opening's moment on the vault's clock (its `ts` less the time since the opening began) is told,
+    /// once.
     func noteOpeningAnswer(_ re: String, _ ts: Date) {
         let up = cfg.uptime()
         let told: (@Sendable (Date) -> Void, Date)? = mem.withLock {
-            guard let o = opening, o.requests.contains(re) else { return nil }
+            guard let o = opening, o.requests.contains(re), pending[re] != nil else { return nil }
             opening = nil
             return (o.onMark, ts.addingTimeInterval(o.began - up))
         }

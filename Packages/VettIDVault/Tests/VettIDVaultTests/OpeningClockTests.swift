@@ -75,4 +75,41 @@ extension LostAnswerTests {
         try await deliver(v, d, a)
         #expect(marks.told.count == 1)
     }
+
+    /// An answer collected after its request's wait ended (no longer pending) does not count: it could pull the mark earlier
+    /// than the request's timeout allows. The next fresh request's answer does.
+    @Test func anAnswerWhoseRequestNoLongerWaitsDoesNotCount() async throws {
+        let h = try await holder()
+        let (d, v) = (h.d, h.v)
+        let marks = Marks()
+        d.beginOpening { marks.add($0) }
+        let gaveUp = Task { [d] in
+            try await d.request("vault.status", body: VaultJSON.empty, timeout: 0.05, innerID: nil, exp: nil, retries: 0)
+        }
+        let late = try await open(v).id
+        _ = try? await gaveUp.value
+        try await deliver(v, d, answer(late, Date().addingTimeInterval(-600)))
+        #expect(marks.told.isEmpty, "its wait had ended")
+        let (t, id) = try await send(h)
+        try await deliver(v, d, answer(id, Date()))
+        _ = try await t.value
+        #expect(marks.told.count == 1)
+    }
+
+    /// An opening begun again on a new device keeps its original moment on the monotonic clock: the mark is that moment on
+    /// the vault's clock, not the new device's start.
+    @Test func anOpeningBegunAgainKeepsItsOriginalMoment() async throws {
+        let up = Uptime()
+        let h = try await holder(uptime: up)
+        let (d, v) = (h.d, h.v)
+        let marks = Marks()
+        let began = up.now
+        up.advance(30) // the first device was let go; this one starts 30 s later
+        d.beginOpening(began: began) { marks.add($0) }
+        let (t, id) = try await send(h)
+        let ts = Date()
+        try await deliver(v, d, answer(id, ts))
+        _ = try await t.value
+        #expect(abs((marks.told.first ?? .distantPast).timeIntervalSince(ts) + 30) < 0.001, "30 s before that answer")
+    }
 }
