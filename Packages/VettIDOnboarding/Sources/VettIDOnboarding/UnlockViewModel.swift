@@ -239,6 +239,8 @@ public final class UnlockViewModel: UnlockActions {
     public func confirmErase() {
         let s = state
         guard s.eraseConfirm, s.eraseOffered, !s.erasing else { return }
+        // A failure of this attempt is new, and said again.
+        state.message = nil
         state.eraseConfirm = false
         state.erasing = true
         state.pin = ""

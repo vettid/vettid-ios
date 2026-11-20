@@ -222,12 +222,12 @@ public struct UnlockScreen: View {
         var offersRecover: Bool { self != .notRecognised && self != .none }
     }
 
+    /// The unlock's message (a failed erase's, ``UnlockViewModel/confirmErase()``) is shown above the way forward wherever
+    /// there is no PIN block to show it under (a phone with no usable `user_guid`, a recovery pending, a failed check).
+    static func messageAboveWayForward(_ state: UnlockState) -> Bool { !state.showsPin }
+
     /// An ended release or a rollback wins: no erase there, whatever else the last answers said. On a phone with no usable
     /// `user_guid` whose release check failed, the stuck words alone (§6.7.1, as vettid-android #412).
-    /// The unlock's message (a failed erase's, ``UnlockViewModel/confirmErase()``) is shown above the way forward on a phone
-    /// with no usable `user_guid`, which has no PIN block to show it under.
-    static func messageAboveWayForward(_ state: UnlockState) -> Bool { state.noUserGuid && !state.showsPin }
-
     static func wayForward(_ state: UnlockState) -> WayForward {
         if state.recoverOnly { return .recoverOnly }
         // Its erase only where it is offered (a phone with no usable user_guid: after a check that answered).
