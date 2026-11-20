@@ -28,8 +28,9 @@ public struct ResultsProblem: Error, Equatable, Sendable {
 /// input that does not verify), so there is nothing to submit (a thrown ``ResultsProblem``). The rest, every other
 /// failure of the observer's check: the hash of `rows.json`, the rows' order and schema, the proposal and its choices,
 /// `eligible` against the proposal's, the tags' tree against the proposal's `record_root`, every ballot's `ballot_sig`
-/// under its `vk` and its choice one of the proposal's (the member's own included), and the tally and `ballots`
-/// recomputed; when one of these fails the row is still returned with the problem (``Checked/problem``): it is
+/// under its `vk` and its choice one of the proposal's (the member's own included), the tally and `ballots` recomputed,
+/// the proposal's `removed_may_vote` (`false`) and `decision`, and the outcome consistent in itself and recomputed
+/// (BALLOT-PROTOCOL 0.14.1 §3.1, §3.5, §7.1, §8.5); when one of these fails the row is still returned with the problem (``Checked/problem``): it is
 /// submitted, the vault judges it, and the member is told the rest of the published results don't add up. The results'
 /// signature and bundle, the anchor and the verdict are the vault's; it never relies on this. Builds on vettid-android
 /// `VoteRows` (the hash, order and tree), with the signatures, the tally and `record_root` added.
@@ -163,7 +164,8 @@ public enum VoteRows {
     }
 
     /// §8.4 items 2 to 4 beyond the member's row: the proposal, the tags against its `record_root` (the electorate it
-    /// fixed before anyone voted, §8.1, §8.2: record leaves in order), every ballot, the tally and `ballots`.
+    /// fixed before anyone voted, §8.1, §8.2: record leaves in order), every ballot, the tally and `ballots`, and the
+    /// outcome (§8.4 step 4, §7.1).
     private static func observe(_ results: JsonObject, _ rowsBytes: [UInt8], _ read: ReadRows, eligible: UInt64) throws {
         let rowsHash: [UInt8]
         do {
@@ -261,7 +263,8 @@ public enum VoteRows {
             let proposalBytes = try results.obj("proposal").base64("doc")
             let proposal = try StrictJson.parseObject(proposalBytes)
             // BALLOT-PROTOCOL 0.14.1 §3.1, §8.4: a proposal whose `removed_may_vote` is not `false` is refused by every
-            // verifier, and so is one without a `decision` of §3.5. First, so that nothing else hides it.
+            // verifier, and so is one without a `decision` of §3.5. First of the proposal's own checks, so that none of
+            // them hides it.
             guard (try? proposal.bool("removed_may_vote")) == false,
                   let decision = try? VoteOutcomes.decision(proposal.obj("decision"))
             else { throw ResultsProblem("proposal") }

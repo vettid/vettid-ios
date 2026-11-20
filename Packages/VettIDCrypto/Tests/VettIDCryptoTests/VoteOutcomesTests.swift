@@ -118,4 +118,25 @@ struct VoteOutcomesTests {
         )
         #expect(try check(results.replacingOccurrences(of: doc, with: allowed.base64EncodedString()), d) != ResultsProblem("proposal"))
     }
+
+    /// A proposal without `removed_may_vote`, or without a valid `decision` (absent, or one §3.5 refuses), is a problem
+    /// with the proposal too.
+    @Test func aProposalWithoutRemovedMayVoteOrAValidDecisionIsRefused() throws {
+        let d = try decided
+        let results = try d.str("results")
+        let doc = try StrictJson.parseObject(Array(results.utf8)).obj("proposal").string("doc")
+        let proposal = try #require(Data(base64Encoded: doc).flatMap { String(data: $0, encoding: .utf8) })
+        let decision = try #require(proposal.range(of: #""decision":\{[^}]*\}\},?|"decision":\{[^}]*\},?"#, options: .regularExpression))
+        let variants = [
+            proposal.replacingOccurrences(of: #""removed_may_vote":false,"#, with: ""),
+            proposal.replacingOccurrences(of: #","removed_may_vote":false"#, with: ""),
+            proposal.replacingCharacters(in: decision, with: ""),
+            proposal.replacingOccurrences(of: #""rule":"majority""#, with: #""rule":"unanimity""#),
+        ].filter { $0 != proposal }
+        #expect(variants.count >= 3)
+        for v in variants {
+            let changed = results.replacingOccurrences(of: doc, with: Data(v.utf8).base64EncodedString())
+            #expect(try check(changed, d) == ResultsProblem("proposal"), "\(v)")
+        }
+    }
 }

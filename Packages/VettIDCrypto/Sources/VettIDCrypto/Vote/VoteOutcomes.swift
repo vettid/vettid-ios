@@ -82,8 +82,14 @@ public enum VoteOutcomes {
         return Outcome(quorumMet: true, status: .notDecided, choice: nil)
     }
 
-    /// [tally] names exactly its choices, sums to its ballots, and has no more ballots than eligible.
+    /// The most choices a proposal has, `abstain` included (vettid-vault `votewire.MaxChoices`).
+    public static let maxChoices = 17
+
+    /// [tally] has 1 to ``VoteRows/maxRows`` eligible and at most ``maxChoices`` choices (as vettid-vault's `Decide`, so
+    /// the products below cannot overflow), names exactly its choices, sums to its ballots, and has no more ballots than
+    /// eligible.
     private static func check(_ tally: BallotTally) throws {
+        guard (1...UInt64(VoteRows.maxRows)).contains(tally.eligible), tally.choices.count <= maxChoices else { throw bad("tally") }
         guard Set(tally.counts.keys) == Set(tally.choices), tally.counts.count == tally.choices.count else { throw bad("tally") }
         var sum: UInt64 = 0
         for n in tally.counts.values {
