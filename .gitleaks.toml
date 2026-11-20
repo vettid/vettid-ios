@@ -72,4 +72,6 @@ regexes = [
   '''9aa9db2fd2ea84364e930cd5d4e2543ab312bfdca4cc98d413b3300b3954557c''',
   '''c7176a703d4dd84fba3c0b760d10670f2a2053fa2c39ccc64ec7fd7792ac037a''',
   '''c7176a703d4dd84fba3c0b760d10670f2a2053fa2c39ccc64ec7fd7792ac03fa''',
+  # The Ed25519 PUBLIC key of the signature edge cases (a mixed-order key), with BALLOT-PROTOCOL 0.14.1.
+  '''f3121c3b0a8e07570dcb0e12393862b8d3818bfd913c04925550b00540feb36e''',
 ]
