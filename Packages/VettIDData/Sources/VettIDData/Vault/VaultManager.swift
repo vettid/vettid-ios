@@ -116,10 +116,11 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
     /// (``refresh()``: only a Locked answer is published), an unlock's last steps, a recovery's or an enrollment's end, and a
     /// failure's `credential_required` handling (``VaultManager+Failures``).
     @ObservationIgnored var lockGeneration = 0
-    /// The newest lock this phone heard of, on the vault's clock: a `vault.locking`'s `ts` (also one dropped as another
-    /// opening's: it is still a lock), or the moment a status read found the vault locked. A status read, or an unlock's
-    /// last steps, that began before it does not open the vault after it (``refresh()``, ``didOpen``). Judged by time, so
-    /// a mailbox's old locks collected during a read do not count.
+    /// The locks this phone heard of (``LocksHeard``): each `vault.locking` (also one dropped as another opening's: it is
+    /// still a lock), by its `ts` on the vault's clock and by count, and each probe that found the vault locked. A status
+    /// read, or an unlock's last steps, that began before one does not open the vault after it (``refresh()``, ``didOpen``).
+    /// A `vault.locking` is judged by its time, so a mailbox's old locks collected during a read do not count; a probe's
+    /// always does.
     @ObservationIgnored var locksHeard = LocksHeard()
 
     /// Bumped by each event that has the phase read again (`device.unlinked`, not a replacement): an unlock it reached
@@ -232,6 +233,8 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
     @ObservationIgnored var eventsMissedWhileHeld = false
     /// ``onBackground(budget:)`` is doing its work (a hold decided at its start waits for it to end).
     @ObservationIgnored var backgroundWorks = 0
+    /// The ``foregrounds`` count of the latest leaving of the foreground, and of the one whose time ran out (``backgroundExpired()``).
+    @ObservationIgnored var leaving: (began: Int, expired: Bool)?
     /// The leaving of the foreground in hand has been counted in ``moveFlags`` (a held background counts when it begins).
     @ObservationIgnored var backgroundCounted = false
     /// The vault's time at the foreground's read of the lists, and until when (the phone's clock) the events older than it are
@@ -660,11 +663,7 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
         if d.recovering { return .setup(.recovering) }
         guard status.state == Self.stateUnlocked else { return .locked }
         if d.credentialVersion == nil { return .setup(.needsCredential) }
-        ownerChecks.onOpened()
-        // A restart after the credential and before the confirmation: the vault is still provisional (§11.3) and may be
-        // replaced; the backup choice and vault.enroll.confirm are sent before anything else.
-        // Only the phone whose enrollment made the vault confirms it.
-        if !local.enrollConfirmed, local.enrolledHere { try await confirmEnrollment(s, backup: local.backupChoice) { _ in } }
+        // The open answer's own steps run once it is to be published (``refresh()``, ``openedSteps(_:)``).
         return local.setupComplete ? .unlocked : .setup(.finishing)
     }
 }
@@ -676,18 +675,19 @@ extension VaultManager {
         let changes = phaseChanges
         let locks = lockGeneration
         let began = readStart()
-        let p: AppPhase
+        var p: AppPhase
+        var session: VaultSession?
         do {
-            p = try await guarded { try await evaluate() }
+            (p, session) = try await guarded {
+                let p = try await evaluate()
+                // The session `evaluate` read, taken with its answer (nothing awaits between): whether the device is paired
+                // is its, not that of a session opened later.
+                return (p, self.session)
+            }
         } catch let f as VaultFailure {
-            // What the phone stores for the vault could not be read: said as that, with the way out, rather than as
-            // "cannot connect".
-            let kind = f.code == VaultFailures.codeKeystore ? FailureKind.localState : f.kind
-            // Nothing has reached the vault service for a long time: erase-or-recover beside "Try again".
-            let last = [record.value.lastContactMs, record.value.lastOpenedMs].compactMap { $0 }.max()
-            let long = StuckScreens.longUnreachable(kind, lastContactMs: last, nowMs: nowMs, timeScale: record.value.timeScale)
-            p = .unreachable(kind, longUnreachable: long)
+            p = unreachable(f)
         }
+        let paired = session?.device.deviceID != nil
         // A reset, a lock, or a newer phase set by an operation meanwhile, wins. (An unlock that a `device.unlinked`
         // reached on its way reads the phase again rather than set its own: ``rereads``.)
         // (A lock meanwhile overtakes only an open answer: Locked is right after any lock, and a lock during a paused opening
@@ -695,10 +695,43 @@ extension VaultManager {
         // A lock heard of after the read began (an event or a probe, whatever the phase) overtakes an open answer, which then
         // reads Locked (the lock is the newest word): Unlocked, and the setup steps of an open vault, as `vault.locking` itself
         // turns them. Any other answer is published as it is (never a phone left on Starting).
-        // (The open answer's own steps, the owner check's `onOpened` and a provisional vault's confirmation, ran inside
-        // `evaluate` before this: both are idempotent and harmless for a vault that just locked; moving them after this guard
-        // is left to a follow-up.)
-        let answer = lockedSince(began) && opensVault(p) ? AppPhase.locked : p
-        if gen == record.generation, changes == phaseChanges, locks == lockGeneration || answer == .locked { phase = answer }
+        func published(_ p: AppPhase) -> AppPhase? {
+            let answer = lockedSince(began) && opensVault(p, paired: paired) ? AppPhase.locked : p
+            return gen == record.generation && changes == phaseChanges && (locks == lockGeneration || answer == .locked)
+                ? answer : nil
+        }
+        guard let answer = published(p) else { return }
+        // The open answer's own steps, only for an answer that is published: they await, so the answer is judged again
+        // after them.
+        if let session, paired, answer == .unlocked || answer == .setup(.finishing) {
+            do {
+                try await guarded { try await openedSteps(session) }
+            } catch let f as VaultFailure {
+                p = unreachable(f)
+            }
+            guard let after = published(p) else { return }
+            phase = after
+        } else {
+            phase = answer
+        }
+    }
+
+    /// The steps of a status read that says the paired vault is open: the owner check notes the opening, and after a
+    /// restart between the credential and the confirmation (the vault still provisional, §11.3, and replaceable) the backup
+    /// choice and vault.enroll.confirm are sent before anything else, by the phone whose enrollment made the vault only.
+    private func openedSteps(_ s: VaultSession) async throws {
+        ownerChecks.onOpened()
+        let local = record.value
+        if !local.enrollConfirmed, local.enrolledHere { try await confirmEnrollment(s, backup: local.backupChoice) { _ in } }
+    }
+
+    /// A read that failed: what the phone stores for the vault could not be read is said as that, with the way out,
+    /// rather than as "cannot connect"; nothing having reached the vault service for a long time puts erase-or-recover
+    /// beside "Try again".
+    private func unreachable(_ f: VaultFailure) -> AppPhase {
+        let kind = f.code == VaultFailures.codeKeystore ? FailureKind.localState : f.kind
+        let last = [record.value.lastContactMs, record.value.lastOpenedMs].compactMap { $0 }.max()
+        let long = StuckScreens.longUnreachable(kind, lastContactMs: last, nowMs: nowMs, timeScale: record.value.timeScale)
+        return .unreachable(kind, longUnreachable: long)
     }
 } // swiftlint:disable:this file_length

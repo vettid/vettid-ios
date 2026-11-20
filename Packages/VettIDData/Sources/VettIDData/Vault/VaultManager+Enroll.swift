@@ -194,7 +194,8 @@ extension VaultManager {
     }
 
     /// The backup setting, when the member chose, and `vault.enroll.confirm` (§3.5.7, §11.3): the vault stops being
-    /// provisional; recorded once answered.
+    /// provisional; recorded once answered. After a restart between the credential and the answer, a status read that
+    /// publishes the vault open sends both first (``refresh()``), by the phone whose enrollment made the vault only.
     func confirmEnrollment(_ s: VaultSession, backup: Bool?, onStep: @MainActor (EnrollStep) -> Void) async throws {
         onStep(.backup)
         if let backup { try await setSetting(s, Self.keyBackup, backup ? "true" : "false") }

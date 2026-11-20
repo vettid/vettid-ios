@@ -294,7 +294,8 @@ extension VaultManagerWaitingAsksTests {
         #expect(await eventually { !m.openingPaused })
         service.releaseStatusReads()
         try await reading.value
-        #expect(m.phase != .unlocked, "\(m.phase)")
+        // The lock heard during the read is the newest word: Locked, neither Unlocked nor "can't connect".
+        #expect(m.phase == .locked, "\(m.phase)")
     }
 
     /// The same, with the status read answering Locked: published, since Locked is right after any lock.

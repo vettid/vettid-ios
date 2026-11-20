@@ -153,6 +153,7 @@ extension VaultManager {
     /// task is cancelled (its expiration); nothing assumes it ran longer. A pending lock's retries go on while the process runs and resume at the next start.
     public func onBackground(budget: Duration = .seconds(25)) async {
         let began = foregrounds
+        leaving = (began, false)
         moveFlags.book.lifecycle += 1
         // IOS-PLAN §6.3: the PIN kept for the pairing goes with the other secrets (§4.9), and so does the one kept for the
         // check's retry (VAULT-MESSAGING §3.6.5), also while an unlock and its check are on their way.
@@ -194,8 +195,9 @@ extension VaultManager {
         work.cancel()
         watcher.cancel()
         backgroundWorks -= 1
-        // Back in the foreground meanwhile: the collection runs on.
-        guard began == foregrounds else { return }
+        // Back in the foreground meanwhile: the collection runs on. Stopped already at the expiration: nothing more.
+        let expired = leaving?.began == began && leaving?.expired == true
+        guard began == foregrounds, !expired else { return }
         // A live call keeps the collection: its peer's `call.end` and ICE come through it, and its own go out through the session.
         // The stop waits for the hold to end (``collectionHoldEnded()``). A call that went live during the work holds it too.
         if collectionHeld?() == true {
@@ -209,6 +211,17 @@ extension VaultManager {
             }
             return
         }
+        finishBackground()
+    }
+
+    /// The background time iOS gave ran out (its expiration handler, called just before the app is suspended): the
+    /// collection stops now, synchronously, as at the end of ``onBackground(budget:)``, whose work the handler then cancels,
+    /// rather than in a task that may not run before the suspension. Not when the app came back meanwhile, nor while a call
+    /// holds the collection (the call keeps the app running), nor twice.
+    public func backgroundExpired() {
+        guard let l = leaving, l.began == foregrounds, !l.expired, backgroundWorks > 0 else { return }
+        guard heldBackground == nil, collectionHeld?() != true else { return }
+        leaving = (l.began, true)
         finishBackground()
     }
 
@@ -487,11 +500,29 @@ extension VaultManager {
     }
 }
 
-/// The locks this phone heard of (``VaultManager/locksHeard``): the newest `vault.locking`'s time on the vault's clock, and how
-/// many probes found the vault locked (a probe's "locked" is now: after any read or unlock under way).
+/// The locks this phone heard of (``VaultManager/locksHeard``): the newest `vault.locking`'s time on the vault's clock, how
+/// many were heard and the time of the last one heard (a lock heard after a step back of the vault's clock is not the
+/// newest by time, and still counts), and how many probes found the vault locked (a probe's "locked" is now: after any
+/// read or unlock under way).
 struct LocksHeard: Equatable {
     var latest: Date?
+    var events = 0
+    var last: Date?
     var probes = 0
+
+    /// A `vault.locking` heard, sent at [at] (vault time).
+    mutating func note(_ at: Date) {
+        if latest.map({ at > $0 }) ?? true { latest = at }
+        events += 1
+        last = at
+    }
+
+    /// A lock heard since [before] whose time is after [at]: a newer newest by time, or the last heard.
+    func since(_ before: LocksHeard, after at: Date) -> Bool {
+        guard events != before.events else { return false }
+        if latest != before.latest, let l = latest, l > at { return true }
+        return last.map { $0 > at } ?? false
+    }
 }
 
 /// Where a read (or an unlock's last steps) began: its moment, whether that is on the vault's clock, and the locks heard
@@ -522,7 +553,7 @@ extension VaultManager {
 
     /// A lock heard of at [at] (vault time).
     func noteLockSeen(at: Date) {
-        if locksHeard.latest.map({ at > $0 }) ?? true { locksHeard.latest = at }
+        locksHeard.note(at)
     }
 
     /// A probe found the vault locked: after anything under way.
@@ -532,17 +563,16 @@ extension VaultManager {
     /// phone's, within ``lockSkewAllowance`` of it. A probe's always.
     func lockedSince(_ start: ReadStart) -> Bool {
         if locksHeard.probes != start.heard.probes { return true }
-        guard let l = locksHeard.latest, l != start.heard.latest else { return false }
-        return l > (start.onVaultClock ? start.at : start.at.addingTimeInterval(-Self.lockSkewAllowance))
+        let from = start.onVaultClock ? start.at : start.at.addingTimeInterval(-Self.lockSkewAllowance)
+        return locksHeard.since(start.heard, after: from)
     }
 
-    /// An answer that says the vault is open: Unlocked, or, on a paired device (whose answer came from the vault's status),
-    /// the setup steps that read it open (finishing, a credential). An unpaired device's "a credential" step is no status
-    /// answer, and is never turned into Locked. (The session read here is the one `evaluate` used: nothing awaits between.)
-    func opensVault(_ p: AppPhase) -> Bool {
+    /// An answer that says the vault is open: Unlocked, or, on a [paired] device (whose answer came from the vault's
+    /// status; as the session `evaluate` read says), the setup steps that read it open (finishing, a credential). An
+    /// unpaired device's "a credential" step is no status answer, and is never turned into Locked.
+    func opensVault(_ p: AppPhase, paired: Bool) -> Bool {
         if p == .unlocked { return true }
-        guard p == .setup(.finishing) || p == .setup(.needsCredential) else { return false }
-        return session?.device.deviceID != nil
+        return paired && (p == .setup(.finishing) || p == .setup(.needsCredential))
     }
 
     /// A lock the vault made after an unlock opened it at [openedAt] (vault time; another device, or the vault itself, during
@@ -553,9 +583,9 @@ extension VaultManager {
         if locksHeard.probes != heard.probes {
             locked = true
         } else if let at = openedAt {
-            locked = locksHeard.latest.map { $0 > at } ?? false
+            locked = locksHeard.since(heard, after: at) || (locksHeard.latest.map { $0 > at } ?? false)
         } else {
-            locked = locksHeard.latest != heard.latest
+            locked = locksHeard.events != heard.events
         }
         if locked { phase = .locked }
         return locked
