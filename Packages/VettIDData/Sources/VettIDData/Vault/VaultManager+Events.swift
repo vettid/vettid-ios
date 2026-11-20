@@ -500,29 +500,11 @@ extension VaultManager {
     }
 }
 
-/// The locks this phone heard of (``VaultManager/locksHeard``): the newest `vault.locking`'s time on the vault's clock, how
-/// many were heard and the time of the last one heard (a lock heard after a step back of the vault's clock is not the
-/// newest by time, and still counts), and how many probes found the vault locked (a probe's "locked" is now: after any
-/// read or unlock under way).
+/// The locks this phone heard of (``VaultManager/locksHeard``): the newest `vault.locking`'s time on the vault's clock, and how
+/// many probes found the vault locked (a probe's "locked" is now: after any read or unlock under way).
 struct LocksHeard: Equatable {
     var latest: Date?
-    var events = 0
-    var last: Date?
     var probes = 0
-
-    /// A `vault.locking` heard, sent at [at] (vault time).
-    mutating func note(_ at: Date) {
-        if latest.map({ at > $0 }) ?? true { latest = at }
-        events += 1
-        last = at
-    }
-
-    /// A lock heard since [before] whose time is after [at]: a newer newest by time, or the last heard.
-    func since(_ before: LocksHeard, after at: Date) -> Bool {
-        guard events != before.events else { return false }
-        if latest != before.latest, let l = latest, l > at { return true }
-        return last.map { $0 > at } ?? false
-    }
 }
 
 /// Where a read (or an unlock's last steps) began: its moment, whether that is on the vault's clock, and the locks heard
@@ -553,7 +535,7 @@ extension VaultManager {
 
     /// A lock heard of at [at] (vault time).
     func noteLockSeen(at: Date) {
-        locksHeard.note(at)
+        if locksHeard.latest.map({ at > $0 }) ?? true { locksHeard.latest = at }
     }
 
     /// A probe found the vault locked: after anything under way.
@@ -563,8 +545,8 @@ extension VaultManager {
     /// phone's, within ``lockSkewAllowance`` of it. A probe's always.
     func lockedSince(_ start: ReadStart) -> Bool {
         if locksHeard.probes != start.heard.probes { return true }
-        let from = start.onVaultClock ? start.at : start.at.addingTimeInterval(-Self.lockSkewAllowance)
-        return locksHeard.since(start.heard, after: from)
+        guard let l = locksHeard.latest, l != start.heard.latest else { return false }
+        return l > (start.onVaultClock ? start.at : start.at.addingTimeInterval(-Self.lockSkewAllowance))
     }
 
     /// An answer that says the vault is open: Unlocked, or, on a [paired] device (whose answer came from the vault's
@@ -583,9 +565,9 @@ extension VaultManager {
         if locksHeard.probes != heard.probes {
             locked = true
         } else if let at = openedAt {
-            locked = locksHeard.since(heard, after: at) || (locksHeard.latest.map { $0 > at } ?? false)
+            locked = locksHeard.latest.map { $0 > at } ?? false
         } else {
-            locked = locksHeard.events != heard.events
+            locked = locksHeard.latest != heard.latest
         }
         if locked { phase = .locked }
         return locked

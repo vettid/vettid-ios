@@ -195,7 +195,8 @@ extension VaultManager {
 
     /// The backup setting, when the member chose, and `vault.enroll.confirm` (§3.5.7, §11.3): the vault stops being
     /// provisional; recorded once answered. After a restart between the credential and the answer, a status read that
-    /// publishes the vault open sends both first (``refresh()``), by the phone whose enrollment made the vault only.
+    /// publishes the vault open sends both first (``refresh()``), and so does ``finishSetup()`` when none did, by the phone
+    /// whose enrollment made the vault only.
     func confirmEnrollment(_ s: VaultSession, backup: Bool?, onStep: @MainActor (EnrollStep) -> Void) async throws {
         onStep(.backup)
         if let backup { try await setSetting(s, Self.keyBackup, backup ? "true" : "false") }
@@ -225,7 +226,13 @@ extension VaultManager {
     /// Leaves onboarding for the open app: only from ``SetupStage/finishing`` (``FinishSetupGate``), never while a lock is
     /// pending, and never before `vault.enroll.confirm` was answered. "Finish the move", which also holds it, comes with
     /// I3.3.
+    /// A provisional vault not confirmed yet (a restart before the answer, and no status read published it open since: one
+    /// overtaken by a lock, or the vault locked and then unlocked) is confirmed first, by the phone whose enrollment made it.
     public func finishSetup() async throws {
+        let local = record.value
+        if phase == .setup(.finishing), !local.enrollConfirmed, local.enrolledHere, let s = session {
+            try await guarded { try await confirmEnrollment(s, backup: local.backupChoice) { _ in } }
+        }
         _ = try finishSetupGated()
     }
 

@@ -25,6 +25,8 @@ extension VaultManagerVotesTests {
         m.backgroundExpired()
         #expect(m.session == nil && m.backgrounded, "stopped synchronously, before the work ends")
         let lifecycle = m.moveFlags.book.lifecycle
+        m.backgroundExpired()
+        #expect(m.moveFlags.book.lifecycle == lifecycle, "not twice")
         background.cancel()
         await background.value
         #expect(m.moveFlags.book.lifecycle == lifecycle, "the work's end does not finish the background again")

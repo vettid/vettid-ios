@@ -186,7 +186,7 @@ import VettIDKeysTesting
     }
 
     /// The open answer's steps run only for an answer that is published: a lock heard during the start's status read
-    /// turns it Locked, and the provisional vault is not confirmed by it (the next opening's read does).
+    /// turns it Locked, and the provisional vault is not confirmed by it. After the unlock, finishing the setup confirms it.
     @Test func aLockDuringTheStartsReadSendsNoConfirmation() async throws {
         defer { phone.close() }
         try await redeemed()
@@ -203,6 +203,10 @@ import VettIDKeysTesting
         service.releaseStatusReads()
         try await reading.value
         #expect(m.phase == .locked && !service.confirmed)
+        #expect(try await m.unlock(pin: "402817") == .success)
+        #expect(m.phase == .setup(.finishing) && !service.confirmed)
+        try await m.finishSetup()
+        #expect(service.confirmed && m.phase == .unlocked)
     }
 
     /// IOS-PLAN ID8: an instance without `recovery_r` gets nothing; no phone key is made for it.

@@ -116,11 +116,11 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
     /// (``refresh()``: only a Locked answer is published), an unlock's last steps, a recovery's or an enrollment's end, and a
     /// failure's `credential_required` handling (``VaultManager+Failures``).
     @ObservationIgnored var lockGeneration = 0
-    /// The locks this phone heard of (``LocksHeard``): each `vault.locking` (also one dropped as another opening's: it is
-    /// still a lock), by its `ts` on the vault's clock and by count, and each probe that found the vault locked. A status
-    /// read, or an unlock's last steps, that began before one does not open the vault after it (``refresh()``, ``didOpen``).
-    /// A `vault.locking` is judged by its time, so a mailbox's old locks collected during a read do not count; a probe's
-    /// always does.
+    /// The locks this phone heard of (``LocksHeard``): the newest `vault.locking`'s `ts` on the vault's clock (also one
+    /// dropped as another opening's: it is still a lock), and each probe that found the vault locked. A status read, or an
+    /// unlock's last steps, that began before one does not open the vault after it (``refresh()``, ``didOpen``). A
+    /// `vault.locking` is judged by its time, so a mailbox's old locks, or one delivered again, collected during a read do
+    /// not count; a probe's always does.
     @ObservationIgnored var locksHeard = LocksHeard()
 
     /// Bumped by each event that has the phase read again (`device.unlinked`, not a replacement): an unlock it reached
@@ -599,23 +599,29 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
     /// The phone's clock, in Unix ms.
     var nowMs: Int64 { Int64((config.now().timeIntervalSince1970 * 1000).rounded(.down)) }
 
-    private func evaluate() async throws -> AppPhase {
+    /// The phase, and the session it was read with (none before one is opened).
+    private func evaluate() async throws -> (AppPhase, VaultSession?) {
         if record.eraseFailed {
             // "Try again" after a wipe that did not finish: it runs again, and its phase says how it ended.
             await holder?.wipeNow()
-            return phase
+            return (phase, nil)
         }
         try await preparedOffMain()
         // IOS-PLAN §4.2: a vault being deleted, before anything else is read or opened.
-        if let d = record.value.deleting { return resumeDeleting(d) }
+        if let d = record.value.deleting { return (resumeDeleting(d), nil) }
         usesPhoneSecret = phoneSecrets.inUse
         // §11.14.9 step 5: a PIN change left unresolved by an earlier run makes the unlock ask for the previous PIN.
         refreshPinStep()
         recoveryOffered = ReleasePath.recoveryOffered(record.value.capabilities)
         let local = record.value
         // Nothing redeemed on this phone: the welcome screen.
-        if local.userGuid.isEmpty && !local.transferIn { return .signedOut }
+        if local.userGuid.isEmpty && !local.transferIn { return (.signedOut, nil) }
         let s = try await openSession()
+        return (try await sessionPhase(s, local), s)
+    }
+
+    /// The phase read with the open session [s].
+    private func sessionPhase(_ s: VaultSession, _ local: LocalAccount) async throws -> AppPhase {
         let d = s.device
         config.attestStartOver?.set(recovering: d.recovering)
         // vault.enrolled pinned the vault: the epoch-1 secret it holds is this phone's (a crash or a lost answer
@@ -678,12 +684,8 @@ extension VaultManager {
         var p: AppPhase
         var session: VaultSession?
         do {
-            (p, session) = try await guarded {
-                let p = try await evaluate()
-                // The session `evaluate` read, taken with its answer (nothing awaits between): whether the device is paired
-                // is its, not that of a session opened later.
-                return (p, self.session)
-            }
+            // The session `evaluate` read with: whether the device is paired, and the open answer's steps, are its.
+            (p, session) = try await guarded { try await evaluate() }
         } catch let f as VaultFailure {
             p = unreachable(f)
         }
@@ -702,7 +704,7 @@ extension VaultManager {
         }
         guard let answer = published(p) else { return }
         // The open answer's own steps, only for an answer that is published: they await, so the answer is judged again
-        // after them.
+        // after them, under the same guards (a confirmation that failed publishes its failure, as before).
         if let session, paired, answer == .unlocked || answer == .setup(.finishing) {
             do {
                 try await guarded { try await openedSteps(session) }
