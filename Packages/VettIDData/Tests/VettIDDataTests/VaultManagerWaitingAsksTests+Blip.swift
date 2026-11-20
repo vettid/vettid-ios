@@ -68,11 +68,11 @@ extension VaultManagerWaitingAsksTests {
         try await blip()
         _ = try service.feedItemArrives("message.received", connectionID: id)
         #expect(await eventually { m.feed.heldEvents.count == 2 })
-        try await Task.sleep(for: .milliseconds(200))
+        try await quiet()
         #expect(live.isEmpty, "nothing while Unreachable: \(live)")
         try await back()
         await failReleaseCheck()
-        try await Task.sleep(for: .milliseconds(200))
+        try await quiet()
         #expect(live.isEmpty, "nothing while the check fails: \(live)")
         await passReleaseCheck()
         #expect(await eventually { live.count == 2 }, "\(live)")
@@ -180,9 +180,18 @@ extension VaultManagerWaitingAsksTests {
         #expect(live.isEmpty, "read elsewhere: \(live)")
     }
 
+    /// Nothing more is under way: the lists' read is over and the feed reads nothing.
+    func quiet() async throws {
+        await m.listsRead?.value
+        // A catch-up or a release just scheduled has had its turn.
+        for _ in 0..<50 { await Task.yield() }
+        #expect(await eventually { m.feed.readsRunning == 0 && !m.feed.catchUpQueued })
+        for _ in 0..<50 { await Task.yield() }
+    }
+
     /// The return's catch-up failed: what the check held does not come from the stale feed (a failed read releases nothing);
-    /// it comes after the next read that lands, from the feed as it is then.
-    @Test func aFailedCatchUpAtTheReturnReleasesNothing() async throws {
+    /// the lists' read tries the catch-up once more, and what was held comes after it, from the feed as it is then.
+    @Test func aFailedCatchUpAtTheReturnIsTriedOnceMore() async throws {
         defer { phone.close() }
         let id = try await connected()
         await failReleaseCheck()
@@ -194,13 +203,9 @@ extension VaultManagerWaitingAsksTests {
         service.failNext("feed.list")
         try await back()
         #expect(await eventually { !m.releaseUpdate.checking })
-        try await settled()
-        #expect(live.isEmpty, "not from the stale feed: \(live)")
-        #expect(m.feed.heldEvents.count == 1, "still held")
-        m.feed.catchUp()
-        #expect(await eventually { m.feed.heldEvents.isEmpty })
-        try await settled()
-        #expect(live.isEmpty, "read elsewhere: \(live)")
+        #expect(await eventually { m.feed.heldEvents.isEmpty && !m.feed.catchUpOwed }, "released after the retried catch-up")
+        try await quiet()
+        #expect(live.isEmpty, "from the feed as it is now: read elsewhere: \(live)")
     }
 
     /// The return reads the feed on from its kept cursor (not in full): an item sent during the gap whose `feed.event`
@@ -273,5 +278,38 @@ extension VaultManagerWaitingAsksTests {
         m.feed.heldArrivals = [HeldArrival(item: item, replayed: true), HeldArrival(item: item, replayed: false)]
         try await blip()
         #expect(m.feed.heldArrivals.map(\.replayed) == [false])
+    }
+
+    /// A status read under way when a lock ends the paused opening does not publish Unlocked over the lock.
+    @Test func aStatusReadUnderWayDoesNotOpenOverALockDuringTheGap() async throws {
+        defer { phone.close() }
+        _ = try await connected()
+        try await blip()
+        service.statusForbidden = false
+        service.holdStatusReads()
+        let reading = Task { try await m.refresh() }
+        #expect(await eventually { service.heldStatusReads == 1 })
+        service.sendEvent("vault.locking", #"{"reason":"test"}"#)
+        #expect(await eventually { !m.openingPaused })
+        service.releaseStatusReads()
+        try await reading.value
+        #expect(m.phase != .unlocked, "\(m.phase)")
+    }
+
+    /// The same, with the status read answering Locked: published, since Locked is right after any lock.
+    @Test func aStatusReadUnderWayThatFindsTheLockIsPublished() async throws {
+        defer { phone.close() }
+        _ = try await connected()
+        try await blip()
+        service.statusForbidden = false
+        service.status("locked")
+        service.holdStatusReads()
+        let reading = Task { try await m.refresh() }
+        #expect(await eventually { service.heldStatusReads == 1 })
+        service.sendEvent("vault.locking", #"{"reason":"test"}"#)
+        #expect(await eventually { !m.openingPaused })
+        service.releaseStatusReads()
+        try await reading.value
+        #expect(m.phase == .locked, "\(m.phase)")
     }
 }

@@ -56,6 +56,9 @@ extension FeedManager {
     /// kept feed is read on from its cursor, not in full, so an item the vault sent meanwhile arrives as one (held while the
     /// release is checked) even if its event comes late; and what was held comes only after that read, from the feed as it
     /// is now (an item read on another device meanwhile is not notified).
+    /// (chosen; not in the spec) A kept feed that is not loaded is read in full, even when an earlier full read had loaded it
+    /// and only a later one failed (its list is complete as of its cursor then): the gap's items come listed but silent, as
+    /// within any opening whose read failed. A rare corner; one never loaded has no cursor to read on from.
     public func openingContinued() {
         catchUpOwed = true
         catchUp()

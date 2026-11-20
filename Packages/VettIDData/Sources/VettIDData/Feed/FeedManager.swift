@@ -129,7 +129,7 @@ public final class FeedManager: FeedRepository {
     /// Bumped by ``clear()``: a read that started before it is not applied after it.
     @ObservationIgnored private var generation = 0
     @ObservationIgnored private var reading: Task<Void, any Error>?
-    @ObservationIgnored private var catchUpQueued = false
+    @ObservationIgnored private(set) var catchUpQueued = false
     /// Open from the end of the held or due state until the waiting asks' replay (``openWaitingAsks()``): the items that
     /// arrived meanwhile, which the replay leaves out. Nil when closed.
     @ObservationIgnored var arrivedSinceCheck: Set<String>?
@@ -276,6 +276,12 @@ public final class FeedManager: FeedRepository {
     }
 
     public func refresh() async throws { try await read(full: true, quietly: false) }
+
+    /// A continued opening's catch-up is still owed (it failed): read on from the cursor once more, awaited.
+    public func readOnIfOwed() async {
+        guard catchUpOwed else { return }
+        try? await read(full: false, quietly: true)
+    }
 
     /// One paged read after the reads before it ([full]: from 0, replacing everything).
     private func read(full: Bool, quietly: Bool, queued: Bool = false) async throws {
