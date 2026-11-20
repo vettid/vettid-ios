@@ -268,19 +268,23 @@ struct AppRoot: View {
 
     /// IOS-PLAN §6.6: what is in flight (a lock's first attempt, the outbox, a vote window's lock) is finished in a
     /// background task, within the time iOS gives it, then the collection stops (not when the app came back meanwhile). At the task's expiration the
-    /// work is cancelled and the task ended. Nothing assumes it ran longer.
+    /// collection stops at once, the work is cancelled and the task ended. Nothing assumes it ran longer.
     private func leaveForeground() {
         let app = UIApplication.shared
         let background = BackgroundTask()
         let remaining = app.backgroundTimeRemaining
         // A margin before iOS's own end, and never more than half a minute (chosen; not in the spec).
         let seconds = remaining.isFinite ? min(max(remaining - 5, 1), 25) : 25
+        // This leaving, by the returns counted so far: a later leaving's expiration is its own.
+        let began = vault.foregroundReturns
         let work = Task { @MainActor in
             await vault.onBackground(budget: .seconds(seconds))
             background.end(app)
         }
         background.id = app.beginBackgroundTask(withName: "vault-background") {
             MainActor.assumeIsolated {
+                // The collection stops before the app is suspended, not in the cancelled work's own time.
+                vault.backgroundExpired(began: began)
                 work.cancel()
                 background.end(app)
             }

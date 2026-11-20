@@ -244,6 +244,9 @@ extension VaultManager {
     /// The vault opened: the stale lock notices, the outbox, and the phase, unless a lock overtook this unlock.
     private func didOpen(_ r: UnlockResult, _ s: VaultSession, _ marks: OpenMarks, beforeOpen: @MainActor () async -> Void) async {
         let (locks, rec) = (marks.locks, marks.record)
+        // (Accepted gap) A probe that found the vault locked after the unlock's answer and before this point is not counted
+        // as a lock after the opening: it is taken among the locks heard before. Its own effect (Locked) still applies; a
+        // `vault.locking` in that window is judged by its time (``lockedAfterOpening(_:since:)``).
         let heard = locksHeard
         // The vault is open as of the result's ts: a vault.locking from before it is stale, also after a restart.
         lockNotices.opened(at: r.at)

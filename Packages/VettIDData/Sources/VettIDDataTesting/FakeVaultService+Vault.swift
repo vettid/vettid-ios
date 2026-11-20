@@ -295,6 +295,12 @@ extension FakeVaultService {
         }
     }
 
+    /// The vault locks itself just as the next request of [type] arrives: its `vault.locking` goes out before that
+    /// request's answer (the request is then handled as any). Unlike ``lockOn``, the vault stays open: the request is
+    /// answered, not kept in the mailbox. Only a request that reaches ``refusal(_:)`` (not one kept in the mailbox, sent
+    /// again or expired, nor one ``refuseNext(_:code:message:body:)`` answers) fires it.
+    public func lockBefore(_ type: String) { locked { _ = lockBeforeTypes.insert(type) } }
+
     /// The vault opened: what waited in its mailbox is handled now, in order; a request whose `exp` has passed is dropped
     /// (§5.3). Callers hold ``cond``.
     func handleWhileLockedRequests() {
@@ -310,6 +316,7 @@ extension FakeVaultService {
     /// or, until the credential exists, everything but what creates it (§3.5.7, `credential_required`). Callers hold
     /// ``cond``.
     private func refusal(_ type: String) -> String? {
+        if lockBeforeTypes.remove(type) != nil { try? reply("vault.locking", #"{"reason":"test"}"#) }
         if failNextTypes.remove(type) != nil { return "retry" }
         if let r = refusedTypesValue[type], r.times > 0 {
             refusedTypesValue[type] = r.times > 1 ? (r.code, r.times - 1) : nil

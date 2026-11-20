@@ -153,6 +153,7 @@ extension VaultManager {
     /// task is cancelled (its expiration); nothing assumes it ran longer. A pending lock's retries go on while the process runs and resume at the next start.
     public func onBackground(budget: Duration = .seconds(25)) async {
         let began = foregrounds
+        leaving = (began, false)
         moveFlags.book.lifecycle += 1
         // IOS-PLAN §6.3: the PIN kept for the pairing goes with the other secrets (§4.9), and so does the one kept for the
         // check's retry (VAULT-MESSAGING §3.6.5), also while an unlock and its check are on their way.
@@ -194,8 +195,9 @@ extension VaultManager {
         work.cancel()
         watcher.cancel()
         backgroundWorks -= 1
-        // Back in the foreground meanwhile: the collection runs on.
-        guard began == foregrounds else { return }
+        // Back in the foreground meanwhile: the collection runs on. Stopped already at the expiration: nothing more.
+        let expired = leaving?.began == began && leaving?.expired == true
+        guard began == foregrounds, !expired else { return }
         // A live call keeps the collection: its peer's `call.end` and ICE come through it, and its own go out through the session.
         // The stop waits for the hold to end (``collectionHoldEnded()``). A call that went live during the work holds it too.
         if collectionHeld?() == true {
@@ -211,6 +213,23 @@ extension VaultManager {
         }
         finishBackground()
     }
+
+    /// The background time iOS gave ran out (its expiration handler, called just before the app is suspended): the
+    /// collection stops now, synchronously, as at the end of ``onBackground(budget:)``, whose work the handler then cancels,
+    /// rather than in a task that may not run before the suspension. [began]: ``foregroundReturns`` when that leaving began
+    /// (another leaving's expiration stops nothing). Not when the app came back meanwhile, nor while a call holds the
+    /// collection (the call keeps the app running; one that ended during the work no longer does), nor twice.
+    public func backgroundExpired(began: Int) {
+        guard let l = leaving, l.began == began, began == foregrounds, !l.expired, !backgrounded, backgroundWorks > 0 else {
+            return
+        }
+        guard collectionHeld?() != true else { return }
+        leaving = (l.began, true)
+        finishBackground()
+    }
+
+    /// Counts the returns to the foreground: taken when the app leaves it, it names that leaving (``backgroundExpired(began:)``).
+    public var foregroundReturns: Int { foregrounds }
 
     /// Starts a device's collection unless the app is in the background; while a call holds the background it collects by long poll.
     func startUnlessBackground(_ d: VaultDevice) {
@@ -529,20 +548,21 @@ extension VaultManager {
     func noteProbeLock() { locksHeard.probes += 1 }
 
     /// A lock heard of during the read that began at [start] and newer than it: on the vault's clock, after it; on the
-    /// phone's, within ``lockSkewAllowance`` of it. A probe's always.
+    /// phone's, within ``lockSkewAllowance`` of it. A probe's always. A lock timed before that does not count even when it
+    /// is heard during the read: the vault's status was read after it, so an open answer then is the vault opened again
+    /// since (a mailbox's old locks, or one delivered again).
     func lockedSince(_ start: ReadStart) -> Bool {
         if locksHeard.probes != start.heard.probes { return true }
         guard let l = locksHeard.latest, l != start.heard.latest else { return false }
         return l > (start.onVaultClock ? start.at : start.at.addingTimeInterval(-Self.lockSkewAllowance))
     }
 
-    /// An answer that says the vault is open: Unlocked, or, on a paired device (whose answer came from the vault's status),
-    /// the setup steps that read it open (finishing, a credential). An unpaired device's "a credential" step is no status
-    /// answer, and is never turned into Locked. (The session read here is the one `evaluate` used: nothing awaits between.)
-    func opensVault(_ p: AppPhase) -> Bool {
+    /// An answer that says the vault is open: Unlocked, or, on a [paired] device (whose answer came from the vault's
+    /// status; as the session `evaluate` read says), the setup steps that read it open (finishing, a credential). An
+    /// unpaired device's "a credential" step is no status answer, and is never turned into Locked.
+    func opensVault(_ p: AppPhase, paired: Bool) -> Bool {
         if p == .unlocked { return true }
-        guard p == .setup(.finishing) || p == .setup(.needsCredential) else { return false }
-        return session?.device.deviceID != nil
+        return paired && (p == .setup(.finishing) || p == .setup(.needsCredential))
     }
 
     /// A lock the vault made after an unlock opened it at [openedAt] (vault time; another device, or the vault itself, during
