@@ -324,7 +324,7 @@ struct UnlockWayForward: View {
             RecoverLink(onRecover: onRecover)
         case .stuck:
             StuckNotice(
-                erasing: state.erasing, earlierSecret: state.earlierSecret, pinReady: pinReady,
+                erasing: state.erasing, earlierSecret: state.earlierSecretOffered, pinReady: pinReady,
                 onErase: { actions.askErase() }, onRecover: onRecover, onEarlierSecret: onEarlierSecret
             )
         case .none:

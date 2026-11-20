@@ -81,6 +81,9 @@ public struct UnlockState: Equatable, Sendable, CustomStringConvertible, CustomD
     public var noUserGuid = false
     /// (iPhone, IOS-PLAN §6.3 item 5) With ``keysGone``: a replaced phone-secret record exists, and the member may try it.
     public var earlierSecret = false
+    /// "Try this phone's earlier keys" is offered: not while a recovery is pending, where only its cancel is sent (the
+    /// earlier keys' plain unlock would only be answered `recovery_pending` again).
+    public var earlierSecretOffered: Bool { earlierSecret && !recoveryPending }
     /// The open app was sent here because the relay kept refusing this phone's messages to the vault.
     public var refused = false
     /// The lock the member asked for (``LockNotice``).

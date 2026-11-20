@@ -57,8 +57,39 @@ extension UnlockViewModelTests {
         vm.cancelRecoveryAndUnlock()
         await vm.settle()
         #expect(vault.lastPin != "11112222", "nothing sent during the wait")
+        #expect(vm.state.pin.isEmpty, "the refused PIN does not stay in memory")
         await ticker.advance(30, vm)
         #expect(vm.state.waitSeconds == 0 && vm.state.cancelAllowed(pinTyped: 8))
+    }
+
+    /// Two taps on the cancel with a correct PIN send one request.
+    @Test func twoTapsSendOneCancel() async {
+        vault.unlockResults = [.recoveryPending]
+        let vm = await vm()
+        await submit(vm)
+        let before = vault.calls.filter { $0 == "unlock" }.count
+        vm.cancelRecoveryAndUnlock()
+        vm.cancelRecoveryAndUnlock()
+        await vm.settle()
+        #expect(vault.calls.filter { $0 == "unlock" }.count == before + 1 && vault.phase == .unlocked)
+    }
+
+    /// After a cancel answered `device_secret` the keypad shows, but the earlier keys are neither offered nor sent while a
+    /// recovery is pending: only its cancel goes (the plain unlock would only be answered `recovery_pending` again).
+    @Test func theEarlierKeysWaitForTheRecovery() async {
+        vault.earlierSecretOffered = true
+        vault.unlockResults = [.recoveryPending, .failed(.deviceSecret, code: "device_secret")]
+        let vm = await vm()
+        await submit(vm)
+        vm.cancelRecoveryAndUnlock()
+        await vm.settle()
+        #expect(vm.state.recoveryPending && vm.state.keysGone && vm.state.earlierSecret && vm.state.showsPin)
+        #expect(!vm.state.earlierSecretOffered)
+        let sent = vault.calls.count
+        vm.setPin("40281795")
+        vm.submitEarlierSecret()
+        await vm.settle()
+        #expect(vault.calls.count == sent && vm.state.pin.isEmpty)
     }
 
     /// While a recovery is pending, a plain submit sends nothing: only the member's cancel goes.

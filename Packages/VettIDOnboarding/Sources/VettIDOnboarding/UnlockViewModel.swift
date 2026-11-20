@@ -218,12 +218,16 @@ public final class UnlockViewModel: UnlockActions {
     }
 
     public func cancelRecoveryAndUnlock() {
-        guard state.cancelAllowed else { return }
+        // Refused here: a PIN typed for it does not stay in memory (the kept one does, for the next tap).
+        guard state.cancelAllowed else {
+            if state.cancelPinNeeded { state.pin = "" }
+            return
+        }
         attempt(.unlock(cancelRecovery: true))
     }
 
     public func submitEarlierSecret() {
-        guard state.keysGone, state.earlierSecret else {
+        guard state.keysGone, state.earlierSecretOffered else {
             state.pin = ""
             return
         }
@@ -329,8 +333,8 @@ public final class UnlockViewModel: UnlockActions {
     private func attempt(_ kind: Kind) {
         let s = state
         guard s.submitAllowed, !s.erasing else {
-            // Refused here: the PIN handed over for it does not stay in memory.
-            if !s.recoveryPending { state.pin = "" }
+            // Refused here: the PIN handed over for it does not stay in memory, unless it is the one kept for the cancel.
+            if !s.recoveryPending || s.cancelPinNeeded { state.pin = "" }
             return
         }
         state.busy = true
@@ -383,7 +387,8 @@ public final class UnlockViewModel: UnlockActions {
         }
     }
 
-    /// "Cancel" on the long wait: stops waiting for the vault's answer.
+    /// "Cancel" on the long wait: stops waiting for the vault's answer. The request may still apply at the vault (a slow
+    /// "Cancel the recovery and unlock" too); the next start reads the phase (VAULT-MESSAGING §11.5).
     public func cancelUnlock() {
         guard state.busy else { return }
         attemptGeneration += 1
@@ -418,7 +423,7 @@ public final class UnlockViewModel: UnlockActions {
             pinRefused(wait, badPin: false)
         // The PIN stays in memory so that "Cancel the recovery and unlock" can send it again.
         case .recoveryPending:
-            state.recoveryPending = true
+            recoveryStillPending()
         case .stateRollback:
             state.pin = ""
             state.stateRollback = true
@@ -431,6 +436,13 @@ public final class UnlockViewModel: UnlockActions {
             // A paused service (503, never proof of anything): wait as it asked, no automatic retry.
             if kind == .servicePaused { startServiceWait(wait) }
         }
+    }
+
+    /// `recovery_pending`: the PIN stays in memory so that "Cancel the recovery and unlock" can send it, unless it was typed
+    /// for a cancel so answered (not expected: the cancel skips that answer). Then another is typed.
+    private func recoveryStillPending() {
+        state.recoveryPending = true
+        if state.cancelPinNeeded { state.pin = "" }
     }
 
     /// An unreadable answer: the vault may not know this phone. A sealed answer shows that it does; other failures say

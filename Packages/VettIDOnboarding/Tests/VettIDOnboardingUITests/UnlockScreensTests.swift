@@ -478,8 +478,6 @@ import VettIDUI
     private func textFields(in view: UIView) -> [UITextField] { views(in: view).compactMap { $0 as? UITextField } }
 }
 
-#endif
-
 /// Records the cancel's calls, in order.
 @MainActor
 private final class RecordingUnlockActions: UnlockActions {
@@ -508,3 +506,5 @@ private final class RecordingUnlockActions: UnlockActions {
     func confirmReturn() {}
     func cancelReturn() {}
 }
+
+#endif
