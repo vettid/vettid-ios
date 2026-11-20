@@ -113,6 +113,10 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
     @ObservationIgnored let lockNotices = LockNotices()
     /// Bumped by every lock the member asks for: an unlock or a refresh that began before it publishes no open phase.
     @ObservationIgnored var lockGeneration = 0
+    /// Locks seen by events (`vault.locking`) and by a status read that found the vault locked, whatever the phase: a status
+    /// read begun before one does not publish an open answer after it (``refresh()``). Refreshes only: an unlock's own
+    /// early `vault.locking` does not overtake the unlock.
+    @ObservationIgnored var locksSeen = 0
     /// Bumped by each event that has the phase read again (`device.unlinked`, not a replacement): an unlock it reached
     /// on its way reads the phase again rather than publish its own (chosen; not in the spec).
     @ObservationIgnored var rereads = 0
@@ -588,6 +592,7 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
         let gen = record.generation
         let changes = phaseChanges
         let locks = lockGeneration
+        let seen = locksSeen
         let p: AppPhase
         do {
             p = try await guarded { try await evaluate() }
@@ -604,7 +609,11 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
         // reached on its way reads the phase again rather than set its own: ``rereads``.)
         // (A lock meanwhile overtakes only an open answer: Locked is right after any lock, and a lock during a paused opening
         // leaves the phase Unreachable until a read says so.)
-        if gen == record.generation, changes == phaseChanges, locks == lockGeneration || p == .locked { phase = p }
+        // A lock seen meanwhile (an event or a probe, whatever the phase) overtakes only an Unlocked answer, which then reads
+        // Locked (the lock is the newest word); any other answer is published as it is (never a phone left on Starting). A
+        // setup answer is left out on purpose: read as Locked it would strand an unfinished setup, a rarer case.
+        let answer = seen != locksSeen && p == .unlocked ? AppPhase.locked : p
+        if gen == record.generation, changes == phaseChanges, locks == lockGeneration || answer == .locked { phase = answer }
     }
 
     /// The phone's clock, in Unix ms.

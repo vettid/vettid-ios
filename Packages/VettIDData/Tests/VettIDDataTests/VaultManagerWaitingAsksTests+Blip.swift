@@ -312,4 +312,44 @@ extension VaultManagerWaitingAsksTests {
         try await reading.value
         #expect(m.phase == .locked, "\(m.phase)")
     }
+
+    /// Outside the gap (the phase Locked): another device opens the vault, this phone's status read answers "unlocked" but is
+    /// still on its way, and the other device locks. The read does not publish Unlocked over the lock.
+    @Test func aStatusReadUnderWayDoesNotOpenOverALockOutsideTheGap() async throws {
+        defer { phone.close() }
+        _ = try await connected()
+        service.status("locked")
+        try await m.refresh()
+        #expect(m.phase == .locked)
+        service.status("unlocked") // another device opened it
+        service.holdStatusReads()
+        let reading = Task { try await m.refresh() }
+        #expect(await eventually { service.heldStatusReads == 1 })
+        let before = m.locksSeen
+        service.sendEvent("vault.locking", #"{"reason":"test"}"#) // and locked it again
+        #expect(await eventually { m.locksSeen > before })
+        service.releaseStatusReads()
+        try await reading.value
+        #expect(m.phase == .locked, "\(m.phase)")
+    }
+
+    /// A lock seen during a read that does not answer Unlocked changes nothing: the answer is published as it is (a cold
+    /// start's backlog lock never leaves the phone on Starting, or hides "can't connect").
+    @Test func aLockDuringAReadThatDoesNotOpenKeepsItsAnswer() async throws {
+        defer { phone.close() }
+        _ = try await connected()
+        service.status("locked")
+        try await m.refresh()
+        #expect(m.phase == .locked)
+        service.statusForbidden = true
+        service.holdStatusReads()
+        let reading = Task { try await m.refresh() }
+        #expect(await eventually { service.heldStatusReads == 1 })
+        let before = m.locksSeen
+        service.sendEvent("vault.locking", #"{"reason":"test"}"#)
+        #expect(await eventually { m.locksSeen > before })
+        service.releaseStatusReads()
+        try await reading.value
+        #expect({ if case .unreachable = m.phase { true } else { false } }(), "\(m.phase)")
+    }
 }
