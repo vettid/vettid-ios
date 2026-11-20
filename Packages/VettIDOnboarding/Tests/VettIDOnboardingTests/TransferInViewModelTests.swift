@@ -36,7 +36,7 @@ import VettIDDataTesting
         #expect((650...660).contains(vm.state.secondsLeft) && !vm.state.busy)
         vault.transferApproval.complete()
         await clock.advance(seconds: 2)
-        #expect(vm.state.step == .done && vm.state.sas == nil && vm.state.canUnlockLater)
+        #expect(vm.state.step == .done && vm.state.sas == nil)
         #expect(vault.phase == .setup(.finishing))
         vm.finish()
         await vm.settle()
@@ -139,17 +139,15 @@ import VettIDDataTesting
         #expect(vm.state.step == .done && vm.state.phoneSecret)
     }
 
-    /// VAULT-MESSAGING 0.17.0 §6.7.1: a vault release before 0.17.0 gives no user_guid; the transfer completes with a warning.
-    @Test func aTransferWithoutUserGuidCompletesAndWarns() async throws {
-        vault.transferGaveUserGuid = false
+    /// (§6.7.1) A paired transfer that cannot complete for want of a `user_guid` (the unlock's `no_user_guid`) stopped on this
+    /// phone.
+    @Test func aTransferWithoutAUserGuidStopped() async throws {
+        vault.fail["awaitTransferIn"] = FakeVaultRepository.failure(.notSupported, code: UnlockAttempt.codeNoUserGuid)
         let vm = model()
         vm.scan()
         vm.scanned(try qr())
         await clock.runCurrent()
-        vault.transferApproval.complete()
-        await clock.advance(seconds: 2)
-        #expect(vm.state.step == .done && !vm.state.canUnlockLater)
-        #expect(vault.phase == .setup(.finishing))
+        #expect(await eventually { vm.state.step == .stopped }, "\(vm.state.step)")
     }
 
     @Test func rejectedOnTheOldPhone() async throws {

@@ -74,11 +74,7 @@ public struct TransferInContent: View {
             if state.phoneSecret, let finishPane {
                 finishPane
             } else {
-                MovedScreen(
-                    body: state.canUnlockLater
-                        ? MoveStrings.onboardingMovedTransferredBody : MoveStrings.onboardingMovedTransferredNoGuidBody,
-                    onGo: actions.finish
-                )
+                MovedScreen(body: MoveStrings.onboardingMovedTransferredBody, onGo: actions.finish)
             }
         case .rejected:
             Outcome(

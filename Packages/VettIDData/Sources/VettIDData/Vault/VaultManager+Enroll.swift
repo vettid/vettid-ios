@@ -236,7 +236,16 @@ extension VaultManager {
         let allowed = FinishSetupGate.allows(phase, lockPending: lockGuard.holdsPhone, finishingMove: finishMoveRunner.finishing)
         guard allowed else { return false }
         guard record.value.enrollConfirmed else { throw VaultFailure(.other, code: Self.codeEnrollUnconfirmed) }
-        try guardedSync { try record.update(since: rec) { $0.setupComplete = true; $0.movedIn = false } }
+        // A transfer's leftovers go with it (a take-over whose own clear could not be written): the setup is complete.
+        try guardedSync {
+            try record.update(since: rec) {
+                $0.setupComplete = true
+                $0.movedIn = false
+                $0.transferStartedMs = nil
+                $0.transferEpochID = nil
+                $0.transferCode = nil
+            }
+        }
         phase = .unlocked
         return true
     }

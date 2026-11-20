@@ -57,7 +57,6 @@ import VettIDUI
             ("stopped", with(.stopped)),
             ("done", with(.done)),
             ("done, phone secret", with(.done) { $0.phoneSecret = true }),
-            ("done, no user_guid", with(.done) { $0.canUnlockLater = false }),
             ("rejected", with(.rejected)),
             ("timed out", with(.timedOut)),
             ("not answered", with(.notAnswered)),

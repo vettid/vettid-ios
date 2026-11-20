@@ -146,7 +146,8 @@ extension VaultManager: MoveRepository {
     /// Waits for the old phone's approval, then takes the credential over (§6.7.1 step 5). ``FailureKind/rejected`` when
     /// rejected; ``FailureKind/noResponse`` at the deadline, 11 minutes after the `hs.init` (§11.14.10 rule 5), when the
     /// settlement window's collects (``collectBeforeDrop(_:)``, 0.85.2) bring no `device.paired` or rejection; a session
-    /// that ended, or a `device.paired` without a valid `user_guid` (§6.7.1), is ``codeTransferSessionEnded``. A fin refused
+    /// that ended, or a `device.paired` without a valid `user_guid` (§6.7.1), is ``codeTransferSessionEnded``; a paired one whose
+    /// record lost it, the unlock's `no_user_guid`. A fin refused
     /// for good (``PairingNotCompleted``) before the deadline drops the transfer too. Any other failure before the deadline
     /// is rethrown and the transfer kept. True once completed, always with the member's `user_guid`.
     public func awaitTransferIn() async throws -> Bool {
@@ -302,7 +303,7 @@ extension VaultManager: MoveRepository {
         // without it before applying it, so a paired device always holds one (defence in depth).
         let stored: String? = record.value.movedIn ? record.value.userGuid : nil
         guard let guid = [guid, d.transferUserGuid, stored].compactMap({ $0 }).first(where: UserGuids.valid) else {
-            return .failed(VaultFailure(.other, code: Self.codeTransferSessionEnded))
+            return .failed(VaultFailure(.notSupported, code: UnlockAttempt.codeNoUserGuid))
         }
         do {
             try await completeTransferIn(s, guid: guid)
@@ -408,9 +409,9 @@ extension VaultManager: MoveRepository {
     /// is taken over again here, at every evaluation, and its failure is thrown: such a phone is never shown "create a
     /// credential" (the vault has one). [resumed]: what this start's resume settled, if it ran.
     func recordAfterResume(_ s: VaultSession, resumed: TransferSettled?) async throws -> LocalAccount {
-        if case .failed(let error)? = resumed { throw error }
+        if case .failed(let error)? = resumed, !Self.pairedWithoutUserGuid(error) { throw error }
         if resumed == nil, s.device.deviceID != nil, record.value.transferStartedMs != nil,
-           case .failed(let error) = await settleTransfer(s, collect: false, guid: nil) {
+           case .failed(let error) = await settleTransfer(s, collect: false, guid: nil), !Self.pairedWithoutUserGuid(error) {
             throw error
         }
         return record.value

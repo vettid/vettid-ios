@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import VettIDData
 import VettIDDataTesting
-import VettIDVault
+@testable import VettIDVault
 
 /// (VAULT-MESSAGING §6.7.1, 0.90.17) One `user_guid` check (1–128 printable ASCII) for every transfer answer and every
 /// stored value. Mirrors vettid-android #404.
@@ -59,6 +59,31 @@ extension VaultManagerTransferInTests {
         #expect(!deviceHoldsVault && m.record.value.transferStartedMs == nil)
     }
 
+    /// A transfer scanned after a setup code was redeemed, then abandoned: the redeemed code is kept (no new code needed),
+    /// and while the transfer was under way its `user_guid` was not usable. A completed transfer writes its own.
+    @Test func anAbandonedTransferKeepsARedeemedCode() async throws {
+        defer { phone.close() }
+        _ = try await m.redeemSetupCode(.secret(service.secret))
+        let guid = m.record.value.userGuid
+        #expect(!guid.isEmpty)
+        _ = try await m.transferIn(code: try code())
+        #expect(!m.userGuidUsable, "not the transfer's while it is under way")
+        try await m.abandonTransferIn()
+        #expect(m.record.value.userGuid == guid && m.record.value.transferStartedMs == nil)
+        try await m.refresh()
+        #expect(m.phase == .setup(.newVault), "\(m.phase)")
+    }
+
+    /// A moved phone whose take-over could not clear its start: the setup's completion clears it, and the phone stays usable
+    /// (never the stuck notice on a working phone).
+    @Test func aMovedPhoneWhoseStartStayedIsUsable() async throws {
+        defer { phone.close() }
+        try await transferred()
+        try m.record.update(since: m.record.generation) { $0.transferStartedMs = 1 } // as if the take-over's clear failed
+        try await m.finishSetup()
+        #expect(m.record.value.transferStartedMs == nil && m.userGuidUsable)
+    }
+
     /// A stored `user_guid` that fails the check (a damaged record) is no `user_guid`: Finish the move and the release update
     /// refuse before their lock (`no_user_guid`), and nothing is locked or sent.
     @Test func aStoredMalformedUserGuidIsRefusedBeforeAnyLock() async throws {
@@ -79,6 +104,33 @@ extension VaultManagerTransferInTests {
         let sent = service.requestsSeen.dropFirst(seen)
         #expect(!sent.contains("vault.lock") && !sent.contains("vault.unlock"), "\(Array(sent))")
         #expect(m.releaseUpdate.progress?.failureCode == UnlockAttempt.codeNoUserGuid)
+    }
+
+    /// (§6.7.1) A paired transfer whose record has no valid `user_guid` (a damaged one) is never completed, and the start goes
+    /// on, Locked: the unlock screen then says this phone cannot open the vault (recover or erase), never "can't connect" at
+    /// every start, nor "create a credential".
+    @Test func aDamagedPairedRecordGoesToTheStuckNotice() async throws {
+        defer { phone.close() }
+        _ = try await scanned()
+        let d = try #require(m.session?.device)
+        service.approveTransferIn()
+        #expect(await eventually { d.deviceID != nil })
+        // The record damaged: the paired device's kept user_guid gone (nothing else runs on it now); the record holds a
+        // valid one that is not the transfer's (as an earlier setup code's would be).
+        d.mem.withLock { d.st.transferUserGuid = nil }
+        try d.save()
+        try m.record.update(since: m.record.generation) { $0.userGuid = "guid-of-a-setup-code" }
+        try await phone.restart()
+        let sent = service.requestsSeen.count
+        try await m.refresh()
+        // Locked: the unlock screen's stuck notice (no PIN), whatever the vault's status (here "unlocked").
+        #expect(m.phase == .locked, "\(m.phase)")
+        #expect(!m.userGuidUsable && !m.record.value.movedIn, "the record's user_guid is not the transfer's")
+        try await m.refresh()
+        #expect(m.phase == .locked, "the same at every start")
+        let later = Array(service.requestsSeen.dropFirst(sent))
+        #expect(!later.contains("vault.unlock") && !later.contains("vault.lock") && !later.contains("credential.get"), "\(later)")
+        #expect(!later.contains("vault.status"), "the guard comes before any status read: \(later)")
     }
 }
 

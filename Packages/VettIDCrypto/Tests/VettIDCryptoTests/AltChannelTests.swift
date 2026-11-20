@@ -248,3 +248,19 @@ struct AltChannelTests {
     }
 }
 // swiftlint:enable function_body_length
+
+/// (§6.7.1, §11.4) The one printable-ASCII rule of the signing strings: 1–128, 0x21–0x7E; a vault id may also be empty where
+/// allowed.
+struct AltChannelPrintableTests {
+    @Test func thePrintableRuleAndTheVaultIDAgree() {
+        let cases: [(String, Bool)] = [
+            ("a", true), (String(repeating: "a", count: 128), true), ("!~", true),
+            ("", false), (String(repeating: "a", count: 129), false), ("a b", false), ("a\u{7F}", false), ("\u{20}", false),
+        ]
+        for (s, ok) in cases {
+            #expect(AltChannel.printable(s, maxLength: 128) == ok, "\(s.utf8.count)")
+            #expect(AltChannel.validVaultID(s, allowEmpty: false) == ok)
+        }
+        #expect(AltChannel.validVaultID("", allowEmpty: true))
+    }
+}

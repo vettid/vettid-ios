@@ -188,6 +188,9 @@ final class RecordingAttester: Attester, @unchecked Sendable {
         // Saved: the next start finds the mark.
         let again = try #require(try VaultDevice.load(base.config(store), secrets: secrets))
         #expect(again.droppedWithoutUserGuid && again.deviceID == nil)
+        // A new handshake clears it (a pairing, an enrollment, a recovery's: every one goes through prepareInit).
+        _ = try await d.lock.withLock { try d.prepareInit(purpose: .app, ctx: "another", depositToken: "t") }
+        #expect(!d.droppedWithoutUserGuid)
         // Abandoning clears it.
         #expect(try await again.abandonTransfer() && !again.droppedWithoutUserGuid)
     }

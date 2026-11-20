@@ -63,4 +63,14 @@ struct RecoveryQRVectorsTests {
         let c = RecoveryCode(vaultID: "v", recoveryID: "01JA0RECVERY0000000000001X", code: code)
         #expect(!c.description.contains(code))
     }
+
+    /// A recovery QR's vault id follows the signing strings' rule: 1–128 printable ASCII.
+    @Test func aRecoveryQRsVaultIDBounds() {
+        let code = "SK01TG8WK2FYJ1Y5MEHJ5R5J7QZKWHX0"
+        let qr = { (v: String) in RecoveryCode(vaultID: v, recoveryID: "01JA0RECVERY0000000000001X", code: code) }
+        #expect((try? RecoveryCode.checked(qr(String(repeating: "a", count: 128)))) != nil)
+        for bad in ["", String(repeating: "a", count: 129), "a b", "a\u{7F}"] {
+            #expect((try? RecoveryCode.checked(qr(bad))) == nil, "\(bad.utf8.count)")
+        }
+    }
 }

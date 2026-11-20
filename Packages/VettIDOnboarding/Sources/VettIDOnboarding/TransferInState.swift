@@ -54,16 +54,13 @@ public struct TransferInState: Equatable, Sendable, CustomStringConvertible, Cus
     public var busy = false
     public var error: FailureKind?
     public var errorCode: String?
-    /// ``TransferInStep/done``: the vault gave this phone the member's `user_guid` (§6.7.1, 0.17.0), so it unlocks later.
-    /// False after a transfer from a vault release before 0.17.0: the screen says it cannot unlock yet.
-    public var canUnlockLater = true
 
     public init(step: TransferInStep = .intro) {
         self.step = step
     }
 
     public var description: String {
-        "TransferInState(step: \(step), busy: \(busy), error: \(error.map { "\($0)" } ?? "nil"), canUnlockLater: \(canUnlockLater))"
+        "TransferInState(step: \(step), busy: \(busy), error: \(error.map { "\($0)" } ?? "nil"))"
     }
     public var debugDescription: String { description }
     public var customMirror: Mirror { Mirror(self, children: [:]) }

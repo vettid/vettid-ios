@@ -280,6 +280,13 @@ extension VaultManager {
         return .dropped
     }
 
+    /// (§6.7.1) A paired transfer whose record has no valid `user_guid` (a damaged one) is never completed: the start goes on,
+    /// and `evaluate` gives Locked, where the unlock screen says this phone cannot open the vault (recover or erase), rather
+    /// than "can't connect" at every start.
+    static func pairedWithoutUserGuid(_ error: any Error) -> Bool {
+        (error as? VaultFailure).map { UnlockAttempt.isNoUserGuid($0.kind, $0.code) } ?? false
+    }
+
     /// The `device.paired` or `device.pair.rejected` handled, if any: by [d], or by the device of a session opened since
     /// (its collector may have taken it).
     private func pairedOrRejected(_ d: VaultDevice) async -> WindowEnd {
