@@ -261,6 +261,7 @@ import VettIDUI
         // A phone with a user_guid and no PIN block (a recovery pending): above the way forward too.
         var pending = ok
         pending.recoveryPending = true
+        pending.pin = "40281795" // kept from the `recovery_pending` answer, for the cancel
         #expect(!pending.showsPin && UnlockScreen.messageAboveWayForward(pending))
         // With the PIN block: under the PIN, not twice.
         #expect(ok.showsPin && !UnlockScreen.messageAboveWayForward(ok))

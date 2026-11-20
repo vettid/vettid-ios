@@ -82,8 +82,8 @@ extension UnlockViewModelTests {
 
     /// A failure answering the cancel after a wrong PIN: the PIN goes, the keypad stays, another PIN is asked for.
     @Test func aFailedCancelAfterAWrongPinKeepsTheKeypad() async {
-        vault.unlockResults = [.recoveryPending, .badPin(retryAfterSeconds: 0), .failed(.network, code: nil)]
         let vm = await cancelledWithAWrongPin()
+        vault.unlockResults = [.failed(.network, code: nil)]
         vm.setPin("40281795")
         vm.cancelRecoveryAndUnlock()
         await vm.settle()
