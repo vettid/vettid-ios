@@ -489,7 +489,9 @@ extension VaultManager {
 
 // The locks heard of, by time (``VaultManager/latestLockAt``).
 extension VaultManager {
-    /// Now on the vault's clock, as this phone knows it (its own clock before any message from the vault).
+    /// Now on the vault's clock, as this phone knows it: the phone's own clock before any message from the vault (a cold
+    /// start), so a lock is then judged across the two clocks' skew (seconds with network time; the outcome, Locked, is
+    /// recoverable).
     var vaultNowOrPhone: Date { session?.device.vaultNow() ?? config.now() }
 
     /// A lock heard of at [at] (vault time).
@@ -500,9 +502,13 @@ extension VaultManager {
     /// A lock heard of after [began] (vault time).
     func lockedSince(_ began: Date) -> Bool { latestLockAt.map { $0 > began } ?? false }
 
-    /// An answer that says the vault is open: Unlocked, or the setup steps that read it open (finishing, a credential).
-    static func opensVault(_ p: AppPhase) -> Bool {
-        p == .unlocked || p == .setup(.finishing) || p == .setup(.needsCredential)
+    /// An answer that says the vault is open: Unlocked, or, on a paired device (whose answer came from the vault's status),
+    /// the setup steps that read it open (finishing, a credential). An unpaired device's "a credential" step is no status
+    /// answer, and is never turned into Locked.
+    func opensVault(_ p: AppPhase) -> Bool {
+        if p == .unlocked { return true }
+        guard p == .setup(.finishing) || p == .setup(.needsCredential) else { return false }
+        return session?.device.deviceID != nil
     }
 
     /// A lock the vault made after an unlock opened it at [openedAt] (another device, or the vault itself, during the steps

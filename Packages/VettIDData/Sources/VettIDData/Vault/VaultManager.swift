@@ -614,7 +614,7 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
         // A lock heard of after the read began (an event or a probe, whatever the phase) overtakes an open answer, which then
         // reads Locked (the lock is the newest word): Unlocked, and the setup steps of an open vault, as `vault.locking` itself
         // turns them. Any other answer is published as it is (never a phone left on Starting).
-        let answer = lockedSince(began) && Self.opensVault(p) ? AppPhase.locked : p
+        let answer = lockedSince(began) && opensVault(p) ? AppPhase.locked : p
         if gen == record.generation, changes == phaseChanges, locks == lockGeneration || answer == .locked { phase = answer }
     }
 
