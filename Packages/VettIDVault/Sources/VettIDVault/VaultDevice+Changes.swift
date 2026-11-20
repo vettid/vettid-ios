@@ -68,9 +68,11 @@ extension VaultDevice {
     }
 
     /// An answer seen for the first time, to [re]: when it is the opening's first answer to one of its fresh requests whose
-    /// request still waits for it (a late-collected answer, its wait ended, could pull the mark earlier than the request's
-    /// timeout allows), the opening's moment on the vault's clock (its `ts` less the time since the opening began) is told,
-    /// once.
+    /// request still waits for it (a late-collected answer, its wait ended, could pull the mark earlier than the whole wait,
+    /// with its retries, allows), the opening's moment on the vault's clock (its `ts` less the time since the opening began)
+    /// is told, once. The wait and the mark are both on this process's clocks: a request does not wait across the phone's
+    /// sleep, since in the background the app's collection is stopped and its device let go (IOS-PLAN §6.6), so an answer
+    /// collected after a sleep finds its request ended; a live call that keeps the collection keeps the phone awake.
     func noteOpeningAnswer(_ re: String, _ ts: Date) {
         let up = cfg.uptime()
         let told: (@Sendable (Date) -> Void, Date)? = mem.withLock {
