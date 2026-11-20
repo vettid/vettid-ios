@@ -303,7 +303,7 @@ struct VoteRowsTests {
     @Test func ballotSignaturesFollowTheStrictRules() throws {
         #expect(Ed25519.verify(try v.hex("vk"), label: VoteRows.ballotLabel, try v.hex("ballot_msg"), try v.hex("ballot_sig")))
         let cases = try v.o.array("ed25519")
-        #expect(cases.count == 12)
+        #expect(cases.count == 24)
         for c in cases {
             let e = try c.asObject()
             let ok = Ed25519.verify(

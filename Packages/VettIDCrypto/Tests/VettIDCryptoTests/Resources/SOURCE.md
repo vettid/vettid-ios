@@ -28,9 +28,11 @@ stop-and-report item, never a skip.
 - `blob.json` and `attachment.json` (last commit touching them d95fb2fe65c81638b8f0bff6d05e5002549cf92d): copied
   2026-10-17 from commit 7f2c5b7bd8c6c04b6f46df610a6aa1f4d29104fe, for I0.8; the same hashes as vettid-android's.
 - `vote.json` is `testdata/vote/vectors.json` (VAULT-MESSAGING 0.81.0 §10.19, BALLOT-PROTOCOL §8.2: the Merkle
-  trees, the ballot leaf, the rows and the results of a vote; last commit touching it
-  be69f910f6432a5efd4515928e0df181d1183671): copied 2026-10-31 from commit a8a968e465ca2700d23d0f4ae6d93b2813a95b93
-  (the merge of vettid-vault #174), for the first votes PR; the same hash as vettid-android's copy.
+  trees, the ballot leaf, the rows and the results of a vote; with 0.90.18 and BALLOT-PROTOCOL 0.14.1, the
+  `outcomes`, `decisions`, `outcome_shapes`, `documents_decided` and `proposal_removed_may_vote_true` of §11 item 5,
+  and the 24 Ed25519 cases of 0.13.10): copied 2026-11-18 from commit 86ce6abaf8f0396bb77246e05774e76cfd8c2214 (the
+  merge of vettid-vault #268, the last commit touching it), for the observer's outcome check. First copied
+  2026-10-31 from a8a968e465ca2700d23d0f4ae6d93b2813a95b93 (vettid-vault #174).
 - `calls.json` (VAULT-MESSAGING §10.10, CALLS-PLAN phase C1: the call key agreement, the shares of both roles, the
   vault-signed ICE configurations; last commit touching it 079cde77a4792f15812c5908d0fa51d68ee2313f, vettid-vault
   #67): copied 2026-11-10 from commit 4c8bab001d532676f8db5dacd40371d601b1f982 (`main`), for calls C1 part 1; the same
@@ -62,5 +64,5 @@ eb5cda1bae3eadc90116f0eb615290701482fff8b03483cd5c288324cef5b496  connauth_docum
 8944c466cd00ce5d606f310e954b8d13fdd4d65d598062b3ecc05de6d310ad6f  release.json
 0073c578252ba87960b74f6a1825b6dbb06f8762c77b7f8003d380b48c373905  unlock.json
 09540a0c78b03fb03cfdee762066a9f1171419d2958798b5b4cf054f7dda66a5  verdicts.json
-4afcaebdc9da8b6f6d26f6a469cfffe24797ce573163617fb4301d192627319e  vote.json
+ff9fcf784d5e95efcdec4e593ec9d6787f925e5887a1b6c0d5acd046744b28c4  vote.json
 ```

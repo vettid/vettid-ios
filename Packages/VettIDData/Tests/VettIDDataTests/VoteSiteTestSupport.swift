@@ -187,7 +187,7 @@ enum VoteResultsFixture {
     static func lp(_ x: [UInt8]) -> [UInt8] { [UInt8(x.count >> 8), UInt8(x.count & 0xFF)] + x }
 
     static var proposal: [UInt8] {
-        Array(#"{"choices":[{"id":"yes","label":"Yes"},{"id":"no","label":"No"},{"id":"abstain","label":"Abstain"}],"eligible":2,"proposal_id":"\#(proposalID)","record_root":"\#(Base64s.encodeStd(VoteMerkle.root([otherTag, tag])))","v":1}"#.utf8)
+        Array(#"{"choices":[{"id":"yes","label":"Yes"},{"id":"no","label":"No"},{"id":"abstain","label":"Abstain"}],"decision":{"base":"cast","rule":"majority","threshold":null},"eligible":2,"proposal_id":"\#(proposalID)","quorum":{"min_ballots":1},"record_root":"\#(Base64s.encodeStd(VoteMerkle.root([otherTag, tag])))","removed_may_vote":false,"v":1}"#.utf8)
     }
 
     static var ballotSig: [UInt8] {
@@ -203,7 +203,7 @@ enum VoteResultsFixture {
         let leaves = [otherTag, tag + lp(vk) + lp(Array("yes".utf8)) + lp(ballotSig)]
         let root = VoteMerkle.root(leaves)
         let sig = Base64s.encodeStd([UInt8](repeating: 5, count: 64))
-        return Array(#"{"counts":{"ballots":1,"eligible":2,"removed":0,"unhandled":0},"proposal":{"doc":"\#(Base64s.encodeStd(proposal))","sig":"\#(sig)"},"proposal_id":"\#(proposalID)","rows_hash":"\#(Base64s.encodeStd(Bytes.sha256(rows)))","rows_root":"\#(Base64s.encodeStd(root))","tally":{"abstain":0,"no":0,"yes":1}}"#.utf8)
+        return Array(#"{"counts":{"ballots":1,"eligible":2,"removed":0,"unhandled":0},"outcome":{"choice":"yes","quorum_met":true,"status":"decided"},"proposal":{"doc":"\#(Base64s.encodeStd(proposal))","sig":"\#(sig)"},"proposal_id":"\#(proposalID)","rows_hash":"\#(Base64s.encodeStd(Bytes.sha256(rows)))","rows_root":"\#(Base64s.encodeStd(root))","tally":{"abstain":0,"no":0,"yes":1}}"#.utf8)
     }
 
     /// Serves the results of [pid] on [site].

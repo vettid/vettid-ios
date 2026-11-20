@@ -102,7 +102,8 @@ extension VoteSiteRunner {
         return consistent ? .consistent : .dontAddUp
     }
 
-    /// Whether the site's `tally` and `counts` are the ones [detail] holds from the vault, where it holds them.
+    /// Whether the site's `tally`, `counts` and `outcome` are the ones [detail] holds from the vault, where it holds them
+    /// (VAULT-MESSAGING §10.19.6 step 1; the outcome per BALLOT-PROTOCOL 0.14.1 §7.1).
     nonisolated static func sameNumbers(_ doc: [UInt8], _ detail: VoteDetail) -> Bool {
         guard let o = try? StrictJson.parseObject(doc) else { return false }
         let most = UInt64(Int64.max)
@@ -127,6 +128,13 @@ extension VoteSiteRunner {
             let site = VoteCounts(eligible: e, ballots: b, removed: r, unhandled: u)
             if site != held { return false }
         }
-        return true
+        return sameOutcome(o, detail.outcome)
+    }
+
+    /// Whether the site's `outcome` in [o] is [held], the vault's, where it holds one.
+    private nonisolated static func sameOutcome(_ o: JsonObject, _ held: VoteOutcome?) -> Bool {
+        guard let held else { return true }
+        guard let site = try? VoteOutcomes.outcome(o.obj("outcome")) else { return false }
+        return site.status.rawValue == held.status.rawValue && site.choice == held.choice
     }
 }

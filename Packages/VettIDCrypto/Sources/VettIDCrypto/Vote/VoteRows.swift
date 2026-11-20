@@ -28,8 +28,9 @@ public struct ResultsProblem: Error, Equatable, Sendable {
 /// input that does not verify), so there is nothing to submit (a thrown ``ResultsProblem``). The rest, every other
 /// failure of the observer's check: the hash of `rows.json`, the rows' order and schema, the proposal and its choices,
 /// `eligible` against the proposal's, the tags' tree against the proposal's `record_root`, every ballot's `ballot_sig`
-/// under its `vk` and its choice one of the proposal's (the member's own included), and the tally and `ballots`
-/// recomputed; when one of these fails the row is still returned with the problem (``Checked/problem``): it is
+/// under its `vk` and its choice one of the proposal's (the member's own included), the tally and `ballots` recomputed,
+/// the proposal's `removed_may_vote` (`false`) and `decision`, and the outcome consistent in itself and recomputed
+/// (BALLOT-PROTOCOL 0.14.1 §3.1, §3.5, §7.1, §8.5); when one of these fails the row is still returned with the problem (``Checked/problem``): it is
 /// submitted, the vault judges it, and the member is told the rest of the published results don't add up. The results'
 /// signature and bundle, the anchor and the verdict are the vault's; it never relies on this. Builds on vettid-android
 /// `VoteRows` (the hash, order and tree), with the signatures, the tally and `record_root` added.
@@ -72,6 +73,13 @@ public enum VoteRows {
         let recordRoot: [UInt8]
         let choices: Set<String>
         let proposalID: String
+        /// The proposal's choice ids in order, its `decision` and quorum, its `eligible`, and the results' `outcome`
+        /// (BALLOT-PROTOCOL 0.14.1 §3.5, §7.1), for the outcome recomputed (§8.4 step 4).
+        let choiceOrder: [String]
+        let decision: VoteOutcomes.Decision
+        let minBallots: UInt64
+        let eligible: UInt64
+        let outcome: VoteOutcomes.Outcome
     }
 
     /// The longest row of a valid `rows.json` written compactly, with the comma after it (BALLOT-PROTOCOL §8.5):
@@ -156,7 +164,8 @@ public enum VoteRows {
     }
 
     /// §8.4 items 2 to 4 beyond the member's row: the proposal, the tags against its `record_root` (the electorate it
-    /// fixed before anyone voted, §8.1, §8.2: record leaves in order), every ballot, the tally and `ballots`.
+    /// fixed before anyone voted, §8.1, §8.2: record leaves in order), every ballot, the tally and `ballots`, and the
+    /// outcome (§8.4 step 4, §7.1).
     private static func observe(_ results: JsonObject, _ rowsBytes: [UInt8], _ read: ReadRows, eligible: UInt64) throws {
         let rowsHash: [UInt8]
         do {
@@ -175,6 +184,20 @@ public enum VoteRows {
             throw ResultsProblem("record_root")
         }
         try checkTally(rows, observed)
+        try checkOutcome(observed)
+    }
+
+    /// §8.4 step 4 (BALLOT-PROTOCOL 0.14.1): the results' outcome is the one the proposal's rule gives for the tally the
+    /// rows just confirmed (§7.1).
+    private static func checkOutcome(_ o: Observed) throws {
+        let recomputed: VoteOutcomes.Outcome
+        do {
+            let tally = BallotTally(choices: o.choiceOrder, counts: o.tally, ballots: o.ballots, eligible: o.eligible)
+            recomputed = try VoteOutcomes.recompute(o.decision, minBallots: o.minBallots, tally)
+        } catch {
+            throw ResultsProblem("tally")
+        }
+        if recomputed != o.outcome { throw ResultsProblem("outcome") }
     }
 
     /// §8.4 items 3 and 4: every ballot verifies and names one of the proposal's choices, and every choice's count and
@@ -239,16 +262,27 @@ public enum VoteRows {
             let ballots = try results.obj("counts").uint("ballots", min: 0, max: eligible)
             let proposalBytes = try results.obj("proposal").base64("doc")
             let proposal = try StrictJson.parseObject(proposalBytes)
+            // BALLOT-PROTOCOL 0.14.1 §3.1, §8.4: a proposal whose `removed_may_vote` is not `false` is refused by every
+            // verifier, and so is one without a `decision` of §3.5. First of the proposal's own checks, so that none of
+            // them hides it.
+            guard (try? proposal.bool("removed_may_vote")) == false,
+                  let decision = try? VoteOutcomes.decision(proposal.obj("decision"))
+            else { throw ResultsProblem("proposal") }
             if try proposal.uint("eligible", min: 1, max: UInt64(maxRows)) != eligible { throw ResultsProblem("results") }
+            let minBallots = try proposal.obj("quorum").uint("min_ballots", min: 0, max: eligible)
             // §8.5: the results are of the proposal they carry. The vault holds its proposal and compares it byte for byte
             // (step 2), so this is the observer's find, not one of the four inputs.
             let proposalID = try proposal.string("proposal_id")
             if try results.string("proposal_id") != proposalID { throw ResultsProblem("results") }
             var choices = Set<String>()
+            var choiceOrder: [String] = []
             for c in try proposal.array("choices") {
                 let id = try c.asObject().string("id")
                 if !validChoice(id) || !choices.insert(id).inserted { throw ResultsProblem("results") }
+                choiceOrder.append(id)
             }
+            // §8.5: an outcome not consistent in itself is a problem of its own, before it is recomputed.
+            guard let outcome = try? VoteOutcomes.outcome(results.obj("outcome")) else { throw ResultsProblem("outcome") }
             var tally: [String: UInt64] = [:]
             for (name, value) in try results.obj("tally").members {
                 tally[name] = try value.asUint(min: 0, max: eligible)
@@ -257,7 +291,8 @@ public enum VoteRows {
             if Set(tally.keys) != choices { throw ResultsProblem("tally") }
             return Observed(
                 ballots: ballots, tally: tally, proposalHash: Bytes.sha256(proposalBytes),
-                recordRoot: try proposal.base64("record_root", VoteMerkle.hashSize), choices: choices, proposalID: proposalID
+                recordRoot: try proposal.base64("record_root", VoteMerkle.hashSize), choices: choices, proposalID: proposalID,
+                choiceOrder: choiceOrder, decision: decision, minBallots: minBallots, eligible: eligible, outcome: outcome
             )
         } catch let p as ResultsProblem {
             throw p
@@ -358,7 +393,7 @@ public enum VoteRows {
     }
 
     /// `[a-z0-9-]{1,32}`.
-    private static func validChoice(_ id: String) -> Bool {
+    static func validChoice(_ id: String) -> Bool {
         let c = Array(id.utf8)
         return !c.isEmpty && c.count <= maxId && c.allSatisfy { (0x61...0x7A).contains($0) || (0x30...0x39).contains($0) || $0 == 0x2D }
     }
