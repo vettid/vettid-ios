@@ -113,6 +113,12 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
     @ObservationIgnored let lockNotices = LockNotices()
     /// Bumped by every lock the member asks for: an unlock or a refresh that began before it publishes no open phase.
     @ObservationIgnored var lockGeneration = 0
+    /// The newest lock this phone heard of, on the vault's clock: a `vault.locking`'s `ts` (also one dropped as another
+    /// opening's: it is still a lock), or the moment a status read found the vault locked. A status read, or an unlock's
+    /// last steps, that began before it does not open the vault after it (``refresh()``, ``didOpen``). Judged by time, so
+    /// a mailbox's old locks collected during a read do not count.
+    @ObservationIgnored var locksHeard = LocksHeard()
+
     /// Bumped by each event that has the phase read again (`device.unlinked`, not a replacement): an unlock it reached
     /// on its way reads the phase again rather than publish its own (chosen; not in the spec).
     @ObservationIgnored var rereads = 0
@@ -588,6 +594,7 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
         let gen = record.generation
         let changes = phaseChanges
         let locks = lockGeneration
+        let began = readStart()
         let p: AppPhase
         do {
             p = try await guarded { try await evaluate() }
@@ -604,7 +611,14 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
         // reached on its way reads the phase again rather than set its own: ``rereads``.)
         // (A lock meanwhile overtakes only an open answer: Locked is right after any lock, and a lock during a paused opening
         // leaves the phase Unreachable until a read says so.)
-        if gen == record.generation, changes == phaseChanges, locks == lockGeneration || p == .locked { phase = p }
+        // A lock heard of after the read began (an event or a probe, whatever the phase) overtakes an open answer, which then
+        // reads Locked (the lock is the newest word): Unlocked, and the setup steps of an open vault, as `vault.locking` itself
+        // turns them. Any other answer is published as it is (never a phone left on Starting).
+        // (The open answer's own steps, the owner check's `onOpened` and a provisional vault's confirmation, ran inside
+        // `evaluate` before this: both are idempotent and harmless for a vault that just locked; moving them after this guard
+        // is left to a follow-up.)
+        let answer = lockedSince(began) && opensVault(p) ? AppPhase.locked : p
+        if gen == record.generation, changes == phaseChanges, locks == lockGeneration || answer == .locked { phase = answer }
     }
 
     /// The phone's clock, in Unix ms.

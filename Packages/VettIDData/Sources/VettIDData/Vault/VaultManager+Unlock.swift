@@ -234,9 +234,17 @@ extension VaultManager {
         return UnlockOpened(outcome: out, session: s, moved: moved)
     }
 
+    /// After an unlock's last steps: nothing overtook it (this phone's own lock, a reset, a lock pending), and no lock came
+    /// after the vault opened (``lockedAfterOpening(_:since:)``, which sets Locked).
+    private func mayOpen(locks: Int, rec: Int, openedAt: Date?, heard: LocksHeard) -> Bool {
+        guard locks == lockGeneration, rec == record.generation, !lockGuard.lockedWhatever(unlocked: true) else { return false }
+        return !lockedAfterOpening(openedAt, since: heard)
+    }
+
     /// The vault opened: the stale lock notices, the outbox, and the phase, unless a lock overtook this unlock.
     private func didOpen(_ r: UnlockResult, _ s: VaultSession, _ marks: OpenMarks, beforeOpen: @MainActor () async -> Void) async {
         let (locks, rec) = (marks.locks, marks.record)
+        let heard = locksHeard
         // The vault is open as of the result's ts: a vault.locking from before it is stale, also after a restart.
         lockNotices.opened(at: r.at)
         if let at = r.at { try? record.opened(since: rec, atMs: Int64((at.timeIntervalSince1970 * 1000).rounded(.down))) }
@@ -271,7 +279,7 @@ extension VaultManager {
         // owner check) is sent (chosen; not in the spec).
         if rereads != marks.rereads { return await rereadPhase() }
         if !s.device.recovering { await beforeOpen() }
-        guard locks == lockGeneration, rec == record.generation, !lockGuard.lockedWhatever(unlocked: true) else { return }
+        guard mayOpen(locks: locks, rec: rec, openedAt: r.at, heard: heard) else { return }
         // The same for one that came during the steps before the open app.
         if rereads != marks.rereads { return await rereadPhase() }
         openApp(s)
