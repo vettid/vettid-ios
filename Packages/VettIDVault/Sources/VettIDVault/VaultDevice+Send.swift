@@ -375,7 +375,14 @@ extension VaultDevice {
         if innerID == nil { noteOpeningRequest(id) }
         let d = OneShot<Inner>()
         mem.withLock { pending[id] = d }
-        defer { mem.withLock { _ = pending.removeValue(forKey: id) } }
+        defer {
+            mem.withLock {
+                _ = pending.removeValue(forKey: id)
+                // Ended (answered, or its wait over): its id can no longer give the opening its clock, and goes, so the
+                // opening's bound of ids is never filled by requests that ended unanswered.
+                if var o = opening, o.requests.remove(id) != nil { opening = o }
+            }
+        }
         // Its first send the lock gate holds: nothing is sent, nothing counted (``requestMayGo(_:)``; a client handed out
         // before the lock began sends nothing new after it).
         guard await requestMayGo(type) else { throw OutboxHeld() }

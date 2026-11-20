@@ -197,9 +197,9 @@ public final class VaultDevice: @unchecked Sendable {
     var quieted = false
     /// The newest `ts` of a message from the vault and the monotonic time it arrived (in memory only).
     var vaultClock: (ts: Date, at: TimeInterval)?
-    /// The opening under way (``beginOpening(onMark:)``), in memory only: when it began on the monotonic clock, the ids of
-    /// the requests first sent since, and whom to tell the opening's moment on the vault's clock once one of them is
-    /// answered (nil once told, and before any opening).
+    /// The opening under way (``beginOpening(began:onMark:)``), in memory only: when it began on the monotonic clock, the ids
+    /// of the fresh requests sent since that still wait (one leaves as it ends), and whom to tell the opening's moment on the
+    /// vault's clock once one of them is answered (nil once told, and before any opening).
     var opening: Opening?
 
     /// An opening under way: see ``opening``.

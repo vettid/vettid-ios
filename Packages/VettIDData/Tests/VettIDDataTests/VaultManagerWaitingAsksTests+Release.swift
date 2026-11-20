@@ -68,7 +68,7 @@ extension VaultManagerWaitingAsksTests {
         let fresh = try #require(m.session?.device)
         #expect(fresh.mem.withLock { fresh.opening } == nil, "not begun again")
         // As if no answer had come before the device was let go: the phone's clock, not fixed.
-        m.feed.markFixed = false
+        m.feed.markFixed = false // as if no answer had come yet: the mark still the phone's clock
         m.feed.openedAt = Date()
         try await m.dropSession(forget: false)
         _ = try await m.openSession()
@@ -84,7 +84,7 @@ extension VaultManagerWaitingAsksTests {
         defer { phone.close() }
         _ = try await connected()
         #expect(await eventually { m.feed.markFixed })
-        m.feed.markFixed = false
+        m.feed.markFixed = false // as if no answer had come yet: the mark still the phone's clock
         service.statusForbidden = true
         try await m.refresh()
         #expect(m.openingPaused)
@@ -92,6 +92,28 @@ extension VaultManagerWaitingAsksTests {
         _ = try await m.openSession()
         let fresh = try #require(m.session?.device)
         #expect(fresh.mem.withLock { fresh.opening } != nil, "begun again during the pause")
+        // From the opening's own moment, and for the same opening: its first answer fixes this opening's mark.
+        #expect(fresh.mem.withLock { fresh.opening?.began } == m.feed.openedUptime)
+        let opening = m.feed.opening
+        service.statusForbidden = false
+        try await m.refresh()
+        try await m.connections.refresh(quietly: true)
+        #expect(await eventually { m.feed.markFixed } && m.feed.opening == opening)
+    }
+
+    /// Not while the vault is not open (nor the opening paused): a Locked phone's new device begins nothing.
+    @Test func aLockedPhonesNewDeviceBeginsNoOpening() async throws {
+        defer { phone.close() }
+        _ = try await connected()
+        #expect(await eventually { m.feed.markFixed })
+        m.feed.markFixed = false // as if no answer had come yet: the mark still the phone's clock
+        service.status("locked")
+        try await m.refresh()
+        #expect(m.phase == .locked && !m.openingPaused)
+        try await m.dropSession(forget: false)
+        _ = try await m.openSession()
+        let fresh = try #require(m.session?.device)
+        #expect(fresh.mem.withLock { fresh.opening } == nil)
     }
 
     /// A cold start with the vault open: what the mailbox delivers first is the backlog of what changed while the app was
