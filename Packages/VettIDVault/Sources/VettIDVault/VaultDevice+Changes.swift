@@ -55,7 +55,7 @@ extension VaultDevice {
         mem.withLock { opening = Opening(began: up, requests: [], onMark: onMark) }
     }
 
-    /// The most fresh requests an opening waits on before its first answer: far more than an opening sends.
+    /// The most fresh requests of an opening waiting at once (one leaves as it ends): far more than an opening sends.
     static let openingRequestsMax = 256
 
     /// A request with a fresh id, first sent now.
@@ -70,9 +70,12 @@ extension VaultDevice {
     /// An answer seen for the first time, to [re]: when it is the opening's first answer to one of its fresh requests whose
     /// request still waits for it (a late-collected answer, its wait ended, could pull the mark earlier than the whole wait,
     /// with its retries, allows), the opening's moment on the vault's clock (its `ts` less the time since the opening began)
-    /// is told, once. The wait and the mark are both on this process's clocks: a request does not wait across the phone's
-    /// sleep, since in the background the app's collection is stopped and its device let go (IOS-PLAN §6.6), so an answer
-    /// collected after a sleep finds its request ended; a live call that keeps the collection keeps the phone awake.
+    /// is told, once. The wait (`Task.sleep`, which may stop while the phone sleeps) and the mark (the monotonic clock, which
+    /// counts across sleep) agree because a request does not wait across a sleep on the normal path: in the background the
+    /// collection is stopped and the device let go (`finishBackground` before suspension, IOS-PLAN §6.6), so an answer
+    /// collected after a sleep finds its request ended; a live call that keeps the collection keeps the phone awake. Two
+    /// edges: the background task's expiration handler ends the task before the collection is stopped, and a background
+    /// launch (phase P, PushKit for a closed app) would collect with no background begun.
     func noteOpeningAnswer(_ re: String, _ ts: Date) {
         let up = cfg.uptime()
         let told: (@Sendable (Date) -> Void, Date)? = mem.withLock {

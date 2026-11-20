@@ -128,4 +128,35 @@ extension LostAnswerTests {
         }
         #expect(d.mem.withLock { d.opening?.requests.count } == 0)
     }
+
+    /// The bound's purpose: more requests than it holds end unanswered, and a fresh one after them still fixes the mark.
+    @Test func endedRequestsNeverFillTheBound() async throws {
+        let h = try await holder()
+        let (d, v) = (h.d, h.v)
+        let marks = Marks()
+        d.beginOpening { marks.add($0) }
+        for _ in 0...VaultDevice.openingRequestsMax {
+            let gaveUp = Task { [d] in
+                try await d.request("vault.status", body: VaultJSON.empty, timeout: 0.001, innerID: nil, exp: nil, retries: 0)
+            }
+            _ = try await open(v)
+            _ = try? await gaveUp.value
+        }
+        let (t, id) = try await send(h)
+        try await deliver(v, d, answer(id, Date()))
+        _ = try await t.value
+        #expect(marks.told.count == 1)
+    }
+
+    /// A request the lock gate holds (``OutboxHeld``: nothing sent) leaves the opening too.
+    @Test func aRequestTheLockGateHeldLeavesTheOpening() async throws {
+        let h = try await holder()
+        let d = h.d
+        d.beginOpening { _ in }
+        d.setFlushGate { false }
+        await #expect(throws: OutboxHeld.self) {
+            _ = try await d.request("vault.status", body: VaultJSON.empty, timeout: 1, innerID: nil, exp: nil, retries: 0)
+        }
+        #expect(d.mem.withLock { d.opening?.requests.count } == 0)
+    }
 }

@@ -68,7 +68,7 @@ extension VaultManagerWaitingAsksTests {
         let fresh = try #require(m.session?.device)
         #expect(fresh.mem.withLock { fresh.opening } == nil, "not begun again")
         // As if no answer had come before the device was let go: the phone's clock, not fixed.
-        m.feed.markFixed = false
+        m.feed.markFixed = false // as if no answer had come yet: the mark still the phone's clock
         m.feed.openedAt = Date()
         try await m.dropSession(forget: false)
         _ = try await m.openSession()
@@ -84,7 +84,7 @@ extension VaultManagerWaitingAsksTests {
         defer { phone.close() }
         _ = try await connected()
         #expect(await eventually { m.feed.markFixed })
-        m.feed.markFixed = false
+        m.feed.markFixed = false // as if no answer had come yet: the mark still the phone's clock
         service.statusForbidden = true
         try await m.refresh()
         #expect(m.openingPaused)
@@ -106,7 +106,7 @@ extension VaultManagerWaitingAsksTests {
         defer { phone.close() }
         _ = try await connected()
         #expect(await eventually { m.feed.markFixed })
-        m.feed.markFixed = false
+        m.feed.markFixed = false // as if no answer had come yet: the mark still the phone's clock
         service.status("locked")
         try await m.refresh()
         #expect(m.phase == .locked && !m.openingPaused)
