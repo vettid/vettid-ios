@@ -266,7 +266,9 @@ extension VaultManager {
         // owner check) is sent (chosen; not in the spec).
         if rereads != marks.rereads { return await rereadPhase() }
         if !s.device.recovering { await beforeOpen() }
-        guard locks == lockGeneration, rec == record.generation, !lockGuard.lockedWhatever(unlocked: true) else { return }
+        // (A lock the vault made after this unlock opened it sets Locked here: ``lockedAfterOpening(_:)``.)
+        guard locks == lockGeneration, rec == record.generation, !lockGuard.lockedWhatever(unlocked: true),
+              !lockedAfterOpening(r.at) else { return }
         // The same for one that came during the steps before the open app.
         if rereads != marks.rereads { return await rereadPhase() }
         openApp(s)

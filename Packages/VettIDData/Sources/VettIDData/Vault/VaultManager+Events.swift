@@ -318,6 +318,9 @@ extension VaultManager {
     /// One vault event. Mirrors the part of vettid-android `VaultManager.onEvent` that the unlock, the lock and the owner
     /// check need; the lists and the feed follow theirs with their rows.
     func onEvent(_ m: VaultMessage) {
+        // Every lock is heard of, by its time (also one named for another opening): reads and unlocks begun before it do
+        // not open the vault after it (``latestLockAt``).
+        if m.type == LockNotices.type { noteLockSeen(at: m.ts) }
         // The lock before this phone's last unlock (the one an unlock of a running vault makes), relayed late.
         if lockNotices.stale(m) { return }
         // In the background, kept running by a live call, only what locks or ends the session is handled here (the calls take their
@@ -378,7 +381,6 @@ extension VaultManager {
     /// no longer is. (One whose place in time is not known confirms nothing: the status read will.)
     private func locking(_ m: VaultMessage) {
         unlockWindow = nil
-        locksSeen += 1
         endPausedOpening()
         if lockNotices.confirms(m, bound: lockGuard.keeper.boundUnlockID) { lockGuard.keeper.confirmed() }
         switch phase {
@@ -391,7 +393,7 @@ extension VaultManager {
     /// app moves to its locked screen, as for a `vault.locking`.
     func lockedByProbe() {
         unlockWindow = nil
-        locksSeen += 1
+        noteLockSeen(at: vaultNowOrPhone)
         endPausedOpening()
         switch phase {
         case .unlocked, .setup: phase = .locked
@@ -482,5 +484,32 @@ extension VaultManager {
             a.state = state
             alarm = a
         }
+    }
+}
+
+// The locks heard of, by time (``VaultManager/latestLockAt``).
+extension VaultManager {
+    /// Now on the vault's clock, as this phone knows it (its own clock before any message from the vault).
+    var vaultNowOrPhone: Date { session?.device.vaultNow() ?? config.now() }
+
+    /// A lock heard of at [at] (vault time).
+    func noteLockSeen(at: Date) {
+        if latestLockAt.map({ at > $0 }) ?? true { latestLockAt = at }
+    }
+
+    /// A lock heard of after [began] (vault time).
+    func lockedSince(_ began: Date) -> Bool { latestLockAt.map { $0 > began } ?? false }
+
+    /// An answer that says the vault is open: Unlocked, or the setup steps that read it open (finishing, a credential).
+    static func opensVault(_ p: AppPhase) -> Bool {
+        p == .unlocked || p == .setup(.finishing) || p == .setup(.needsCredential)
+    }
+
+    /// A lock the vault made after an unlock opened it at [openedAt] (another device, or the vault itself, during the steps
+    /// before the open app): the phase is Locked, not the open app. True when it was.
+    func lockedAfterOpening(_ openedAt: Date?) -> Bool {
+        guard let at = openedAt, lockedSince(at) else { return false }
+        phase = .locked
+        return true
     }
 }

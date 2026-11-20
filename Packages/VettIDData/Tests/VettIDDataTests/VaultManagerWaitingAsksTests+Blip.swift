@@ -3,6 +3,7 @@ import Testing
 @testable import VettIDData
 import VettIDDataTesting
 import VettIDVault
+import VettIDAltChan
 
 /// (chosen; not in the spec: as vettid-android #411) Unlocked, then only Unreachable, then Unlocked is the same opening: a
 /// status read that could not be made closed nothing. The feed (its cursor, what it notified, what it holds) and the
@@ -325,9 +326,9 @@ extension VaultManagerWaitingAsksTests {
         service.holdStatusReads()
         let reading = Task { try await m.refresh() }
         #expect(await eventually { service.heldStatusReads == 1 })
-        let before = m.locksSeen
+        let before = m.latestLockAt
         service.sendEvent("vault.locking", #"{"reason":"test"}"#) // and locked it again
-        #expect(await eventually { m.locksSeen > before })
+        #expect(await eventually { m.latestLockAt != before })
         service.releaseStatusReads()
         try await reading.value
         #expect(m.phase == .locked, "\(m.phase)")
@@ -345,11 +346,83 @@ extension VaultManagerWaitingAsksTests {
         service.holdStatusReads()
         let reading = Task { try await m.refresh() }
         #expect(await eventually { service.heldStatusReads == 1 })
-        let before = m.locksSeen
+        let before = m.latestLockAt
         service.sendEvent("vault.locking", #"{"reason":"test"}"#)
-        #expect(await eventually { m.locksSeen > before })
+        #expect(await eventually { m.latestLockAt != before })
         service.releaseStatusReads()
         try await reading.value
         #expect({ if case .unreachable = m.phase { true } else { false } }(), "\(m.phase)")
+    }
+
+    /// A lock named for another opening (`unlock_id` not this phone's) is still a lock: a read under way across it, answering
+    /// Unlocked, gives Locked.
+    @Test func aLockNamedForAnotherOpeningStillCounts() async throws {
+        defer { phone.close() }
+        service.announcesUnlockID = true // this phone knows its opening's name: another's lock is dropped as stale
+        _ = try await connected()
+        service.status("locked")
+        try await m.refresh()
+        service.status("unlocked")
+        service.holdStatusReads()
+        let reading = Task { try await m.refresh() }
+        #expect(await eventually { service.heldStatusReads == 1 })
+        let before = m.latestLockAt
+        service.sendEvent("vault.locking", #"{"reason":"test","unlock_id":"ffffffffffffffffffffffffffffffff"}"#)
+        #expect(await eventually { m.latestLockAt != before })
+        service.releaseStatusReads()
+        try await reading.value
+        #expect(m.phase == .locked, "\(m.phase)")
+    }
+
+    /// A probe that found the vault locked is a lock too.
+    @Test func aProbesLockCounts() async throws {
+        defer { phone.close() }
+        _ = try await connected()
+        service.status("locked")
+        try await m.refresh()
+        service.status("unlocked")
+        service.holdStatusReads()
+        let reading = Task { try await m.refresh() }
+        #expect(await eventually { service.heldStatusReads == 1 })
+        m.lockedByProbe()
+        service.releaseStatusReads()
+        try await reading.value
+        #expect(m.phase == .locked, "\(m.phase)")
+    }
+
+    /// A cold start: a lock older than the read (in the mailbox, collected during it) does not turn a correct Unlocked into
+    /// Locked.
+    @Test func aColdStartsOlderLockDoesNotHideAnOpenVault() async throws {
+        defer { phone.close() }
+        service.stampsOnVaultClock = true
+        _ = try await connected()
+        try await phone.restart()
+        // The read is under way when an older lock (a backlog's: stamped 5 s before it began) is collected.
+        service.holdStatusReads()
+        let reading = Task { try await m.refresh() }
+        #expect(await eventually { service.heldStatusReads == 1 })
+        service.advanceVaultClock(-5)
+        service.sendEvent("vault.locking", #"{"reason":"test"}"#)
+        service.advanceVaultClock(5)
+        #expect(await eventually { m.latestLockAt != nil })
+        service.releaseStatusReads()
+        try await reading.value
+        #expect(m.phase == .unlocked, "\(m.phase)")
+    }
+
+    /// A lock the vault made during an unlock's last steps (after it opened the vault, before the open app): Locked.
+    @Test func aLockDuringAnUnlocksLastStepsEndsLocked() async throws {
+        defer { phone.close() }
+        service.stampsOnVaultClock = true
+        _ = try await connected()
+        try await m.lock()
+        #expect(await eventually { m.phase == .locked })
+        _ = await m.unlockStep(pin: pin, options: UnlockOptions()) {
+            let before = m.latestLockAt
+            service.advanceVaultClock(2)
+            service.sendEvent("vault.locking", #"{"reason":"test"}"#)
+            _ = await eventually { m.latestLockAt != before }
+        }
+        #expect(m.phase == .locked, "\(m.phase)")
     }
 }
