@@ -63,10 +63,16 @@ import VettIDVault
         return expected
     }
 
-    /// Nothing more arrives (no second replay) once every read is over.
+    /// Nothing more can arrive: every read is over, the replay's window is closed (a second replay needs a new check), and
+    /// the feed holds nothing and reads nothing (no held arrival or event is still to come).
     func settled() async throws {
         await m.listsRead?.value
-        try await Task.sleep(for: .milliseconds(300))
+        let quiet = await eventually {
+            !m.asksToNotify && m.feed.arrivedSinceCheck == nil && !m.feed.queuesBehind && m.feed.readsRunning == 0
+                && !m.feed.catchUpQueued
+        }
+        #expect(quiet, "settled")
+        await m.listsRead?.value
     }
 
     @Test func thisPhonesOwnCheckNotifiesEachAskStillWaitingOnce() async throws {

@@ -27,7 +27,7 @@ extension VaultManagerWaitingAsksTests {
         let id = try await connected()
         await failReleaseCheck()
         _ = try service.feedItemArrives("message.received", connectionID: id)
-        try await Task.sleep(for: .milliseconds(200))
+        #expect(await eventually { m.feed.queuesBehind }, "its event came, and is held")
         #expect(live.isEmpty, "nothing while the check fails")
         await passReleaseCheck()
         #expect(await eventually { live.count == 1 }, "\(live)")
@@ -49,7 +49,7 @@ extension VaultManagerWaitingAsksTests {
         #expect(abs(mark.timeIntervalSinceNow - skew) < 30, "the vault's clock, not the phone's: \(mark.timeIntervalSinceNow)")
         await failReleaseCheck()
         _ = try service.feedItemArrives("message.received", connectionID: id)
-        try await Task.sleep(for: .milliseconds(200))
+        #expect(await eventually { m.feed.queuesBehind }, "its event came, and is held")
         await passReleaseCheck()
         #expect(await eventually { live.count == 1 }, "\(live)")
     }
@@ -162,7 +162,10 @@ extension VaultManagerWaitingAsksTests {
         await failReleaseCheck()
         try service.otherDevicePassesCheck()
         #expect(await eventually { m.ownerChecks.ownerCheck?.state == .ok })
-        try await Task.sleep(for: .milliseconds(300))
+        // The replay's `pending.list` read is applied and the reads after the hold are over: the replay was asked for, and
+        // waits.
+        await m.listsRead?.value
+        #expect(await eventually { !m.asksToNotify && m.feed.readsRunning == 0 }, "the replay asked for")
         #expect(replays.isEmpty, "nothing while the release check fails")
         await passReleaseCheck()
         #expect(await eventually { replays == expected }, "\(replays)")

@@ -57,8 +57,9 @@ extension FeedManager {
     /// release is checked) even if its event comes late; and what was held comes only after that read, from the feed as it
     /// is now (an item read on another device meanwhile is not notified).
     /// (chosen; not in the spec) A kept feed that is not loaded is read in full, even when an earlier full read had loaded it
-    /// and only a later one failed (its list is complete as of its cursor then): the gap's items come listed but silent, as
-    /// within any opening whose read failed. A rare corner; one never loaded has no cursor to read on from.
+    /// and only a later one failed (its list is complete as of its cursor then): the gap's items then appear in the list
+    /// with no notification, as within any opening whose read failed. A rare corner; one never loaded has no cursor to read
+    /// on from.
     public func openingContinued() {
         catchUpOwed = true
         catchUp()
@@ -102,8 +103,9 @@ extension FeedManager {
         release(readIfNeeded: true)
     }
 
-    /// After a read: released if the check is over and the feed not paused, else kept (no read started: one that failed is
-    /// not retried in a loop; the next event or release starts one).
+    /// After a read, what the feed holds is released when the release check is over and the feed is not paused, and kept
+    /// otherwise. It never starts a read itself (``release(readIfNeeded:)`` with false): a read that failed is not retried
+    /// in a loop from here; the next event, or ``releaseHeld(afterFullRead:)`` at the check's end, starts one.
     func releaseIfOver() { release(readIfNeeded: false) }
 
     private func release(readIfNeeded: Bool) {

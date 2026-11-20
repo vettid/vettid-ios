@@ -108,6 +108,8 @@ public final class FakeVaultService: @unchecked Sendable {
     var noHolderValue = false
     var vaultMade = false
     var failNextTypes: Set<String> = []
+    /// The vault locks itself as the next request of each type arrives (``lockBefore(_:)``).
+    var lockBeforeTypes: Set<String> = []
     /// The next request of a type is refused with this error (``refuseNext(_:code:message:body:)``).
     var refuseNextAnswers: [String: (error: InnerError, body: String)] = [:]
     /// A vault.enrolled held back until the next enrollment request (``EnrollAnswer/answerLostEnrolledLate``).
