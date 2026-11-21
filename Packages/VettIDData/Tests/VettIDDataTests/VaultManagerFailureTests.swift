@@ -204,7 +204,8 @@ import VettIDKeysTesting
         try await reading.value
         #expect(m.phase == .locked && !service.confirmed)
         #expect(try await m.unlock(pin: "402817") == .success)
-        #expect(m.phase == .setup(.finishing) && service.confirmed)
+        #expect(m.phase == .setup(.finishing))
+        #expect(await eventually { service.confirmed && m.confirming == nil })
         try await m.finishSetup()
         #expect(m.phase == .unlocked)
     }

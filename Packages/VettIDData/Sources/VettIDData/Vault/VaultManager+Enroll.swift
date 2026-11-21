@@ -187,7 +187,7 @@ extension VaultManager {
             // Kept first, so that a restart before the confirmation still sends the member's choice.
             try record.update(since: record.generation) { $0.backupChoice = backup }
             if s.device.credentialVersion == nil { try await createOrFetch(s, password: password, pin: pin) }
-            try await confirmEnrollment(s, backup: backup, onStep: onStep)
+            try await confirmProvisional(s, backup: backup, onStep: onStep)
             // A lock asked for meanwhile wins: the phone stays locked.
             if locks == lockGeneration, !lockGuard.holdsPhone { phase = .setup(.finishing) }
         }
@@ -197,28 +197,45 @@ extension VaultManager {
     /// provisional; recorded once answered. After a restart between the credential and the answer, a status read that
     /// publishes the vault open sends both first (``refresh()``), and so does ``finishSetup()`` when none did, by the phone
     /// whose enrollment made the vault only.
-    func confirmEnrollment(_ s: VaultSession, backup: Bool?, onStep: @MainActor (EnrollStep) -> Void) async throws {
+    /// [since]: the record's generation when it began (a confirmation answered after a reset or a lock is not recorded in
+    /// the record that came after).
+    func confirmEnrollment(_ s: VaultSession, backup: Bool?, since: Int, onStep: @MainActor (EnrollStep) -> Void) async throws {
         onStep(.backup)
         if let backup { try await setSetting(s, Self.keyBackup, backup ? "true" : "false") }
         onStep(.confirm)
         try await openApi(s).enrollConfirm()
-        try record.update(since: record.generation) { $0.enrollConfirmed = true }
+        try record.update(since: since) { $0.enrollConfirmed = true }
     }
 
-    /// ``confirmEnrollment(_:backup:onStep:)`` for a provisional vault found unconfirmed after a restart, one at a time: a
-    /// status read, an unlock and "Finish" that find it so together share the confirmation on its way, its answer or its
-    /// failure (each says it as it says its own), so the backup setting and `vault.enroll.confirm` are sent once. One that
-    /// comes after the answer sends nothing.
-    func confirmProvisional(_ s: VaultSession, backup: Bool?) async throws {
-        if let confirming {
+    /// ``confirmEnrollment(_:backup:since:onStep:)``, one at a time: the credential's step, a status read, an unlock and
+    /// "Finish" that find the vault unconfirmed together share the confirmation on its way in the same session, its answer
+    /// or its failure (each says it as it says its own), so the backup setting and `vault.enroll.confirm` are sent once.
+    /// The first sends it, with its [onStep]; one that comes after the answer sends nothing. One on a session dropped since
+    /// (a background, a lock, a reset) is not joined: its answer may never be collected, and this caller's session sends
+    /// its own.
+    func confirmProvisional(_ s: VaultSession, backup: Bool?, onStep: @MainActor (EnrollStep) -> Void = { _ in }) async throws {
+        if let c = confirming, c.session == sessionGeneration {
             confirmationsJoined += 1
-            return try await confirming.value
+            return try await c.done.value
         }
         guard !record.value.enrollConfirmed else { return }
-        let task = Task { try await confirmEnrollment(s, backup: backup) { _ in } }
-        confirming = task
-        defer { confirming = nil }
-        try await task.value
+        let (results, report) = AsyncStream.makeStream(of: Result<Void, any Error>.self)
+        let done = Task<Void, any Error> {
+            for await r in results { return try r.get() }
+            throw CancellationError()
+        }
+        confirming = (done, sessionGeneration)
+        defer {
+            report.finish()
+            if confirming?.done == done { confirming = nil }
+        }
+        do {
+            try await confirmEnrollment(s, backup: backup, since: record.generation, onStep: onStep)
+            report.yield(.success(()))
+        } catch {
+            report.yield(.failure(error))
+            throw error
+        }
     }
 
     /// `credential.create`. A vault that answers `exists` already holds this phone's credential (a create whose answer

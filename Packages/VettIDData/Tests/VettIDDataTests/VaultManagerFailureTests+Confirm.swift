@@ -28,11 +28,13 @@ extension VaultManagerFailureTests {
         #expect(m.phase == .locked && !service.confirmed)
     }
 
-    /// Then an unlock whose confirmation fails: it opens on "finishing" all the same, not confirmed.
+    /// Then an unlock whose confirmation (after the opening) fails: on "finishing" all the same, not confirmed.
     func finishingUnconfirmed() async throws {
         try await lockedAtTheStart()
         service.failNext("vault.enroll.confirm")
+        let sent = confirmsSent
         #expect(try await m.unlock(pin: "402817") == .success)
+        #expect(await eventually { confirmsSent == sent + 1 && m.confirming == nil })
         #expect(m.phase == .setup(.finishing) && !service.confirmed)
     }
 
@@ -163,8 +165,9 @@ extension VaultManagerFailureTests {
         try await lockedAtTheStart()
         let sent = confirmsSent
         #expect(try await m.unlock(pin: "402817") == .success)
-        #expect(confirmsSent == sent + 1 && service.confirmed)
         #expect(m.phase == .setup(.finishing), "\(m.phase)")
+        #expect(await eventually { service.confirmed && m.confirming == nil })
+        #expect(confirmsSent == sent + 1)
         try await m.finishSetup()
         #expect(confirmsSent == sent + 1 && m.phase == .unlocked)
     }
@@ -176,20 +179,51 @@ extension VaultManagerFailureTests {
         try m.record.update(since: m.record.generation) { $0.enrolledHere = false }
         let sent = confirmsSent
         #expect(try await m.unlock(pin: "402817") == .success)
-        #expect(confirmsSent == sent && !service.confirmed)
+        #expect(!(await eventually(within: .milliseconds(500)) { confirmsSent > sent }))
+        #expect(!service.confirmed)
     }
 
-    /// A lock heard while the unlock's confirmation is on its way: the vault is not opened over it.
+    /// The unlock does not wait for its confirmation: it opens while the answer is on its way, and "Finish" joins it.
+    @Test func finishJoinsTheUnlocksConfirmation() async throws {
+        defer { phone.close() }
+        try await lockedAtTheStart()
+        let sent = confirmsSent
+        service.holdAnswers(to: "vault.enroll.confirm")
+        #expect(try await m.unlock(pin: "402817") == .success)
+        #expect(m.phase == .setup(.finishing), "\(m.phase)")
+        #expect(await eventually { service.heldAnswers == 1 })
+        let finishing = Task { try await m.finishSetup() }
+        #expect(await eventually { m.confirmationsJoined == 1 })
+        service.releaseHeldAnswers()
+        try await finishing.value
+        #expect(confirmsSent == sent + 1 && service.confirmed && m.phase == .unlocked)
+    }
+
+    /// A lock heard while the unlock's confirmation is on its way: Locked, whatever the confirmation's answer.
     @Test func aLockDuringTheUnlocksConfirmationGivesLocked() async throws {
         defer { phone.close() }
         try await lockedAtTheStart()
         service.lockBefore("vault.enroll.confirm")
         service.holdAnswers(to: "vault.enroll.confirm")
         let heard = m.locksHeard
-        let unlocking = Task { try await m.unlock(pin: "402817") }
+        #expect(try await m.unlock(pin: "402817") == .success)
         #expect(await eventually { m.locksHeard != heard })
         service.releaseHeldAnswers()
-        _ = try await unlocking.value
-        #expect(m.phase == .locked, "\(m.phase)")
+        #expect(await eventually { m.phase == .locked && m.confirming == nil }, "\(m.phase)")
+    }
+
+    /// A confirmation on a session dropped since (the app went to the background): "Finish" in the session opened again
+    /// sends its own rather than wait for an answer the old session will never collect.
+    @Test func finishDoesNotJoinADroppedSessionsConfirmation() async throws {
+        defer { phone.close() }
+        try await finishingUnconfirmed()
+        service.holdAnswers(to: "vault.enroll.confirm")
+        let reading = Task { try await m.refresh() }
+        #expect(await eventually { service.heldAnswers == 1 })
+        m.stopCollecting()
+        service.releaseHeldAnswers()
+        try await m.finishSetup()
+        #expect(m.confirmationsJoined == 0 && service.confirmed && m.phase == .unlocked)
+        reading.cancel()
     }
 }

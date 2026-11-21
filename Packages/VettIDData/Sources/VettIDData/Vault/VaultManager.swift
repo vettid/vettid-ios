@@ -98,8 +98,9 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
     @ObservationIgnored let timeScaleCell = TimeScaleCell()
     @ObservationIgnored var session: VaultSession?
     @ObservationIgnored private var opening: Task<VaultSession, any Error>?
-    /// The provisional vault's confirmation on its way (``confirmProvisional(_:backup:)``), which every caller shares.
-    @ObservationIgnored var confirming: Task<Void, any Error>?
+    /// The provisional vault's confirmation on its way (``confirmProvisional(_:backup:onStep:)``), which every caller in
+    /// the same session shares: its outcome, and the ``sessionGeneration`` it was sent in.
+    @ObservationIgnored var confirming: (done: Task<Void, any Error>, session: Int)?
     /// How many callers joined a confirmation on its way rather than sending their own (for the tests).
     @ObservationIgnored var confirmationsJoined = 0
     /// Bumped whenever the session is dropped: a session opened before is not kept.
@@ -222,7 +223,7 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
     /// Whether something that lives past the foreground (a live call, ``holdCollection(_:)``) needs the collection to go on.
     @ObservationIgnored var collectionHeld: (@MainActor () -> Bool)?
     /// The ``foregrounds`` count of a leaving of the foreground that was finished but for the collection's stop, which a hold kept
-    /// running (``onBackground(budget:)``); nil when none waits.
+    /// running (``onBackground(budget:began:)``); nil when none waits.
     @ObservationIgnored var heldBackground: Int? {
         didSet {
             heldFlag.set(heldBackground != nil)
@@ -235,7 +236,7 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
     /// Events that were not handled while a call held the collection in the background (``heldBackground``): the lists are read
     /// again when the app is back in the foreground (``onForeground()``).
     @ObservationIgnored var eventsMissedWhileHeld = false
-    /// ``onBackground(budget:)`` is doing its work (a hold decided at its start waits for it to end).
+    /// ``onBackground(budget:began:)`` is doing its work (a hold decided at its start waits for it to end).
     @ObservationIgnored var backgroundWorks = 0
     /// The ``foregrounds`` count of the latest leaving of the foreground, and of the one whose time ran out (``backgroundExpired()``).
     @ObservationIgnored var leaving: (began: Int, expired: Bool)?

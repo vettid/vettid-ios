@@ -91,7 +91,7 @@ extension VaultManager {
     /// Back in the foreground: the mailbox collection runs again (a session is opened when this phone holds a device),
     /// and the outbox is flushed unless a lock is pending (nothing but the lock goes to a vault that counts as locked).
     public func onForeground() {
-        // A background task that began before this does not stop the collection (``onBackground(budget:)``).
+        // A background task that began before this does not stop the collection (``onBackground(budget:began:)``).
         foregrounds += 1
         // Back from a background that a call held: what was not handled meanwhile is read again below, with the lists.
         heldBackground = nil
@@ -155,9 +155,15 @@ extension VaultManager {
     /// (``backgroundExpired(began:)``); by default, as now.
     public func onBackground(budget: Duration = .seconds(25), began: Int? = nil) async {
         let began = began ?? foregrounds
-        // The app came back before this ran: that leaving has ended, and nothing of it is done (the PINs, the owner check's
-        // foreground and the collection stay as the return left them).
-        guard began == foregrounds else { return }
+        // The app came back before this ran: that leaving has ended. Its secrets go all the same (IOS-PLAN §6.3), and the
+        // owner check counts it left and came back (an unlock on its way drops its kept PIN); the votes and the collection
+        // stay as the return left them.
+        guard began == foregrounds else {
+            forgetPairingPin()
+            ownerChecks.setForeground(false)
+            ownerChecks.setForeground(true)
+            return
+        }
         beginLeaving(began)
         backgroundWorks += 1
         let work = Task { @MainActor [weak self] in
@@ -225,7 +231,7 @@ extension VaultManager {
     }
 
     /// The background time iOS gave ran out (its expiration handler, called just before the app is suspended): the
-    /// collection stops now, synchronously, as at the end of ``onBackground(budget:)``, whose work the handler then cancels,
+    /// collection stops now, synchronously, as at the end of ``onBackground(budget:began:)``, whose work the handler then cancels,
     /// rather than in a task that may not run before the suspension. [began]: ``foregroundReturns`` when that leaving began
     /// (another leaving's expiration stops nothing). Not when the app came back meanwhile, nor while a call holds the
     /// collection (the call keeps the app running; one that ended during the work no longer does), nor twice.
@@ -331,9 +337,9 @@ extension VaultManager {
     public func holdCollection(_ held: @escaping @MainActor () -> Bool) { collectionHeld = held }
 
     /// The hold of ``holdCollection(_:)`` ended. If the app left the foreground meanwhile and has not come back, the background
-    /// that was waiting finishes now: the collection stops as ``onBackground(budget:)`` would have stopped it.
+    /// that was waiting finishes now: the collection stops as ``onBackground(budget:began:)`` would have stopped it.
     public func collectionHoldEnded() {
-        // (Not while the background's own work runs: ``onBackground(budget:)`` decides at its end.)
+        // (Not while the background's own work runs: ``onBackground(budget:began:)`` decides at its end.)
         guard backgroundWorks == 0, let began = heldBackground, began == foregrounds, collectionHeld?() != true else { return }
         finishBackground()
     }

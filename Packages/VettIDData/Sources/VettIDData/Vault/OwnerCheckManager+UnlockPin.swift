@@ -50,7 +50,7 @@ extension OwnerCheckManager {
     }
 
     /// The app entered the foreground or left it (IOS-PLAN §6.6; ``VaultManager/onForeground()``,
-    /// ``VaultManager/onBackground(budget:)``): leaving drops the kept PIN, also while the unlock and its check are on
+    /// ``VaultManager/onBackground(budget:began:)``): leaving drops the kept PIN, also while the unlock and its check are on
     /// their way (§3.6.5: both are then asked for again).
     public func setForeground(_ front: Bool) {
         inFront = front

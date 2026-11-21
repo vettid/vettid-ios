@@ -43,8 +43,10 @@ extension VaultManagerVotesTests {
         let began = m.foregroundReturns
         m.onForeground()
         let lifecycle = m.moveFlags.book.lifecycle
+        let left = m.ownerChecks.leftFront
         await m.onBackground(budget: .seconds(1), began: began)
         #expect(m.moveFlags.book.lifecycle == lifecycle && m.backgroundWorks == 0)
+        #expect(m.ownerChecks.leftFront == left + 1, "the owner check counts the leaving")
         #expect(m.session?.device.collecting == true && !m.backgrounded)
     }
 
