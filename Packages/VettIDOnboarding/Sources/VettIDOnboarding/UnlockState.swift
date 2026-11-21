@@ -61,6 +61,11 @@ public struct UnlockState: Equatable, Sendable, CustomStringConvertible, CustomD
     /// Seconds until the paused vault service asked to be tried again (MEMBER-API 1.2.0). Nothing retries by itself.
     public var serviceWaitSeconds: Int64 = 0
     public var recoveryPending = false
+    /// The PIN sent with "Cancel the recovery and unlock" was wrong (the vault applies the cancel only after a correct PIN,
+    /// so the recovery is still pending): the keypad asks for another, with its backoff, and the cancel sends it.
+    public var cancelPinWrong = false
+    /// A PIN typed on the keypad was handed to the cancel (its kept one was gone): the keypad stays up while it is sent.
+    public var cancelPinTyped = false
     /// (STAGING-TIME-SCALE §5.2) The vault's time scale: the screen's waits are shown divided by it.
     public var timeScale: UInt64 = 1
     public var stateRollback = false
@@ -76,6 +81,9 @@ public struct UnlockState: Equatable, Sendable, CustomStringConvertible, CustomD
     public var noUserGuid = false
     /// (iPhone, IOS-PLAN §6.3 item 5) With ``keysGone``: a replaced phone-secret record exists, and the member may try it.
     public var earlierSecret = false
+    /// "Try this phone's earlier keys" is offered: not while a recovery is pending, where only its cancel is sent (the
+    /// earlier keys' plain unlock would only be answered `recovery_pending` again).
+    public var earlierSecretOffered: Bool { earlierSecret && !recoveryPending }
     /// The open app was sent here because the relay kept refusing this phone's messages to the vault.
     public var refused = false
     /// The lock the member asked for (``LockNotice``).
@@ -111,8 +119,24 @@ public struct UnlockState: Equatable, Sendable, CustomStringConvertible, CustomD
         self.phoneSecret = phoneSecret
     }
 
-    /// "Cancel the recovery and unlock" may be pressed: with a phone secret, once the password is entered.
-    public var cancelAllowed: Bool { recoveryPending && !busy && (!phoneSecret || !password.isEmpty) }
+    /// The cancel needs a PIN typed on the keypad: its last PIN was wrong (``cancelPinWrong``), or the PIN kept from the
+    /// `recovery_pending` answer is gone (a trip to the background, "Cancel" on a slow answer, a failure that cleared it).
+    public var cancelPinNeeded: Bool { recoveryPending && (cancelPinWrong || cancelPinTyped || pin.isEmpty) }
+
+    /// The cancel needs the password: a phone secret's owner check goes with it, and a vault past its owner-check deadline
+    /// asks for it with any PIN (``submitAllowed``).
+    public var cancelPasswordNeeded: Bool { phoneSecret || checkDue }
+
+    /// "Cancel the recovery and unlock" may be pressed: what ``submitAllowed`` asks of the PIN it sends (the kept one, or
+    /// `pinTyped` digits typed on the keypad when ``cancelPinNeeded``), so the button is never enabled for a cancel that
+    /// would be refused.
+    public func cancelAllowed(pinTyped: Int) -> Bool {
+        guard recoveryPending, pinAllowed, !erasing, !cancelPasswordNeeded || !password.isEmpty else { return false }
+        return (cancelPinNeeded ? pinTyped : pin.count) >= Self.minPinLength
+    }
+
+    /// ``cancelAllowed(pinTyped:)`` with the PIN handed over.
+    public var cancelAllowed: Bool { cancelAllowed(pinTyped: pin.count) }
 
     /// The vault cannot be opened from here and erasing this phone would not help: an ended release, or a rollback of
     /// the release or of the vault's state. "Recover your vault" and support only.
@@ -154,9 +178,11 @@ public struct UnlockState: Equatable, Sendable, CustomStringConvertible, CustomD
     /// Whether the unlock may be sent: a PIN, and with a check due, the password too.
     public var submitAllowed: Bool { pinAllowed && pin.count >= Self.minPinLength && (!checkDue || !password.isEmpty) }
 
-    /// The PIN field is shown: the vault's software verified, nothing blocking, no recovery pending.
+    /// The PIN field is shown: the vault's software verified, nothing blocking, no recovery pending (unless its cancel
+    /// needs a PIN typed: ``cancelPinNeeded``, and no erase is running).
     public var showsPin: Bool {
-        returnAsksPin || (!noUserGuid && !recoverOnly && !recoveryPending && preflight != nil && preflightError == nil)
+        returnAsksPin || (!noUserGuid && !recoverOnly && (!recoveryPending || cancelPinNeeded && !erasing) && preflight != nil
+            && preflightError == nil)
     }
 
     /// A recovery's delay at the vault's time scale ("24 hours"; on staging "1 hour").

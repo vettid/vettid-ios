@@ -261,6 +261,7 @@ import VettIDUI
         // A phone with a user_guid and no PIN block (a recovery pending): above the way forward too.
         var pending = ok
         pending.recoveryPending = true
+        pending.pin = "40281795" // kept from the `recovery_pending` answer, for the cancel
         #expect(!pending.showsPin && UnlockScreen.messageAboveWayForward(pending))
         // With the PIN block: under the PIN, not twice.
         #expect(ok.showsPin && !UnlockScreen.messageAboveWayForward(ok))
@@ -393,6 +394,73 @@ import VettIDUI
         #expect(OnboardingStrings.ownerCheckLock == "Lock vault")
     }
 
+    /// A wrong PIN on "Cancel the recovery and unlock": the PIN block is back, with the wrong-PIN text and the backoff's
+    /// countdown in it, so its separate wrong-PIN card is neither drawn nor announced.
+    @Test func aWrongPinOnTheCancelShowsThePinBlockAndItsWait() {
+        var s = ok
+        s.recoveryPending = true
+        s.pin = "40281795" // kept from the `recovery_pending` answer, for the cancel
+        s.message = .badPin
+        #expect(!UnlockBlock.blocks(for: s).contains(.pin))
+        #expect(height(UnlockMessageNotice(state: s)) > 0, "without the PIN block, the card says it")
+        s.cancelPinWrong = true
+        #expect(UnlockBlock.blocks(for: s).contains(.pin))
+        #expect(height(UnlockMessageNotice(state: s)) == 0, "the PIN block says it")
+        #expect(height(UnlockWaitLine(state: s)) == 0)
+        s.waitSeconds = 30
+        #expect(height(UnlockWaitLine(state: s)) > 0, "the countdown, in the PIN block")
+    }
+
+    /// The cancel takes the keypad's PIN only when it needs one typed; otherwise the kept PIN goes and the keypad's stays.
+    @Test func theCancelTakesTheKeypadsPinOnlyWhenItNeedsOne() {
+        var s = ok
+        s.recoveryPending = true
+        s.pin = "40281795"
+        for needed in [false, true] {
+            s.cancelPinWrong = needed
+            let pin = PinBuffer()
+            for d in [1, 1, 1, 1, 2, 2, 2, 2] { pin.append(d) }
+            let actions = RecordingUnlockActions()
+            UnlockScreen.cancelRecovery(s, pin, actions)
+            #expect(actions.calls == (needed ? ["setPin 11112222", "cancel"] : ["cancel"]))
+            #expect(pin.count == (needed ? 0 : 8))
+        }
+    }
+
+    /// The notice's password field's return key sends only what the button would: not with a partial PIN typed.
+    @Test func theNoticesReturnKeyCancelsOnlyWhenTheButtonWould() {
+        var s = ok
+        s.recoveryPending = true
+        s.cancelPinWrong = true
+        for (typed, sent) in [(3, false), (8, true)] {
+            var called = false
+            RecoveryPendingNotice(state: s, actions: NoUnlockActions(), pinTyped: typed) { called = true }.cancelNow()
+            #expect(called == sent, "\(typed) digits")
+        }
+    }
+
+    /// One password field at most: the PIN block's only when no recovery is pending.
+    @Test func thePinBlockAsksThePasswordOnlyWithoutARecovery() {
+        var s = ok
+        s.checkDue = true
+        #expect(UnlockScreen.pinBlockAsksPassword(s))
+        s.recoveryPending = true
+        #expect(!UnlockScreen.pinBlockAsksPassword(s))
+    }
+
+    /// The recovery notice has the password field whenever the cancel needs one: a phone secret, or a due owner check.
+    @Test func theRecoveryNoticeAsksThePasswordWhenTheCancelNeedsIt() {
+        var s = ok
+        s.recoveryPending = true
+        s.pin = "40281795"
+        let without = height(RecoveryPendingNotice(state: s, actions: NoUnlockActions()))
+        s.checkDue = true
+        #expect(height(RecoveryPendingNotice(state: s, actions: NoUnlockActions())) > without)
+        s.checkDue = false
+        s.phoneSecret = true
+        #expect(height(RecoveryPendingNotice(state: s, actions: NoUnlockActions())) > without)
+    }
+
     private func height(_ view: some View) -> CGFloat {
         UIHostingController(rootView: view.vettIDTheme()).sizeThatFits(in: CGSize(width: 390, height: 844)).height
     }
@@ -408,6 +476,35 @@ import VettIDUI
     private func views(in view: UIView) -> [UIView] { [view] + view.subviews.flatMap { views(in: $0) } }
 
     private func textFields(in view: UIView) -> [UITextField] { views(in: view).compactMap { $0 as? UITextField } }
+}
+
+/// Records the cancel's calls, in order.
+@MainActor
+private final class RecordingUnlockActions: UnlockActions {
+    var calls: [String] = []
+
+    func retryPreflight() {}
+    func acknowledgeUpdate() {}
+    func setApproveOffer(_ approve: Bool) {}
+    func setPin(_ v: String) { calls.append("setPin \(v)") }
+    func setPassword(_ v: String) {}
+    func submit() {}
+    func cancelUnlock() {}
+    func cancelRecoveryAndUnlock() { calls.append("cancel") }
+    func submitEarlierSecret() {}
+    func showSignerHelp(_ show: Bool) {}
+    func askErase() {}
+    func dismissErase() {}
+    func confirmErase() {}
+    func retryLock() {}
+    func dismissLockNotice() {}
+    func lockAgain() {}
+    func dismissMoveFailure() {}
+    func forgetSecrets() {}
+    func askReturn() {}
+    func dismissReturn() {}
+    func confirmReturn() {}
+    func cancelReturn() {}
 }
 
 #endif

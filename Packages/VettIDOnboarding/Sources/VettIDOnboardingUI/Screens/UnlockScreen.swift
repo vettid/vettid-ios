@@ -107,7 +107,10 @@ public struct UnlockScreen: View {
             VStack(alignment: .leading, spacing: Spacing.m) {
                 ForEach(UnlockBlock.blocks(for: state), id: \.self) { block in
                     switch block {
-                    case .notices: UnlockNotices(state: state, actions: actions)
+                    case .notices:
+                        UnlockNotices(state: state, actions: actions, pinTyped: pin.count) {
+                            Self.cancelRecovery(state, pin, actions)
+                        }
                     case .pin:
                         pinEntry
                         UnlockMessageNotice(state: state)
@@ -191,16 +194,9 @@ public struct UnlockScreen: View {
         )
         .disabled(!state.pinAllowed)
         .padding(.top, Spacing.s)
-        if state.waitSeconds > 0 {
-            Text(OnboardingStrings.unlockWait(formatWait(state.waitSeconds)))
-                .vettIDFont(.bodySmall)
-                .frame(maxWidth: .infinity)
-                // Said once when the wait starts, never at each tick.
-                .accessibilityLabel(OnboardingStrings.unlockWait(spokenDuration(state.waitSeconds)))
-                .announcedOnce(OnboardingStrings.unlockWait(spokenDuration(state.waitSeconds)))
-                .accessibilityIdentifier("unlock_wait")
-        }
-        if state.checkDue {
+        UnlockWaitLine(state: state)
+        // While a recovery is pending its notice has the password field (the cancel's), not this one.
+        if Self.pinBlockAsksPassword(state) {
             SecretField(
                 OnboardingStrings.unlockPasswordLabel,
                 text: Binding(get: { state.password }, set: { actions.setPassword($0) }),
@@ -209,6 +205,17 @@ public struct UnlockScreen: View {
             .disabled(!state.pinAllowed)
             .accessibilityIdentifier("unlock_password")
         }
+    }
+
+    /// The PIN block's password field: when the owner check is due, except while a recovery is pending, whose notice has the
+    /// cancel's own (``UnlockState/cancelPasswordNeeded``), never two.
+    static func pinBlockAsksPassword(_ state: UnlockState) -> Bool { state.checkDue && !state.recoveryPending }
+
+    /// "Cancel the recovery and unlock": when the cancel needs a PIN typed (``UnlockState/cancelPinNeeded``), the keypad's
+    /// goes with it; otherwise the PIN kept from the `recovery_pending` answer does, and the keypad's is not taken.
+    static func cancelRecovery(_ state: UnlockState, _ pin: PinBuffer, _ actions: any UnlockActions) {
+        if state.cancelPinNeeded { actions.setPin(pin.take()) }
+        actions.cancelRecoveryAndUnlock()
     }
 
     /// The way forward under the unlock's results, one at most.
@@ -272,6 +279,9 @@ enum UnlockBlock: Hashable {
 struct UnlockNotices: View {
     let state: UnlockState
     let actions: any UnlockActions
+    /// The digits typed on the keypad, and the cancel of a pending recovery (which hands them over when it needs them).
+    var pinTyped = 0
+    var cancelRecovery: (@MainActor () -> Void)?
 
     var body: some View {
         if state.loading {
@@ -368,7 +378,9 @@ struct UnlockNotices: View {
         if state.stateRollback {
             NoticeCard(.urgent, title: OnboardingStrings.unlockRollbackStateTitle, message: OnboardingStrings.unlockRollbackStateBody)
         }
-        if state.recoveryPending { RecoveryPendingNotice(state: state, actions: actions) }
+        if state.recoveryPending {
+            RecoveryPendingNotice(state: state, actions: actions, pinTyped: pinTyped, cancel: cancelRecovery)
+        }
     }
 }
 
@@ -424,24 +436,32 @@ struct LockNoticeView: View {
 struct RecoveryPendingNotice: View {
     let state: UnlockState
     let actions: any UnlockActions
+    var pinTyped = 0
+    var cancel: (@MainActor () -> Void)?
     @Environment(\.vettIDColors) private var colors
+
+    /// Only when the button would be enabled: the return key of the password field too.
+    func cancelNow() {
+        guard state.cancelAllowed(pinTyped: pinTyped) else { return }
+        if let cancel { cancel() } else { actions.cancelRecoveryAndUnlock() }
+    }
 
     var body: some View {
         NoticeCard(.urgent, title: OnboardingStrings.unlockRecoveryTitle, message: OnboardingStrings.unlockRecoveryBody) {
-            Button { actions.cancelRecoveryAndUnlock() } label: {
+            Button { cancelNow() } label: {
                 Text(OnboardingStrings.unlockRecoveryCancel).vettIDFont(.labelLarge).foregroundStyle(colors.error)
                     .textButtonTarget()
             }
             .buttonStyle(.plain)
-            .disabled(!state.cancelAllowed)
+            .disabled(!state.cancelAllowed(pinTyped: pinTyped))
             .accessibilityIdentifier("recovery_cancel")
         }
         .accessibilityIdentifier("recovery_pending")
-        if state.phoneSecret {
+        if state.cancelPasswordNeeded {
             SecretField(
                 OnboardingStrings.unlockPasswordLabel,
                 text: Binding(get: { state.password }, set: { actions.setPassword($0) }),
-                onSubmit: { actions.cancelRecoveryAndUnlock() }
+                onSubmit: { cancelNow() }
             )
             .disabled(state.busy)
             .accessibilityIdentifier("unlock_cancel_password")
@@ -535,3 +555,20 @@ struct UnlockMessageNotice: View {
     }
 }
 #endif
+
+/// The PIN block's backoff countdown (a wrong PIN, on the unlock or on the cancel of a recovery); nothing without a wait.
+struct UnlockWaitLine: View {
+    let state: UnlockState
+
+    var body: some View {
+        if state.waitSeconds > 0 {
+            Text(OnboardingStrings.unlockWait(formatWait(state.waitSeconds)))
+                .vettIDFont(.bodySmall)
+                .frame(maxWidth: .infinity)
+                // Said once when the wait starts, never at each tick.
+                .accessibilityLabel(OnboardingStrings.unlockWait(spokenDuration(state.waitSeconds)))
+                .announcedOnce(OnboardingStrings.unlockWait(spokenDuration(state.waitSeconds)))
+                .accessibilityIdentifier("unlock_wait")
+        }
+    }
+}

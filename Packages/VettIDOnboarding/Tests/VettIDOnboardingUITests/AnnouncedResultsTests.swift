@@ -90,6 +90,7 @@ import VettIDOnboarding
     @Test func aWrongPinWhileARecoveryIsPendingIsSpoken() async {
         var s = unlock
         s.recoveryPending = true
+        s.pin = "40281795" // kept from the `recovery_pending` answer: no PIN block
         s.message = .badPin
         let text = "\(OnboardingStrings.unlockTitle). \(OnboardingStrings.unlockBadPin)"
         #expect(await spoken(UnlockScreen(state: s, actions: NoUnlockActions()), text, .assertive))
