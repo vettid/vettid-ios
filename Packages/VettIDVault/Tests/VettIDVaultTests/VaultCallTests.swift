@@ -232,8 +232,11 @@ extension VaultDeviceTests {
         let onlyTwo = try await take(try offer(offerSdp: CallMedia.sdpWithOffer(sdp, offered: [2])))
         #expect(throws: CallMessageError.self) { try api.callIncoming(onlyTwo, pinnedFingerprint: peer.pinned, suites: MediaSuite.allCases) }
 
-        let call = try api.callIncoming(try await take(try offer()), pinnedFingerprint: peer.pinned)
-        #expect((44...45).contains(Int(call.ringFor)), "rings for the offer's lifetime by the vault's clock")
+        // The refused offers above take wall-clock time, so the time left is judged against this offer's own `ts`.
+        let event = try await take(try offer())
+        let call = try api.callIncoming(event, pinnedFingerprint: peer.pinned)
+        #expect(abs(call.ringFor - exp.timeIntervalSince(event.ts)) < 0.001, "rings for the offer's lifetime by the vault's clock")
+        #expect(call.ringFor > 0 && call.ringFor <= 45)
         #expect(call.callId == callId)
         #expect(call.connectionId == "conn-1")
         #expect(call.exp == exp)
