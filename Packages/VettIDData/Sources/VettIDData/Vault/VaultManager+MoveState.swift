@@ -46,7 +46,7 @@ final class MoveBook {
     /// The wait of a transfer found waiting at a start (before its deadline), and whether the start was looked at.
     var transferWaiter: Task<Void, Never>?
     var transferResumed = false
-    /// The times the app went to the background (``VaultManager/onBackground(budget:)``), and the times every device was
+    /// The times the app went to the background (``VaultManager/onBackground(budget:began:)``), and the times every device was
     /// forgotten (a wipe, a sign-out): what the settlement window watches, as a background ends the session too.
     var backgrounds = 0
     var sessionEnds = 0

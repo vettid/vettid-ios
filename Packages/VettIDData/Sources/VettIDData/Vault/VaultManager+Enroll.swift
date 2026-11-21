@@ -187,7 +187,7 @@ extension VaultManager {
             // Kept first, so that a restart before the confirmation still sends the member's choice.
             try record.update(since: record.generation) { $0.backupChoice = backup }
             if s.device.credentialVersion == nil { try await createOrFetch(s, password: password, pin: pin) }
-            try await confirmEnrollment(s, backup: backup, onStep: onStep)
+            try await confirmProvisional(s, backup: backup, onStep: onStep)
             // A lock asked for meanwhile wins: the phone stays locked.
             if locks == lockGeneration, !lockGuard.holdsPhone { phase = .setup(.finishing) }
         }
@@ -197,12 +197,65 @@ extension VaultManager {
     /// provisional; recorded once answered. After a restart between the credential and the answer, a status read that
     /// publishes the vault open sends both first (``refresh()``), and so does ``finishSetup()`` when none did, by the phone
     /// whose enrollment made the vault only.
-    func confirmEnrollment(_ s: VaultSession, backup: Bool?, onStep: @MainActor (EnrollStep) -> Void) async throws {
+    /// [since]: the record's generation when it began (a confirmation answered after a reset or a lock is not recorded in
+    /// the record that came after).
+    func confirmEnrollment(_ s: VaultSession, backup: Bool?, since: Int, onStep: @MainActor (EnrollStep) -> Void) async throws {
         onStep(.backup)
         if let backup { try await setSetting(s, Self.keyBackup, backup ? "true" : "false") }
         onStep(.confirm)
         try await openApi(s).enrollConfirm()
-        try record.update(since: record.generation) { $0.enrollConfirmed = true }
+        try record.update(since: since) { $0.enrollConfirmed = true }
+    }
+
+    /// ``confirmEnrollment(_:backup:since:onStep:)``, one at a time: the credential's step, a status read, an unlock and
+    /// "Finish" that find the vault unconfirmed together share the confirmation on its way in the same session, its answer
+    /// or its failure (each says it as it says its own), so the backup setting and `vault.enroll.confirm` are sent once.
+    /// The first sends it, with its [onStep]; one that comes after the answer sends nothing. One on a session dropped since
+    /// (a background, a lock, a reset) is not joined: its answer may never be collected, and this caller's session sends
+    /// its own.
+    /// [s] must be the live session: one dropped since its caller got it (a read that began before a background) sends
+    /// nothing and is refused as such.
+    func confirmProvisional(_ s: VaultSession, backup: Bool?, onStep: @MainActor (EnrollStep) -> Void = { _ in }) async throws {
+        guard s.device === session?.device else { throw VaultFailure(.other, code: "session_dropped") }
+        // Joined only in its own session and before any lock since it began: a vault that locked meanwhile keeps the
+        // request in its mailbox, so its answer may come only after its timeout. A caller that joins waits for it as its
+        // sender does, request timeout included.
+        if let c = confirming, c.session == sessionGeneration, c.locks == lockGeneration, c.heard == locksHeard {
+            confirmationsJoined += 1
+            do {
+                return try await c.done.value
+            } catch is CancellationError where !Task.isCancelled {
+                // Its sender was cancelled (a screen's task), not this caller: this one goes on, and sends it if still due.
+                // (A cancelled request ends in a `CancellationError`; any other failure is said as the sender's.)
+                return try await confirmProvisional(s, backup: backup, onStep: onStep)
+            }
+        }
+        guard !record.value.enrollConfirmed else { return }
+        let (results, report) = AsyncStream.makeStream(of: Result<Void, any Error>.self)
+        let done = Task<Void, any Error> {
+            for await r in results { return try r.get() }
+            throw CancellationError()
+        }
+        confirming = Confirming(done: done, session: sessionGeneration, locks: lockGeneration, heard: locksHeard)
+        defer {
+            report.finish()
+            if confirming?.done == done { confirming = nil }
+        }
+        do {
+            try await confirmEnrollment(s, backup: backup, since: record.generation, onStep: onStep)
+            report.yield(.success(()))
+        } catch {
+            report.yield(.failure(error))
+            throw error
+        }
+    }
+
+    /// A confirmation on its way: its outcome, and the session and the locks it began under.
+    struct Confirming {
+        let done: Task<Void, any Error>
+        let session: Int
+        let locks: Int
+        let heard: LocksHeard
     }
 
     /// `credential.create`. A vault that answers `exists` already holds this phone's credential (a create whose answer
@@ -236,7 +289,7 @@ extension VaultManager {
             // The session as it is now (opened again after a background, say): a failure is said, as any.
             try await guarded {
                 let s = try await openSession()
-                if s.device.deviceID != nil { try await confirmEnrollment(s, backup: local.backupChoice) { _ in } }
+                if s.device.deviceID != nil { try await confirmProvisional(s, backup: local.backupChoice) }
             }
         }
         // A gate that refuses now (a lock asked for meanwhile) leaves the phase as it is, and says nothing more.

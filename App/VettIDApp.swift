@@ -278,7 +278,7 @@ struct AppRoot: View {
         // This leaving, by the returns counted so far: a later leaving's expiration is its own.
         let began = vault.foregroundReturns
         let work = Task { @MainActor in
-            await vault.onBackground(budget: .seconds(seconds))
+            await vault.onBackground(budget: .seconds(seconds), began: began)
             background.end(app)
         }
         background.id = app.beginBackgroundTask(withName: "vault-background") {

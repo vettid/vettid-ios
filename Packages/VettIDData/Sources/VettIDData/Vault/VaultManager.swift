@@ -98,6 +98,11 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
     @ObservationIgnored let timeScaleCell = TimeScaleCell()
     @ObservationIgnored var session: VaultSession?
     @ObservationIgnored private var opening: Task<VaultSession, any Error>?
+    /// The provisional vault's confirmation on its way (``confirmProvisional(_:backup:onStep:)``), which every caller in
+    /// the same session shares, until a lock.
+    @ObservationIgnored var confirming: Confirming?
+    /// How many callers joined a confirmation on its way rather than sending their own (for the tests).
+    @ObservationIgnored var confirmationsJoined = 0
     /// Bumped whenever the session is dropped: a session opened before is not kept.
     @ObservationIgnored var sessionGeneration = 0
     /// Bumped by every change of ``phase``: a refresh that started before one does not overwrite it.
@@ -218,7 +223,7 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
     /// Whether something that lives past the foreground (a live call, ``holdCollection(_:)``) needs the collection to go on.
     @ObservationIgnored var collectionHeld: (@MainActor () -> Bool)?
     /// The ``foregrounds`` count of a leaving of the foreground that was finished but for the collection's stop, which a hold kept
-    /// running (``onBackground(budget:)``); nil when none waits.
+    /// running (``onBackground(budget:began:)``); nil when none waits.
     @ObservationIgnored var heldBackground: Int? {
         didSet {
             heldFlag.set(heldBackground != nil)
@@ -231,7 +236,7 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
     /// Events that were not handled while a call held the collection in the background (``heldBackground``): the lists are read
     /// again when the app is back in the foreground (``onForeground()``).
     @ObservationIgnored var eventsMissedWhileHeld = false
-    /// ``onBackground(budget:)`` is doing its work (a hold decided at its start waits for it to end).
+    /// ``onBackground(budget:began:)`` is doing its work (a hold decided at its start waits for it to end).
     @ObservationIgnored var backgroundWorks = 0
     /// The ``foregrounds`` count of the latest leaving of the foreground, and of the one whose time ran out (``backgroundExpired()``).
     @ObservationIgnored var leaving: (began: Int, expired: Bool)?
@@ -711,6 +716,14 @@ extension VaultManager {
             } catch let f as VaultFailure {
                 p = unreachable(f)
             }
+            // The session dropped meanwhile (a background): this read's answer is of that session, and is not published.
+            // A phone still on Starting reads again in the live one (the return's own read may have ended before this), not
+            // while in the background (the return reads again: nothing would be collected meanwhile); any other phase was
+            // set by what came since, which reads again itself where it needs to.
+            guard self.session?.device === session.device else {
+                if phase == .starting, !backgrounded { try await refresh() }
+                return
+            }
             // A lock heard since the read began, during the steps too, is the newest word over the vault this answer opened,
             // whatever the steps returned: Locked, not "can't connect". (Judged as the read's answer is: a mailbox's old
             // `vault.locking` has expired, 60 s after it was sent, and is dropped before it is heard.)
@@ -728,7 +741,7 @@ extension VaultManager {
     private func openedSteps(_ s: VaultSession) async throws {
         ownerChecks.onOpened()
         let local = record.value
-        if !local.enrollConfirmed, local.enrolledHere { try await confirmEnrollment(s, backup: local.backupChoice) { _ in } }
+        if !local.enrollConfirmed, local.enrolledHere { try await confirmProvisional(s, backup: local.backupChoice) }
     }
 
     /// A read that failed: what the phone stores for the vault could not be read is said as that, with the way out,

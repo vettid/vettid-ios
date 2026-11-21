@@ -91,7 +91,7 @@ extension VaultManager {
     /// Back in the foreground: the mailbox collection runs again (a session is opened when this phone holds a device),
     /// and the outbox is flushed unless a lock is pending (nothing but the lock goes to a vault that counts as locked).
     public func onForeground() {
-        // A background task that began before this does not stop the collection (``onBackground(budget:)``).
+        // A background task that began before this does not stop the collection (``onBackground(budget:began:)``).
         foregrounds += 1
         // Back from a background that a call held: what was not handled meanwhile is read again below, with the lists.
         heldBackground = nil
@@ -151,27 +151,20 @@ extension VaultManager {
     /// is sent (not while a lock is pending), a vote window's lock on its way ends, then the collection stops, unless the
     /// app came back meanwhile. All of it within [budget] (the background time iOS gives) and stopped when the calling
     /// task is cancelled (its expiration); nothing assumes it ran longer. A pending lock's retries go on while the process runs and resume at the next start.
-    public func onBackground(budget: Duration = .seconds(25)) async {
-        let began = foregrounds
-        leaving = (began, false)
-        moveFlags.book.lifecycle += 1
-        // IOS-PLAN §6.3: the PIN kept for the pairing goes with the other secrets (§4.9), and so does the one kept for the
-        // check's retry (VAULT-MESSAGING §3.6.5), also while an unlock and its check are on their way.
-        forgetPairingPin()
-        ownerChecks.setForeground(false)
-        // No run with the votes site while the app is away (there is no background job).
-        votes.pauseSync()
-        // A live call holds the collection: decided first, so that what arrives during the work below is already kept, not acted on.
-        if collectionHeld?() == true {
-            heldBackground = began
-            // The WebSocket's window of unacked messages would fill with the held events: a long poll meanwhile.
-            session?.device.collectsLongPoll(true)
+    /// [began]: ``foregroundReturns`` when the app left, the value its expiration handler names this leaving by
+    /// (``backgroundExpired(began:)``); by default, as now.
+    public func onBackground(budget: Duration = .seconds(25), began: Int? = nil) async {
+        let began = began ?? foregrounds
+        // The app came back before this ran: that leaving has ended. Its secrets go all the same (IOS-PLAN §6.3), and the
+        // owner check counts it left and came back (an unlock on its way drops its kept PIN); the votes and the collection
+        // stay as the return left them. (A PIN kept by an unlock that began after the return goes too: it is asked again.)
+        guard began == foregrounds else {
+            forgetPairingPin()
+            ownerChecks.setForeground(false)
+            ownerChecks.setForeground(true)
+            return
         }
-        // A held background is a background for the settlement windows: counted once, when it begins.
-        if heldBackground != nil, !backgroundCounted {
-            moveFlags.book.backgrounds += 1
-            backgroundCounted = true
-        }
+        beginLeaving(began)
         backgroundWorks += 1
         let work = Task { @MainActor [weak self] in
             guard let self else { return }
@@ -214,8 +207,31 @@ extension VaultManager {
         finishBackground()
     }
 
+    /// What leaving the foreground does at once (``onBackground(budget:began:)``), before its work.
+    private func beginLeaving(_ began: Int) {
+        leaving = (began, false)
+        moveFlags.book.lifecycle += 1
+        // IOS-PLAN §6.3: the PIN kept for the pairing goes with the other secrets (§4.9), and so does the one kept for the
+        // check's retry (VAULT-MESSAGING §3.6.5), also while an unlock and its check are on their way.
+        forgetPairingPin()
+        ownerChecks.setForeground(false)
+        // No run with the votes site while the app is away (there is no background job).
+        votes.pauseSync()
+        // A live call holds the collection: decided first, so that what arrives during the work below is already kept, not acted on.
+        if collectionHeld?() == true {
+            heldBackground = began
+            // The WebSocket's window of unacked messages would fill with the held events: a long poll meanwhile.
+            session?.device.collectsLongPoll(true)
+        }
+        // A held background is a background for the settlement windows: counted once, when it begins.
+        if heldBackground != nil, !backgroundCounted {
+            moveFlags.book.backgrounds += 1
+            backgroundCounted = true
+        }
+    }
+
     /// The background time iOS gave ran out (its expiration handler, called just before the app is suspended): the
-    /// collection stops now, synchronously, as at the end of ``onBackground(budget:)``, whose work the handler then cancels,
+    /// collection stops now, synchronously, as at the end of ``onBackground(budget:began:)``, whose work the handler then cancels,
     /// rather than in a task that may not run before the suspension. [began]: ``foregroundReturns`` when that leaving began
     /// (another leaving's expiration stops nothing). Not when the app came back meanwhile, nor while a call holds the
     /// collection (the call keeps the app running; one that ended during the work no longer does), nor twice.
@@ -321,9 +337,9 @@ extension VaultManager {
     public func holdCollection(_ held: @escaping @MainActor () -> Bool) { collectionHeld = held }
 
     /// The hold of ``holdCollection(_:)`` ended. If the app left the foreground meanwhile and has not come back, the background
-    /// that was waiting finishes now: the collection stops as ``onBackground(budget:)`` would have stopped it.
+    /// that was waiting finishes now: the collection stops as ``onBackground(budget:began:)`` would have stopped it.
     public func collectionHoldEnded() {
-        // (Not while the background's own work runs: ``onBackground(budget:)`` decides at its end.)
+        // (Not while the background's own work runs: ``onBackground(budget:began:)`` decides at its end.)
         guard backgroundWorks == 0, let began = heldBackground, began == foregrounds, collectionHeld?() != true else { return }
         finishBackground()
     }
