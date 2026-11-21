@@ -217,12 +217,16 @@ extension VaultManager {
     /// nothing and is refused as such.
     func confirmProvisional(_ s: VaultSession, backup: Bool?, onStep: @MainActor (EnrollStep) -> Void = { _ in }) async throws {
         guard s.device === session?.device else { throw VaultFailure(.other, code: "session_dropped") }
-        if let c = confirming, c.session == sessionGeneration {
+        // Joined only in its own session and before any lock since it began: a vault that locked meanwhile keeps the
+        // request in its mailbox, so its answer may come only after its timeout. A caller that joins waits for it as its
+        // sender does, request timeout included.
+        if let c = confirming, c.session == sessionGeneration, c.locks == lockGeneration, c.heard == locksHeard {
             confirmationsJoined += 1
             do {
                 return try await c.done.value
             } catch is CancellationError where !Task.isCancelled {
                 // Its sender was cancelled (a screen's task), not this caller: this one goes on, and sends it if still due.
+                // (A cancelled request ends in a `CancellationError`; any other failure is said as the sender's.)
                 return try await confirmProvisional(s, backup: backup, onStep: onStep)
             }
         }
@@ -232,7 +236,7 @@ extension VaultManager {
             for await r in results { return try r.get() }
             throw CancellationError()
         }
-        confirming = (done, sessionGeneration)
+        confirming = Confirming(done: done, session: sessionGeneration, locks: lockGeneration, heard: locksHeard)
         defer {
             report.finish()
             if confirming?.done == done { confirming = nil }
@@ -244,6 +248,14 @@ extension VaultManager {
             report.yield(.failure(error))
             throw error
         }
+    }
+
+    /// A confirmation on its way: its outcome, and the session and the locks it began under.
+    struct Confirming {
+        let done: Task<Void, any Error>
+        let session: Int
+        let locks: Int
+        let heard: LocksHeard
     }
 
     /// `credential.create`. A vault that answers `exists` already holds this phone's credential (a create whose answer

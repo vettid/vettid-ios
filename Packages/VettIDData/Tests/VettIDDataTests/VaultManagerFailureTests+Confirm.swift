@@ -179,8 +179,8 @@ extension VaultManagerFailureTests {
         try m.record.update(since: m.record.generation) { $0.enrolledHere = false }
         let sent = confirmsSent
         #expect(try await m.unlock(pin: "402817") == .success)
-        #expect(!(await eventually(within: .milliseconds(500)) { confirmsSent > sent }))
-        #expect(!service.confirmed)
+        for _ in 0..<20 { await Task.yield() } // the unlock's confirmation, had it begun, would be on its way now
+        #expect(m.confirming == nil && confirmsSent == sent && !service.confirmed)
     }
 
     /// The unlock does not wait for its confirmation: it opens while the answer is on its way, and "Finish" joins it.
@@ -299,5 +299,38 @@ extension VaultManagerFailureTests {
         service.releaseHeldAnswers()
         try await finishing.value
         #expect(service.confirmed && m.phase == .unlocked)
+    }
+
+    /// An unlock while the previous unlock's confirmation is on its way, the vault having locked meanwhile: it sends its
+    /// own rather than wait for the one the locked vault keeps in its mailbox.
+    @Test func anUnlockAfterALockDoesNotJoinTheLastOnesConfirmation() async throws {
+        defer { phone.close() }
+        try await lockedAtTheStart()
+        service.holdAnswers(to: "vault.enroll.confirm")
+        #expect(try await m.unlock(pin: "402817") == .success)
+        #expect(await eventually { service.heldAnswers == 1 })
+        let heard = m.locksHeard
+        service.sendEvent("vault.locking", #"{"reason":"test"}"#)
+        #expect(await eventually { m.locksHeard != heard && m.phase == .locked })
+        #expect(try await m.unlock(pin: "402817") == .success)
+        #expect(await eventually { service.heldAnswers == 2 }, "the second unlock sends its own")
+        #expect(m.confirmationsJoined == 0)
+        service.releaseHeldAnswers()
+        #expect(await eventually { service.confirmed && m.confirming == nil })
+    }
+
+    /// A start's read whose session dropped while its status read was on its way: the phone, still on Starting, reads
+    /// again in the live session.
+    @Test func aStartsReadOfADroppedSessionReadsAgain() async throws {
+        defer { phone.close() }
+        try await provisionalRestarted()
+        service.holdStatusReads()
+        let reading = Task { try await m.refresh() }
+        #expect(await eventually { service.heldStatusReads == 1 })
+        m.stopCollecting()
+        _ = try await m.openSession()
+        service.releaseStatusReads()
+        try await reading.value
+        #expect(m.phase == .setup(.finishing) && service.confirmed, "\(m.phase)")
     }
 }
