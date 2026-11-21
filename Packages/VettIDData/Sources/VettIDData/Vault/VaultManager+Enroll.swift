@@ -205,6 +205,22 @@ extension VaultManager {
         try record.update(since: record.generation) { $0.enrollConfirmed = true }
     }
 
+    /// ``confirmEnrollment(_:backup:onStep:)`` for a provisional vault found unconfirmed after a restart, one at a time: a
+    /// status read, an unlock and "Finish" that find it so together share the confirmation on its way, its answer or its
+    /// failure (each says it as it says its own), so the backup setting and `vault.enroll.confirm` are sent once. One that
+    /// comes after the answer sends nothing.
+    func confirmProvisional(_ s: VaultSession, backup: Bool?) async throws {
+        if let confirming {
+            confirmationsJoined += 1
+            return try await confirming.value
+        }
+        guard !record.value.enrollConfirmed else { return }
+        let task = Task { try await confirmEnrollment(s, backup: backup) { _ in } }
+        confirming = task
+        defer { confirming = nil }
+        try await task.value
+    }
+
     /// `credential.create`. A vault that answers `exists` already holds this phone's credential (a create whose answer
     /// was lost): it is fetched instead of a new one being asked for (vettid-android `CredentialCreate.fetchInstead`;
     /// every vault of this app is of release R).
@@ -236,7 +252,7 @@ extension VaultManager {
             // The session as it is now (opened again after a background, say): a failure is said, as any.
             try await guarded {
                 let s = try await openSession()
-                if s.device.deviceID != nil { try await confirmEnrollment(s, backup: local.backupChoice) { _ in } }
+                if s.device.deviceID != nil { try await confirmProvisional(s, backup: local.backupChoice) }
             }
         }
         // A gate that refuses now (a lock asked for meanwhile) leaves the phase as it is, and says nothing more.

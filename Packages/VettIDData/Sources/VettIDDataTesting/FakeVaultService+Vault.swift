@@ -235,7 +235,28 @@ extension FakeVaultService {
             ?? Inner(id: Ulid.new(), type: type, ts: ts, re: re, status: re == nil ? nil : Inner.statusOK, body: Array(body.utf8))
         if let re { responses[re] = inner }
         if re != nil, answerLost(type) { return }
-        queue(try epoch.seal(inner))
+        answer(type, try epoch.seal(inner), isAnswer: re != nil)
+    }
+
+    /// [sealed] queued, or held when it answers a request of a type ``holdAnswers(to:)`` names. Callers hold ``cond``.
+    private func answer(_ type: String, _ sealed: [UInt8], isAnswer: Bool) {
+        if isAnswer, heldAnswerTypes.contains(type) { heldAnswersValue.append(sealed) } else { queue(sealed) }
+    }
+
+    /// From now on the answers to requests of [type] (an error too) wait until ``releaseHeldAnswers()``: a slow answer, which
+    /// the phone waits for (unlike ``holdMessages``, it is not one that may go unanswered).
+    public func holdAnswers(to type: String) { locked { _ = heldAnswerTypes.insert(type) } }
+
+    /// The answers held by ``holdAnswers(to:)`` now.
+    public var heldAnswers: Int { locked { heldAnswersValue.count } }
+
+    /// The held answers go out, in order, and every later one at once.
+    public func releaseHeldAnswers() {
+        locked {
+            heldAnswerTypes = []
+            for a in heldAnswersValue { queue(a) }
+            heldAnswersValue = []
+        }
     }
 
     /// [m] refused with [error] (its code and message) and [body]. Callers hold ``cond``.
@@ -243,7 +264,7 @@ extension FakeVaultService {
         guard let epoch = keyring.current() else { return }
         let inner = Inner(id: Ulid.new(), type: m.type, ts: stampNow, re: m.id, status: Inner.statusError, error: error, body: Array(body.utf8))
         responses[m.id] = inner
-        queue(try epoch.seal(inner))
+        answer(m.type, try epoch.seal(inner), isAnswer: true)
     }
 
     /// The requests of enrollment (§3.5.7, §10.6, §10.8), and those of Settings (``settingsRequest(_:_:)``). Callers hold

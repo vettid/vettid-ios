@@ -98,6 +98,10 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
     @ObservationIgnored let timeScaleCell = TimeScaleCell()
     @ObservationIgnored var session: VaultSession?
     @ObservationIgnored private var opening: Task<VaultSession, any Error>?
+    /// The provisional vault's confirmation on its way (``confirmProvisional(_:backup:)``), which every caller shares.
+    @ObservationIgnored var confirming: Task<Void, any Error>?
+    /// How many callers joined a confirmation on its way rather than sending their own (for the tests).
+    @ObservationIgnored var confirmationsJoined = 0
     /// Bumped whenever the session is dropped: a session opened before is not kept.
     @ObservationIgnored var sessionGeneration = 0
     /// Bumped by every change of ``phase``: a refresh that started before one does not overwrite it.
@@ -728,7 +732,7 @@ extension VaultManager {
     private func openedSteps(_ s: VaultSession) async throws {
         ownerChecks.onOpened()
         let local = record.value
-        if !local.enrollConfirmed, local.enrolledHere { try await confirmEnrollment(s, backup: local.backupChoice) { _ in } }
+        if !local.enrollConfirmed, local.enrolledHere { try await confirmProvisional(s, backup: local.backupChoice) }
     }
 
     /// A read that failed: what the phone stores for the vault could not be read is said as that, with the way out,

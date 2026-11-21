@@ -282,10 +282,29 @@ extension VaultManager {
         // owner check) is sent (chosen; not in the spec).
         if rereads != marks.rereads { return await rereadPhase() }
         if !s.device.recovering { await beforeOpen() }
-        guard mayOpen(locks: locks, rec: rec, openedAt: r.at, heard: heard) else { return }
+        // A provisional vault (a restart before its confirmation was answered, VAULT-MESSAGING §11.3) is confirmed by the
+        // unlock that opens it, as by a status read that finds it open; then judged again, as the steps before.
+        guard await mayOpenConfirmed(s, { mayOpen(locks: locks, rec: rec, openedAt: r.at, heard: heard) }) else { return }
         // The same for one that came during the steps before the open app.
         if rereads != marks.rereads { return await rereadPhase() }
         openApp(s)
+    }
+
+    /// [mayOpen], then after ``confirmedAtUnlock(_:)`` when that sent or joined a confirmation, again.
+    private func mayOpenConfirmed(_ s: VaultSession, _ mayOpen: () -> Bool) async -> Bool {
+        guard mayOpen() else { return false }
+        return await confirmedAtUnlock(s) ? mayOpen() : true
+    }
+
+    /// ``confirmProvisional(_:backup:)`` for the vault this unlock opened, by the phone whose enrollment made it, with its
+    /// credential, outside a recovery and while no lock is pending; true when it was sent or joined. A failure leaves the
+    /// vault to "Finish", which sends it again and says the failure (``finishSetup()``).
+    private func confirmedAtUnlock(_ s: VaultSession) async -> Bool {
+        let local = record.value
+        guard !local.enrollConfirmed, local.enrolledHere, !s.device.recovering, s.device.credentialVersion != nil,
+              lockGuard.admits() else { return false }
+        _ = try? await confirmProvisional(s, backup: local.backupChoice)
+        return true
     }
 
     /// The phase of the opened vault. The check screen is shown only by the open app: a PIN kept for its retry does not wait

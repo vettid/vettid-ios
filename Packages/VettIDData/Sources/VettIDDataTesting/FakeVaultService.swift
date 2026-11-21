@@ -160,6 +160,7 @@ public final class FakeVaultService: @unchecked Sendable {
     var memberLockAnswerValue: MemberLockAnswer = .lock
     var heldSlots: [String: [UInt8]] = [:]
     var holdMessagesValue = false
+    var heldAnswerTypes: Set<String> = [], heldAnswersValue: [[UInt8]] = []
     var relayLocksValue = 0
     var relayLockNames: [String?] = []
     var memberLockNames: [String?] = []

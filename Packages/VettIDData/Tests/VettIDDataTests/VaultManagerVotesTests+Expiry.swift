@@ -36,6 +36,18 @@ extension VaultManagerVotesTests {
         #expect(m.moveFlags.book.lifecycle == lifecycle, "the work's end does not finish the background again")
     }
 
+    /// The leaving's work starting only after the app came back (its task ran late): it does nothing.
+    @Test func aLeavingThatEndedBeforeItsWorkDoesNothing() async throws {
+        defer { phone.close() }
+        try await open()
+        let began = m.foregroundReturns
+        m.onForeground()
+        let lifecycle = m.moveFlags.book.lifecycle
+        await m.onBackground(budget: .seconds(1), began: began)
+        #expect(m.moveFlags.book.lifecycle == lifecycle && m.backgroundWorks == 0)
+        #expect(m.session?.device.collecting == true && !m.backgrounded)
+    }
+
     @Test func anExpirationAfterTheReturnStopsNothing() async throws {
         defer { phone.close() }
         let (background, began) = try await backgroundWaiting()
