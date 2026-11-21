@@ -263,4 +263,38 @@ extension VaultManagerFailureTests {
         try await reading.value
         #expect(confirmsSent == 1 && service.confirmed)
     }
+
+    /// A read whose session was dropped while its status read was on its way (a background and a return): it sends no
+    /// confirmation on the old session, publishes nothing, and "Finish" in the new one sends its own.
+    @Test func aReadOfADroppedSessionSendsNoConfirmation() async throws {
+        defer { phone.close() }
+        try await finishingUnconfirmed()
+        let sent = confirmsSent
+        service.holdStatusReads()
+        let reading = Task { try await m.refresh() }
+        #expect(await eventually { service.heldStatusReads == 1 })
+        m.stopCollecting()
+        _ = try await m.openSession()
+        service.releaseStatusReads()
+        try await reading.value
+        #expect(confirmsSent == sent && m.phase == .setup(.finishing), "\(m.phase)")
+        try await m.finishSetup()
+        #expect(m.confirmationsJoined == 0 && confirmsSent == sent + 1 && m.phase == .unlocked)
+    }
+
+    /// The confirmation's sender is cancelled (a screen's task) while "Finish" waits for it: "Finish" goes on and sends it.
+    @Test func aCancelledSenderDoesNotFailFinish() async throws {
+        defer { phone.close() }
+        try await finishingUnconfirmed()
+        service.holdAnswers(to: "vault.enroll.confirm")
+        let reading = Task { try await m.refresh() }
+        #expect(await eventually { service.heldAnswers == 1 })
+        let finishing = Task { try await m.finishSetup() }
+        #expect(await eventually { m.confirmationsJoined == 1 })
+        reading.cancel()
+        _ = try? await reading.value
+        service.releaseHeldAnswers()
+        try await finishing.value
+        #expect(service.confirmed && m.phase == .unlocked)
+    }
 }

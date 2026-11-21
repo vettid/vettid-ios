@@ -213,10 +213,18 @@ extension VaultManager {
     /// The first sends it, with its [onStep]; one that comes after the answer sends nothing. One on a session dropped since
     /// (a background, a lock, a reset) is not joined: its answer may never be collected, and this caller's session sends
     /// its own.
+    /// [s] must be the live session: one dropped since its caller got it (a read that began before a background) sends
+    /// nothing and is refused as such.
     func confirmProvisional(_ s: VaultSession, backup: Bool?, onStep: @MainActor (EnrollStep) -> Void = { _ in }) async throws {
+        guard s.device === session?.device else { throw VaultFailure(.other, code: "session_dropped") }
         if let c = confirming, c.session == sessionGeneration {
             confirmationsJoined += 1
-            return try await c.done.value
+            do {
+                return try await c.done.value
+            } catch is CancellationError where !Task.isCancelled {
+                // Its sender was cancelled (a screen's task), not this caller: this one goes on, and sends it if still due.
+                return try await confirmProvisional(s, backup: backup, onStep: onStep)
+            }
         }
         guard !record.value.enrollConfirmed else { return }
         let (results, report) = AsyncStream.makeStream(of: Result<Void, any Error>.self)

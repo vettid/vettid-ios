@@ -157,7 +157,7 @@ extension VaultManager {
         let began = began ?? foregrounds
         // The app came back before this ran: that leaving has ended. Its secrets go all the same (IOS-PLAN §6.3), and the
         // owner check counts it left and came back (an unlock on its way drops its kept PIN); the votes and the collection
-        // stay as the return left them.
+        // stay as the return left them. (A PIN kept by an unlock that began after the return goes too: it is asked again.)
         guard began == foregrounds else {
             forgetPairingPin()
             ownerChecks.setForeground(false)
