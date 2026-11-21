@@ -4,8 +4,8 @@ name: vulns
 #
 # - osv-scanner v2.7.0 (checksum-verified binary) over every Package.resolved
 #   in the repository. The app's (VettID.xcodeproj/.../Package.resolved) pins
-#   what ships, so a finding there fails the job. Each package's own
-#   Package.resolved is used only to build and test that package on its own,
+#   what ships, so a finding there fails the job. Every other one (each
+#   package's own) is used only to build and test that package on its own,
 #   and may pin other versions; a finding there is a warning and goes in the
 #   weekly issue. The WebRTC framework (Packages/VettIDCallsWebRTC) is a binary
 #   target that no Package.resolved lists, so it is not covered here.
@@ -62,12 +62,22 @@ jobs:
           app=VettID.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
           test -f "$app" || { echo "::error::$app not found"; exit 1; }
           ./osv-scanner scan source -L "$app"
-      - name: each package's Package.resolved (standalone builds; a finding is listed)
+      - name: every other Package.resolved (standalone builds; a finding is listed)
         id: packages
+        # Also after an app finding, so both are in the log and the issue.
+        if: ${{ !cancelled() }}
         run: |
+          app=VettID.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
           args=()
-          while IFS= read -r f; do args+=(-L "$f"); done < <(git ls-files 'Packages/*/Package.resolved')
-          echo "Scanning $(( ${#args[@]} / 2 )) packages' Package.resolved files."
+          while IFS= read -r f; do
+            [ "$f" = "$app" ] || args+=(-L "$f")
+          done < <(git ls-files '*Package.resolved')
+          if [ "${#args[@]}" -eq 0 ]; then
+            echo "found=false" >> "$GITHUB_OUTPUT"
+            echo "No other Package.resolved."
+            exit 0
+          fi
+          echo "Scanning $(( ${#args[@]} / 2 )) other Package.resolved files."
           rc=0
           ./osv-scanner scan source "${args[@]}" || rc=$?
           case $rc in
@@ -112,6 +122,13 @@ jobs:
             # The Go the module names: its toolchain line, else its go line.
             v=$(sed -n 's/^toolchain go//p' "$mod")
             [ -n "$v" ] || v=$(sed -n 's/^go //p' "$mod")
+            # A module that uses the vault needs at least the Go the vault's
+            # go.mod names, or a Go bump there would fail the load.
+            if grep -q '^replace github.com/vettid/vettid-vault' "$mod"; then
+              vv=$(sed -n 's/^toolchain go//p' ../vettid-vault/go.mod)
+              [ -n "$vv" ] || vv=$(sed -n 's/^go //p' ../vettid-vault/go.mod)
+              v=$(printf '%s\n' "$v" "$vv" | sort -V | tail -1)
+            fi
             # A bare "go 1.26" names no toolchain that can be downloaded.
             case $v in *.*.*) ;; *) v="$v.0" ;; esac
             echo "::group::$dir (go$v)"
@@ -153,7 +170,8 @@ jobs:
           if [ "$OSV" != success ]; then
             what="$what
           - osv-scanner: a vulnerability in a Swift dependency the app ships, or the scan could not run (the job log names it)."
-          elif [ "$OSV_PACKAGES" = true ]; then
+          fi
+          if [ "$OSV_PACKAGES" = true ]; then
             what="$what
           - osv-scanner: a package's own Package.resolved (its standalone build, not the app) pins a vulnerable version (the job log names it)."
           fi
