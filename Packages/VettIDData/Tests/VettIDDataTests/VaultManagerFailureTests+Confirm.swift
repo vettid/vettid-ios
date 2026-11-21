@@ -226,4 +226,41 @@ extension VaultManagerFailureTests {
         #expect(m.confirmationsJoined == 0 && service.confirmed && m.phase == .unlocked)
         reading.cancel()
     }
+
+    /// A dropped session's confirmation that ends late does not take the place of the one on its way in the session opened
+    /// again: a read there still joins that one.
+    @Test func aDroppedSessionsConfirmationEndingLateLeavesTheNewOne() async throws {
+        defer { phone.close() }
+        try await finishingUnconfirmed()
+        service.holdAnswers(to: "vault.enroll.confirm")
+        let old = Task { try await m.refresh() }
+        #expect(await eventually { service.heldAnswers == 1 })
+        m.stopCollecting()
+        let finishing = Task { try await m.finishSetup() }
+        #expect(await eventually { service.heldAnswers == 2 })
+        old.cancel()
+        _ = try? await old.value
+        let reading = Task { try await m.refresh() }
+        #expect(await eventually { m.confirmationsJoined == 1 }, "the read joins the new session's confirmation")
+        service.releaseHeldAnswers()
+        try await finishing.value
+        try await reading.value
+        #expect(service.confirmed && m.phase == .unlocked)
+    }
+
+    /// A read while the credential's step confirms the vault joins that confirmation.
+    @Test func aReadDuringTheCredentialsConfirmationJoinsIt() async throws {
+        defer { phone.close() }
+        try await redeemed()
+        try await m.enroll(pin: "402817") { _ in }
+        service.holdAnswers(to: "vault.enroll.confirm")
+        let creating = Task { try await m.createCredential(password: "correct horse battery", backup: true, pin: "402817") { _ in } }
+        #expect(await eventually { service.heldAnswers == 1 })
+        let reading = Task { try await m.refresh() }
+        #expect(await eventually { m.confirmationsJoined == 1 })
+        service.releaseHeldAnswers()
+        try await creating.value
+        try await reading.value
+        #expect(confirmsSent == 1 && service.confirmed)
+    }
 }
