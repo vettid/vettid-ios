@@ -3,14 +3,20 @@ name: vulns
 # Vulnerability scanning. It reports; it never changes a dependency.
 #
 # - osv-scanner v2.7.0 (checksum-verified binary) over every Package.resolved
-#   in the repository: the app's and each package's. Every Swift dependency
-#   they pin ships in the app, so any finding fails the job. The WebRTC
-#   framework (Packages/VettIDCallsWebRTC) is a binary target that no
-#   Package.resolved lists, so it is not covered here.
+#   in the repository. The app's (VettID.xcodeproj/.../Package.resolved) pins
+#   what ships, so a finding there fails the job. Each package's own
+#   Package.resolved is used only to build and test that package on its own,
+#   and may pin other versions; a finding there is a warning and goes in the
+#   weekly issue. The WebRTC framework (Packages/VettIDCallsWebRTC) is a binary
+#   target that no Package.resolved lists, so it is not covered here.
 # - govulncheck v1.9.0 over each Go module in scripts/ (reference and test-PKI
 #   generators; none is built into the app), with the Go each module's go.mod
-#   names. They are tooling, so a vulnerability their code reaches is listed
-#   as a warning and in the weekly issue, not failed.
+#   names, against vettid-vault's main (GOFLAGS=-mod=mod, so a newer vault
+#   dependency adjusts the throwaway go.mod instead of failing the load). They
+#   are tooling, so a vulnerability their code reaches is listed as a warning
+#   and in the weekly issue, not failed. Go tooling built inside the
+#   vettid-vault module (scripts/devattest-verify, scripts/devstack-test.sh)
+#   is covered by vettid-vault's own scanning.
 #
 # On pull requests and pushes to master, and weekly and on demand to catch
 # advisories published after the last change. On master, a scheduled or manual
@@ -31,13 +37,17 @@ permissions:
   contents: read
 
 concurrency:
-  group: vulns-${{ github.ref }}
+  # The event is in the group, so a push to master never displaces the
+  # scheduled run that updates the issue.
+  group: vulns-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   osv-scanner:
     runs-on: ubuntu-26.04
     timeout-minutes: 10
+    outputs:
+      packages: ${{ steps.packages.outputs.found }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -47,16 +57,26 @@ jobs:
           curl -sSLo osv-scanner https://github.com/google/osv-scanner/releases/download/v2.7.0/osv-scanner_linux_amd64
           echo "160c6253e2922e9e0a6a9771c5c4c40a4b3c6090b34a3cdd5e80c96cc2e4218b  osv-scanner" | sha256sum -c -
           chmod +x osv-scanner
-      - name: scan every Package.resolved
+      - name: the app's Package.resolved (what ships; a finding fails)
+        run: |
+          app=VettID.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
+          test -f "$app" || { echo "::error::$app not found"; exit 1; }
+          ./osv-scanner scan source -L "$app"
+      - name: each package's Package.resolved (standalone builds; a finding is listed)
+        id: packages
         run: |
           args=()
-          while IFS= read -r f; do args+=(-L "$f"); done < <(git ls-files '*Package.resolved')
-          if [ "${#args[@]}" -eq 0 ]; then
-            echo "::error::no Package.resolved found"
-            exit 1
-          fi
-          echo "Scanning $(( ${#args[@]} / 2 )) Package.resolved files."
-          ./osv-scanner scan source "${args[@]}"
+          while IFS= read -r f; do args+=(-L "$f"); done < <(git ls-files 'Packages/*/Package.resolved')
+          echo "Scanning $(( ${#args[@]} / 2 )) packages' Package.resolved files."
+          rc=0
+          ./osv-scanner scan source "${args[@]}" || rc=$?
+          case $rc in
+            0) echo "found=false" >> "$GITHUB_OUTPUT" ;;
+            1) echo "found=true" >> "$GITHUB_OUTPUT"
+               echo "::warning::osv-scanner: a package's own Package.resolved pins a vulnerable version (standalone builds only, not what the app ships; see the log)" ;;
+            *) echo "::error::osv-scanner could not scan the packages (exit $rc)"
+               exit 1 ;;
+          esac
 
   govulncheck:
     runs-on: ubuntu-26.04
@@ -92,9 +112,11 @@ jobs:
             # The Go the module names: its toolchain line, else its go line.
             v=$(sed -n 's/^toolchain go//p' "$mod")
             [ -n "$v" ] || v=$(sed -n 's/^go //p' "$mod")
+            # A bare "go 1.26" names no toolchain that can be downloaded.
+            case $v in *.*.*) ;; *) v="$v.0" ;; esac
             echo "::group::$dir (go$v)"
             rc=0
-            (cd "$dir" && GOTOOLCHAIN="go$v" "$RUNNER_TEMP/bin/govulncheck" -show verbose ./...) || rc=$?
+            (cd "$dir" && GOFLAGS=-mod=mod GOTOOLCHAIN="go$v" "$RUNNER_TEMP/bin/govulncheck" -show verbose ./...) || rc=$?
             echo "::endgroup::"
             case $rc in
               0) ;;
@@ -123,6 +145,7 @@ jobs:
           GH_REPO: ${{ github.repository }}
           RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           OSV: ${{ needs.osv-scanner.result }}
+          OSV_PACKAGES: ${{ needs.osv-scanner.outputs.packages }}
           GOVULN: ${{ needs.govulncheck.result }}
           GOVULN_FOUND: ${{ needs.govulncheck.outputs.found }}
         run: |
@@ -130,6 +153,9 @@ jobs:
           if [ "$OSV" != success ]; then
             what="$what
           - osv-scanner: a vulnerability in a Swift dependency the app ships, or the scan could not run (the job log names it)."
+          elif [ "$OSV_PACKAGES" = true ]; then
+            what="$what
+          - osv-scanner: a package's own Package.resolved (its standalone build, not the app) pins a vulnerable version (the job log names it)."
           fi
           if [ "$GOVULN" != success ]; then
             what="$what
@@ -139,14 +165,14 @@ jobs:
           - govulncheck: a Go module in scripts/ (tooling, not in the app) reaches a vulnerability (the job log names it)."
           fi
           title="security: vulnerability scan findings"
+          gh label create security --color B60205 --description "Security findings" 2>/dev/null || true
           n=$(gh issue list --state open --search "in:title \"$title\"" --json number,title --jq "map(select(.title == \"$title\")) | .[0].number // empty")
           if [ -n "$what" ]; then
             if [ -n "$n" ]; then
               gh issue comment "$n" --body "Found again: $RUN$what"
+              gh issue edit "$n" --add-label security
             else
               gh issue create --title "$title" --label security --body "The vulnerability scan on master (.github/workflows/vulns.yml) found:$what
-
-          See $RUN." || gh issue create --title "$title" --body "The vulnerability scan on master (.github/workflows/vulns.yml) found:$what
 
           See $RUN."
             fi
