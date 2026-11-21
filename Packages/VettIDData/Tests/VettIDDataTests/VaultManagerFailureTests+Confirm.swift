@@ -270,6 +270,8 @@ extension VaultManagerFailureTests {
         defer { phone.close() }
         try await finishingUnconfirmed()
         let sent = confirmsSent
+        let reads = { service.requestsSeen.filter { $0 == "settings.get" }.count }
+        let readsBefore = reads()
         service.holdStatusReads()
         let reading = Task { try await m.refresh() }
         #expect(await eventually { service.heldStatusReads == 1 })
@@ -277,7 +279,8 @@ extension VaultManagerFailureTests {
         _ = try await m.openSession()
         service.releaseStatusReads()
         try await reading.value
-        #expect(confirmsSent == sent && m.phase == .setup(.finishing), "\(m.phase)")
+        #expect(reads() == readsBefore && confirmsSent == sent, "nothing sent on the old session")
+        #expect(m.phase == .setup(.finishing), "\(m.phase)")
         try await m.finishSetup()
         #expect(m.confirmationsJoined == 0 && confirmsSent == sent + 1 && m.phase == .unlocked)
     }
