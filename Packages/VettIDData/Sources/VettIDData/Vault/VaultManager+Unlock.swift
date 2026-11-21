@@ -297,12 +297,14 @@ extension VaultManager {
     }
 
     /// ``confirmProvisional(_:backup:)`` for the vault this unlock opened, by the phone whose enrollment made it, with its
-    /// credential, outside a recovery and while no lock is pending; true when it was sent or joined. A failure leaves the
-    /// vault to "Finish", which sends it again and says the failure (``finishSetup()``).
+    /// credential, outside a recovery (called after ``mayOpen(locks:rec:openedAt:heard:)``: no lock is pending); true when
+    /// it was sent or joined. A failure leaves the vault to "Finish", which sends it again and says the failure
+    /// (``finishSetup()``).
     private func confirmedAtUnlock(_ s: VaultSession) async -> Bool {
         let local = record.value
-        guard !local.enrollConfirmed, local.enrolledHere, !s.device.recovering, s.device.credentialVersion != nil,
-              lockGuard.admits() else { return false }
+        guard !local.enrollConfirmed, local.enrolledHere, !s.device.recovering, s.device.credentialVersion != nil else {
+            return false
+        }
         _ = try? await confirmProvisional(s, backup: local.backupChoice)
         return true
     }
