@@ -57,11 +57,14 @@ jobs:
           curl -sSLo osv-scanner https://github.com/google/osv-scanner/releases/download/v2.7.0/osv-scanner_linux_amd64
           echo "160c6253e2922e9e0a6a9771c5c4c40a4b3c6090b34a3cdd5e80c96cc2e4218b  osv-scanner" | sha256sum -c -
           chmod +x osv-scanner
+          # A fixed, empty configuration: an osv-scanner.toml a pull request
+          # puts beside a lockfile is never read, so it can't ignore findings.
+          : > "$RUNNER_TEMP/osv-scanner.toml"
       - name: the app's Package.resolved (what ships; a finding fails)
         run: |
           app=VettID.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
           test -f "$app" || { echo "::error::$app not found"; exit 1; }
-          ./osv-scanner scan source -L "$app"
+          ./osv-scanner scan source --config "$RUNNER_TEMP/osv-scanner.toml" -L "$app"
       - name: every other Package.resolved (standalone builds; a finding is listed)
         id: packages
         # Also after an app finding, so both are in the log and the issue.
@@ -79,7 +82,7 @@ jobs:
           fi
           echo "Scanning $(( ${#args[@]} / 2 )) other Package.resolved files."
           rc=0
-          ./osv-scanner scan source "${args[@]}" || rc=$?
+          ./osv-scanner scan source --config "$RUNNER_TEMP/osv-scanner.toml" "${args[@]}" || rc=$?
           case $rc in
             0) echo "found=false" >> "$GITHUB_OUTPUT" ;;
             1) echo "found=true" >> "$GITHUB_OUTPUT"
@@ -116,8 +119,9 @@ jobs:
           # Installed and run as a binary: "go run" would turn its exit 3
           # (a vulnerability the code reaches) into exit 1.
           GOBIN="$RUNNER_TEMP/bin" go install golang.org/x/vuln/cmd/govulncheck@v1.9.0
+          echo "vettid-vault at $(git -C ../vettid-vault rev-parse HEAD)"
           found=false
-          for mod in $(git ls-files 'scripts/*/go.mod'); do
+          while IFS= read -r mod; do
             dir=$(dirname "$mod")
             # The Go the module names: its toolchain line, else its go line.
             v=$(sed -n 's/^toolchain go//p' "$mod")
@@ -133,7 +137,7 @@ jobs:
             case $v in *.*.*) ;; *) v="$v.0" ;; esac
             echo "::group::$dir (go$v)"
             rc=0
-            (cd "$dir" && GOFLAGS=-mod=mod GOTOOLCHAIN="go$v" "$RUNNER_TEMP/bin/govulncheck" -show verbose ./...) || rc=$?
+            (cd "$dir" && GOFLAGS=-mod=mod GOTOOLCHAIN="go$v" "$RUNNER_TEMP/bin/govulncheck" -show verbose ./... < /dev/null) || rc=$?
             echo "::endgroup::"
             case $rc in
               0) ;;
@@ -142,7 +146,7 @@ jobs:
               *) echo "::error::govulncheck could not scan $dir (exit $rc)"
                  exit 1 ;;
             esac
-          done
+          done < <(git ls-files 'scripts/*/go.mod')
           echo "found=$found" >> "$GITHUB_OUTPUT"
 
   issue:
