@@ -153,6 +153,9 @@ targets:
         INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription: "VettID adds a photo to your library only when you choose Save to phone."
         # The microphone, for calls only (CALLS-PLAN; the text approved by the owner), in every configuration.
         INFOPLIST_KEY_NSMicrophoneUsageDescription: "VettID uses the microphone only during calls, so the person you're talking to can hear you."
+        # The local network, for a call's direct path to a phone on the same network (owner decision, Ground Control #12588 a):
+        # iOS asks the member before an app reaches other devices there, with this text.
+        INFOPLIST_KEY_NSLocalNetworkUsageDescription: "VettID connects calls directly to the other phone when you're on the same network."
         # Face ID for the app lock (IOS-PLAN ID17; chosen; not in the spec: vettid-android has no such text).
         INFOPLIST_KEY_NSFaceIDUsageDescription: "VettID uses Face ID only to open the app when you turn on the app lock."
         MARKETING_VERSION: 2.0.0
@@ -236,6 +239,7 @@ targets:
         INFOPLIST_KEY_NSCameraUsageDescription: "VettID uses the camera to scan QR codes, such as your setup code or an invitation, and to take photos you send. Nothing is recorded, and a photo stays in memory until you send it."
         INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription: "VettID adds a photo to your library only when you choose Save to phone."
         INFOPLIST_KEY_NSMicrophoneUsageDescription: "VettID uses the microphone only during calls, so the person you're talking to can hear you."
+        INFOPLIST_KEY_NSLocalNetworkUsageDescription: "VettID connects calls directly to the other phone when you're on the same network."
         MARKETING_VERSION: 2.0.0
         CURRENT_PROJECT_VERSION: 1
         SKIP_INSTALL: YES

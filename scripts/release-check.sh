@@ -404,11 +404,15 @@ check_no_stack_logging() {
 # the media stack (Frameworks/WebRTC.framework, with its executable) and links the call code, and its Info.plist carries the
 # microphone text for calls. Required, so that a build that silently drops the calls (a lost dependency, a lost key) fails.
 MICROPHONE_TEXT="VettID uses the microphone only during calls, so the person you're talking to can hear you."
+# The local network text for a call's direct path (owner decision): required, so that iOS's prompt is never unexplained.
+LOCAL_NETWORK_TEXT="VettID connects calls directly to the other phone when you're on the same network."
 check_calls() {
   local app=$1 problems=() text exe names modes
   [[ -x "${app}/Frameworks/WebRTC.framework/WebRTC" ]] || problems+=("no Frameworks/WebRTC.framework/WebRTC (the media stack is not embedded)")
   text=$(/usr/libexec/PlistBuddy -c 'Print :NSMicrophoneUsageDescription' "${app}/Info.plist" 2>/dev/null || true)
   [[ "${text}" == "${MICROPHONE_TEXT}" ]] || problems+=("NSMicrophoneUsageDescription '${text}', expected '${MICROPHONE_TEXT}'")
+  text=$(/usr/libexec/PlistBuddy -c 'Print :NSLocalNetworkUsageDescription' "${app}/Info.plist" 2>/dev/null || true)
+  [[ "${text}" == "${LOCAL_NETWORK_TEXT}" ]] || problems+=("NSLocalNetworkUsageDescription '${text}', expected '${LOCAL_NETWORK_TEXT}'")
   # Calls (owner decisions): audio, so that a live call keeps going when the app leaves the foreground, and voip, without
   # which CallKit refuses the app's provider; nothing else (no fetch, processing or location).
   modes=$(plutil -extract UIBackgroundModes json -o - "${app}/Info.plist" 2>/dev/null | tr -d ' ' || true)
@@ -435,7 +439,7 @@ check_calls() {
     printf '%s: %s\n' "${app}" "${problems[@]}" >&2
     return 1
   fi
-  echo "${app}: the calls are linked (WebRTC.framework embedded, the microphone text present, the audio and voip background modes alone)"
+  echo "${app}: the calls are linked (WebRTC.framework embedded, the microphone and local network texts present, the audio and voip background modes alone)"
 }
 
 # The VettIDDevStack app and its UI tests are built for the simulator only: never an iPhone, a Mac or a headset.
@@ -865,8 +869,8 @@ PY
       echo "self-test: ${config} refuses '${planted}' in the media stack's binary"
     done
   done
-  # The calls must not silently drop out: a copy of each app without the media stack, without the microphone text, with another
-  # text, or without the calls' code, must fail check_calls (and the unchanged one passes).
+  # The calls must not silently drop out: a copy of each app without the media stack, without the microphone or local network
+  # text, with another of either, or without the calls' code, must fail check_calls (and the unchanged one passes).
   uncall() {
     local config=$1 what=$2 command=$3 expected=$4 errors
     local copy="${OUT}/planted/${config}-calls/VettID.app"
@@ -896,6 +900,8 @@ PY
     uncall "${config}" "with only the voip background mode" "plutil -replace UIBackgroundModes -json '[\"voip\"]' Info.plist" "UIBackgroundModes [\"voip\"]"
     uncall "${config}" "with the fetch background mode too" "plutil -replace UIBackgroundModes -json '[\"audio\",\"voip\",\"fetch\"]' Info.plist" "UIBackgroundModes [\"audio\",\"voip\",\"fetch\"]"
     uncall "${config}" "with another microphone text" "plutil -replace NSMicrophoneUsageDescription -string 'VettID listens.' Info.plist" "NSMicrophoneUsageDescription 'VettID listens.'"
+    uncall "${config}" "without the local network text" "plutil -remove NSLocalNetworkUsageDescription Info.plist" "NSLocalNetworkUsageDescription ''"
+    uncall "${config}" "with another local network text" "plutil -replace NSLocalNetworkUsageDescription -string 'VettID looks around.' Info.plist" "NSLocalNetworkUsageDescription 'VettID looks around.'"
   done
   # The media engine's test hook: the selector that makes the stack's factory with a custom audio device, named in an executable.
   hookdir="${OUT}/planted/Release-hook"
