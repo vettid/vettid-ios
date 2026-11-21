@@ -717,10 +717,11 @@ extension VaultManager {
                 p = unreachable(f)
             }
             // The session dropped meanwhile (a background): this read's answer is of that session, and is not published.
-            // A phone still on Starting reads again in the live one (the return's own read may have ended before this);
-            // any other phase was set by what came since, which reads again itself where it needs to.
+            // A phone still on Starting reads again in the live one (the return's own read may have ended before this), not
+            // while in the background (the return reads again: nothing would be collected meanwhile); any other phase was
+            // set by what came since, which reads again itself where it needs to.
             guard self.session?.device === session.device else {
-                if phase == .starting { try await refresh() }
+                if phase == .starting, !backgrounded { try await refresh() }
                 return
             }
             // A lock heard since the read began, during the steps too, is the newest word over the vault this answer opened,
