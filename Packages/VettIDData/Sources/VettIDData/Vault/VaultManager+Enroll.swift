@@ -215,7 +215,11 @@ extension VaultManager {
     /// its own.
     /// [s] must be the live session: one dropped since its caller got it (a read that began before a background) sends
     /// nothing and is refused as such.
-    func confirmProvisional(_ s: VaultSession, backup: Bool?, onStep: @MainActor (EnrollStep) -> Void = { _ in }) async throws {
+    /// [openedAt]: the opening an unlock's confirmation began under (its result's time), which the join judges by; others
+    /// take the last opening this phone recorded (``LockNotices/openedAt``), which never moves back, so an enclave clock that
+    /// stepped back between two openings leaves the older one recorded (the join is then refused: a second confirmation).
+    func confirmProvisional(_ s: VaultSession, backup: Bool?, openedAt: Date? = nil,
+                            onStep: @MainActor (EnrollStep) -> Void = { _ in }) async throws {
         guard s.device === session?.device else { throw VaultFailure(.other, code: "session_dropped") }
         // Joined only in its own session and before any lock since it began: a vault that locked meanwhile keeps the
         // request in its mailbox, so its answer may come only after its timeout. A caller that joins waits for it as its
@@ -227,7 +231,7 @@ extension VaultManager {
             } catch is CancellationError where !Task.isCancelled {
                 // Its sender was cancelled (a screen's task), not this caller: this one goes on, and sends it if still due.
                 // (A cancelled request ends in a `CancellationError`; any other failure is said as the sender's.)
-                return try await confirmProvisional(s, backup: backup, onStep: onStep)
+                return try await confirmProvisional(s, backup: backup, openedAt: openedAt, onStep: onStep)
             }
         }
         guard !record.value.enrollConfirmed else { return }
@@ -237,7 +241,7 @@ extension VaultManager {
             throw CancellationError()
         }
         confirming = Confirming(done: done, session: sessionGeneration, locks: lockGeneration, start: readStart(),
-                                openedAt: lockNotices.openedAt)
+                                openedAt: openedAt ?? lockNotices.openedAt)
         defer {
             report.finish()
             if confirming?.done == done { confirming = nil }

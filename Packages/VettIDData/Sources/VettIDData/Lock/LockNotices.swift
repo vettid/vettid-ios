@@ -72,5 +72,13 @@ final class LockNotices {
 
     func sinceLastOpened(_ m: VaultMessage) -> Bool { sinceLastOpened(type: m.type, ts: m.ts) }
 
+    /// (Release L) Whether [m] is a `vault.locking` that names the opening this phone holds as current: a lock of this
+    /// opening, whatever its time says (one stamped in the opening's own millisecond included).
+    func namesCurrent(_ m: VaultMessage) -> Bool {
+        guard m.type == Self.type, let named = named(m), let mine = current() else { return false }
+        if let dead = dead(), named == dead { return false }
+        return named == mine
+    }
+
     private func named(_ m: VaultMessage) -> String? { UnlockIds.of(VaultJSON.string(m.object, "unlock_id")) }
 }

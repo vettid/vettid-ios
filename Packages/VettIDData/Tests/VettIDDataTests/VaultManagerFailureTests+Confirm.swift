@@ -435,4 +435,35 @@ extension VaultManagerFailureTests {
         m.noteLockSeen(at: base.addingTimeInterval(5))
         #expect(!m.lockedSinceConfirming(later) && m.lockedSinceConfirming(unknownLater))
     }
+
+    /// (Release L) A `vault.locking` naming the current opening is a lock after it whatever its time, the opening's own
+    /// millisecond included: it stops the unlock's confirmation and refuses the join.
+    @Test func aLockNamingTheCurrentOpeningCountsAfterIt() async throws {
+        defer { phone.close() }
+        try await finishingUnconfirmed()
+        let openedAt = try #require(m.lockNotices.openedAt)
+        let (locks, heard) = (m.lockGeneration, m.locksHeard)
+        let done = Task<Void, any Error> {}
+        let c = VaultManager.Confirming(done: done, session: m.sessionGeneration, locks: locks, start: m.readStart(),
+                                        openedAt: openedAt)
+        m.noteLockSeen(at: openedAt)
+        #expect(m.confirmAfterUnlockDue(locks: locks, openedAt: openedAt, heard: heard) && !m.lockedSinceConfirming(c))
+        m.noteLockSeen(at: openedAt, namingCurrent: true)
+        #expect(!m.confirmAfterUnlockDue(locks: locks, openedAt: openedAt, heard: heard))
+        #expect(m.lockedSinceConfirming(c))
+    }
+
+    /// The unlock passes its result's time to its confirmation, which carries it into the join.
+    @Test func theUnlockPassesTheOpeningsTimeToItsConfirmation() async throws {
+        defer { phone.close() }
+        try await lockedAtTheStart()
+        service.holdAnswers(to: "vault.enroll.confirm")
+        #expect(try await m.unlock(pin: "402817") == .success)
+        #expect(await eventually { service.heldAnswers == 1 })
+        let openedAt = try #require(m.lastConfirmOpenedAt)
+        #expect(openedAt == m.lockNotices.openedAt)
+        #expect(m.confirming?.openedAt == openedAt)
+        service.releaseHeldAnswers()
+        #expect(await eventually { m.confirming == nil })
+    }
 }
