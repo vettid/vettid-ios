@@ -363,26 +363,49 @@ extension VaultManagerFailureTests {
         #expect(m.phase == .setup(.finishing))
     }
 
-    /// "Finish" joins the confirmation on its way though the `vault.locking` of the opening before is heard after it
-    /// began: that lock is older than its start, so the confirmation is sent once.
+    /// "Finish" joins the confirmation on its way though the `vault.locking` of the opening before is heard only after it
+    /// began, stamped as the opening is (the vault stamps both in the same millisecond): the confirmation is sent once.
     @Test func finishJoinsAConfirmationThoughALateOldLockIsHeard() async throws {
         defer { phone.close() }
         try await finishingUnconfirmed()
+        let openedAt = try #require(m.lockNotices.openedAt)
+        // As if that lock had not reached this phone yet: the last one heard is older.
+        m.locksHeard.latest = openedAt.addingTimeInterval(-60)
         service.holdAnswers(to: "vault.enroll.confirm")
         let sent = confirmsSent
         let reading = Task { try await m.refresh() }
         #expect(await eventually { service.heldAnswers == 1 })
-        let start = try #require(m.confirming?.start)
-        let latest = try #require(m.locksHeard.latest)
-        #expect(start.onVaultClock && latest < start.at)
-        // Heard now, timed between the last lock heard and the confirmation's start.
-        m.noteLockSeen(at: latest.addingTimeInterval(start.at.timeIntervalSince(latest) / 2))
-        #expect(m.locksHeard.latest != latest)
+        #expect(m.confirming?.openedAt == openedAt)
+        // It arrives now.
+        m.noteLockSeen(at: openedAt)
+        #expect(m.locksHeard.latest == openedAt)
         let finishing = Task { try await m.finishSetup() }
         #expect(await eventually { m.confirmationsJoined == 1 })
         service.releaseHeldAnswers()
         try await finishing.value
         try await reading.value
         #expect(confirmsSent == sent + 1 && service.confirmed && m.phase == .unlocked, "\(m.phase)")
+    }
+
+    /// A lock after the opening a confirmation began under, heard only after it began, is not joined: that vault closed,
+    /// so "Finish" sends its own.
+    @Test func finishDoesNotJoinAConfirmationALaterLockClosed() async throws {
+        defer { phone.close() }
+        try await finishingUnconfirmed()
+        service.holdAnswers(to: "vault.enroll.confirm")
+        let sent = confirmsSent
+        let reading = Task { try await m.refresh() }
+        #expect(await eventually { service.heldAnswers == 1 })
+        let openedAt = try #require(m.confirming?.openedAt)
+        let start = try #require(m.confirming?.start)
+        #expect(openedAt < start.at)
+        // Timed after the opening and before the confirmation began; heard now.
+        m.noteLockSeen(at: openedAt.addingTimeInterval(start.at.timeIntervalSince(openedAt) / 2))
+        let finishing = Task { try await m.finishSetup() }
+        #expect(await eventually { service.heldAnswers == 2 })
+        service.releaseHeldAnswers()
+        try await finishing.value
+        _ = try? await reading.value
+        #expect(m.confirmationsJoined == 0 && confirmsSent == sent + 2 && service.confirmed)
     }
 }

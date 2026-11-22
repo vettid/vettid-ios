@@ -218,10 +218,12 @@ extension VaultManager {
     func confirmProvisional(_ s: VaultSession, backup: Bool?, onStep: @MainActor (EnrollStep) -> Void = { _ in }) async throws {
         guard s.device === session?.device else { throw VaultFailure(.other, code: "session_dropped") }
         // Joined only in its own session and before any lock since it began: a vault that locked meanwhile keeps the
-        // request in its mailbox, so its answer may come only after its timeout. A lock is judged by its time, as a read
-        // judges it (``lockedSince(_:)``): the `vault.locking` of the opening before, heard late, does not count. A
-        // caller that joins waits for it as its sender does, request timeout included.
-        if let c = confirming, c.session == sessionGeneration, c.locks == lockGeneration, !lockedSince(c.start) {
+        // request in its mailbox, so its answer may come only after its timeout. A lock is judged by its time, from the
+        // opening it began under (``lockHeardAfterOpening(_:since:)``; from its own start when that is unknown, as a read
+        // judges it): the `vault.locking` of the opening before, heard late, does not count, a lock after that opening
+        // does, heard before or after it began. A caller that joins waits for it as its sender does, timeout included.
+        if let c = confirming, c.session == sessionGeneration, c.locks == lockGeneration,
+           !(c.openedAt.map { lockHeardAfterOpening($0, since: c.start.heard) } ?? lockedSince(c.start)) {
             confirmationsJoined += 1
             do {
                 return try await c.done.value
@@ -237,7 +239,8 @@ extension VaultManager {
             for await r in results { return try r.get() }
             throw CancellationError()
         }
-        confirming = Confirming(done: done, session: sessionGeneration, locks: lockGeneration, start: readStart())
+        confirming = Confirming(done: done, session: sessionGeneration, locks: lockGeneration, start: readStart(),
+                                openedAt: lockNotices.openedAt)
         defer {
             report.finish()
             if confirming?.done == done { confirming = nil }
@@ -257,6 +260,8 @@ extension VaultManager {
         let session: Int
         let locks: Int
         let start: ReadStart
+        /// The opening it began under, on the vault's clock (``LockNotices/openedAt``), when known.
+        let openedAt: Date?
     }
 
     /// `credential.create`. A vault that answers `exists` already holds this phone's credential (a create whose answer
