@@ -590,8 +590,7 @@ extension VaultManager {
         return locked
     }
 
-    /// ``lockedAfterOpening(_:since:)``'s finding, with the phase left as it is: a lock timed after [openedAt], or a probe's
-    /// since [heard]; an unknown moment counts any lock heard since. A `vault.locking` timed before the opening (the one an
+    /// ``lockedAfterOpening(_:since:)``'s finding, phase unchanged. A `vault.locking` timed before the opening (the one an
     /// unlock of a running vault makes, relayed late) does not count.
     func lockHeardAfterOpening(_ openedAt: Date?, since heard: LocksHeard) -> Bool {
         if locksHeard.probes != heard.probes { return true }

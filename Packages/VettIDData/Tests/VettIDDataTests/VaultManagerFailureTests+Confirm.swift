@@ -336,7 +336,8 @@ extension VaultManagerFailureTests {
 
     /// The confirmation after an unlock judges a lock by its time, as the opening does: the `vault.locking` of the opening
     /// before (which the unlock of a running vault makes) heard only after the opening, before the confirmation's task
-    /// starts, does not stop it. A lock after the opening, a probe's, or a lock asked for since does.
+    /// starts, does not stop it. A lock after the opening, a probe's, or a lock asked for since does; with no opening moment,
+    /// any lock heard since does.
     @Test func confirmAfterUnlockJudgesLocksByTheirTime() async throws {
         defer { phone.close() }
         try await finishingUnconfirmed()
@@ -360,5 +361,28 @@ extension VaultManagerFailureTests {
         m.noteProbeLock()
         #expect(!m.confirmAfterUnlockDue(locks: locks, openedAt: openedAt.addingTimeInterval(60), heard: now))
         #expect(m.phase == .setup(.finishing))
+    }
+
+    /// "Finish" joins the confirmation on its way though the `vault.locking` of the opening before is heard after it
+    /// began: that lock is older than its start, so the confirmation is sent once.
+    @Test func finishJoinsAConfirmationThoughALateOldLockIsHeard() async throws {
+        defer { phone.close() }
+        try await finishingUnconfirmed()
+        service.holdAnswers(to: "vault.enroll.confirm")
+        let sent = confirmsSent
+        let reading = Task { try await m.refresh() }
+        #expect(await eventually { service.heldAnswers == 1 })
+        let start = try #require(m.confirming?.start)
+        let latest = try #require(m.locksHeard.latest)
+        #expect(start.onVaultClock && latest < start.at)
+        // Heard now, timed between the last lock heard and the confirmation's start.
+        m.noteLockSeen(at: latest.addingTimeInterval(start.at.timeIntervalSince(latest) / 2))
+        #expect(m.locksHeard.latest != latest)
+        let finishing = Task { try await m.finishSetup() }
+        #expect(await eventually { m.confirmationsJoined == 1 })
+        service.releaseHeldAnswers()
+        try await finishing.value
+        try await reading.value
+        #expect(confirmsSent == sent + 1 && service.confirmed && m.phase == .unlocked, "\(m.phase)")
     }
 }

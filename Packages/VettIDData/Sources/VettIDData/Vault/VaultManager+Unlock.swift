@@ -293,7 +293,8 @@ extension VaultManager {
     /// unlock opened it, as by a status read that finds it open: by the phone whose enrollment made it, with its credential,
     /// outside a recovery. The unlock does not wait for it; "Finish" joins it while it is on its way, and after a failure
     /// sends it again and says the failure (``finishSetup()``). Nothing is sent while a lock is pending (``openApi(_:)``), nor
-    /// after a lock since the opening at [openedAt] (the vault this unlock opened is closed: the next unlock confirms it).
+    /// after a lock since the opening at [openedAt] (``confirmAfterUnlockDue(locks:openedAt:heard:)``; the vault this unlock
+    /// opened is closed: the next unlock confirms it).
     private func confirmAfterUnlock(_ s: VaultSession, openedAt: Date?) {
         let local = record.value
         guard !local.enrollConfirmed, local.enrolledHere, !s.device.recovering, s.device.credentialVersion != nil else { return }
@@ -307,7 +308,8 @@ extension VaultManager {
     /// Whether the confirmation after an unlock that opened the vault at [openedAt] is still sent when its task starts: no
     /// lock asked for since [locks], and no lock since the opening, judged by its time as the opening itself judges it
     /// (``lockHeardAfterOpening(_:since:)``). The `vault.locking` of the opening before, which the unlock of a running vault
-    /// makes, may be heard only now; it is older than the opening and does not stop it.
+    /// makes, may be heard only now; it is older than the opening and does not stop it. With no opening moment, any lock
+    /// heard since [heard] does; a probe's counts from [heard] (taken after ``mayOpen``, which judged the earlier ones).
     func confirmAfterUnlockDue(locks: Int, openedAt: Date?, heard: LocksHeard) -> Bool {
         locks == lockGeneration && !lockHeardAfterOpening(openedAt, since: heard)
     }
