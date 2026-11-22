@@ -398,7 +398,7 @@ extension VaultManagerFailureTests {
         #expect(await eventually { service.heldAnswers == 1 })
         let openedAt = try #require(m.confirming?.openedAt)
         let start = try #require(m.confirming?.start)
-        #expect(openedAt < start.at)
+        #expect(openedAt < start.at && start.onVaultClock)
         // Timed after the opening and before the confirmation began; heard now.
         m.noteLockSeen(at: openedAt.addingTimeInterval(start.at.timeIntervalSince(openedAt) / 2))
         let finishing = Task { try await m.finishSetup() }

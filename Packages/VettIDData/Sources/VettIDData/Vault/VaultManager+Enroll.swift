@@ -218,12 +218,9 @@ extension VaultManager {
     func confirmProvisional(_ s: VaultSession, backup: Bool?, onStep: @MainActor (EnrollStep) -> Void = { _ in }) async throws {
         guard s.device === session?.device else { throw VaultFailure(.other, code: "session_dropped") }
         // Joined only in its own session and before any lock since it began: a vault that locked meanwhile keeps the
-        // request in its mailbox, so its answer may come only after its timeout. A lock is judged by its time, from the
-        // opening it began under (``lockHeardAfterOpening(_:since:)``; from its own start when that is unknown, as a read
-        // judges it): the `vault.locking` of the opening before, heard late, does not count, a lock after that opening
-        // does, heard before or after it began. A caller that joins waits for it as its sender does, timeout included.
-        if let c = confirming, c.session == sessionGeneration, c.locks == lockGeneration,
-           !(c.openedAt.map { lockHeardAfterOpening($0, since: c.start.heard) } ?? lockedSince(c.start)) {
+        // request in its mailbox, so its answer may come only after its timeout. A caller that joins waits for it as its
+        // sender does, request timeout included (``lockedSinceConfirming(_:)``).
+        if let c = confirming, c.session == sessionGeneration, c.locks == lockGeneration, !lockedSinceConfirming(c) {
             confirmationsJoined += 1
             do {
                 return try await c.done.value
@@ -252,6 +249,18 @@ extension VaultManager {
             report.yield(.failure(error))
             throw error
         }
+    }
+
+    /// A lock heard since [c] began that closed the vault it went to: a probe's, or a `vault.locking` timed after the
+    /// opening it began under. The one of the opening before, heard late, does not count. With that opening's moment
+    /// unknown (a status read at a cold start), any lock heard since does: a second confirmation is harmless, a join of
+    /// one the vault never answers is not. (The opening is the last one this phone recorded, which is the one a status
+    /// read finds open: only this phone's unlock reopens the vault, and it records the opening.)
+    func lockedSinceConfirming(_ c: Confirming) -> Bool {
+        if locksHeard.probes != c.start.heard.probes { return true }
+        guard locksHeard.latest != c.start.heard.latest else { return false }
+        guard let at = c.openedAt else { return true }
+        return locksHeard.latest.map { $0 > at } ?? false
     }
 
     /// A confirmation on its way: its outcome, and the session and the locks it began under.
