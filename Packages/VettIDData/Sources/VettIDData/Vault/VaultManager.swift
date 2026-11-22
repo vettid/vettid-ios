@@ -121,11 +121,16 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
     /// (``refresh()``: only a Locked answer is published), an unlock's last steps, a recovery's or an enrollment's end, and a
     /// failure's `credential_required` handling (``VaultManager+Failures``).
     @ObservationIgnored var lockGeneration = 0
+    #if DEBUG
+    /// The opening's time the last unlock passed to its confirmation (``confirmAfterUnlock(_:openedAt:)``); tests read it.
+    @ObservationIgnored var lastConfirmOpenedAt: Date?
+    #endif
     /// The locks this phone heard of (``LocksHeard``): the newest `vault.locking`'s `ts` on the vault's clock (also one
     /// dropped as another opening's: it is still a lock), and each probe that found the vault locked. A status read, or an
     /// unlock's last steps, that began before one does not open the vault after it (``refresh()``, ``didOpen``). A
     /// `vault.locking` is judged by its time, so a mailbox's old locks, or one delivered again, collected during a read do
-    /// not count; a probe's always does.
+    /// not count; a probe's always does, and so does one naming the current opening (release L). (Accepted gap) One naming
+    /// the new opening heard between its result and ``didOpen``'s capture is in that baseline, so it is judged by time.
     @ObservationIgnored var locksHeard = LocksHeard()
 
     /// Bumped by each event that has the phase read again (`device.unlinked`, not a replacement): an unlock it reached

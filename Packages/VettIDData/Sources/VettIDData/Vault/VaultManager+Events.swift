@@ -355,7 +355,7 @@ extension VaultManager {
     func onEvent(_ m: VaultMessage) {
         // Every lock is heard of, by its time (also one named for another opening): reads and unlocks begun before it do
         // not open the vault after it (``latestLockAt``).
-        if m.type == LockNotices.type { noteLockSeen(at: m.ts) }
+        if m.type == LockNotices.type { noteLockSeen(at: m.ts, namingCurrent: lockNotices.namesCurrent(m)) }
         // The lock before this phone's last unlock (the one an unlock of a running vault makes), relayed late.
         if lockNotices.stale(m) { return }
         // In the background, kept running by a live call, only what locks or ends the session is handled here (the calls take their
@@ -522,15 +522,14 @@ extension VaultManager {
     }
 }
 
-/// The locks this phone heard of (``VaultManager/locksHeard``): the newest `vault.locking`'s time on the vault's clock, and how
-/// many probes found the vault locked (a probe's "locked" is now: after any read or unlock under way).
+/// The locks this phone heard of (``VaultManager/locksHeard``): the newest `vault.locking`'s time on the vault's clock, how many
+/// probes found the vault locked (a probe's "locked" is now: after any read or unlock under way), and how many notices named
+/// the opening this phone held as current (release L: each a lock after it, whatever its time).
 struct LocksHeard: Equatable {
-    var latest: Date?
-    var probes = 0
+    var latest: Date?, probes = 0, namingCurrent = 0
 }
 
-/// Where a read (or an unlock's last steps) began: its moment, whether that is on the vault's clock, and the locks heard
-/// before it.
+/// Where a read (or an unlock's last steps) began: its moment, whether on the vault's clock, and the locks heard before it.
 struct ReadStart {
     let at: Date
     let onVaultClock: Bool
@@ -556,7 +555,8 @@ extension VaultManager {
     }
 
     /// A lock heard of at [at] (vault time).
-    func noteLockSeen(at: Date) {
+    func noteLockSeen(at: Date, namingCurrent: Bool = false) {
+        if namingCurrent { locksHeard.namingCurrent += 1 }
         if locksHeard.latest.map({ at > $0 }) ?? true { locksHeard.latest = at }
     }
 
@@ -568,7 +568,7 @@ extension VaultManager {
     /// is heard during the read: the vault's status was read after it, so an open answer then is the vault opened again
     /// since (a mailbox's old locks, or one delivered again).
     func lockedSince(_ start: ReadStart) -> Bool {
-        if locksHeard.probes != start.heard.probes { return true }
+        if locksHeard.probes != start.heard.probes || locksHeard.namingCurrent != start.heard.namingCurrent { return true }
         guard let l = locksHeard.latest, l != start.heard.latest else { return false }
         return l > (start.onVaultClock ? start.at : start.at.addingTimeInterval(-Self.lockSkewAllowance))
     }
@@ -590,10 +590,10 @@ extension VaultManager {
         return locked
     }
 
-    /// ``lockedAfterOpening(_:since:)``'s finding, phase unchanged. A `vault.locking` timed before the opening (the one an
-    /// unlock of a running vault makes, relayed late) does not count.
+    /// ``lockedAfterOpening(_:since:)``'s finding, phase unchanged. One naming the current opening always counts; a
+    /// `vault.locking` timed before the opening (the one an unlock of a running vault makes, relayed late) does not.
     func lockHeardAfterOpening(_ openedAt: Date?, since heard: LocksHeard) -> Bool {
-        if locksHeard.probes != heard.probes { return true }
+        if locksHeard.probes != heard.probes || locksHeard.namingCurrent != heard.namingCurrent { return true }
         if let at = openedAt { return locksHeard.latest.map { $0 > at } ?? false }
         return locksHeard.latest != heard.latest
     }

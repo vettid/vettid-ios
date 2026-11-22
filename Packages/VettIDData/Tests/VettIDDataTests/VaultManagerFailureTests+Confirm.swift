@@ -1,7 +1,9 @@
 import Foundation
 import Testing
+import VettIDCrypto
 @testable import VettIDData
 import VettIDDataTesting
+@testable import VettIDVault
 
 /// A provisional vault after a restart (VAULT-MESSAGING §11.3): who confirms it, and when.
 extension VaultManagerFailureTests {
@@ -434,5 +436,86 @@ extension VaultManagerFailureTests {
         let unknownLater = began(openedAt: nil)
         m.noteLockSeen(at: base.addingTimeInterval(5))
         #expect(!m.lockedSinceConfirming(later) && m.lockedSinceConfirming(unknownLater))
+    }
+
+    /// (Release L) A `vault.locking` naming the current opening is a lock after it whatever its time, the opening's own
+    /// millisecond included: it stops the unlock's confirmation and refuses the join.
+    @Test func aLockNamingTheCurrentOpeningCountsAfterIt() async throws {
+        defer { phone.close() }
+        try await finishingUnconfirmed()
+        let openedAt = try #require(m.lockNotices.openedAt)
+        let (locks, heard) = (m.lockGeneration, m.locksHeard)
+        let done = Task<Void, any Error> {}
+        let c = VaultManager.Confirming(done: done, session: m.sessionGeneration, locks: locks, start: m.readStart(),
+                                        openedAt: openedAt)
+        m.noteLockSeen(at: openedAt)
+        #expect(m.confirmAfterUnlockDue(locks: locks, openedAt: openedAt, heard: heard) && !m.lockedSinceConfirming(c))
+        m.noteLockSeen(at: openedAt, namingCurrent: true)
+        #expect(!m.confirmAfterUnlockDue(locks: locks, openedAt: openedAt, heard: heard))
+        #expect(m.lockedSinceConfirming(c))
+        // A read counts it too, whatever its time; without the name, an older time doesn't count.
+        let start = m.readStart()
+        m.noteLockSeen(at: start.at.addingTimeInterval(-60))
+        #expect(!m.lockedSince(start))
+        m.noteLockSeen(at: start.at.addingTimeInterval(-60), namingCurrent: true)
+        #expect(m.lockedSince(start))
+    }
+
+    /// The unlock passes its result's time to its confirmation, which carries it into the join.
+    @Test func theUnlockPassesTheOpeningsTimeToItsConfirmation() async throws {
+        defer { phone.close() }
+        try await lockedAtTheStart()
+        // A recorded opening later than this unlock's (as after an enclave clock stepped back), so that the unlock's own
+        // time is told apart from it.
+        let recorded = Date().addingTimeInterval(3600)
+        m.lockNotices.opened(at: recorded)
+        service.holdAnswers(to: "vault.enroll.confirm")
+        #expect(try await m.unlock(pin: "402817") == .success)
+        #expect(await eventually { service.heldAnswers == 1 })
+        let openedAt = try #require(m.lastConfirmOpenedAt)
+        #expect(openedAt != recorded && m.lockNotices.openedAt == recorded)
+        #expect(m.confirming?.openedAt == openedAt)
+        service.releaseHeldAnswers()
+        #expect(await eventually { m.confirming == nil })
+    }
+
+    /// (Release L) Which notices name the current opening: the same name does; another, the dead one's, none, or no current
+    /// name doesn't. `onEvent` counts the one that does.
+    @Test func whichNoticesNameTheCurrentOpening() async throws {
+        defer { phone.close() }
+        try await finishingUnconfirmed()
+        let (mine, other, dead) = (String(repeating: "a", count: 32), String(repeating: "b", count: 32), String(repeating: "c", count: 32))
+        func locking(_ id: String?) -> VaultMessage {
+            let body = id.map { #"{"reason":"test","unlock_id":"\#($0)"}"# } ?? #"{"reason":"test"}"#
+            return VaultMessage(inner: Inner(id: Ulid.new(), type: LockNotices.type, ts: Date(), body: Array(body.utf8)))
+        }
+        let n = LockNotices()
+        n.current = { mine }
+        n.dead = { dead }
+        #expect(n.namesCurrent(locking(mine)))
+        #expect(!n.namesCurrent(locking(other)) && !n.namesCurrent(locking(dead)) && !n.namesCurrent(locking(nil)))
+        n.current = { nil }
+        #expect(!n.namesCurrent(locking(mine)))
+        // Through onEvent.
+        let before = m.locksHeard.namingCurrent
+        m.lockNotices.current = { mine }
+        m.onEvent(locking(other))
+        #expect(m.locksHeard.namingCurrent == before)
+        m.onEvent(locking(mine))
+        #expect(m.locksHeard.namingCurrent == before + 1)
+    }
+
+    /// A confirmation given its opening's time carries that one into the join, not the last opening recorded.
+    @Test func aConfirmationCarriesTheOpeningItWasGiven() async throws {
+        defer { phone.close() }
+        try await finishingUnconfirmed()
+        let s = try #require(m.session)
+        let given = (m.lockNotices.openedAt ?? Date()).addingTimeInterval(-30)
+        service.holdAnswers(to: "vault.enroll.confirm")
+        let confirming = Task { try await m.confirmProvisional(s, backup: nil, openedAt: given) }
+        #expect(await eventually { service.heldAnswers == 1 })
+        #expect(m.confirming?.openedAt == given && given != m.lockNotices.openedAt)
+        service.releaseHeldAnswers()
+        _ = try? await confirming.value
     }
 }
