@@ -453,6 +453,12 @@ extension VaultManagerFailureTests {
         m.noteLockSeen(at: openedAt, namingCurrent: true)
         #expect(!m.confirmAfterUnlockDue(locks: locks, openedAt: openedAt, heard: heard))
         #expect(m.lockedSinceConfirming(c))
+        // A read counts it too, whatever its time; without the name, an older time doesn't count.
+        let start = m.readStart()
+        m.noteLockSeen(at: start.at.addingTimeInterval(-60))
+        #expect(!m.lockedSince(start))
+        m.noteLockSeen(at: start.at.addingTimeInterval(-60), namingCurrent: true)
+        #expect(m.lockedSince(start))
     }
 
     /// The unlock passes its result's time to its confirmation, which carries it into the join.
