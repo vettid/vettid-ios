@@ -299,7 +299,9 @@ extension VaultManager {
         let local = record.value
         guard !local.enrollConfirmed, local.enrolledHere, !s.device.recovering, s.device.credentialVersion != nil else { return }
         let (locks, heard) = (lockGeneration, locksHeard)
+        #if DEBUG
         lastConfirmOpenedAt = openedAt
+        #endif
         Task {
             guard confirmAfterUnlockDue(locks: locks, openedAt: openedAt, heard: heard) else { return }
             _ = try? await confirmProvisional(s, backup: local.backupChoice, openedAt: openedAt)

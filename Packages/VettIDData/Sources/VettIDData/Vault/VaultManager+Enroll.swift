@@ -216,8 +216,10 @@ extension VaultManager {
     /// [s] must be the live session: one dropped since its caller got it (a read that began before a background) sends
     /// nothing and is refused as such.
     /// [openedAt]: the opening an unlock's confirmation began under (its result's time), which the join judges by; others
-    /// take the last opening this phone recorded (``LockNotices/openedAt``), which never moves back, so an enclave clock that
-    /// stepped back between two openings leaves the older one recorded (the join is then refused: a second confirmation).
+    /// take the last opening this phone recorded (``LockNotices/openedAt``), which never moves back. So if the enclave clock
+    /// stepped back between two openings, the recorded opening is the earlier one's later time: an unnamed lock timed
+    /// between the two is missed, and a join is accepted and waits one request timeout. A release-L notice naming the
+    /// current opening still counts (``lockHeardAfterOpening(_:since:)``).
     func confirmProvisional(_ s: VaultSession, backup: Bool?, openedAt: Date? = nil,
                             onStep: @MainActor (EnrollStep) -> Void = { _ in }) async throws {
         guard s.device === session?.device else { throw VaultFailure(.other, code: "session_dropped") }

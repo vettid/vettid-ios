@@ -465,11 +465,15 @@ extension VaultManagerFailureTests {
     @Test func theUnlockPassesTheOpeningsTimeToItsConfirmation() async throws {
         defer { phone.close() }
         try await lockedAtTheStart()
+        // A recorded opening later than this unlock's (as after an enclave clock stepped back), so that the unlock's own
+        // time is told apart from it.
+        let recorded = Date().addingTimeInterval(3600)
+        m.lockNotices.opened(at: recorded)
         service.holdAnswers(to: "vault.enroll.confirm")
         #expect(try await m.unlock(pin: "402817") == .success)
         #expect(await eventually { service.heldAnswers == 1 })
         let openedAt = try #require(m.lastConfirmOpenedAt)
-        #expect(openedAt == m.lockNotices.openedAt)
+        #expect(openedAt != recorded && m.lockNotices.openedAt == recorded)
         #expect(m.confirming?.openedAt == openedAt)
         service.releaseHeldAnswers()
         #expect(await eventually { m.confirming == nil })
