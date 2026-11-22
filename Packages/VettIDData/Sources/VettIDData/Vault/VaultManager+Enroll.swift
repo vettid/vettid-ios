@@ -255,8 +255,9 @@ extension VaultManager {
     /// began under, heard before or after it began (``lockHeardAfterOpening(_:since:)``, as the opening itself judges
     /// it). The one of the opening before, heard late, does not count. With that opening's moment unknown (a status read
     /// at a cold start), any lock heard since it began does: a second confirmation is harmless, a join of one the vault
-    /// never answers is not. (The opening is the last one this phone recorded, which is the one a status read finds
-    /// open: only this phone's unlock reopens the vault, and it records the opening.)
+    /// never answers is not. (The opening is the last one this phone recorded. An unlock whose answer was lost, or came
+    /// without a time, leaves an older one recorded: a lock heard after that one then refuses the join, which costs only
+    /// a second confirmation.)
     func lockedSinceConfirming(_ c: Confirming) -> Bool {
         lockHeardAfterOpening(c.openedAt, since: c.start.heard)
     }
