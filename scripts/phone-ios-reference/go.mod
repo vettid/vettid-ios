@@ -2,6 +2,8 @@ module phoneiosreference
 
 go 1.26.0
 
+toolchain go1.26.11
+
 require github.com/vettid/vettid-vault v0.0.0
 
 require (
