@@ -219,8 +219,8 @@ extension VaultManager {
         guard s.device === session?.device else { throw VaultFailure(.other, code: "session_dropped") }
         // Joined only in its own session and before any lock since it began: a vault that locked meanwhile keeps the
         // request in its mailbox, so its answer may come only after its timeout. A caller that joins waits for it as its
-        // sender does, request timeout included.
-        if let c = confirming, c.session == sessionGeneration, c.locks == lockGeneration, c.heard == locksHeard {
+        // sender does, request timeout included (``lockedSinceConfirming(_:)``).
+        if let c = confirming, c.session == sessionGeneration, c.locks == lockGeneration, !lockedSinceConfirming(c) {
             confirmationsJoined += 1
             do {
                 return try await c.done.value
@@ -236,7 +236,8 @@ extension VaultManager {
             for await r in results { return try r.get() }
             throw CancellationError()
         }
-        confirming = Confirming(done: done, session: sessionGeneration, locks: lockGeneration, heard: locksHeard)
+        confirming = Confirming(done: done, session: sessionGeneration, locks: lockGeneration, start: readStart(),
+                                openedAt: lockNotices.openedAt)
         defer {
             report.finish()
             if confirming?.done == done { confirming = nil }
@@ -250,12 +251,25 @@ extension VaultManager {
         }
     }
 
+    /// A lock that closed the vault [c] went to: a probe's since it began, or a `vault.locking` timed after the opening it
+    /// began under, heard before or after it began (``lockHeardAfterOpening(_:since:)``, as the opening itself judges
+    /// it). The one of the opening before, heard late, does not count. With that opening's moment unknown (a status read
+    /// at a cold start), any lock heard since it began does: a second confirmation is harmless, a join of one the vault
+    /// never answers is not. (The opening is the last one this phone recorded. An unlock whose answer was lost, or came
+    /// without a time, leaves an older one recorded: a lock heard after that one then refuses the join, which costs only
+    /// a second confirmation.)
+    func lockedSinceConfirming(_ c: Confirming) -> Bool {
+        lockHeardAfterOpening(c.openedAt, since: c.start.heard)
+    }
+
     /// A confirmation on its way: its outcome, and the session and the locks it began under.
     struct Confirming {
         let done: Task<Void, any Error>
         let session: Int
         let locks: Int
-        let heard: LocksHeard
+        let start: ReadStart
+        /// The opening it began under, on the vault's clock (``LockNotices/openedAt``), when known.
+        let openedAt: Date?
     }
 
     /// `credential.create`. A vault that answers `exists` already holds this phone's credential (a create whose answer

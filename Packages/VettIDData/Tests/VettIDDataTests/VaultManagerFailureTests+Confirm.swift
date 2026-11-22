@@ -333,4 +333,106 @@ extension VaultManagerFailureTests {
         try await reading.value
         #expect(m.phase == .setup(.finishing) && service.confirmed, "\(m.phase)")
     }
+
+    /// The confirmation after an unlock judges a lock by its time, as the opening does: the `vault.locking` of the opening
+    /// before (which the unlock of a running vault makes) heard only after the opening, before the confirmation's task
+    /// starts, does not stop it. A lock after the opening, a probe's, or a lock asked for since does; with no opening moment,
+    /// any lock heard since does.
+    @Test func confirmAfterUnlockJudgesLocksByTheirTime() async throws {
+        defer { phone.close() }
+        try await finishingUnconfirmed()
+        let (locks, heard) = (m.lockGeneration, m.locksHeard)
+        // (The times are after the locks heard so far: a lock heard only ever moves the latest forward.)
+        let openedAt = (heard.latest ?? Date()).addingTimeInterval(10)
+        #expect(m.confirmAfterUnlockDue(locks: locks, openedAt: openedAt, heard: heard))
+        // The opening before's lock, relayed late: newer than every lock heard so far, older than this opening.
+        m.noteLockSeen(at: openedAt.addingTimeInterval(-5))
+        #expect(m.locksHeard != heard)
+        #expect(m.confirmAfterUnlockDue(locks: locks, openedAt: openedAt, heard: heard))
+        // Without the opening's moment, any lock heard since counts.
+        #expect(!m.confirmAfterUnlockDue(locks: locks, openedAt: nil, heard: heard))
+        // A lock asked for since.
+        #expect(!m.confirmAfterUnlockDue(locks: locks - 1, openedAt: openedAt, heard: heard))
+        // A lock after the opening.
+        m.noteLockSeen(at: openedAt.addingTimeInterval(1))
+        #expect(!m.confirmAfterUnlockDue(locks: locks, openedAt: openedAt, heard: heard))
+        // A probe that found the vault locked, whatever the times.
+        let now = m.locksHeard
+        m.noteProbeLock()
+        #expect(!m.confirmAfterUnlockDue(locks: locks, openedAt: openedAt.addingTimeInterval(60), heard: now))
+        #expect(m.phase == .setup(.finishing))
+    }
+
+    /// "Finish" joins the confirmation on its way though the `vault.locking` of the opening before is heard only after it
+    /// began, stamped as the opening is (the vault stamps both in the same millisecond): the confirmation is sent once.
+    @Test func finishJoinsAConfirmationThoughALateOldLockIsHeard() async throws {
+        defer { phone.close() }
+        try await finishingUnconfirmed()
+        let openedAt = try #require(m.lockNotices.openedAt)
+        // As if that lock had not reached this phone yet: the last one heard is older.
+        m.locksHeard.latest = openedAt.addingTimeInterval(-60)
+        service.holdAnswers(to: "vault.enroll.confirm")
+        let sent = confirmsSent
+        let reading = Task { try await m.refresh() }
+        #expect(await eventually { service.heldAnswers == 1 })
+        #expect(m.confirming?.openedAt == openedAt)
+        // It arrives now.
+        m.noteLockSeen(at: openedAt)
+        #expect(m.locksHeard.latest == openedAt)
+        let finishing = Task { try await m.finishSetup() }
+        #expect(await eventually { m.confirmationsJoined == 1 })
+        service.releaseHeldAnswers()
+        try await finishing.value
+        try await reading.value
+        #expect(confirmsSent == sent + 1 && service.confirmed && m.phase == .unlocked, "\(m.phase)")
+    }
+
+    /// A lock after the opening a confirmation began under, heard only after it began, is not joined: that vault closed,
+    /// so "Finish" sends its own.
+    @Test func finishDoesNotJoinAConfirmationALaterLockClosed() async throws {
+        defer { phone.close() }
+        try await finishingUnconfirmed()
+        service.holdAnswers(to: "vault.enroll.confirm")
+        let sent = confirmsSent
+        let reading = Task { try await m.refresh() }
+        #expect(await eventually { service.heldAnswers == 1 })
+        let openedAt = try #require(m.confirming?.openedAt)
+        let start = try #require(m.confirming?.start)
+        #expect(openedAt < start.at && start.onVaultClock)
+        // Timed after the opening and before the confirmation began; heard now.
+        m.noteLockSeen(at: openedAt.addingTimeInterval(start.at.timeIntervalSince(openedAt) / 2))
+        let finishing = Task { try await m.finishSetup() }
+        #expect(await eventually { service.heldAnswers == 2 })
+        service.releaseHeldAnswers()
+        try await finishing.value
+        _ = try? await reading.value
+        #expect(m.confirmationsJoined == 0 && confirmsSent == sent + 2 && service.confirmed)
+    }
+
+    /// The join's rule, judged directly: a lock after the opening refuses it, heard before the confirmation began or after;
+    /// with the opening's moment unknown, any lock heard since it began does; nothing heard since, it joins.
+    @Test func theJoinJudgesLocksFromTheOpening() async throws {
+        defer { phone.close() }
+        try await finishingUnconfirmed()
+        let heard = m.locksHeard
+        let base = (heard.latest ?? Date()).addingTimeInterval(10)
+        let done = Task<Void, any Error> {}
+        func began(openedAt: Date?) -> VaultManager.Confirming {
+            VaultManager.Confirming(done: done, session: m.sessionGeneration, locks: m.lockGeneration, start: m.readStart(),
+                                    openedAt: openedAt)
+        }
+        let known = began(openedAt: base)
+        let unknown = began(openedAt: nil)
+        #expect(!m.lockedSinceConfirming(known) && !m.lockedSinceConfirming(unknown))
+        // A lock after the opening, already heard when a confirmation began: refused all the same.
+        m.noteLockSeen(at: base.addingTimeInterval(1))
+        #expect(m.lockedSinceConfirming(began(openedAt: base)))
+        // Heard since an unknown opening's confirmation began: refused.
+        #expect(m.lockedSinceConfirming(unknown))
+        // The opening before's lock, heard since: a known opening still joins, an unknown one does not.
+        let later = began(openedAt: base.addingTimeInterval(10))
+        let unknownLater = began(openedAt: nil)
+        m.noteLockSeen(at: base.addingTimeInterval(5))
+        #expect(!m.lockedSinceConfirming(later) && m.lockedSinceConfirming(unknownLater))
+    }
 }

@@ -585,15 +585,16 @@ extension VaultManager {
     /// the steps before the open app), or a probe's since [heard] (the locks heard when those steps began). An unknown moment
     /// counts any lock heard since. The phase is then Locked, not the open app. True when it was.
     func lockedAfterOpening(_ openedAt: Date?, since heard: LocksHeard) -> Bool {
-        let locked: Bool
-        if locksHeard.probes != heard.probes {
-            locked = true
-        } else if let at = openedAt {
-            locked = locksHeard.latest.map { $0 > at } ?? false
-        } else {
-            locked = locksHeard.latest != heard.latest
-        }
+        let locked = lockHeardAfterOpening(openedAt, since: heard)
         if locked { phase = .locked }
         return locked
+    }
+
+    /// ``lockedAfterOpening(_:since:)``'s finding, phase unchanged. A `vault.locking` timed before the opening (the one an
+    /// unlock of a running vault makes, relayed late) does not count.
+    func lockHeardAfterOpening(_ openedAt: Date?, since heard: LocksHeard) -> Bool {
+        if locksHeard.probes != heard.probes { return true }
+        if let at = openedAt { return locksHeard.latest.map { $0 > at } ?? false }
+        return locksHeard.latest != heard.latest
     }
 }
