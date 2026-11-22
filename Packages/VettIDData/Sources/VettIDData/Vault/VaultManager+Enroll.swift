@@ -251,16 +251,14 @@ extension VaultManager {
         }
     }
 
-    /// A lock heard since [c] began that closed the vault it went to: a probe's, or a `vault.locking` timed after the
-    /// opening it began under. The one of the opening before, heard late, does not count. With that opening's moment
-    /// unknown (a status read at a cold start), any lock heard since does: a second confirmation is harmless, a join of
-    /// one the vault never answers is not. (The opening is the last one this phone recorded, which is the one a status
-    /// read finds open: only this phone's unlock reopens the vault, and it records the opening.)
+    /// A lock that closed the vault [c] went to: a probe's since it began, or a `vault.locking` timed after the opening it
+    /// began under, heard before or after it began (``lockHeardAfterOpening(_:since:)``, as the opening itself judges
+    /// it). The one of the opening before, heard late, does not count. With that opening's moment unknown (a status read
+    /// at a cold start), any lock heard since it began does: a second confirmation is harmless, a join of one the vault
+    /// never answers is not. (The opening is the last one this phone recorded, which is the one a status read finds
+    /// open: only this phone's unlock reopens the vault, and it records the opening.)
     func lockedSinceConfirming(_ c: Confirming) -> Bool {
-        if locksHeard.probes != c.start.heard.probes { return true }
-        guard locksHeard.latest != c.start.heard.latest else { return false }
-        guard let at = c.openedAt else { return true }
-        return locksHeard.latest.map { $0 > at } ?? false
+        lockHeardAfterOpening(c.openedAt, since: c.start.heard)
     }
 
     /// A confirmation on its way: its outcome, and the session and the locks it began under.
