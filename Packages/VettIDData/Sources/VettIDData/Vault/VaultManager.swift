@@ -127,7 +127,8 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
     /// dropped as another opening's: it is still a lock), and each probe that found the vault locked. A status read, or an
     /// unlock's last steps, that began before one does not open the vault after it (``refresh()``, ``didOpen``). A
     /// `vault.locking` is judged by its time, so a mailbox's old locks, or one delivered again, collected during a read do
-    /// not count; a probe's always does.
+    /// not count; a probe's always does, and so does one naming the current opening (release L). (Accepted gap) One naming
+    /// the new opening heard between its result and ``didOpen``'s capture is in that baseline, so it is judged by time.
     @ObservationIgnored var locksHeard = LocksHeard()
 
     /// Bumped by each event that has the phase read again (`device.unlinked`, not a replacement): an unlock it reached

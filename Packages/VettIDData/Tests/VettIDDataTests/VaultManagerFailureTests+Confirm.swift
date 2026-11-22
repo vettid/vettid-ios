@@ -1,7 +1,9 @@
 import Foundation
 import Testing
+import VettIDCrypto
 @testable import VettIDData
 import VettIDDataTesting
+@testable import VettIDVault
 
 /// A provisional vault after a restart (VAULT-MESSAGING §11.3): who confirms it, and when.
 extension VaultManagerFailureTests {
@@ -465,5 +467,45 @@ extension VaultManagerFailureTests {
         #expect(m.confirming?.openedAt == openedAt)
         service.releaseHeldAnswers()
         #expect(await eventually { m.confirming == nil })
+    }
+
+    /// (Release L) Which notices name the current opening: the same name does; another, the dead one's, none, or no current
+    /// name doesn't. `onEvent` counts the one that does.
+    @Test func whichNoticesNameTheCurrentOpening() async throws {
+        defer { phone.close() }
+        try await finishingUnconfirmed()
+        let (mine, other, dead) = (String(repeating: "a", count: 32), String(repeating: "b", count: 32), String(repeating: "c", count: 32))
+        func locking(_ id: String?) -> VaultMessage {
+            let body = id.map { #"{"reason":"test","unlock_id":"\#($0)"}"# } ?? #"{"reason":"test"}"#
+            return VaultMessage(inner: Inner(id: Ulid.new(), type: LockNotices.type, ts: Date(), body: Array(body.utf8)))
+        }
+        let n = LockNotices()
+        n.current = { mine }
+        n.dead = { dead }
+        #expect(n.namesCurrent(locking(mine)))
+        #expect(!n.namesCurrent(locking(other)) && !n.namesCurrent(locking(dead)) && !n.namesCurrent(locking(nil)))
+        n.current = { nil }
+        #expect(!n.namesCurrent(locking(mine)))
+        // Through onEvent.
+        let before = m.locksHeard.namingCurrent
+        m.lockNotices.current = { mine }
+        m.onEvent(locking(other))
+        #expect(m.locksHeard.namingCurrent == before)
+        m.onEvent(locking(mine))
+        #expect(m.locksHeard.namingCurrent == before + 1)
+    }
+
+    /// A confirmation given its opening's time carries that one into the join, not the last opening recorded.
+    @Test func aConfirmationCarriesTheOpeningItWasGiven() async throws {
+        defer { phone.close() }
+        try await finishingUnconfirmed()
+        let s = try #require(m.session)
+        let given = (m.lockNotices.openedAt ?? Date()).addingTimeInterval(-30)
+        service.holdAnswers(to: "vault.enroll.confirm")
+        let confirming = Task { try await m.confirmProvisional(s, backup: nil, openedAt: given) }
+        #expect(await eventually { service.heldAnswers == 1 })
+        #expect(m.confirming?.openedAt == given && given != m.lockNotices.openedAt)
+        service.releaseHeldAnswers()
+        _ = try? await confirming.value
     }
 }
