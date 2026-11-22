@@ -333,4 +333,32 @@ extension VaultManagerFailureTests {
         try await reading.value
         #expect(m.phase == .setup(.finishing) && service.confirmed, "\(m.phase)")
     }
+
+    /// The confirmation after an unlock judges a lock by its time, as the opening does: the `vault.locking` of the opening
+    /// before (which the unlock of a running vault makes) heard only after the opening, before the confirmation's task
+    /// starts, does not stop it. A lock after the opening, a probe's, or a lock asked for since does.
+    @Test func confirmAfterUnlockJudgesLocksByTheirTime() async throws {
+        defer { phone.close() }
+        try await finishingUnconfirmed()
+        let (locks, heard) = (m.lockGeneration, m.locksHeard)
+        // (The times are after the locks heard so far: a lock heard only ever moves the latest forward.)
+        let openedAt = (heard.latest ?? Date()).addingTimeInterval(10)
+        #expect(m.confirmAfterUnlockDue(locks: locks, openedAt: openedAt, heard: heard))
+        // The opening before's lock, relayed late: newer than every lock heard so far, older than this opening.
+        m.noteLockSeen(at: openedAt.addingTimeInterval(-5))
+        #expect(m.locksHeard != heard)
+        #expect(m.confirmAfterUnlockDue(locks: locks, openedAt: openedAt, heard: heard))
+        // Without the opening's moment, any lock heard since counts.
+        #expect(!m.confirmAfterUnlockDue(locks: locks, openedAt: nil, heard: heard))
+        // A lock asked for since.
+        #expect(!m.confirmAfterUnlockDue(locks: locks - 1, openedAt: openedAt, heard: heard))
+        // A lock after the opening.
+        m.noteLockSeen(at: openedAt.addingTimeInterval(1))
+        #expect(!m.confirmAfterUnlockDue(locks: locks, openedAt: openedAt, heard: heard))
+        // A probe that found the vault locked, whatever the times.
+        let now = m.locksHeard
+        m.noteProbeLock()
+        #expect(!m.confirmAfterUnlockDue(locks: locks, openedAt: openedAt.addingTimeInterval(60), heard: now))
+        #expect(m.phase == .setup(.finishing))
+    }
 }

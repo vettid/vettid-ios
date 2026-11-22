@@ -286,22 +286,30 @@ extension VaultManager {
         // The same for one that came during the steps before the open app.
         if rereads != marks.rereads { return await rereadPhase() }
         openApp(s)
-        confirmAfterUnlock(s)
+        confirmAfterUnlock(s, openedAt: r.at)
     }
 
     /// A provisional vault (a restart before its confirmation was answered, VAULT-MESSAGING §11.3) is confirmed once the
     /// unlock opened it, as by a status read that finds it open: by the phone whose enrollment made it, with its credential,
     /// outside a recovery. The unlock does not wait for it; "Finish" joins it while it is on its way, and after a failure
     /// sends it again and says the failure (``finishSetup()``). Nothing is sent while a lock is pending (``openApi(_:)``), nor
-    /// after a lock heard since the opening (the vault this unlock opened is closed: the next unlock confirms it).
-    private func confirmAfterUnlock(_ s: VaultSession) {
+    /// after a lock since the opening at [openedAt] (the vault this unlock opened is closed: the next unlock confirms it).
+    private func confirmAfterUnlock(_ s: VaultSession, openedAt: Date?) {
         let local = record.value
         guard !local.enrollConfirmed, local.enrolledHere, !s.device.recovering, s.device.credentialVersion != nil else { return }
         let (locks, heard) = (lockGeneration, locksHeard)
         Task {
-            guard locks == lockGeneration, heard == locksHeard else { return }
+            guard confirmAfterUnlockDue(locks: locks, openedAt: openedAt, heard: heard) else { return }
             _ = try? await confirmProvisional(s, backup: local.backupChoice)
         }
+    }
+
+    /// Whether the confirmation after an unlock that opened the vault at [openedAt] is still sent when its task starts: no
+    /// lock asked for since [locks], and no lock since the opening, judged by its time as the opening itself judges it
+    /// (``lockHeardAfterOpening(_:since:)``). The `vault.locking` of the opening before, which the unlock of a running vault
+    /// makes, may be heard only now; it is older than the opening and does not stop it.
+    func confirmAfterUnlockDue(locks: Int, openedAt: Date?, heard: LocksHeard) -> Bool {
+        locks == lockGeneration && !lockHeardAfterOpening(openedAt, since: heard)
     }
 
     /// The phase of the opened vault. The check screen is shown only by the open app: a PIN kept for its retry does not wait
