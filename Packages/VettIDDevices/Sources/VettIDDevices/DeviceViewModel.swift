@@ -8,6 +8,27 @@ public enum DeviceConfirm: Equatable, Sendable { case endAccess, remove }
 /// What a failed request on a device's page says (the vault's own failure text for a refused owner check).
 public enum DeviceFailure: Equatable, Sendable { case endAccess, remove }
 
+/// A row of "Items it may use" (AA7): the item's name from the cache (nil when it does not resolve), and its ways. Holds an
+/// item's name: nothing but the type is printed.
+public struct WayItemRow: Equatable, Sendable, CustomStringConvertible, CustomDebugStringConvertible, CustomReflectable {
+    public let itemID: String
+    public let name: String?
+    /// The names of the items are read: a name still nil is then "An item you no longer have", never before.
+    public let namesLoaded: Bool
+    public let ways: [ItemWay]
+
+    public init(itemID: String, name: String?, namesLoaded: Bool, ways: [ItemWay]) {
+        self.itemID = itemID
+        self.name = name
+        self.namesLoaded = namesLoaded
+        self.ways = ways
+    }
+
+    public var description: String { "WayItemRow" }
+    public var debugDescription: String { "WayItemRow" }
+    public var customMirror: Mirror { Mirror(self, children: [:]) }
+}
+
 /// A device's page state (ANDROID-PLAN 0.1.53 AA1). Holds a device's name: nothing but the type is printed. Mirrors
 /// vettid-android `DeviceUiState`.
 public struct DeviceState: Equatable, Sendable, CustomStringConvertible, CustomDebugStringConvertible, CustomReflectable {
@@ -29,6 +50,12 @@ public struct DeviceState: Equatable, Sendable, CustomStringConvertible, CustomD
     public var removedDevice: DeviceInfo?
     /// The list could not be read and no device is known: the page says so and offers Retry.
     public var loadError: FailureKind?
+    /// AA7: the items the agent's rules include, with the ways each allows (`leash.item.list{agent_id}`); memory only.
+    public var wayItems: [WayItemRow] = []
+    public var wayItemsLoaded = false
+    public var wayItemsError: FailureKind?
+    /// The vault lists `item_ways` (decision 17): "Items it may use" is shown only then.
+    public var wayItemsAvailable = false
 
     public init() {}
 
@@ -42,34 +69,91 @@ public struct DeviceState: Equatable, Sendable, CustomStringConvertible, CustomD
 
 /// A device's page (ANDROID-PLAN 0.1.53 AA1): its facts, End access (confirmed) and Remove (confirmed). It signs nothing and
 /// never asks for the credential password: it holds only the device's id and the devices repository, so it has no way to
-/// sign, to open the unlock window or to read anything else. Fails secure: a request that fails leaves the page as it was and
+/// sign, to open the unlock window or to read anything else (AA7's items are read through a list-only interface:
+/// ``ItemWaysList``, which holds nothing that saves). Fails secure: a request that fails leaves the page as it was and
 /// says so. Mirrors vettid-android `DeviceViewModel`.
 @MainActor
 @Observable
 public final class DeviceViewModel {
     @ObservationIgnored private let id: String
     @ObservationIgnored private let repo: any DevicesRepository
+    @ObservationIgnored private let itemWays: (any ItemWaysList)?
+    @ObservationIgnored private let items: (any ItemsRepository)?
     @ObservationIgnored private let work = Work()
+    @ObservationIgnored private let follows = TaskBag()
+    /// The latest read of the items started: only its failure is shown (AA7).
+    @ObservationIgnored private var wayItemsRead = 0
+    @ObservationIgnored private var seenEvent: Int?
     private var local = DeviceState()
     /// The device as it was when a request failed or it was removed here: a hold clears the list (and with it the device)
     /// while the failure, the vault's refusal, is still to be read, and the page keeps naming it until the list is read again.
     private var kept: DeviceInfo?
 
-    public init(id: String, repo: any DevicesRepository) {
+    public init(id: String, repo: any DevicesRepository, itemWays: (any ItemWaysList)? = nil, items: (any ItemsRepository)? = nil) {
         self.id = id
         self.repo = repo
+        self.itemWays = itemWays
+        self.items = items
+        seenEvent = itemWays?.event?.seq
         // A page opened from a feed item (or after a process start) may be the first reader of the list.
         refresh()
+        if itemWays != nil { follows.add(follow(self, read: { $0.itemWays?.event }, apply: { $0.onWayEvent($1) })) }
     }
 
-    deinit { work.cancelAll() }
+    deinit {
+        work.cancelAll()
+        follows.cancelAll()
+    }
 
     public var state: DeviceState {
         var s = local
         s.loaded = repo.load == .loaded
         s.device = repo.devices.first { $0.id == id }
         if s.device == nil, let kept, s.removedDevice != nil || (!s.loaded && s.failure != nil) { s.device = kept }
+        if let itemWays, s.device?.isAgent == true, itemWays.listed {
+            s.wayItemsAvailable = true
+            let names = Dictionary((items?.items ?? []).map { ($0.itemID, $0.name) }, uniquingKeysWith: { a, _ in a })
+            let namesLoaded = items?.load == .loaded
+            let read = itemWays.items[id]
+            s.wayItemsLoaded = read != nil
+            s.wayItems = (read ?? []).map {
+                WayItemRow(itemID: $0.itemID, name: names[$0.itemID], namesLoaded: namesLoaded, ways: shownWays($0.rawWays))
+            }
+        }
         return s
+    }
+
+    /// The page is shown again (the item's page closed over it): the items are read again, since a way may have changed there.
+    public func returned() { readWayItems() }
+
+    /// **Try again** on the items that could not be read.
+    public func refreshWayItems() { readWayItems() }
+
+    /// A `leash.item.changed` of this agent, or a `share.rule.*` event (the rules read again): the items are read again.
+    private func onWayEvent(_ e: ItemWaysEvent?) {
+        guard let e, e.seq != seenEvent else { return }
+        seenEvent = e.seq
+        if e.concerns(id) { readWayItems() }
+    }
+
+    /// AA7: the items the agent's rules include, only with a vault that lists `item_ways` (decision 17).
+    private func readWayItems() {
+        guard let itemWays, itemWays.listed, state.device?.isAgent == true else { return }
+        // The names come from the items' cache; a read nobody asked for fills it (as Approvals' and History's do).
+        if let items, items.load != .loaded { items.refreshQuietly() }
+        wayItemsRead += 1
+        let mine = wayItemsRead
+        let id = id
+        work.launch { [weak self] in
+            do {
+                _ = try await itemWays.list(id)
+                if self?.wayItemsRead == mine { self?.local.wayItemsError = nil }
+            } catch where isSilent(error) {
+                // Cut off by a lock or the app leaving.
+            } catch {
+                if self?.wayItemsRead == mine { self?.local.wayItemsError = failureKind(error) }
+            }
+        }
     }
 
     /// The daily check passed (or the hold ended): a page that could not read its device, or the hold cleared the list under,
@@ -87,6 +171,7 @@ public final class DeviceViewModel {
             do {
                 try await repo.refresh()
                 self?.local.loadError = nil
+                self?.readWayItems()
             } catch where isSilent(error) {
                 // Cut off by a lock or the app leaving.
             } catch {
