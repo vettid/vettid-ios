@@ -220,6 +220,16 @@ import VettIDDataTesting
         #expect(try request(m, "h2").held == .unshown)
     }
 
+    /// Whatever the store still holds, a replaced approval is not shown (defence in depth: the store drops it as well).
+    @Test func aReplacedApprovalIsNeverShown() throws {
+        let m = manager()
+        m.onEvent(event(held("h1", runBody())))
+        m.replaced.insert("device:approval.pending:h1")
+        #expect(m.stored.count == 1 && keys(m).isEmpty)
+        m.forgetOpenVault()
+        #expect(m.replaced.isEmpty && m.mismatched.isEmpty, "dropped with the lists")
+    }
+
     @Test func aReferralWithTheOwnIdReplacesNothing() throws {
         let m = manager()
         m.onEvent(event(held("h1", runBody(), top: #","replaces":"h1""#)))
