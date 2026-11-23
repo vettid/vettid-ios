@@ -41,6 +41,26 @@ extension VaultManagerTransferInTests {
         #expect(!m.userGuidUsable)
     }
 
+    /// A paired transfer whose take-over never ran stays Locked (the stuck notice) even when the record says the setup is
+    /// complete: only the setup's completion, which clears the start, ends the guard.
+    @Test func aDamagedPairedRecordStaysLockedWhateverSetupComplete() async throws {
+        defer { phone.close() }
+        _ = try await scanned()
+        let d = try #require(m.session?.device)
+        service.approveTransferIn()
+        #expect(await eventually { d.deviceID != nil })
+        d.mem.withLock { d.st.transferUserGuid = nil }
+        try d.save()
+        try m.record.update(since: m.record.generation) {
+            $0.userGuid = "guid-of-a-setup-code"
+            $0.setupComplete = true
+        }
+        try await phone.restart()
+        try await m.refresh()
+        #expect(m.phase == .locked, "\(m.phase)")
+        #expect(!m.userGuidUsable)
+    }
+
     /// The unlock on a transfer that is not completed, or on a damaged record, is refused (`no_user_guid`), and no
     /// `vault.unlock` is sent.
     @Test(arguments: [false, true])

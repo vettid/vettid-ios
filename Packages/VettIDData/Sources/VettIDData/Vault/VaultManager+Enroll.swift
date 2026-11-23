@@ -49,8 +49,9 @@ extension VaultManager {
     /// would otherwise enroll another vault with that code's `user_guid` while the transfer's vault is pinned.
     public func enroll(pin: String, onStep: @MainActor (EnrollStep) -> Void) async throws {
         try await guarded {
-            if record.value.transferStartedMs != nil { throw VaultFailure(.enrollmentStarted, code: Self.codeTransferWaiting) }
             let s = try await openSession()
+            // After the session is opened: the record is read (prepared), and a start written meanwhile is seen.
+            if record.value.transferStartedMs != nil { throw VaultFailure(.enrollmentStarted, code: Self.codeTransferWaiting) }
             let local = record.value
             onStep(.enroll)
             // An earlier request of this enrollment got no answer: its vault.enrolled may still be on its way, and a new
