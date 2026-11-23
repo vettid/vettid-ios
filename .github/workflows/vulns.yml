@@ -8,7 +8,15 @@ name: vulns
 #   package's own) is used only to build and test that package on its own,
 #   and may pin other versions; a finding there is a warning and goes in the
 #   weekly issue. The WebRTC framework (Packages/VettIDCallsWebRTC) is a binary
-#   target that no Package.resolved lists, so it is not covered here.
+#   target that no Package.resolved lists, and Chromium/WebRTC fixes have no
+#   OSV ecosystem, so osv-scanner can't see it; the webrtc job below checks
+#   only its age.
+# - webrtc: the WebRTC framework's pinned webrtc-sdk/Specs release (its
+#   Chromium milestone, the first number of 150.7871.04) is compared with the
+#   newest release there. Two or more milestones behind (WEBRTC_MAX_BEHIND) is
+#   a warning and goes in the weekly issue. This says the binary is old, not
+#   which fixes it lacks: nothing here reads WebRTC's or Chromium's
+#   advisories.
 # - govulncheck v1.9.0 over each Go module in scripts/ (reference and test-PKI
 #   generators; none is built into the app), with the Go each module's go.mod
 #   names, against vettid-vault's main (GOFLAGS=-mod=mod, so a newer vault
@@ -21,7 +29,9 @@ name: vulns
 # On pull requests and pushes to master, and weekly and on demand to catch
 # advisories published after the last change. On master, a scheduled or manual
 # run with a finding opens one issue, or comments on the one already open; a
-# clean run closes it.
+# clean run closes it. The issue is assigned to the repository variable
+# SECURITY_ASSIGNEE's login, or else to the repository's owner, so a finding
+# reaches a person.
 #
 # Actions are pinned by commit SHA (tag in the comment).
 
@@ -32,6 +42,11 @@ on:
   schedule:
     - cron: '23 6 * * 1' # Mondays, 06:23 UTC
   workflow_dispatch:
+    inputs:
+      webrtc_pinned:
+        description: "Test only: a webrtc-sdk release to judge instead of the pinned one (e.g. 140.0.0)"
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -149,12 +164,54 @@ jobs:
           done < <(git ls-files 'scripts/*/go.mod')
           echo "found=$found" >> "$GITHUB_OUTPUT"
 
+  webrtc:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    env:
+      # Warn at this many Chromium milestones behind the newest release.
+      WEBRTC_MAX_BEHIND: 2
+    outputs:
+      stale: ${{ steps.age.outputs.stale }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: the WebRTC framework's milestone against webrtc-sdk's newest
+        id: age
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OVERRIDE: ${{ github.event_name == 'workflow_dispatch' && inputs.webrtc_pinned || '' }}
+        run: |
+          pkg=Packages/VettIDCallsWebRTC/Package.swift
+          pinned=$(sed -n 's|.*webrtc-sdk/Specs/releases/download/\([0-9][0-9.]*\)/WebRTC.xcframework.zip.*|\1|p' "$pkg")
+          [ "$(printf '%s\n' "$pinned" | grep -c .)" = 1 ] || { echo "::error::no single webrtc-sdk release in $pkg"; exit 1; }
+          if [ -n "$OVERRIDE" ]; then
+            echo "::notice::test run: judging $OVERRIDE instead of the pinned $pinned"
+            pinned=$OVERRIDE
+          fi
+          case $pinned in [0-9]*.*) ;; *) echo "::error::not a release: $pinned"; exit 1 ;; esac
+          # The newest milestone among the published releases (the list isn't
+          # in version order, and "latest" is only the most recent publish).
+          newest=$(gh api 'repos/webrtc-sdk/Specs/releases?per_page=50' \
+            --jq '[.[] | select(.draft | not) | select(.prerelease | not) | .tag_name | split(".")[0] | tonumber] | max') \
+            || { echo "::error::webrtc-sdk/Specs' releases could not be read"; exit 1; }
+          case $newest in ''|null|*[!0-9]*) echo "::error::no milestone in webrtc-sdk/Specs' releases"; exit 1 ;; esac
+          have=${pinned%%.*}
+          behind=$(( newest - have ))
+          echo "pinned $pinned (milestone $have); newest milestone $newest; behind $behind"
+          if [ "$behind" -ge "$WEBRTC_MAX_BEHIND" ]; then
+            echo "stale=true" >> "$GITHUB_OUTPUT"
+            echo "::warning::WebRTC: the pinned webrtc-sdk release $pinned is $behind Chromium milestones behind the newest ($newest); update Packages/VettIDCallsWebRTC"
+          else
+            echo "stale=false" >> "$GITHUB_OUTPUT"
+          fi
+
   issue:
     # One issue for all findings: opened, or commented on while open; a clean
     # run closes it. Only for scheduled and manual runs on master. A cancelled
     # run reports nothing; a scan that couldn't run is reported as such.
     if: ${{ !cancelled() && github.ref == 'refs/heads/master' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') }}
-    needs: [osv-scanner, govulncheck]
+    needs: [osv-scanner, govulncheck, webrtc]
     runs-on: ubuntu-26.04
     timeout-minutes: 5
     permissions:
@@ -169,6 +226,9 @@ jobs:
           OSV_PACKAGES: ${{ needs.osv-scanner.outputs.packages }}
           GOVULN: ${{ needs.govulncheck.result }}
           GOVULN_FOUND: ${{ needs.govulncheck.outputs.found }}
+          WEBRTC: ${{ needs.webrtc.result }}
+          WEBRTC_STALE: ${{ needs.webrtc.outputs.stale }}
+          ASSIGNEE: ${{ vars.SECURITY_ASSIGNEE || github.repository_owner }}
         run: |
           what=""
           if [ "$OSV" != success ]; then
@@ -186,15 +246,22 @@ jobs:
             what="$what
           - govulncheck: a Go module in scripts/ (tooling, not in the app) reaches a vulnerability (the job log names it)."
           fi
+          if [ "$WEBRTC" != success ]; then
+            what="$what
+          - webrtc: the WebRTC framework's age could not be checked (the job log names why)."
+          elif [ "$WEBRTC_STALE" = true ]; then
+            what="$what
+          - webrtc: the WebRTC framework (Packages/VettIDCallsWebRTC) is two or more Chromium milestones behind webrtc-sdk's newest release (the job log names both)."
+          fi
           title="security: vulnerability scan findings"
           gh label create security --color B60205 --description "Security findings" 2>/dev/null || true
           n=$(gh issue list --state open --search "in:title \"$title\"" --json number,title --jq "map(select(.title == \"$title\")) | .[0].number // empty")
           if [ -n "$what" ]; then
             if [ -n "$n" ]; then
               gh issue comment "$n" --body "Found again: $RUN$what"
-              gh issue edit "$n" --add-label security
+              gh issue edit "$n" --add-label security --add-assignee "$ASSIGNEE"
             else
-              gh issue create --title "$title" --label security --body "The vulnerability scan on master (.github/workflows/vulns.yml) found:$what
+              gh issue create --title "$title" --label security --assignee "$ASSIGNEE" --body "The vulnerability scan on master (.github/workflows/vulns.yml) found:$what
 
           See $RUN."
             fi
