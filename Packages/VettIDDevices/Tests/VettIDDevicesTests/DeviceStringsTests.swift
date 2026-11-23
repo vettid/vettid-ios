@@ -145,7 +145,7 @@ import Testing
     @Test func theTableHoldsEveryKeyOfTheCatalog() throws {
         let doc = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: Self.catalog)) as? [String: Any])
         let keys = Set(try #require((doc["strings"] as? [String: Any])?.keys))
-        #expect(keys == Set(Self.table.map(\.key)))
+        #expect(keys.subtracting(ItemWaysStringsTests.keys) == Set(Self.table.map(\.key)))
         #expect(Set(Self.table.map(\.key)).count == Self.table.count)
     }
 
