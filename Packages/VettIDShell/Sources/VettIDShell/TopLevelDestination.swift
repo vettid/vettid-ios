@@ -83,6 +83,8 @@ public enum ShellRoute: Hashable, Sendable {
     case connection(String)
     /// A device's page in Devices & agents (ANDROID-PLAN 0.1.53 AA1), by its `device_id`: from the list or a feed item.
     case device(String)
+    /// How an agent may use one item (ANDROID-PLAN 0.1.137 AA7), by the agent's `device_id` and the item's id, from the agent's page.
+    case itemWays(agentID: String, itemID: String)
     /// History searched for a device's name (ANDROID-PLAN 0.1.53 AA1; the vault's search matches device names, §10.9), from the
     /// device's page. [query] is the name as the device gave it; the search cuts it as it cuts every search.
     case deviceHistory(query: String)

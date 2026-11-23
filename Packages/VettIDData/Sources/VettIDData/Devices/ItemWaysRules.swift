@@ -116,7 +116,7 @@ public enum ItemWaysRules {
     /// Lower case rune by rune with the simple mapping, as Go's `strings.ToLower` (no final sigma, `İ` one rune). Swift's
     /// mapping of a single scalar is context free; the one scalar it maps to two (`İ`, U+0130, to `i` and a combining dot)
     /// is `i` in the simple mapping.
-    private static func simpleLower(_ s: String) -> [Unicode.Scalar] {
+    static func simpleLower(_ s: String) -> [Unicode.Scalar] {
         var out: [Unicode.Scalar] = []
         for c in s.unicodeScalars {
             let m = Array(c.properties.lowercaseMapping.unicodeScalars)
@@ -251,6 +251,55 @@ public enum ItemWaysRules {
     private static func sameHeader(_ a: String, _ b: String) -> Bool {
         let fold = { (s: String) in s.utf8.map { $0 >= 0x41 && $0 <= 0x5A ? $0 + 32 : $0 } }
         return fold(a) == fold(b)
+    }
+
+    /// [a] and [b] are the same settings, a `run.folders` of `[]` counting as none (the vault may answer either way).
+    public static func sameSettings(_ a: ItemWays, _ b: ItemWays) -> Bool { identical(norm(a), norm(b)) }
+
+    /// [a] and [b] are the same settings byte for byte (every string by its UTF-8 bytes, as ``same(_:_:)``, never Swift's `==`,
+    /// which takes canonically equivalent spellings for one string): what "nothing changed" means to a page (Save is offered only
+    /// for a difference the vault would see).
+    public static func identical(_ a: ItemWays?, _ b: ItemWays?) -> Bool {
+        guard let a, let b else { return a == nil && b == nil }
+        return same(a.agentID, b.agentID) && same(a.itemID, b.itemID) && a.version == b.version && a.ways == b.ways
+            && identical(a.run, b.run) && identical(a.proxy, b.proxy)
+    }
+
+    private static func identical(_ a: RunSettings?, _ b: RunSettings?) -> Bool {
+        guard let a, let b else { return a == nil && b == nil }
+        return a.each == b.each && list(a.programs, b.programs, programsIdentical) && foldersIdentical(a.folders, b.folders)
+    }
+
+    private static func programsIdentical(_ a: RunProgram, _ b: RunProgram) -> Bool {
+        same(a.program, b.program) && optSame(a.sha256, b.sha256) && optSame(a.path, b.path) && list(a.env, b.env, same)
+    }
+
+    private static func foldersIdentical(_ a: [RunFolder]?, _ b: [RunFolder]?) -> Bool {
+        guard let a, let b else { return a == nil && b == nil }
+        return list(a, b) { same($0.path, $1.path) && $0.write == $1.write }
+    }
+
+    private static func identical(_ a: ProxySettings?, _ b: ProxySettings?) -> Bool {
+        guard let a, let b else { return a == nil && b == nil }
+        return list(a.hosts, b.hosts, same) && same(a.header, b.header) && same(a.prefix, b.prefix)
+    }
+
+    private static func optSame(_ a: String?, _ b: String?) -> Bool {
+        guard let a, let b else { return a == nil && b == nil }
+        return same(a, b)
+    }
+
+    private static func list<T>(_ a: [T], _ b: [T], _ eq: (T, T) -> Bool) -> Bool {
+        a.count == b.count && zip(a, b).allSatisfy { eq($0, $1) }
+    }
+
+    private static func norm(_ w: ItemWays) -> ItemWays {
+        var w = w
+        if var r = w.run {
+            if r.folders?.isEmpty == true { r.folders = nil }
+            w.run = r
+        }
+        return w
     }
 
     /// Whether [next] allows more than [cur] (VAULT-MESSAGING §10.11 "Widening needs the member", as vettid-vault's `Widens`): a

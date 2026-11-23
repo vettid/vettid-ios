@@ -22,7 +22,16 @@ extension AppShell {
     @ViewBuilder func devicesDetail(_ route: ShellRoute) -> some View {
         switch route {
         case .device(let id):
-            if let devices { DeviceRoute(id, devices: devices, ownerChecks: ownerChecks, host: devicesHost) }
+            if let devices {
+                DeviceRoute(id, devices: devices, itemWays: itemWays, items: items, ownerChecks: ownerChecks, host: devicesHost)
+            }
+        case .itemWays(let agentID, let itemID):
+            if let devices, let itemWays, let items {
+                ItemWaysRoute(
+                    agentID: agentID, itemID: itemID, itemWays: itemWays, devices: devices, items: items, ownerChecks: ownerChecks,
+                    host: devicesHost
+                )
+            }
         case .pair(let held, let desktop):
             if let pairing { PairRoute(held: held, desktop: desktop, pairing: pairing, ownerChecks: ownerChecks, host: devicesHost) }
         case .deviceHistory(let query):
@@ -45,6 +54,8 @@ extension AppShell {
         h.onOpen = { model.openDevice($0) }
         h.onBack = { model.pop() }
         h.onOpenHistory = { model.openDeviceHistory($0) }
+        h.onOpenItemWays = { model.openItemWays(agentID: $0, itemID: $1) }
+        h.onOpenAlarm = { model.push(.alarm) }
         h.onPair = { model.openPair(desktop: false) }
         h.onPairDesktop = { model.openPair(desktop: true) }
         h.onOwnerCheck = { model.ownerCheck(holdOff: false) }

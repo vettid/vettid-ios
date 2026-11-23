@@ -360,7 +360,7 @@ struct AppRoot: View {
                         connections: vault.connections, connectionRequests: vault.connections, inviteInbox: inviteInbox,
                         messages: vault.messages, attachments: vault.attachments, feed: vault.feed, approvals: vault.approvals,
                         history: vault.history, historyExport: vault.historyExport, items: vault.items, sharing: vault.sharing,
-                        votes: vault.votes, devices: vault.devices, pairing: vault.pairing, move: move,
+                        votes: vault.votes, devices: vault.devices, itemWays: vault.itemWays, pairing: vault.pairing, move: move,
                         calls: calls.map { ShellCalls($0) }
                     ) { openPortal() }
                     .environment(\.accountDeletionURL, AccountDeletion.url(origin: environment.apiOrigin))

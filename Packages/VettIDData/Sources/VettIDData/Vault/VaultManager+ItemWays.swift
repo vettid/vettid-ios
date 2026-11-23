@@ -15,7 +15,8 @@ extension VaultManager {
             closeWindow: { try await ref.manager?.closeUnlockWindow() },
             // The setting alone (one `settings.get`), not the whole credential status.
             unlockTtl: { await ref.manager?.unlockTtlSetting() },
-            now: manager.config.now
+            now: manager.config.now,
+            hasItemWays: { ReleasePath.itemWays(ref.manager?.record.value.capabilities ?? []) }
         )
     }
 }

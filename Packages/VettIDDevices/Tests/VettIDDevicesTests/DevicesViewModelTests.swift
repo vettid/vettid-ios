@@ -375,9 +375,14 @@ import VettIDDataTesting
         let held = Mirror(reflecting: m).children.map(\.value).filter { Mirror(reflecting: $0).displayStyle == .class }
         let objects = held.compactMap { $0 as? AnyObject }
         let names = objects.map { String(describing: type(of: $0)) }
-        // The repository, the work it started: nothing else is an object it could call.
+        // The repository, the work it started and the tasks that follow it: nothing else is an object it could call. (AA7's items
+        // are given as the list-only ``ItemWaysList`` and the items' names, when there are any: none here.)
         #expect(objects.contains { $0 === fake })
-        #expect(objects.allSatisfy { $0 === fake || String(describing: type(of: $0)).hasSuffix("Work") }, "\(names)")
+        let allowed = { (o: AnyObject) -> Bool in
+            let n = String(describing: type(of: o))
+            return o === fake || n.hasSuffix("Work") || n.hasSuffix("TaskBag")
+        }
+        #expect(objects.allSatisfy(allowed), "\(names)")
         #expect(!objects.contains { $0 is any OwnerCheckRepository || $0 is any VaultRepository })
         m.askEndAccess()
         m.confirm()

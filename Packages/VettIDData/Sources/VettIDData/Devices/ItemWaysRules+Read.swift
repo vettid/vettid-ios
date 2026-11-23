@@ -21,14 +21,17 @@ extension ItemWaysRules {
             .flatMap { $0.count == items.count ? $0 : nil }
         let reads = items.enumerated().map { i, raw in
             let r = read(raw, strict.flatMap { try? $0[i].asObject() })
-            if let agentID, !same(r.agentID, agentID) { return r.with(ways: nil, foreign: true) }
+            if let agentID, !same(r.agentID, agentID) { return r.asForeign() }
             return r
         }
         var pairs = Set<[UInt8]>()
         let repeated = reads.contains { r in !pairs.insert(Array(r.agentID.utf8) + [0] + Array(r.itemID.utf8)).inserted }
         // Without the strict reading too, as for a duplicate member: no copy's settings can be sent back by a turn-off.
         let readOnly = { (r: ItemWaysRead) in
-            ItemWaysRead(agentID: r.agentID, itemID: r.itemID, ways: nil, rawWays: r.rawWays, strict: nil, foreign: r.foreign)
+            ItemWaysRead(
+                agentID: r.agentID, itemID: r.itemID, ways: nil, rawWays: r.rawWays, strict: nil, foreign: r.foreign,
+                answerHasFolders: r.answerHasFolders
+            )
         }
         return repeated ? reads.map(readOnly) : reads
     }
@@ -51,7 +54,10 @@ extension ItemWaysRules {
         let rawWays = (raw["ways"] as? [Any] ?? []).compactMap { $0 as? String }
         // The strict reading counts only when it is of the same item the lenient one names.
         let ways = strict.flatMap { try? parse($0) }.flatMap { same($0.agentID, agent) && same($0.itemID, item) ? $0 : nil }
-        return ItemWaysRead(agentID: agent, itemID: item, ways: ways, rawWays: rawWays, strict: strict)
+        // A real value: `"folders": null` is none.
+        let folders = (raw["run"] as? [String: Any])?["folders"]
+        let hasFolders = folders != nil && !(folders is NSNull)
+        return ItemWaysRead(agentID: agent, itemID: item, ways: ways, rawWays: rawWays, strict: strict, answerHasFolders: hasFolders)
     }
 
     private static let topMembers: Set<[UInt8]> = names("agent_id", "item_id", "version", "ways", "run", "proxy", "updated_at")

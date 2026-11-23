@@ -163,14 +163,20 @@ public struct ItemWaysRead: Sendable, CustomStringConvertible, CustomDebugString
     public let strict: JsonObject?
     /// Listed for another agent than the one asked about: read only, and never turned off from this agent's page.
     public let foreign: Bool
+    /// The answer carries `run.folders`, read or not (a read-only page's "Stop runs" text says the folders go too).
+    public let answerHasFolders: Bool
 
-    public init(agentID: String, itemID: String, ways: ItemWays?, rawWays: [String], strict: JsonObject? = nil, foreign: Bool = false) {
+    public init(
+        agentID: String, itemID: String, ways: ItemWays?, rawWays: [String], strict: JsonObject? = nil, foreign: Bool = false,
+        answerHasFolders: Bool = false
+    ) {
         self.agentID = agentID
         self.itemID = itemID
         self.ways = ways
         self.rawWays = rawWays
         self.strict = strict
         self.foreign = foreign
+        self.answerHasFolders = answerHasFolders
     }
 
     public var readOnly: Bool { ways == nil }
@@ -181,8 +187,14 @@ public struct ItemWaysRead: Sendable, CustomStringConvertible, CustomDebugString
     public var description: String { "ItemWaysRead" }
     public var debugDescription: String { "ItemWaysRead" }
 
+    /// The same read, listed for another agent than the one asked about: read only.
+    public func asForeign() -> ItemWaysRead { with(ways: nil, foreign: true) }
+
     func with(ways: ItemWays?, foreign: Bool) -> ItemWaysRead {
-        ItemWaysRead(agentID: agentID, itemID: itemID, ways: ways, rawWays: rawWays, strict: strict, foreign: foreign)
+        ItemWaysRead(
+            agentID: agentID, itemID: itemID, ways: ways, rawWays: rawWays, strict: strict, foreign: foreign,
+            answerHasFolders: answerHasFolders
+        )
     }
 }
 

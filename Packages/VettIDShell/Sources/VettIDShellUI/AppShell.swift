@@ -88,6 +88,7 @@ public struct AppShell: View {
     let sharing: (any SharingRepository)?
     let votes: (any VotesRepository)?
     let devices: (any DevicesRepository)?
+    let itemWays: (any ItemWaysRepository)?
     let pairing: (any PairingRepository)?
     private let move: (any MoveRepository)?
     let calls: ShellCalls?
@@ -143,6 +144,7 @@ public struct AppShell: View {
         sharing: (any SharingRepository)? = nil,
         votes: (any VotesRepository)? = nil,
         devices: (any DevicesRepository)? = nil,
+        itemWays: (any ItemWaysRepository)? = nil,
         pairing: (any PairingRepository)? = nil,
         move: (any MoveRepository)? = nil,
         calls: ShellCalls? = nil,
@@ -178,6 +180,7 @@ public struct AppShell: View {
         self.sharing = sharing
         self.votes = votes
         self.devices = devices
+        self.itemWays = itemWays
         self.pairing = pairing
         self.move = move
         self.calls = calls
@@ -425,7 +428,7 @@ public struct AppShell: View {
             itemsDetail(route)
         case .vote, .connectionVotes:
             votesDetail(route)
-        case .device, .deviceHistory, .pair: devicesDetail(route)
+        case .device, .itemWays, .deviceHistory, .pair: devicesDetail(route)
         }
     }
 

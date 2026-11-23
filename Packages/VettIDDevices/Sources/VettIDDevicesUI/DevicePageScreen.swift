@@ -16,6 +16,9 @@ public struct DevicePageActions {
     public var onDismissFailure: @MainActor () -> Void = {}
     public var onAccessEndedShown: @MainActor () -> Void = {}
     public var onRetry: @MainActor () -> Void = {}
+    /// An item of "Items it may use" (AA7): its id.
+    public var onOpenWayItem: @MainActor (String) -> Void = { _ in }
+    public var onRetryWayItems: @MainActor () -> Void = {}
 
     public init() {}
 }
@@ -174,6 +177,7 @@ private struct PageContent: View {
                 .padding(.top, Spacing.s)
                 if let f = state.failure { failure(f, d) }
                 accessCard(d)
+                if state.wayItemsAvailable { wayItemsCard }
                 aboutCard(d)
             }
             .padding(.bottom, 96)
@@ -229,6 +233,49 @@ private struct PageContent: View {
             }
         }
         .accessibilityIdentifier("access_card")
+    }
+
+    /// AA7: "Items it may use", one row per item the agent's rules include, with the ways it allows; a tap opens the item's page.
+    private var wayItemsCard: some View {
+        DetailCard {
+            CardTitle(ItemWaysStrings.waysItemsTitle)
+            if let e = state.wayItemsError {
+                Text(ItemWaysStrings.waysItemsFailed).vettIDFont(.bodyMedium).foregroundStyle(colors.error)
+                Text(e.message(timeScale: timeScale)).vettIDFont(.bodySmall).foregroundStyle(colors.onSurfaceVariant)
+                DeviceTextAction(label: ItemWaysStrings.waysRetry, identifier: "ways_items_retry", action: actions.onRetryWayItems)
+            } else if !state.wayItemsLoaded {
+                Text(ItemWaysStrings.waysItemLoading).vettIDFont(.bodyMedium).foregroundStyle(colors.onSurfaceVariant)
+            }
+            ForEach(state.wayItems) { row in
+                Button { actions.onOpenWayItem(row.itemID) } label: {
+                    VStack(alignment: .leading, spacing: Spacing.xxs) {
+                        Text(rowName(row)).vettIDFont(.bodyLarge).foregroundStyle(colors.onSurface)
+                        Text(row.ways.map(wayLabel).joined(separator: ItemWaysStrings.waysShortJoin))
+                            .vettIDFont(.bodySmall)
+                            .foregroundStyle(colors.onSurfaceVariant)
+                    }
+                    .frame(maxWidth: .infinity, minHeight: Spacing.touchTarget, alignment: .leading)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("way_item_\(row.itemID)")
+            }
+        }
+        .accessibilityIdentifier("way_items_card")
+    }
+
+    /// The item's name from the cache; "Loading…" until the names are read, "An item you no longer have" after.
+    private func rowName(_ row: WayItemRow) -> String {
+        row.name ?? (row.namesLoaded ? ItemWaysStrings.waysItemGone : ItemWaysStrings.waysItemLoading)
+    }
+
+    private func wayLabel(_ w: ItemWay) -> String {
+        switch w {
+        case .use: ItemWaysStrings.waysShortUse
+        case .run: ItemWaysStrings.waysShortRun
+        case .proxy: ItemWaysStrings.waysShortProxy
+        case .reveal: ItemWaysStrings.waysShortReveal
+        }
     }
 
     private func aboutCard(_ d: DeviceInfo) -> some View {

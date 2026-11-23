@@ -1233,6 +1233,1228 @@
           }
         }
       }
+    },
+    "ways_add": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add"
+          }
+        }
+      }
+    },
+    "ways_add_host": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add a host"
+          }
+        }
+      }
+    },
+    "ways_add_program": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add a program"
+          }
+        }
+      }
+    },
+    "ways_add_variable": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add a variable"
+          }
+        }
+      }
+    },
+    "ways_alarm": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Settings can't be widened while a credential alarm is open"
+          }
+        }
+      }
+    },
+    "ways_alarm_open": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open the alarm"
+          }
+        }
+      }
+    },
+    "ways_bad_request": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "These settings could not be saved. Your vault answered: %@."
+          }
+        }
+      }
+    },
+    "ways_bad_request_fallback": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "These settings could not be saved: your vault refused one of them. Check the programs, the variables, the folders, the hosts, the header name and the prefix."
+          }
+        }
+      }
+    },
+    "ways_batch_file": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This is a Windows batch file. Its fingerprint covers this file only, not the programs it starts (for an npm tool, node and its packages)."
+          }
+        }
+      }
+    },
+    "ways_cancel": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cancel"
+          }
+        }
+      }
+    },
+    "ways_change_program_note": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Changing the program forgets its fingerprint."
+          }
+        }
+      }
+    },
+    "ways_changed_elsewhere": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Another device changed these settings."
+          }
+        }
+      }
+    },
+    "ways_conflict": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Another device changed these settings. Here are the current ones."
+          }
+        }
+      }
+    },
+    "ways_each": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ask me before each run"
+          }
+        }
+      }
+    },
+    "ways_each_needs_program": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "List a program to turn this off."
+          }
+        }
+      }
+    },
+    "ways_each_off_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Runs of the listed programs then go ahead without asking you. %@ chooses the arguments each time, and you won't see them."
+          }
+        }
+      }
+    },
+    "ways_each_off_help": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A run of a listed program goes ahead without asking when its file matches the recorded fingerprint. A first or changed program, and runs in your folders or with files, still ask you every time. Shells, interpreters and launchers your vault recognizes by name still ask every time. Other programs that can run commands, such as git or npm, do not."
+          }
+        }
+      }
+    },
+    "ways_each_off_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stop asking before each run?"
+          }
+        }
+      }
+    },
+    "ways_header_bad": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This header can't carry the key."
+          }
+        }
+      }
+    },
+    "ways_header_field": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Header name"
+          }
+        }
+      }
+    },
+    "ways_host_duplicate": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This host is already in the list."
+          }
+        }
+      }
+    },
+    "ways_host_field": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Host"
+          }
+        }
+      }
+    },
+    "ways_host_hint": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A host name, such as api.example.com, with :port if it is not 443."
+          }
+        }
+      }
+    },
+    "ways_host_ip": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "An IP address can't be used; give the host's name."
+          }
+        }
+      }
+    },
+    "ways_host_local": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "localhost and names without a dot can't be used."
+          }
+        }
+      }
+    },
+    "ways_host_not_host": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Give a host name, such as api.example.com."
+          }
+        }
+      }
+    },
+    "ways_host_too_many": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You can add at most 8 hosts."
+          }
+        }
+      }
+    },
+    "ways_host_wildcard": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wildcards can't be used."
+          }
+        }
+      }
+    },
+    "ways_hosts_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hosts it may be sent to"
+          }
+        }
+      }
+    },
+    "ways_item_gone": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "An item you no longer have"
+          }
+        }
+      }
+    },
+    "ways_item_loading": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Loading…"
+          }
+        }
+      }
+    },
+    "ways_items_failed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "These items could not be loaded."
+          }
+        }
+      }
+    },
+    "ways_items_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Items it may use"
+          }
+        }
+      }
+    },
+    "ways_load_failed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "These settings could not be loaded."
+          }
+        }
+      }
+    },
+    "ways_locked_again": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your credential locked again before the settings were saved. Try again."
+          }
+        }
+      }
+    },
+    "ways_not_included": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ can no longer use this item: none of its rules includes it."
+          }
+        }
+      }
+    },
+    "ways_password_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Letting %@ do more with %@ needs your credential password, so only you can do it. Enter your credential password."
+          }
+        }
+      }
+    },
+    "ways_password_confirm": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Confirm"
+          }
+        }
+      }
+    },
+    "ways_password_label": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Credential password"
+          }
+        }
+      }
+    },
+    "ways_password_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Confirm with your credential password"
+          }
+        }
+      }
+    },
+    "ways_pin_close": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Close"
+          }
+        }
+      }
+    },
+    "ways_pin_forget": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Forget fingerprint"
+          }
+        }
+      }
+    },
+    "ways_pin_forget_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The next run of %@ asks you again, and approving it records the file then."
+          }
+        }
+      }
+    },
+    "ways_pin_forget_confirm": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Forget"
+          }
+        }
+      }
+    },
+    "ways_pin_forget_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Forget this fingerprint?"
+          }
+        }
+      }
+    },
+    "ways_pin_forgotten": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fingerprint forgotten when you save"
+          }
+        }
+      }
+    },
+    "ways_pin_none": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No fingerprint yet. The first run asks you, and approving it records that file."
+          }
+        }
+      }
+    },
+    "ways_pin_recorded": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fingerprint recorded: %@, at %@"
+          }
+        }
+      }
+    },
+    "ways_prefix_bad": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "At most 32 plain characters: letters, digits, spaces and punctuation."
+          }
+        }
+      }
+    },
+    "ways_prefix_field": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Before the key"
+          }
+        }
+      }
+    },
+    "ways_program_characters": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This can't hold a control or invisible character."
+          }
+        }
+      }
+    },
+    "ways_program_duplicate": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This program is already in the list."
+          }
+        }
+      }
+    },
+    "ways_program_field": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Program"
+          }
+        }
+      }
+    },
+    "ways_program_hint": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A full path, such as /usr/bin/git or C:\\Program Files\\Git\\cmd\\git.exe, or a program name the connector finds on its own search path, such as git (on Windows, git.exe)."
+          }
+        }
+      }
+    },
+    "ways_program_network": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A network path (\\\\server\\…) can't be used."
+          }
+        }
+      }
+    },
+    "ways_program_no_variables": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No variables"
+          }
+        }
+      }
+    },
+    "ways_program_not_path": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Give a full path or a program name."
+          }
+        }
+      }
+    },
+    "ways_program_parts": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A path can't hold an empty part, . or .., or a colon after the drive."
+          }
+        }
+      }
+    },
+    "ways_program_tilde": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remove the ~ from the program's name; on Windows, give its full long name."
+          }
+        }
+      }
+    },
+    "ways_program_too_long": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "At most 4,096 bytes."
+          }
+        }
+      }
+    },
+    "ways_program_too_many": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You can add at most 16 programs."
+          }
+        }
+      }
+    },
+    "ways_programs_none": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No programs listed. The agent may ask to run any program, and every run asks you."
+          }
+        }
+      }
+    },
+    "ways_programs_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Programs it may run"
+          }
+        }
+      }
+    },
+    "ways_proxy": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Send it to an API for the agent"
+          }
+        }
+      }
+    },
+    "ways_proxy_off_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The hosts and the header you set are removed."
+          }
+        }
+      }
+    },
+    "ways_proxy_off_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stop sending %@ to an API?"
+          }
+        }
+      }
+    },
+    "ways_read_only": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This item has settings this version of VettID can't show. Update VettID to change them."
+          }
+        }
+      }
+    },
+    "ways_read_only_locked": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your vault asked for your credential password for this change, so it was not saved. Update VettID to change these settings."
+          }
+        }
+      }
+    },
+    "ways_remove": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remove"
+          }
+        }
+      }
+    },
+    "ways_remove_last_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "With no programs listed, %@ may ask to run any program, and every run asks you."
+          }
+        }
+      }
+    },
+    "ways_remove_last_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remove the last program?"
+          }
+        }
+      }
+    },
+    "ways_remove_program": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remove program"
+          }
+        }
+      }
+    },
+    "ways_retry": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Try again"
+          }
+        }
+      }
+    },
+    "ways_reveal": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "May be shown to agents"
+          }
+        }
+      }
+    },
+    "ways_reveal_note": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Off: the agent can use it without seeing it. On: the agent's app may keep the value in its history."
+          }
+        }
+      }
+    },
+    "ways_reveal_on_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You are asked each time before it sees the value. Once you approve, the value goes to the agent's app, which may keep it in its history or logs. It may also reach the AI service that the agent's app uses. VettID can't remove it from any of these places."
+          }
+        }
+      }
+    },
+    "ways_reveal_on_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Let %@ see %@?"
+          }
+        }
+      }
+    },
+    "ways_run": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Run programs with it"
+          }
+        }
+      }
+    },
+    "ways_run_off_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The programs you listed, their variables and their recorded fingerprints are removed."
+          }
+        }
+      }
+    },
+    "ways_run_off_body_folders": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The programs you listed, their variables, their recorded fingerprints and the folders runs may use are removed."
+          }
+        }
+      }
+    },
+    "ways_run_off_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stop runs with %@?"
+          }
+        }
+      }
+    },
+    "ways_runs_commands": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ can run other commands given in its arguments, so the agent could use it to run any command with your secret. Asking before each run is safer for it."
+          }
+        }
+      }
+    },
+    "ways_save": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Save"
+          }
+        }
+      }
+    },
+    "ways_saved": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Saved"
+          }
+        }
+      }
+    },
+    "ways_sent_as": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sent as: %@: %@••••••••"
+          }
+        }
+      }
+    },
+    "ways_sent_note": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The key is sent only to these hosts, over a verified connection. The agent is not given the key."
+          }
+        }
+      }
+    },
+    "ways_short_join": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": " · "
+          }
+        }
+      }
+    },
+    "ways_short_proxy": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Send to an API"
+          }
+        }
+      }
+    },
+    "ways_short_reveal": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "May be shown"
+          }
+        }
+      }
+    },
+    "ways_short_run": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Run programs"
+          }
+        }
+      }
+    },
+    "ways_short_use": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Use without seeing it"
+          }
+        }
+      }
+    },
+    "ways_show_current": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show the current ones"
+          }
+        }
+      }
+    },
+    "ways_string_empty": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "(empty)"
+          }
+        }
+      }
+    },
+    "ways_string_escaped": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "escaped character %@"
+          }
+        }
+      }
+    },
+    "ways_string_lookalike": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Some characters here may look like others."
+          }
+        }
+      }
+    },
+    "ways_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "How %@ may use %@"
+          }
+        }
+      }
+    },
+    "ways_turn_off": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Turn off"
+          }
+        }
+      }
+    },
+    "ways_turn_on": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Turn on"
+          }
+        }
+      }
+    },
+    "ways_use": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Use without seeing it"
+          }
+        }
+      }
+    },
+    "ways_use_note": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your vault uses the value for the agent and gives it only the result."
+          }
+        }
+      }
+    },
+    "ways_variable_field": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Variable name"
+          }
+        }
+      }
+    },
+    "ways_variable_form": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Capital letters, digits and _ only, not starting with a digit, at most 64."
+          }
+        }
+      }
+    },
+    "ways_variable_note": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The agent can then give this program any value it chooses in this variable."
+          }
+        }
+      }
+    },
+    "ways_variable_too_many": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "At most 32 variables."
+          }
+        }
+      }
+    },
+    "ways_variables_none": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "None. The agent can't give this program any other variables."
+          }
+        }
+      }
+    },
+    "ways_variables_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Variables it may receive"
+          }
+        }
+      }
+    },
+    "ways_window_close": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Close it now"
+          }
+        }
+      }
+    },
+    "ways_window_open": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "VettID could not close the credential unlock window after saving these settings. It closes by itself once it has not been used for %lld minute."
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "VettID could not close the credential unlock window after saving these settings. It closes by itself once it has not been used for %lld minutes."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "ways_window_plain": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "VettID could not close the credential unlock window after saving these settings. It closes by itself."
+          }
+        }
+      }
+    },
+    "ways_window_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The unlock window may still be open"
+          }
+        }
+      }
     }
   },
   "version": "1.0"
