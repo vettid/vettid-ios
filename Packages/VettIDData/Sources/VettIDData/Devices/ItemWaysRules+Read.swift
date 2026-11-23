@@ -21,7 +21,7 @@ extension ItemWaysRules {
             .flatMap { $0.count == items.count ? $0 : nil }
         let reads = items.enumerated().map { i, raw in
             let r = read(raw, strict.flatMap { try? $0[i].asObject() })
-            if let agentID, !same(r.agentID, agentID) { return r.with(ways: nil, foreign: true) }
+            if let agentID, !same(r.agentID, agentID) { return r.asForeign() }
             return r
         }
         var pairs = Set<[UInt8]>()
@@ -51,7 +51,8 @@ extension ItemWaysRules {
         let rawWays = (raw["ways"] as? [Any] ?? []).compactMap { $0 as? String }
         // The strict reading counts only when it is of the same item the lenient one names.
         let ways = strict.flatMap { try? parse($0) }.flatMap { same($0.agentID, agent) && same($0.itemID, item) ? $0 : nil }
-        return ItemWaysRead(agentID: agent, itemID: item, ways: ways, rawWays: rawWays, strict: strict)
+        let hasFolders = (raw["run"] as? [String: Any])?["folders"] != nil
+        return ItemWaysRead(agentID: agent, itemID: item, ways: ways, rawWays: rawWays, strict: strict, answerHasFolders: hasFolders)
     }
 
     private static let topMembers: Set<[UInt8]> = names("agent_id", "item_id", "version", "ways", "run", "proxy", "updated_at")

@@ -67,6 +67,79 @@ public enum ItemWaysSave: Sendable, CustomStringConvertible {
     }
 }
 
+/// A `sync.event` the agent's page and the item's page read again for (ANDROID-PLAN 0.1.137 AA7): `leash.item.changed`, and the
+/// `share.rule.*` events that make the rules read again. Mirrors vettid-android `AgentChange.Item` and `AgentChange.Rule`; [seq]
+/// makes every event its own value, so that a follower sees each one.
+public struct ItemWaysEvent: Equatable, Sendable {
+    public enum Kind: Equatable, Sendable {
+        /// The ways [agentID] may use [itemID] changed; [version] is the new one when it reads. [deleted]: the event has no
+        /// `version` (the item left every rule of the agent); a `version` that does not read is not taken for a deletion.
+        case item(agentID: String, itemID: String, version: Int64?, deleted: Bool)
+        /// `share.rule.changed` or `share.rule.deleted`: they name no agent.
+        case rule
+    }
+
+    public let seq: Int
+    public let kind: Kind
+
+    public init(seq: Int, kind: Kind) {
+        self.seq = seq
+        self.kind = kind
+    }
+
+    /// The event concerns [agentID]'s page.
+    public func concerns(_ agentID: String) -> Bool {
+        switch kind {
+        case .item(let agent, _, _, _): same(agent, agentID)
+        case .rule: true
+        }
+    }
+
+    /// The event [m] announces, or nil for one these pages do not read for.
+    static func of(_ m: VaultMessage, seq: Int) -> ItemWaysEvent? {
+        guard m.type == "sync.event" else { return nil }
+        let o = m.object
+        switch VaultJSON.string(o, "kind") {
+        case "leash.item.changed":
+            guard let agent = VaultJSON.string(o, "agent_id"), !agent.isEmpty, let item = VaultJSON.string(o, "item_id"), !item.isEmpty
+            else { return nil }
+            let version = VaultJSON.int(o, "version")
+            return ItemWaysEvent(seq: seq, kind: .item(agentID: agent, itemID: item, version: version, deleted: !o.has("version")))
+        case "share.rule.changed", "share.rule.deleted":
+            return ItemWaysEvent(seq: seq, kind: .rule)
+        default:
+            return nil
+        }
+    }
+}
+
+/// What an agent's page reads of how the agent may use its items (AA7): the list, never a save, so the page holds nothing
+/// that signs or opens the unlock window. Mirrors vettid-android `ItemWaysList`.
+@MainActor
+public protocol ItemWaysList: AnyObject, Observable, Sendable {
+    /// The items each agent's rules include, as last read (agent id to its list); memory only.
+    var items: [String: [ItemWaysRead]] { get }
+    /// The vault lists `item_ways` (§11.10.9; decision 17): without it nothing of AA7 is shown or read.
+    var listed: Bool { get }
+    /// The last event the pages read again for.
+    var event: ItemWaysEvent? { get }
+
+    func list(_ agentID: String) async throws -> [ItemWaysRead]
+}
+
+/// What the item's page knows of how an agent may use its items (ANDROID-PLAN 0.1.137 AA7). Mirrors vettid-android
+/// `ItemWaysRepository`.
+@MainActor
+public protocol ItemWaysRepository: ItemWaysList {
+    /// A save opened the window and could not lock it again (the votes' notice, with **Close it now**).
+    var windowNotClosed: WindowNotClosed? { get }
+
+    func read(_ agentID: String, _ itemID: String) async throws -> ItemWaysRead?
+    func save(_ cur: ItemWaysRead, _ next: ItemWays, password: String?, resent: Bool) async throws -> ItemWaysSave
+    func turnOff(_ cur: ItemWaysRead, _ way: String) async throws -> ItemWaysSave
+    func closeWindowNow() async throws
+}
+
 /// How an agent may use its items (ANDROID-PLAN 0.1.137 AA7; VAULT-MESSAGING §10.11): `leash.item.list` and `leash.item.set`.
 /// The list is held in memory only, per agent, and cleared at lock and at the hold (``clear()``). A save that widens
 /// (``ItemWaysRules/widens(_:_:)``) asks for the password every time and opens the unlock window with it (decision 4, as for
@@ -74,11 +147,13 @@ public enum ItemWaysSave: Sendable, CustomStringConvertible {
 /// Mirrors vettid-android `ItemWaysManager`.
 @MainActor
 @Observable
-public final class ItemWaysManager {
+public final class ItemWaysManager: ItemWaysRepository {
     /// The items each agent's rules include, as last read (agent id to its list).
     public private(set) var items: [String: [ItemWaysRead]] = [:]
     /// A save opened the window and could not lock it again (the votes' notice, with **Close it now**).
     public private(set) var windowNotClosed: WindowNotClosed?
+    /// The last `leash.item.changed` or `share.rule.*` event (``onEvent(_:)``).
+    public private(set) var event: ItemWaysEvent?
 
     @ObservationIgnored private let ops: @MainActor () async throws -> any ItemWaysOps
     /// The credential's unlock window: until when it is open, as this app opened it.
@@ -88,6 +163,9 @@ public final class ItemWaysManager {
     /// The window's length, for the notice of a lock that failed.
     @ObservationIgnored private let unlockTtl: @MainActor () async -> Int?
     @ObservationIgnored private let now: @MainActor () -> Date
+    /// Whether the vault lists `item_ways`.
+    @ObservationIgnored private let hasItemWays: @MainActor () -> Bool
+    @ObservationIgnored private var eventSeq = 0
     /// Bumped by ``clear()``: an answer to a request sent before it is not kept.
     @ObservationIgnored private var generation = 0
 
@@ -108,7 +186,8 @@ public final class ItemWaysManager {
         openWindow: @escaping @MainActor (String) async throws -> Void = { _ in },
         closeWindow: @escaping @MainActor () async throws -> Void = {},
         unlockTtl: @escaping @MainActor () async -> Int? = { nil },
-        now: @escaping @MainActor () -> Date = { Date() }
+        now: @escaping @MainActor () -> Date = { Date() },
+        hasItemWays: @escaping @MainActor () -> Bool = { false }
     ) {
         self.ops = ops
         self.windowUntil = windowUntil
@@ -116,6 +195,15 @@ public final class ItemWaysManager {
         self.closeWindow = closeWindow
         self.unlockTtl = unlockTtl
         self.now = now
+        self.hasItemWays = hasItemWays
+    }
+
+    public var listed: Bool { hasItemWays() }
+
+    /// A `sync.event` that the pages of AA7 read again for (``ItemWaysEvent``).
+    public func onEvent(_ m: VaultMessage) {
+        eventSeq += 1
+        if let e = ItemWaysEvent.of(m, seq: eventSeq) { event = e }
     }
 
     private static func unreadable() -> VaultFailure { VaultFailure(.other, code: codeUnreadable) }
@@ -124,6 +212,7 @@ public final class ItemWaysManager {
     public func clear() {
         generation += 1
         items = [:]
+        event = nil
     }
 
     /// **Close it now**: locks the window; the notice goes only when that went through.

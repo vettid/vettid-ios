@@ -74,6 +74,7 @@ extension VaultManager {
     /// One vault event for the devices and a pairing (only while the vault takes events, ``onEvent(_:)``).
     func devicesEvent(_ m: VaultMessage) {
         devices.onEvent(m)
+        itemWays.onEvent(m)
         pairing.onEvent(m)
     }
 

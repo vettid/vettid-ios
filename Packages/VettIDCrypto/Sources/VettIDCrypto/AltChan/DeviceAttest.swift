@@ -86,6 +86,8 @@ public enum Capabilities {
     public static let recoveryOffered = "recovery_offered"
     /// (0.83.3) `other_rows` and `rows_unavailable` of `vote.results.submit` (§10.19.6 step 3): sent only to a vault with it.
     public static let voteRows = "vote_rows"
+    /// (VAULT-MESSAGING 0.91.0, §10.11) `leash.item.list` and `leash.item.set`: how an agent may use an item (ANDROID-PLAN 0.1.137 AA7).
+    public static let itemWays = "item_ways"
 
     public static let member = "capabilities"
     private static let maxNames = 32

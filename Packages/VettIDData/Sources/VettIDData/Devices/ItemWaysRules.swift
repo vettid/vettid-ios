@@ -116,7 +116,7 @@ public enum ItemWaysRules {
     /// Lower case rune by rune with the simple mapping, as Go's `strings.ToLower` (no final sigma, `İ` one rune). Swift's
     /// mapping of a single scalar is context free; the one scalar it maps to two (`İ`, U+0130, to `i` and a combining dot)
     /// is `i` in the simple mapping.
-    private static func simpleLower(_ s: String) -> [Unicode.Scalar] {
+    static func simpleLower(_ s: String) -> [Unicode.Scalar] {
         var out: [Unicode.Scalar] = []
         for c in s.unicodeScalars {
             let m = Array(c.properties.lowercaseMapping.unicodeScalars)
@@ -251,6 +251,18 @@ public enum ItemWaysRules {
     private static func sameHeader(_ a: String, _ b: String) -> Bool {
         let fold = { (s: String) in s.utf8.map { $0 >= 0x41 && $0 <= 0x5A ? $0 + 32 : $0 } }
         return fold(a) == fold(b)
+    }
+
+    /// [a] and [b] are the same settings, a `run.folders` of `[]` counting as none (the vault may answer either way).
+    public static func sameSettings(_ a: ItemWays, _ b: ItemWays) -> Bool { norm(a) == norm(b) }
+
+    private static func norm(_ w: ItemWays) -> ItemWays {
+        var w = w
+        if var r = w.run {
+            if r.folders?.isEmpty == true { r.folders = nil }
+            w.run = r
+        }
+        return w
     }
 
     /// Whether [next] allows more than [cur] (VAULT-MESSAGING §10.11 "Widening needs the member", as vettid-vault's `Widens`): a
