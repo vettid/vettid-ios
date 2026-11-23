@@ -31,9 +31,10 @@ extension VaultApi {
     }
 
     /// `leash.item.list{agent_id, item_id?}` (§10.11, ANDROID-PLAN 0.1.137 AA7): `{items: [<item_ways>]}`, each item the agent's
-    /// rules include, as the body's bytes (`{}` when empty). Mirrors vettid-android `leashItemList` over
-    /// `VaultDevice.opRaw`; here ``VaultDevice/op(_:body:timeout:innerID:)`` already returns the body's bytes, and a reply with
-    /// a duplicate member is refused when the reply is read (``StrictJson``), before it gets here.
+    /// rules include, as the body's bytes (an empty body is `{}`, which has no `items` and is read as unreadable). Mirrors
+    /// vettid-android `leashItemList` over `VaultDevice.opRaw`; here ``VaultDevice/op(_:body:timeout:innerID:)`` already returns
+    /// the body's bytes, and a reply with a duplicate member is refused when the reply is read (``StrictJson``), before it gets
+    /// here.
     public func leashItemList(agentID: String, itemID: String? = nil) async throws -> [UInt8] {
         let b = JsonBuilder().string("agent_id", agentID)
         if let itemID { b.string("item_id", itemID) }

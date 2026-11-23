@@ -227,6 +227,41 @@ final class FakeWindow {
         }
     }
 
+    /// A save the vault answers after a clear is saved, but the list held from before is not touched.
+    @Test func aSaveAnsweredAfterAClearLeavesTheListAlone() async throws {
+        let ops = FakeItemWaysOps()
+        let m = manager(ops, FakeWindow())
+        _ = try await m.list("a1")
+        let cur = try read(#"{"agent_id":"a1","item_id":"i1","version":1,"ways":["use","reveal"]}"#)
+        ops.setGate = TestDeferred<Void>()
+        ops.answer = #"{"agent_id":"a1","item_id":"i1","version":2,"ways":["use"]}"#
+        let job = Task { @MainActor in try await m.save(cur, try narrowed(cur), password: nil) }
+        try await ops.setEntered.value()
+        m.clear()
+        ops.setGate?.complete(())
+        _ = try await job.value
+        #expect(m.items.isEmpty)
+    }
+
+    /// A read or a save of a1's i1 replaces that entry only: a2's list and a1's other item stay as they were.
+    @Test func aReadOrASaveTouchesItsOwnEntryOnly() async throws {
+        let ops = FakeItemWaysOps()
+        let m = manager(ops, FakeWindow())
+        ops.listed = #"{"items":[{"agent_id":"a1","item_id":"i1","version":1,"ways":["use"]},{"agent_id":"a1","item_id":"i2","version":1,"ways":["use"]}]}"#
+        _ = try await m.list("a1")
+        ops.listed = #"{"items":[{"agent_id":"a2","item_id":"i1","version":4,"ways":["use"]}]}"#
+        _ = try await m.list("a2")
+        ops.listed = #"{"items":[{"agent_id":"a1","item_id":"i1","version":7,"ways":["use"]}]}"#
+        _ = try await m.read("a1", "i1")
+        #expect(m.items["a1"]?.map { $0.ways?.version } == [7, 1])
+        #expect(m.items["a2"]?.map { $0.ways?.version } == [4])
+        let cur = try read(#"{"agent_id":"a1","item_id":"i1","version":7,"ways":["use","reveal"]}"#)
+        ops.answer = #"{"agent_id":"a1","item_id":"i1","version":8,"ways":["use"]}"#
+        _ = try await m.save(cur, try narrowed(cur), password: nil)
+        #expect(m.items["a1"]?.map { $0.ways?.version } == [8, 1])
+        #expect(m.items["a2"]?.map { $0.ways?.version } == [4])
+    }
+
     @Test func aListThatIsNotAListIsAFailureNotNoItems() async throws {
         let ops = FakeItemWaysOps()
         ops.listed = "[]"

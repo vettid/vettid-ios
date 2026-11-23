@@ -6,8 +6,9 @@ import VettIDCrypto
 // and are read with ``StrictJson`` (a duplicate member anywhere is refused). Mirrors vettid-android `ItemWaysRules`.
 extension ItemWaysRules {
     /// Reads `leash.item.list`'s answer (`{items: [<item_ways>]}`) strictly. An answer that does not read strictly (a duplicate
-    /// member anywhere) is read leniently, and every item in it is read only; an item of another agent than [agentID] too. Nil
-    /// when the answer is not a list of objects at all (it is never "no items").
+    /// member anywhere) is read leniently, and every item in it is read only; an item of another agent than [agentID] too, and
+    /// every item when one (agent, item) pair is listed twice (which copy to edit, and to judge a widening against, is unknown).
+    /// Nil when the answer is not a list of objects at all (it is never "no items").
     public static func list(_ answer: [UInt8], agentID: String? = nil) -> [ItemWaysRead]? {
         guard let lenient = lenientObject(answer), let listed = lenient["items"] as? [Any] else { return nil }
         var items: [[String: Any]] = []
@@ -18,11 +19,14 @@ extension ItemWaysRules {
         let strict = (try? StrictJson.parseObject(answer))
             .flatMap { try? $0.array("items") }
             .flatMap { $0.count == items.count ? $0 : nil }
-        return items.enumerated().map { i, raw in
+        let reads = items.enumerated().map { i, raw in
             let r = read(raw, strict.flatMap { try? $0[i].asObject() })
             if let agentID, !same(r.agentID, agentID) { return r.with(ways: nil, foreign: true) }
             return r
         }
+        var pairs = Set<[UInt8]>()
+        let repeated = reads.contains { r in !pairs.insert(Array(r.agentID.utf8) + [0] + Array(r.itemID.utf8)).inserted }
+        return repeated ? reads.map { $0.with(ways: nil, foreign: $0.foreign) } : reads
     }
 
     /// Reads one `<item_ways>` answer (`leash.item.set`'s) strictly, as ``list(_:agentID:)`` reads each item.

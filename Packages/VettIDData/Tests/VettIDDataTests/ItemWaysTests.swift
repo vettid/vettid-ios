@@ -171,6 +171,31 @@ private func rules() -> ItemWays { ItemWays(agentID: "a1", itemID: "i1") }
     }
 
     /// One item's settings are never shown under another item's name.
+    /// One (agent, item) pair listed twice: every item is read only, the other items included (which copy to edit is unknown).
+    @Test func aPairListedTwiceMakesTheListReadOnly() throws {
+        let twice = #"{"items":[{"agent_id":"a1","item_id":"i1","version":1,"ways":["use"]},{"agent_id":"a1","item_id":"i1","version":2,"ways":["use","reveal"]},{"agent_id":"a1","item_id":"i2","version":1,"ways":["use"]}]}"#
+        let all = try #require(ItemWaysRules.list(bytes(twice), agentID: "a1"))
+        #expect(all.count == 3 && all.allSatisfy(\.readOnly))
+        // The same item id for another agent is another pair.
+        let two = #"{"items":[{"agent_id":"a1","item_id":"i1","version":1,"ways":["use"]},{"agent_id":"a2","item_id":"i1","version":1,"ways":["use"]}]}"#
+        let read = try #require(ItemWaysRules.list(bytes(two)))
+        #expect(read.allSatisfy { !$0.readOnly })
+    }
+
+    /// A `null` where settings, `each` or the version belong is read only (never read as absent).
+    @Test func aNullSettingIsReadOnly() throws {
+        for body in [
+            #""version":1,"ways":["use","run"],"run":null"#,
+            #""version":1,"ways":["use","proxy"],"proxy":null"#,
+            #""version":1,"ways":["use","run"],"run":{"programs":[],"each":null}"#,
+            #""version":null,"ways":["use"]"#,
+            #""version":1,"ways":["use"],"run":null"#,
+        ] {
+            let r = try #require(ItemWaysRules.one(bytes(item(body))), Comment(rawValue: body))
+            #expect(r.readOnly, Comment(rawValue: body))
+        }
+    }
+
     @Test func anEntryThatIsNotAnObjectMakesTheAnswerUnreadable() throws {
         let shifted = #"{"items":[null,{"agent_id":"a1","item_id":"B","ways":["use"]},{"agent_id":"a1","item_id":"C","version":5,"ways":["use","reveal"]}]}"#
         #expect(ItemWaysRules.list(bytes(shifted)) == nil)
@@ -321,8 +346,15 @@ private func rules() -> ItemWays { ItemWays(agentID: "a1", itemID: "i1") }
             ("a host", with { $0.proxy?.hosts = ["api.example.com", "b.example.com"] }),
             ("the header", with { $0.proxy?.header = "X-Api-Key" }),
             ("a changed program", with { $0.run?.programs = [RunProgram(program: "git2", env: ["GH_HOST"]), RunProgram(program: "/usr/bin/gh")] }),
+            ("a changed host", with { $0.proxy?.hosts = ["api.example.net"] }),
+            ("a host's port", with { $0.proxy?.hosts = ["api.example.com:8443"] }),
         ]
         for (name, next) in widen { #expect(ItemWaysRules.widens(cur, next), Comment(rawValue: name)) }
+        // The proxy added to an item that had none.
+        var noProxy = cur
+        noProxy.ways.remove(.proxy)
+        noProxy.proxy = nil
+        #expect(ItemWaysRules.widens(noProxy, cur), "proxy added")
         let askAgain = with { $0.run?.each = true }
         #expect(ItemWaysRules.widens(askAgain, cur), "each off")
         let narrow: [(String, ItemWays)] = [

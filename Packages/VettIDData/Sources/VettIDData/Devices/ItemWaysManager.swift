@@ -151,7 +151,7 @@ public final class ItemWaysManager {
         let read = all.first { same($0.itemID, itemID) }
         guard gen == generation else { throw VaultFailure(.other, code: Self.codeVoided) }
         if let held = items[agentID] {
-            items[agentID] = held.compactMap { same($0.itemID, itemID) ? read : $0 }
+            items[agentID] = held.compactMap { same($0.itemID, itemID) && same($0.agentID, agentID) ? read : $0 }
         }
         return read
     }
@@ -234,7 +234,7 @@ public final class ItemWaysManager {
         }
         // Saved either way (the vault answered); only the list held from before a clear is not touched.
         if gen == generation, let list = items[read.agentID] {
-            items[read.agentID] = list.map { same($0.itemID, read.itemID) ? read : $0 }
+            items[read.agentID] = list.map { same($0.itemID, read.itemID) && same($0.agentID, read.agentID) ? read : $0 }
         }
         return .saved(read)
     }
