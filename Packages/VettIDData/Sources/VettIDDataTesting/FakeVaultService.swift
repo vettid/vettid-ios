@@ -235,9 +235,7 @@ public final class FakeVaultService: @unchecked Sendable {
     var statusVaultValue: String?
     var holdsDeletionUnlinkValue = false
     var slotQueuedAfterDeletionValue = 0
-    var statusGateValue: FakeHTTPServer.Gate?
-    /// Holds the answers of `GET /api/vault/enclave` until released (``holdEnclaveReads()``).
-    var enclaveGateValue: FakeHTTPServer.Gate?
+    var statusGateValue: FakeHTTPServer.Gate?, enclaveGateValue: FakeHTTPServer.Gate? // ``holdEnclaveReads()``
     /// Holds the device relay's `register` answers (a session being opened) until released.
     var registerGateValue: FakeHTTPServer.Gate?
     // The rotation, a new credential and the clone alarm (FakeVaultService+Credential.swift), under ``cond``.
