@@ -62,11 +62,11 @@ extension VaultManager {
     /// This phone can open the vault: it holds the vault's `user_guid` (§6.7.1; §11.4 needs it). The unlock refuses without
     /// it (`no_user_guid`), and so do the flows that lock first (Finish the move, the release update), before their lock:
     /// they would lock a vault this phone cannot open again.
-    /// Never while a transfer to this phone is not completed (its start stored, neither moved in nor set up): no `user_guid`
-    /// of the record is the transfer's then.
+    /// Never while a transfer to this phone is not completed (its start stored, not moved in): no `user_guid` of the record
+    /// is the transfer's then. The setup's completion clears the start (``finishSetupGated()``).
     public var userGuidUsable: Bool {
         let r = record.value
-        return UserGuids.valid(r.userGuid) && (r.transferStartedMs == nil || r.movedIn || r.setupComplete)
+        return UserGuids.valid(r.userGuid) && (r.transferStartedMs == nil || r.movedIn)
     }
 
     /// ``userGuidUsable``'s refusal, as the unlock answers it.

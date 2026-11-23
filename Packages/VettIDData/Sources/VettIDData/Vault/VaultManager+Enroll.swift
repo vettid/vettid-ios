@@ -45,9 +45,13 @@ extension VaultManager {
     /// A request whose answer was lost may have made the vault: `vault.enrolled` then pins it on this device, and no
     /// second request is sent; a retry that meets `vault_exists` first waits ``VaultManagerConfig/enrolledGrace`` for
     /// that `vault.enrolled` before it reports the vault as another phone's.
+    /// Refused while a transfer to this phone waits (``transferWaitingRefusal(_:)``): a setup code redeemed before it was
+    /// scanned would otherwise enroll another vault with that code's `user_guid` while the transfer's vault is pinned.
     public func enroll(pin: String, onStep: @MainActor (EnrollStep) -> Void) async throws {
         try await guarded {
             let s = try await openSession()
+            // After the session is opened, so the record is read (prepared); checked again before every post (``markPosting``).
+            if let refusal = transferWaitingRefusal(s.device) { throw refusal }
             let local = record.value
             onStep(.enroll)
             // An earlier request of this enrollment got no answer: its vault.enrolled may still be on its way, and a new
@@ -86,7 +90,7 @@ extension VaultManager {
                 path.set(epoch.id, capabilities)
                 return epoch.secret
             } onPosting: { [weak self] in
-                try await self?.markPosting()
+                try await self?.markPosting(s.device)
                 posted.posted()
             } onUnprocessed: {
                 posted.unprocessed()
@@ -122,10 +126,23 @@ extension VaultManager {
         try await s.device.awaitEnrolled()
     }
 
-    /// A request is about to be posted: from now its outcome is unknown until its answer.
-    private func markPosting() throws {
+    /// A request is about to be posted: from now its outcome is unknown until its answer. Refused, with nothing written,
+    /// when a transfer started meanwhile (a scan during the enrollment's manifest, enclave and attestation awaits).
+    private func markPosting(_ d: VaultDevice) throws {
+        if let refusal = transferWaitingRefusal(d) { throw refusal }
         let nowMs = Int64(config.now().timeIntervalSince1970 * 1000)
         try record.update(since: record.generation) { if $0.enrollStartedMs == nil { $0.enrollStartedMs = nowMs } }
+    }
+
+    /// Why no enrollment may go out now, if a transfer to this phone waits: its start stored, or the device pinned to a
+    /// vault whose id it doesn't know yet (a transfer's; a redeem racing a scan can wipe the stored start). A stored start
+    /// is also waited for in the background, as a refused code's is: one that nothing pinned is cleared at its end, so it
+    /// refuses no longer than that.
+    func transferWaitingRefusal(_ d: VaultDevice) -> VaultFailure? {
+        let pinned = d.deviceID == nil && d.hasVault && d.vaultID == nil
+        guard pinned || record.value.transferStartedMs != nil else { return nil }
+        waitForTransferInBackground()
+        return VaultFailure(.enrollmentStarted, code: Self.codeTransferWaiting)
     }
 
     /// An enrollment that made no vault: its nonces are dropped (a later `vault.enrolled` for it is not accepted), its

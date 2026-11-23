@@ -80,6 +80,9 @@ extension VaultManagerTransferInTests {
         defer { phone.close() }
         try await transferred()
         try m.record.update(since: m.record.generation) { $0.transferStartedMs = 1 } // as if the take-over's clear failed
+        #expect(m.userGuidUsable, "moved in: usable before the setup's completion too")
+        try await m.refresh()
+        #expect(m.phase != .locked, "\(m.phase)")
         try await m.finishSetup()
         #expect(m.record.value.transferStartedMs == nil && m.userGuidUsable)
     }
@@ -99,8 +102,10 @@ extension VaultManagerTransferInTests {
             ReleaseView(number: n, pcr0: String(repeating: "ab", count: 48), status: status, endsAt: nil, notes: "")
         }
         let offer = ReleaseUpdateOffer(current: rel(3, "deprecated"), target: rel(4, "active"))
+        let (unlocks, locks) = (service.unlocks.count, service.memberLocks)
         #expect(m.releaseUpdate.start(pin: pin, offer: offer, generation: nil))
         await m.releaseUpdate.settle()
+        #expect(service.unlocks.count == unlocks && service.memberLocks == locks, "no unlock or lock posted")
         let sent = service.requestsSeen.dropFirst(seen)
         #expect(!sent.contains("vault.lock") && !sent.contains("vault.unlock"), "\(Array(sent))")
         #expect(m.releaseUpdate.progress?.failureCode == UnlockAttempt.codeNoUserGuid)
@@ -122,12 +127,14 @@ extension VaultManagerTransferInTests {
         try m.record.update(since: m.record.generation) { $0.userGuid = "guid-of-a-setup-code" }
         try await phone.restart()
         let sent = service.requestsSeen.count
+        let (unlocks, locks) = (service.unlocks.count, service.memberLocks)
         try await m.refresh()
         // Locked: the unlock screen's stuck notice (no PIN), whatever the vault's status (here "unlocked").
         #expect(m.phase == .locked, "\(m.phase)")
         #expect(!m.userGuidUsable && !m.record.value.movedIn, "the record's user_guid is not the transfer's")
         try await m.refresh()
         #expect(m.phase == .locked, "the same at every start")
+        #expect(service.unlocks.count == unlocks && service.memberLocks == locks, "no unlock or lock posted")
         let later = Array(service.requestsSeen.dropFirst(sent))
         #expect(!later.contains("vault.unlock") && !later.contains("vault.lock") && !later.contains("credential.get"), "\(later)")
         #expect(!later.contains("vault.status"), "the guard comes before any status read: \(later)")
