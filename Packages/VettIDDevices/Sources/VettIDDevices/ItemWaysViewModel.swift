@@ -26,6 +26,9 @@ public final class ItemWaysViewModel {
     @ObservationIgnored private var seenEvent: Int?
     /// The repository's count of clears this page has taken in: a lock, the hold or a wipe ends what the page holds.
     @ObservationIgnored private var seenCleared: Int
+    /// The vault locked, was held or wiped under this page: it holds nothing and reads again when it can (it is shown again, or the
+    /// daily check passed).
+    private var cleared = false
     private var local = ItemWaysState()
 
     public init(agentID: String, itemID: String, repo: any ItemWaysRepository, devices: any DevicesRepository, items: any ItemsRepository) {
@@ -71,7 +74,25 @@ public final class ItemWaysViewModel {
     /// program, dialog or sheet), since this phone's own approval of a run records a pin without a `leash.item.changed` to this
     /// phone (the vault skips the deciding device). Before the first read has answered, nothing.
     public func returned() {
-        if local.read != nil && !local.busy && !local.saving { load(force: false) }
+        if cleared {
+            readAfterClear()
+        } else if local.read != nil && !local.busy && !local.saving {
+            load(force: false)
+        }
+    }
+
+    /// The daily check passed (or the hold ended): a page the hold emptied, or whose read the check refused, reads again.
+    public func ownerCheckPassed() {
+        if cleared {
+            readAfterClear()
+        } else if local.read == nil && !local.notIncluded {
+            load(force: true)
+        }
+    }
+
+    private func readAfterClear() {
+        cleared = false
+        load(force: true)
     }
 
     /// Reads the settings. Only the latest read is applied. [force] (opening, Show the current ones, a conflict) starts the page
@@ -116,6 +137,7 @@ public final class ItemWaysViewModel {
         loads += 1
         work.cancelAll()
         local = ItemWaysState()
+        cleared = true
     }
 
     private func onEvent(_ e: ItemWaysEvent?) {
@@ -372,15 +394,20 @@ public final class ItemWaysViewModel {
     public func setPassword(_ v: String) {
         guard local.prompt != nil else { return }
         local.prompt?.password = v
-        local.prompt?.error = nil
+        // A wrong password is forgotten as it is typed again; the alarm stays until it is closed.
+        if local.prompt?.alarm != true { local.prompt?.error = nil }
     }
 
     public func submitPassword() {
-        guard let p = local.prompt, !p.password.isEmpty, !p.sending else { return }
+        // Not while the alarm shows (the keyboard's Return reaches here too): nothing is sent to be refused again.
+        guard let p = local.prompt, !p.password.isEmpty, !p.sending, !p.alarm else { return }
         local.prompt?.password = ""
         local.prompt?.sending = true
         send(password: p.password, resent: p.resend)
     }
+
+    /// **Open the alarm**: the prompt closes first, so that the alarm screen is not pushed under it.
+    public func openAlarm() { local.prompt = nil }
 
     public func dismissPrompt() {
         if local.prompt?.sending == true { return }
@@ -406,7 +433,11 @@ public final class ItemWaysViewModel {
             // The vault answered after a lock, a hold or a wipe (`saved` all the same): the page it was for is gone.
             guard let self, repo.cleared == started else { return }
             local.saving = false
-            guard let result else { return }
+            guard let result else {
+                // Cut off (a lock, the app leaving): the prompt is free again.
+                local.prompt?.sending = false
+                return
+            }
             // One resend after `credential_locked`, whatever the repository answers (AA7 "Saving").
             if resent, case .credentialLocked = result { onSaved(.lockedAgain, sent: next) } else { onSaved(result, sent: next) }
         }
@@ -429,7 +460,7 @@ public final class ItemWaysViewModel {
             }
             guard let self, repo.cleared == started else { return }
             local.saving = false
-            if let result { onSaved(result, sent: nil) }
+            if let result { onSaved(result, sent: nil) } else { local.prompt?.sending = false }
         }
     }
 

@@ -170,6 +170,8 @@ public struct ItemWaysRoute: View {
                 }
             }
             .onChange(of: scenePhase) { _, phase in if phase == .active { model?.returned() } }
+            // The daily check passed or the hold ended: a page the hold emptied reads again.
+            .onChange(of: ownerChecks?.ownerCheck) { _, check in if check?.state == .ok { model?.ownerCheckPassed() } }
             .onChange(of: model?.state.ownerCheck ?? false) { _, asked in
                 guard asked else { return }
                 model?.ownerCheckShown()
@@ -182,6 +184,12 @@ public struct ItemWaysRoute: View {
         a.onBack = host.onBack
         a.onOpenAlarm = host.onOpenAlarm
         guard let m = model else { return a }
+        // The prompt closes before the alarm is pushed.
+        let openAlarm = host.onOpenAlarm
+        a.onOpenAlarm = {
+            m.openAlarm()
+            openAlarm()
+        }
         a.onSave = { m.save() }
         a.onRetry = { m.retry() }
         a.onShowCurrent = { m.load() }

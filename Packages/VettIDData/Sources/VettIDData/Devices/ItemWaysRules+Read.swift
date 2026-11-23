@@ -54,7 +54,9 @@ extension ItemWaysRules {
         let rawWays = (raw["ways"] as? [Any] ?? []).compactMap { $0 as? String }
         // The strict reading counts only when it is of the same item the lenient one names.
         let ways = strict.flatMap { try? parse($0) }.flatMap { same($0.agentID, agent) && same($0.itemID, item) ? $0 : nil }
-        let hasFolders = (raw["run"] as? [String: Any])?["folders"] != nil
+        // A real value: `"folders": null` is none.
+        let folders = (raw["run"] as? [String: Any])?["folders"]
+        let hasFolders = folders != nil && !(folders is NSNull)
         return ItemWaysRead(agentID: agent, itemID: item, ways: ways, rawWays: rawWays, strict: strict, answerHasFolders: hasFolders)
     }
 

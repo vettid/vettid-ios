@@ -75,6 +75,8 @@ public struct ItemWaysScreen: View {
             }
             .accessibilityIdentifier("item_ways_screen")
         }
+        // The swipe back from a program's page would drop the whole page and its draft: only the bar's Back closes the program.
+        .blocksBackGesture(state.openProgram != nil)
         .holdsInput(state.holdsInput)
         .deviceToast(noticeText, bottom: Spacing.l, onShown: actions.onNoticeShown)
         // After a save's not_found the page says so, then goes back; an event's says so and stays.

@@ -158,6 +158,12 @@ import VettIDCrypto
         #expect(with.asForeign().foreign && with.asForeign().readOnly && with.asForeign().answerHasFolders)
     }
 
+    /// `"folders": null` is no folders: only a real value counts.
+    @Test func aNullFoldersIsNotInTheAnswer() throws {
+        let r = try #require(ItemWaysRules.one(Array(#"{"agent_id":"a1","item_id":"i1","version":2,"ways":["use","run"],"run":{"programs":[],"each":true,"folders":null}}"#.utf8)))
+        #expect(!r.answerHasFolders)
+    }
+
     @Test func aFoldersListOfNothingIsTheSameSettings() throws {
         let a = ItemWays(agentID: "a1", itemID: "i1", version: 1, ways: [.use, .run], run: RunSettings(programs: [RunProgram(program: "gh")], each: true, folders: []))
         var b = a

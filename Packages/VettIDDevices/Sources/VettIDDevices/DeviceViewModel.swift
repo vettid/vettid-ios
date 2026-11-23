@@ -171,12 +171,13 @@ public final class DeviceViewModel {
             do {
                 try await repo.refresh()
                 self?.local.loadError = nil
-                self?.readWayItems()
             } catch where isSilent(error) {
                 // Cut off by a lock or the app leaving.
             } catch {
                 self?.local.loadError = failureKind(error)
             }
+            // Also after a refresh that failed: a list already held says the device is an agent, and the items have their own Retry.
+            self?.readWayItems()
         }
     }
 

@@ -306,5 +306,87 @@ extension ItemWaysViewModelTests {
         #expect("\(WaysPrompt())" == "WaysPrompt")
         #expect(String(reflecting: m.state) == "ItemWaysState")
     }
+
+    /// A hold empties the page under the cover: it reads again when it is shown or the daily check passes, not a spinner for good.
+    @Test func aPageTheHoldEmptiedReadsAgain() async {
+        let m = await vm()
+        repo.clear()
+        await pump()
+        #expect(m.state.read == nil)
+        let reads = repo.reads
+        m.returned()
+        await m.settle()
+        #expect(repo.reads == reads + 1 && m.state.read != nil && m.state.draft != nil)
+        repo.clear()
+        await pump()
+        m.ownerCheckPassed()
+        await m.settle()
+        #expect(m.state.read != nil)
+        m.ownerCheckPassed()
+        await m.settle()
+        #expect(repo.reads == reads + 2, "a page that holds its settings is not read again by a passed check")
+    }
+
+    /// A read the daily check refused reads again once it passes.
+    @Test func aReadTheCheckRefusedReadsAgainWhenItPasses() async {
+        repo.failRead = VaultFailure(.ownerCheckRequired)
+        let m = await vm()
+        #expect(m.state.read == nil && m.state.ownerCheck)
+        m.ownerCheckShown()
+        m.ownerCheckPassed()
+        await m.settle()
+        #expect(m.state.read != nil)
+    }
+
+    /// The alarm stays on the prompt as the password is typed, and nothing is sent while it shows.
+    @Test func nothingIsSentWhileTheAlarmShows() async {
+        repo.answers = [.needsPassword, .alarmOpen]
+        let m = await vm()
+        m.setReveal(true)
+        m.confirm()
+        m.save()
+        await m.settle()
+        m.setPassword("pw")
+        m.submitPassword()
+        await m.settle()
+        #expect(m.state.prompt?.alarm == true && repo.saves.count == 2)
+        m.setPassword("again")
+        #expect(m.state.prompt?.alarm == true)
+        m.submitPassword()
+        await m.settle()
+        #expect(repo.saves.count == 2)
+    }
+
+    /// **Open the alarm** closes the prompt.
+    @Test func openingTheAlarmClosesThePrompt() async {
+        repo.answers = [.needsPassword]
+        let m = await vm()
+        m.setReveal(true)
+        m.confirm()
+        m.save()
+        await m.settle()
+        #expect(m.state.prompt != nil)
+        m.openAlarm()
+        #expect(m.state.prompt == nil)
+    }
+
+    /// A save cut off (a lock, the app leaving) frees the prompt: it is not left sending.
+    @Test func aCutOffSaveFreesThePrompt() async {
+        repo.answers = [.needsPassword]
+        let m = await vm()
+        m.setReveal(true)
+        m.confirm()
+        m.save()
+        await m.settle()
+        let gate = TestDeferred<Void>()
+        repo.saveGate = gate
+        m.setPassword("pw")
+        m.submitPassword()
+        await pump()
+        #expect(m.state.prompt?.sending == true)
+        gate.fail(CancellationError())
+        await m.settle()
+        #expect(m.state.prompt?.sending == false && !m.state.saving)
+    }
 }
 // swiftlint:enable line_length
