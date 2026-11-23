@@ -117,9 +117,13 @@ public enum ApprovalParser {
             type: type, id: id, deviceName: VaultJSON.string(o, "name"), role: VaultJSON.string(o, "role"),
             requestType: approval ? VaultJSON.string(o, "type") : nil, receivedAt: at, exp: instant(VaultJSON.string(o, "exp")),
             deviceID: VaultJSON.string(o, "device_id"),
-            held: approval ? HeldApprovals.of(role: VaultJSON.string(o, "role"), type: VaultJSON.string(o, "type"), body: VaultJSON.obj(o, "body"), pending: o) : nil,
+            held: approval ? held(o) : nil,
             replaces: approval ? replaces(o) : nil
         )
+    }
+
+    private static func held(_ o: JsonObject) -> HeldApproval {
+        HeldApprovals.of(role: VaultJSON.string(o, "role"), type: VaultJSON.string(o, "type"), body: VaultJSON.obj(o, "body"), pending: o)
     }
 
     /// The ops an approval may be referred again for (§6.8 step 4).

@@ -221,3 +221,5 @@ import VettIDDataTesting
         #expect(keys(m) == ["device:approval.pending:h1"])
     }
 }
+
+// swiftlint:enable line_length

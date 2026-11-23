@@ -16,7 +16,9 @@ public enum AgentApprovals {
     )
 
     /// An `item.run` body's members (VAULT-MESSAGING's `agent.request` row).
-    private static let runBody = names("op", "item_id", "field_id", "program", "sha256", "argv", "cwd", "how", "name", "env", "inputs", "output")
+    private static let runBody = names(
+        "op", "item_id", "field_id", "program", "sha256", "argv", "cwd", "how", "name", "env", "inputs", "output"
+    )
 
     /// An `item.proxy` body's members.
     private static let proxyBody = names("op", "item_id", "field_id", "host", "seconds")
@@ -55,7 +57,7 @@ public enum AgentApprovals {
     }
 
     /// An `item.run`, or ``HeldApproval/unshown``.
-    static func run(_ p: JsonObject) -> HeldApproval { // swiftlint:disable:this cyclomatic_complexity function_body_length
+    static func run(_ p: JsonObject) -> HeldApproval { // swiftlint:disable:this cyclomatic_complexity
         guard envelope(p, allowProxy: false, allowReplaces: true), case .object(let body)? = p["body"],
               body.members.allSatisfy({ runBody.contains(Array($0.name.utf8)) }), let wire = flags(p) else { return .unshown }
         var flags = Set<RunFlag>()
@@ -132,7 +134,8 @@ public enum AgentApprovals {
 
     /// Known top-level members only; `proxy` and `replaces` only where they belong.
     private static func envelope(_ p: JsonObject, allowProxy: Bool, allowReplaces: Bool) -> Bool {
-        p.members.allSatisfy { top.contains(Array($0.name.utf8)) } && (allowProxy || !p.has("proxy")) && (allowReplaces || !p.has("replaces"))
+        p.members.allSatisfy { top.contains(Array($0.name.utf8)) }
+            && (allowProxy || !p.has("proxy")) && (allowReplaces || !p.has("replaces"))
     }
 
     /// No member a run alone carries.

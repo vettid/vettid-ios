@@ -243,3 +243,5 @@ private func itemProxy(_ h: HeldApproval) throws -> ItemProxy {
         #expect(try device(runBody, top: #","replaces":"a0""#, role: "desktop").replaces == nil)
     }
 }
+
+// swiftlint:enable line_length

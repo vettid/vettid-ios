@@ -259,7 +259,8 @@ extension ApprovalsManager {
         var differ = Set<String>()
         for e in stored where e.type == Self.approvalType {
             guard case .device(let old)? = parsed(e), let ask = listed[PendingApproval.device(old).key] else { continue }
-            guard let o = try? StrictJson.parseObject(Array(ask.body.utf8)), case .device(let new)? = ApprovalParser.parse(ask.type, o, at: now()),
+            guard let o = try? StrictJson.parseObject(Array(ask.body.utf8)),
+                  case .device(let new)? = ApprovalParser.parse(ask.type, o, at: now()),
                   new.held == old.held, new.role == old.role, new.requestType == old.requestType, new.deviceName == old.deviceName,
                   new.replaces == old.replaces, new.deviceID == old.deviceID else {
                 differ.insert(PendingApproval.device(old).key)

@@ -26,3 +26,5 @@ import Testing
         #expect(!ItemWaysRules.runCwdAllowed(read(#""ways":["use","run"],"run":{"programs":[],"each":true},"run":{"programs":[],"each":true}"#)))
     }
 }
+
+// swiftlint:enable line_length

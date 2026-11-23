@@ -196,19 +196,6 @@ public final class ApprovalsManager: ApprovalsRepository {
         }
     }
 
-    /// AA8: an approval a `pending.list` read showed otherwise than its event is deny only.
-    private func denyIfDiffering(_ a: PendingApproval) -> PendingApproval {
-        guard case .device(var d) = a, mismatched.contains(a.key) else { return a }
-        d.held = .unshown
-        return .device(d)
-    }
-
-    /// The key of the approval [a] replaces, if it is a run or a proxy referred again.
-    static func replacedKey(_ a: PendingApproval) -> String? {
-        guard case .device(let d) = a, d.type == approvalType, let r = d.replaces, r != d.id else { return nil }
-        return PendingApproval.device(DeviceRequest(type: d.type, id: r, receivedAt: d.receivedAt)).key
-    }
-
     func parsed(_ e: StoredEvent) -> PendingApproval? {
         guard let o = try? StrictJson.parseObject(Array(e.body.utf8)) else { return nil }
         return ApprovalParser.parse(e.type, o, at: e.at)
@@ -275,15 +262,6 @@ public final class ApprovalsManager: ApprovalsRepository {
         } else if m.type == "sync.event" {
             onSync(m.object, ts: m.ts)
         }
-    }
-
-    /// The body of [m]. An `approval.pending` that does not read strictly (a duplicate member somewhere) is kept as a deny-only
-    /// one, not dropped, so that the member can still deny it (ANDROID-PLAN 0.1.138 AA8 "Fail closed").
-    private func eventObject(_ m: VaultMessage) -> JsonObject {
-        guard m.type == Self.approvalType, (try? StrictJson.parseObject(m.body)) == nil,
-              let lenient = (try? JSONSerialization.jsonObject(with: Data(m.body))) as? [String: Any],
-              let denyOnly = ApprovalParser.denyOnly(lenient) else { return m.object }
-        return denyOnly
     }
 
     /// Whether the creation of [p] came after its close: an ask closed or decided is final (its id is unique), and a
@@ -354,11 +332,7 @@ public final class ApprovalsManager: ApprovalsRepository {
             d.items = d.items.filter { !named.contains($0.itemID) } + added
             listed[i] = .share(d)
         }
-        if let r = replacedByThis {
-            replaced.insert(r)
-            changes += 1
-            changedAt[r] = changes
-        }
+        replacedByThis.map(markReplaced)
         edit { events in
             let old = events.first { parsed($0)?.key == p.key }
             events.removeAll { parsed($0)?.key == p.key || parsed($0)?.key == replacedByThis }
@@ -368,7 +342,7 @@ public final class ApprovalsManager: ApprovalsRepository {
             let body = if case .share = p, let old { Self.mergedShare(old.body, o) } else { o.raw }
             events.append(StoredEvent(type: type, body: body, at: at, ts: ts))
         }
-        if let r = replacedByThis { decided(r) }
+        replacedByThis.map(decided)
     }
 
     /// [o] with the items of [old] it does not name added (by `item_id`).
