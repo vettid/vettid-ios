@@ -514,6 +514,7 @@ public final class OnboardingViewModel: OnboardingActions {
         state.slowWait = false
         state.error = e.kind
         state.errorCode = e.code
+        state.errorRetryAt = nil
         for i in state.progress.indices where state.progress[i].state == .active { state.progress[i].state = .failed }
         if e.kind == .vaultExists {
             state.step = .vaultElsewhere

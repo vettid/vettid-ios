@@ -67,6 +67,21 @@ extension FakeVaultService {
         return .json(404, #"{"code":"not_found","message":""}"#)
     }
 
+    /// Holds each answer of `GET /api/vault/enclave` (as it is when asked) until ``releaseEnclaveReads()``.
+    public func holdEnclaveReads() { locked { enclaveGateValue = FakeHTTPServer.Gate() } }
+
+    /// The `GET /api/vault/enclave` answers held now.
+    public var heldEnclaveReads: Int { locked { enclaveGateValue?.waiting ?? 0 } }
+
+    /// Lets the held answers of `GET /api/vault/enclave` through, and every later one at once.
+    public func releaseEnclaveReads() {
+        let gate: FakeHTTPServer.Gate? = locked {
+            defer { enclaveGateValue = nil }
+            return enclaveGateValue
+        }
+        gate?.open()
+    }
+
     /// Holds the device relay's `register` (a new device being made while a session opens) until ``releaseRegisters()``.
     public func holdRegisters() { locked { registerGateValue = FakeHTTPServer.Gate() } }
 

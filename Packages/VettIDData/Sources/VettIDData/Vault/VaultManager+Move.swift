@@ -66,6 +66,10 @@ extension VaultManager: MoveRepository {
                 $0.transferIn = true
                 $0.transferStartedMs = started
                 $0.transferCode = codeID
+                // The start alone says that a transfer is under way (``userGuidUsable``): nothing of an earlier one stays.
+                $0.movedIn = false
+                $0.setupComplete = false
+                $0.finishMovePending = false
             }
             let path = TransferPath()
             let fresh = FreshTransferSecret(secrets: phoneSecrets, policy: config.trust.timeScales, path: path)
