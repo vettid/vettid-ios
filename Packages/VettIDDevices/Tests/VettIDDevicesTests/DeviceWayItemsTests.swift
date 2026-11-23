@@ -42,4 +42,14 @@ import VettIDDataTesting
         await m.settle()
         #expect(m.state.wayItemsError == nil && m.state.wayItemsLoaded)
     }
+
+    /// A pair the vault lists twice is two rows with two ids.
+    @Test func everyRowHasItsOwnId() async {
+        ways.listAnswer = [
+            #"{"agent_id":"a1","item_id":"i1","version":2,"ways":["use"]}"#, #"{"agent_id":"a1","item_id":"i1","version":2,"ways":["use"]}"#,
+        ]
+        let m = DeviceViewModel(id: "a1", repo: fake, itemWays: ways, items: items)
+        await m.settle()
+        #expect(m.state.wayItems.count == 2 && Set(m.state.wayItems.map(\.id)).count == 2)
+    }
 }

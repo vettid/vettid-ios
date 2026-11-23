@@ -165,6 +165,7 @@ public final class ItemWaysViewModel {
 
     public func setRun(_ on: Bool) {
         if on {
+            guard local.draft != nil else { return }
             // A vault whose answer carried `run.folders` keeps the list (empty) when Run is turned back on (AA9: only a run
             // binding's first creation learns it from the answer).
             let folders: [RunFolder]? = local.read?.foldersKnown == true ? [] : nil
@@ -179,6 +180,7 @@ public final class ItemWaysViewModel {
 
     public func setProxy(_ on: Bool) {
         if on {
+            guard local.draft != nil else { return }
             edit {
                 $0.ways.insert(.proxy)
                 $0.proxy = ProxySettings(hosts: [], header: Self.defaultHeader, prefix: Self.defaultPrefix)
@@ -191,6 +193,8 @@ public final class ItemWaysViewModel {
 
     public func setReveal(_ on: Bool) {
         if on {
+            // A page that is read only offers only to turn a way off.
+            guard local.draft != nil else { return }
             local.confirm = .revealOn
         } else if local.readOnly {
             turnOff(.reveal)
@@ -387,7 +391,11 @@ public final class ItemWaysViewModel {
 
     public func save() {
         guard local.canSave else { return }
-        if local.openProgram != nil && !applyEdit() { return }
+        // A program text typed on its page is applied first and shown (in the box, every odd character marked); Save then sends it.
+        if local.editPending {
+            applyEdit()
+            return
+        }
         send(password: nil, resent: false)
     }
 

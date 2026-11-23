@@ -10,14 +10,20 @@ public enum DeviceFailure: Equatable, Sendable { case endAccess, remove }
 
 /// A row of "Items it may use" (AA7): the item's name from the cache (nil when it does not resolve), and its ways. Holds an
 /// item's name: nothing but the type is printed.
-public struct WayItemRow: Equatable, Sendable, CustomStringConvertible, CustomDebugStringConvertible, CustomReflectable {
+public struct WayItemRow: Equatable, Sendable, Identifiable, CustomStringConvertible, CustomDebugStringConvertible, CustomReflectable {
     public let itemID: String
     public let name: String?
     /// The names of the items are read: a name still nil is then "An item you no longer have", never before.
     public let namesLoaded: Bool
     public let ways: [ItemWay]
+    /// The row's place in the list: a pair listed twice has two rows with the one item id.
+    public let index: Int
 
-    public init(itemID: String, name: String?, namesLoaded: Bool, ways: [ItemWay]) {
+    /// Unique in the list, whatever the vault listed.
+    public var id: String { "\(index)/\(itemID)" }
+
+    public init(itemID: String, name: String?, namesLoaded: Bool, ways: [ItemWay], index: Int = 0) {
+        self.index = index
         self.itemID = itemID
         self.name = name
         self.namesLoaded = namesLoaded
@@ -116,8 +122,8 @@ public final class DeviceViewModel {
             let namesLoaded = items?.load == .loaded
             let read = itemWays.items[id]
             s.wayItemsLoaded = read != nil
-            s.wayItems = (read ?? []).map {
-                WayItemRow(itemID: $0.itemID, name: names[$0.itemID], namesLoaded: namesLoaded, ways: shownWays($0.rawWays))
+            s.wayItems = (read ?? []).enumerated().map { i, r in
+                WayItemRow(itemID: r.itemID, name: names[r.itemID], namesLoaded: namesLoaded, ways: shownWays(r.rawWays), index: i)
             }
         }
         return s

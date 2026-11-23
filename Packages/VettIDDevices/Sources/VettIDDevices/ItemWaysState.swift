@@ -81,9 +81,14 @@ public struct ItemWaysState: Sendable, CustomStringConvertible, CustomDebugStrin
 
     public var readOnly: Bool { read?.readOnly == true }
 
-    /// The agent's name as a sentence has it, the item's name, or "An item you no longer have".
-    public var agentName: String { agent.map { DeviceTexts.sentenceName($0) } ?? "" }
-    public var shownItemName: String { itemName ?? ItemWaysStrings.waysItemGone }
+    /// The agent's name as a sentence has it (isolated); "Loading…" until the agent is known.
+    public var agentName: String { agent.map { DeviceTexts.sentenceName($0) } ?? ItemWaysStrings.waysItemLoading }
+
+    /// The item's name, isolated as an agent's is; "Loading…" until the names are read, "An item you no longer have" after.
+    public var shownItemName: String {
+        if let itemName { return AccountNames.isolate(itemName) }
+        return namesLoaded ? ItemWaysStrings.waysItemGone : ItemWaysStrings.waysItemLoading
+    }
 
     /// The draft or the open program's field holds something not saved.
     public var holdsChanges: Bool { dirty || editPending }
@@ -161,6 +166,19 @@ public struct ItemWaysState: Sendable, CustomStringConvertible, CustomDebugStrin
             s.read = r
             if clean { s.draft = r.ways }
             s.notIncluded = false
+        } else if !force, r.readOnly {
+            // The same version, or a new one, that this page cannot edit (a repeated pair, an unknown member): the draft was made
+            // from a reading the vault no longer gives, and a save from it would meet no `conflict`. The page takes the reading.
+            s.read = r
+            s.draft = nil
+            s.notIncluded = false
+            s.changedElsewhere = false
+            s.prompt = nil
+            s.openProgram = nil
+            s.editInput = ""
+            s.addingHost = false
+            s.confirm = nil
+            s.fullPin = nil
         } else if !force, keep || busy || !ItemWaysRules.identical(draft, before) {
             // Kept, on the read it was made from: its save meets the vault's `conflict`, with no prompt.
             s.notIncluded = false
@@ -170,6 +188,7 @@ public struct ItemWaysState: Sendable, CustomStringConvertible, CustomDebugStrin
             s.draft = r.ways
             s.notIncluded = false
             s.changedElsewhere = false
+            s.prompt = nil
             s.openProgram = nil
             s.editInput = ""
             s.addingHost = false

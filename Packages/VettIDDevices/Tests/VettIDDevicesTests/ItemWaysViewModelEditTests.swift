@@ -148,6 +148,10 @@ extension ItemWaysViewModelTests {
         #expect(m.state.canSave && m.state.holdsInput)
         m.save()
         await m.settle()
+        #expect(repo.saves.isEmpty, "Save applies the text first, shown on the page")
+        #expect(m.state.draft?.run?.programs.map(\.program) == ["curl", "git"] && !m.state.editPending)
+        m.save()
+        await m.settle()
         #expect(repo.saves.first?.next.run?.programs.map(\.program) == ["curl", "git"])
         m.openProgram(0)
         m.setEditInput("GIT")
@@ -274,6 +278,8 @@ extension ItemWaysViewModelTests {
         #expect(m.state.editPending && m.state.canSave)
         m.save()
         await m.settle()
+        m.save()
+        await m.settle()
         #expect(Array(repo.saves.first?.next.run?.programs[0].program.utf8 ?? "".utf8) == Array("cafe\u{0301}".utf8))
     }
 
@@ -389,6 +395,76 @@ extension ItemWaysViewModelTests {
         gate.fail(CancellationError())
         await m.settle()
         #expect(m.state.prompt?.sending == false && !m.state.saving)
+    }
+
+    /// Save applies a typed program text and shows it; a refused one stays with its problem; nothing is sent until Save again.
+    @Test func saveShowsAProgramTextBeforeItSendsIt() async {
+        repo.current = #"{"agent_id":"a1","item_id":"i1","version":1,"ways":["use","run"],"run":{"programs":[{"program":"gh","env":[]}],"each":true}}"#
+        let m = await vm()
+        m.openProgram(0)
+        m.setEditInput("g\u{0456}t")
+        m.save()
+        await m.settle()
+        #expect(repo.saves.isEmpty && m.state.prompt == nil)
+        #expect(m.state.draft?.run?.programs[0].program == "g\u{0456}t", "the look-alike now shows in its box")
+        m.setEditInput("bin/x")
+        m.save()
+        await m.settle()
+        #expect(repo.saves.isEmpty && m.state.editProblem == .notPathOrName)
+    }
+
+    /// The same version coming back that this page cannot edit (a repeated pair, an unknown member): the page takes it, and no
+    /// draft is left to save from the old reading.
+    @Test func aReadOnlyReReadAtTheSameVersionReplacesTheDraft() async {
+        repo.current = #"{"agent_id":"a1","item_id":"i1","version":1,"ways":["use","reveal"]}"#
+        let m = await vm()
+        m.setReveal(false)
+        #expect(m.state.canSave)
+        repo.current = #"{"agent_id":"a1","item_id":"i1","version":1,"ways":["use","reveal"],"x":1}"#
+        m.retry()
+        await m.settle()
+        #expect(m.state.readOnly && m.state.draft == nil && !m.state.canSave && !m.state.changedElsewhere)
+        m.save()
+        await m.settle()
+        #expect(repo.saves.isEmpty)
+    }
+
+    /// A read-only page offers only to turn a way off: turning one on does nothing.
+    @Test func aReadOnlyPageIgnoresTurningAWayOn() async {
+        repo.current = #"{"agent_id":"a1","item_id":"i1","version":2,"ways":["use"],"x":1}"#
+        let m = await vm()
+        m.setRun(true)
+        m.setProxy(true)
+        m.setReveal(true)
+        await m.settle()
+        #expect(m.state.confirm == nil && !m.state.addingHost && m.state.draft == nil)
+        #expect(repo.saves.isEmpty && repo.offs.isEmpty)
+    }
+
+    /// The names say "Loading…" until they are read, and "An item you no longer have" only after.
+    @Test func aNameNotReadYetIsNotAnItemYouNoLongerHave() async {
+        var s = ItemWaysState()
+        #expect(s.shownItemName == ItemWaysStrings.waysItemLoading && s.agentName == ItemWaysStrings.waysItemLoading)
+        s.namesLoaded = true
+        #expect(s.shownItemName == ItemWaysStrings.waysItemGone)
+        s.itemName = "g\u{202E}it"
+        #expect(s.shownItemName == AccountNames.isolate("g\u{202E}it") && s.shownItemName != "g\u{202E}it")
+    }
+
+    /// The vault's own `GitHub token` reaches a sentence isolated, as an agent's name does.
+    @Test func theItemNameInASentenceIsIsolated() async {
+        let m = await vm()
+        #expect(ItemWaysStrings.waysTitle(m.state.agentName, m.state.shownItemName).contains(AccountNames.isolate("GitHub token")))
+    }
+
+    /// A save is recorded with the reading it was made from.
+    @Test func aSaveRecordsItsReading() async {
+        let m = await vm()
+        m.setReveal(true)
+        m.confirm()
+        m.save()
+        await m.settle()
+        #expect(repo.saves.first?.cur.ways?.version == 1)
     }
 }
 // swiftlint:enable line_length

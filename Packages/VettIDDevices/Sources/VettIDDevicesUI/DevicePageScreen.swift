@@ -246,7 +246,7 @@ private struct PageContent: View {
             } else if !state.wayItemsLoaded {
                 Text(ItemWaysStrings.waysItemLoading).vettIDFont(.bodyMedium).foregroundStyle(colors.onSurfaceVariant)
             }
-            ForEach(state.wayItems, id: \.itemID) { row in
+            ForEach(state.wayItems) { row in
                 Button { actions.onOpenWayItem(row.itemID) } label: {
                     VStack(alignment: .leading, spacing: Spacing.xxs) {
                         Text(rowName(row)).vettIDFont(.bodyLarge).foregroundStyle(colors.onSurface)

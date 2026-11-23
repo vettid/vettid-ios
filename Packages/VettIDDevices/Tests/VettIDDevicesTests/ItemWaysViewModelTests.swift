@@ -49,7 +49,7 @@ import VettIDDataTesting
         let m = await vm()
         let s = m.state
         #expect(s.agentName.contains("Claude"))
-        #expect(s.itemName == "GitHub token" && s.shownItemName == "GitHub token")
+        #expect(s.itemName == "GitHub token" && s.shownItemName == AccountNames.isolate("GitHub token"))
         #expect(s.draft?.ways == [.use])
         #expect(!s.dirty && !s.canSave && !s.holdsInput)
     }

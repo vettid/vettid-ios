@@ -232,6 +232,7 @@ private struct RefusedCard: View {
 
 /// The confirmations of the page (alerts, the destructive or confirming button styled as such) and the full fingerprint.
 private struct WaysDialogs: ViewModifier {
+    @Environment(\.vettIDCovered) private var covered
     let state: ItemWaysState
     let actions: ItemWaysActions
 
@@ -266,7 +267,7 @@ private struct WaysDialogs: ViewModifier {
                 confirmLabel: Txt.waysPinForgetConfirm, dismissLabel: Txt.waysCancel, onConfirm: actions.onConfirm
             )
             .alert(
-                "", isPresented: Binding(get: { state.fullPin != nil }, set: { if !$0 { actions.onShowPin(nil) } })
+                "", isPresented: uncovered(Binding(get: { state.fullPin != nil }, set: { if !$0 { actions.onShowPin(nil) } }), covered: covered)
             ) {
                 Button(Txt.waysPinClose, role: .cancel) {}
             } message: {

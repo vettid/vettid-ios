@@ -11,7 +11,9 @@ import VettIDData
 @Observable
 public final class FakeItemWays: ItemWaysRepository {
     /// A save: the settings sent, the password (nil: none) and whether it was the resend after `credential_locked`.
-    public struct Sent: Equatable, Sendable {
+    public struct Sent: Sendable {
+        /// The reading the save was made from.
+        public let cur: ItemWaysRead
         public let next: ItemWays
         public let password: String?
         public let resent: Bool
@@ -79,7 +81,7 @@ public final class FakeItemWays: ItemWaysRepository {
     }
 
     public func save(_ cur: ItemWaysRead, _ next: ItemWays, password: String?, resent: Bool) async throws -> ItemWaysSave {
-        saves.append(Sent(next: next, password: password, resent: resent))
+        saves.append(Sent(cur: cur, next: next, password: password, resent: resent))
         if let g = saveGate { try await g.value() }
         var saved = next
         if bump { saved.version = (next.version ?? 0) + 1 }
