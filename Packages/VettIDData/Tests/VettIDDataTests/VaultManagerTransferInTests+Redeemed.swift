@@ -2,6 +2,7 @@ import Foundation
 import Testing
 @testable import VettIDData
 import VettIDDataTesting
+import VettIDTesting
 @testable import VettIDVault
 
 /// A transfer scanned after a setup code was redeemed (§6.7.1): the transfer's vault is pinned, so no enrollment goes out
@@ -82,6 +83,28 @@ extension VaultManagerTransferInTests {
         #expect(error?.code == VaultManager.codeTransferWaiting, "\(String(describing: error))")
         #expect(m.record.value.transferStartedMs == started, "the start kept")
         #expect(m.session?.device.hasVault == true && m.record.value.userGuid.isEmpty, "the transfer pinned, the code's guid not written")
+    }
+
+    /// The same with the scan held between its start's write and its pin (at the claim fetch): the stored start alone
+    /// refuses the redeem.
+    @Test func aRedeemRacingAScanBeforeItsPinKeepsTheStart() async throws {
+        defer { phone.close() }
+        service.holdRedeems()
+        let redeeming = Task { try await m.redeemSetupCode(.secret(service.secret)) }
+        #expect(await eventually { service.heldRedeems > 0 })
+        let gate = FakeHTTPServer.Gate()
+        service.holdsClaim = gate
+        service.holdsTransferApproval = true
+        let link = try code()
+        let scan = Task { try await m.transferIn(code: link) }
+        #expect(await eventually { gate.waiting > 0 && m.record.value.transferStartedMs != nil }, "held at the claim")
+        #expect(m.session?.device.hasVault != true, "not pinned yet")
+        service.releaseRedeems()
+        let error = await vaultFailure { _ = try await redeeming.value }
+        #expect(error?.code == VaultManager.codeTransferWaiting, "\(String(describing: error))")
+        #expect(m.record.value.transferStartedMs != nil, "the start kept")
+        gate.open()
+        _ = try? await scan.value
     }
 
     /// Pinned with no start stored (an older race wiped it): the refusal writes a start now, so the transfer's deadline
