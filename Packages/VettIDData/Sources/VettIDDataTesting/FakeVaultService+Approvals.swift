@@ -84,6 +84,8 @@ extension FakeVaultService {
         case "device.list": try reply(m.type, #"{"devices":[{"id":"dev-1","kind":"app","state":"active","name":""},{"id":"dev-2","kind":"desktop","state":"active","name":"Work laptop"}]}"#, re: m.id)
         // §10.3: End access and Remove, answered `{}` (the vault tells the member's other devices, not this one).
         case "device.session.end", "device.unlink": try reply(m.type, "{}", re: m.id)
+        // §10.11, ANDROID-PLAN 0.1.137 AA7: how an agent may use an item.
+        case "leash.item.list", "leash.item.set": try itemWaysRequest(m, body)
         default: try reply(m.type, "{}", re: m.id, error: "unsupported_type")
         }
     }

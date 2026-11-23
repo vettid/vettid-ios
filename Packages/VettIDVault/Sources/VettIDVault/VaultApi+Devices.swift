@@ -29,4 +29,20 @@ extension VaultApi {
         guard role == "agent" || role == "desktop" else { throw VaultStateError(message: "pairing role") }
         return VaultJSON.object(try await device.op("device.pair.create", body: JsonBuilder().string("role", role).bytes()))
     }
+
+    /// `leash.item.list{agent_id, item_id?}` (§10.11, ANDROID-PLAN 0.1.137 AA7): `{items: [<item_ways>]}`, each item the agent's
+    /// rules include, as the body's bytes (`{}` when empty). Mirrors vettid-android `leashItemList` over
+    /// `VaultDevice.opRaw`; here ``VaultDevice/op(_:body:timeout:innerID:)`` already returns the body's bytes, and a reply with
+    /// a duplicate member is refused when the reply is read (``StrictJson``), before it gets here.
+    public func leashItemList(agentID: String, itemID: String? = nil) async throws -> [UInt8] {
+        let b = JsonBuilder().string("agent_id", agentID)
+        if let itemID { b.string("item_id", itemID) }
+        return try await device.op("leash.item.list", body: b.bytes())
+    }
+
+    /// `leash.item.set{agent_id, item_id, version?, ways, run?, proxy?}` (§10.11): [body] is sent as it is; the `<item_ways>`
+    /// saved comes back as the body's bytes. A widening outside the unlock window is `credential_locked`.
+    public func leashItemSet(_ body: [UInt8]) async throws -> [UInt8] {
+        try await device.op("leash.item.set", body: body)
+    }
 }
