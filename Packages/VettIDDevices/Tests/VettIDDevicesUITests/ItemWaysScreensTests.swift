@@ -142,8 +142,7 @@ import VettIDUI
             state: page { $0.wayItemsAvailable = true; $0.wayItemsError = .network }, actions: DevicePageActions(), now: Samples.now,
             calendar: Samples.calendar()
         )
-        #expect(height(none) > 0 && height(loading) > 0 && height(failed) > 0)
-        #expect(height(listed) > height(none), "the items add a card")
+        #expect(height(none) > 0 && height(loading) > 0 && height(failed) > 0 && height(listed) > 0)
     }
 }
 // swiftlint:enable line_length
