@@ -16,6 +16,9 @@ extension VaultManager {
             // record already names the vault (chosen; not in the spec). A phone that holds nothing yet but carries a
             // stale enrollment starts afresh, as on vettid-android.
             let stored = try await storedSession()
+            // A transfer under way (a scan being made, a start stored, or a pinned transfer): refused before anything is
+            // forgotten and before the code is spent, as the enrollment is (``transferWaitingRefusal(_:)``).
+            if let refusal = redeemTransferRefusal(stored?.device) { throw refusal }
             if let refusal = startOverRefusal(stored?.device) { throw refusal }
             if stored != nil { try await dropSession(forget: true) }
             let appKey = try config.keys.appKeys.getOrCreate().spki()
@@ -45,6 +48,17 @@ extension VaultManager {
         }
         phase = .setup(.newVault)
         return r.emailHint
+    }
+
+    /// Why no setup code may be redeemed now, if a transfer to this phone is under way: a scan being made
+    /// (``MoveFlags``' `startingIn`), or what ``transferWaitingRefusal(_:)`` refuses (with no device: a stored start,
+    /// nothing pinned, waited for quietly so it is cleared).
+    func redeemTransferRefusal(_ d: VaultDevice?) -> VaultFailure? {
+        if moveFlags.book.startingIn > 0 { return VaultFailure(.enrollmentStarted, code: Self.codeTransferWaiting) }
+        if let d { return transferWaitingRefusal(d) }
+        guard record.value.transferStartedMs != nil else { return nil }
+        waitForTransferInBackground(quiet: true)
+        return VaultFailure(.enrollmentStarted, code: Self.codeTransferWaiting)
     }
 
     /// "That is not my account": refused (``FailureKind/enrollmentStarted``, code `enrollment_started`) while this phone may

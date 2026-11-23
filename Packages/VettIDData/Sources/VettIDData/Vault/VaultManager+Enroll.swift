@@ -139,14 +139,21 @@ extension VaultManager {
     /// is also waited for in the background, as a refused code's is: one that nothing pinned is cleared at its end, so it
     /// refuses no longer than that.
     func transferWaitingRefusal(_ d: VaultDevice) -> VaultFailure? {
-        let pinned = d.deviceID == nil && d.hasVault && d.vaultID == nil
+        // [d], or the current session's device when a scan replaced the session meanwhile.
+        let pinned = [d, session?.device].contains { $0.map { $0.deviceID == nil && $0.hasVault && $0.vaultID == nil } ?? false }
         let started = record.value.transferStartedMs != nil
         guard pinned || started else { return nil }
         // Not while a scan is writing its own start (``transferIn(code:)``): it waits for its transfer itself.
         if moveFlags.book.startingIn == 0 {
             // Pinned with no start stored (an older race wiped it): a start written now, so the transfer's deadline and its
             // settlement window apply. Never dropped outright: the old phone may already have approved it.
-            if pinned, !started { _ = try? record.update(since: record.generation) { $0.transferStartedMs = nowMs } }
+            // (Its code isn't known, so a re-scan of it counts as a new code; and its abandon window counts from now.)
+            if pinned, !started {
+                _ = try? record.update(since: record.generation) {
+                    $0.transferIn = true
+                    $0.transferStartedMs = nowMs
+                }
+            }
             // A leftover start that nothing pinned: the member already left it, so its end says nothing ("timed out").
             waitForTransferInBackground(quiet: !pinned)
         }
