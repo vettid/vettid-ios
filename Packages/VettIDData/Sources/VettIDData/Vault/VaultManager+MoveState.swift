@@ -59,6 +59,10 @@ final class MoveBook {
     /// The ``VaultManager/transferIn(code:)`` calls under way: a start's resume waits for none to run (its start may be
     /// written before its handshake is saved).
     var startingIn = 0
+    /// The ``VaultManager/redeemSetupCode(_:)`` calls under way, from their start to their record's write: a scan waits for
+    /// none (``VaultManager/transferIn(code:)`` refuses meanwhile), since a redeem forgets the stored device and keys and
+    /// binds the app key to the code's vault.
+    var redeeming = 0
     /// The times a settlement window began to wait for the collector's round at its end (what a test awaits).
     var collectorRounds = 0
     /// The last collects of settlement windows that went out (a window cut during its last collect makes another).

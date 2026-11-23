@@ -26,6 +26,8 @@ extension VaultManager: MoveRepository {
         // A scan of the open transfer's own code changes nothing (§11.14.10 rule 5, 0.88.4), and is decided first: before
         // the notice below, the window's and the deadline's refusals, the code's expiry, the claim fetch and any drop.
         if let sas = try await sameCodeMove(code) { return sas }
+        // Not while a setup code's redeem is under way: it forgets the stored device and keys (``MoveFlags``' `redeeming`).
+        if moveFlags.book.redeeming > 0 { throw VaultFailure(.enrollmentStarted, code: Self.codeTransferWaiting) }
         // A new move: the notice of how the last one ended goes, whatever this one does.
         transferEnd = nil
         // A refresh while this runs resumes nothing: the start may be written before its handshake is saved, and a start
@@ -464,7 +466,7 @@ extension VaultManager: MoveRepository {
     /// Deletes what a transfer to this phone made, its pending epoch-1 record first: only once it is gone are the stored
     /// start and record id cleared, so that a record that could not be deleted is retried by a later drop (a stored start
     /// that nothing pinned is cleared at a resume, ``resumeTransferIn(_:)``). The attested key is discarded in any case.
-    private func discardTransferStart(attestKey: [UInt8]?) {
+    func discardTransferStart(attestKey: [UInt8]?) {
         if let key = attestKey { try? config.attester.discard(keyID: key) }
         if let id = record.value.transferEpochID {
             do {

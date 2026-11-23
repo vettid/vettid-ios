@@ -63,6 +63,7 @@ extension VaultManagerTransferInTests {
         let error = await vaultFailure { try await m.enroll(pin: pin) { _ in } }
         #expect(error?.code == VaultManager.codeTransferWaiting, "\(String(describing: error))")
         #expect(await eventually { m.record.value.transferStartedMs == nil }, "the wait cleared the start")
+        #expect(await eventually { m.moveFlags.book.transferWaiter == nil }, "the wait ended")
         #expect(m.transferEnd == nil, "no \"timed out\" notice for a start the member already left")
         try await m.enroll(pin: pin) { _ in }
         #expect(service.enrolls.count == 1)
@@ -75,7 +76,10 @@ extension VaultManagerTransferInTests {
         service.holdRedeems()
         let redeeming = Task { try await m.redeemSetupCode(.secret(service.secret)) }
         #expect(await eventually { service.heldRedeems > 0 })
+        // A scan refuses while a redeem is under way; let it through, to show the redeem's last check holds alone.
+        m.moveFlags.book.redeeming -= 1
         _ = try await scanned()
+        m.moveFlags.book.redeeming += 1
         let started = m.record.value.transferStartedMs
         #expect(started != nil)
         service.releaseRedeems()
@@ -96,8 +100,10 @@ extension VaultManagerTransferInTests {
         service.holdsClaim = gate
         service.holdsTransferApproval = true
         let link = try code()
+        m.moveFlags.book.redeeming -= 1 // as above: the scan let through
         let scan = Task { try await m.transferIn(code: link) }
         #expect(await eventually { gate.waiting > 0 && m.record.value.transferStartedMs != nil }, "held at the claim")
+        m.moveFlags.book.redeeming += 1
         #expect(m.session?.device.hasVault != true, "not pinned yet")
         service.releaseRedeems()
         let error = await vaultFailure { _ = try await redeeming.value }
@@ -125,18 +131,79 @@ extension VaultManagerTransferInTests {
         #expect(!sas.isEmpty && m.session?.device.hasVault == true && pendingRecord, "the scan's device and keys kept")
     }
 
-    /// A leftover start (nothing pinned) refuses a redeem before the code is spent, and is waited for quietly: once it is
-    /// cleared, the redeem goes through.
-    @Test func aLeftoverStartRefusesARedeemUntilItIsCleared() async throws {
+    /// A leftover start with no device stored (nothing pinned) is cleared by the redeem at once, as a resume clears it,
+    /// and the redeem goes through.
+    @Test func aLeftoverStartWithNoDeviceIsClearedByTheRedeem() async throws {
         defer { phone.close() }
         try m.record.update(since: m.record.generation) { $0.transferStartedMs = 1 }
+        _ = try await m.redeemSetupCode(.secret(service.secret))
+        #expect(m.phase == .setup(.newVault) && m.record.value.transferStartedMs == nil)
+        #expect(m.moveFlags.book.transferWaiter == nil && m.transferEnd == nil, "nothing waited for")
+    }
+
+    /// The scan side: a scan while a redeem awaits the member API is refused (`transfer_waiting`), before it writes a
+    /// start or makes a device; the redeem then goes through.
+    @Test func aScanWhileARedeemIsUnderWayIsRefused() async throws {
+        defer { phone.close() }
+        service.holdRedeems()
+        let redeeming = Task { try await m.redeemSetupCode(.secret(service.secret)) }
+        #expect(await eventually { service.heldRedeems > 0 })
+        let error = await vaultFailure { _ = try await m.transferIn(code: try code()) }
+        #expect(error?.code == VaultManager.codeTransferWaiting, "\(String(describing: error))")
+        #expect(m.record.value.transferStartedMs == nil && m.session?.device.hasVault != true)
+        service.releaseRedeems()
+        _ = try await redeeming.value
+        #expect(m.phase == .setup(.newVault))
+    }
+
+    /// A redeem while a scan is still opening its session (held at the relay's register, before it writes its start) is
+    /// refused by the scan being made alone.
+    @Test func aRedeemWhileAScanOpensItsSessionIsRefused() async throws {
+        defer { phone.close() }
+        service.holdRegisters()
+        service.holdsTransferApproval = true
+        let link = try code()
+        let scan = Task { try await m.transferIn(code: link) }
+        #expect(await eventually { service.heldRegisters > 0 }, "held at the register")
+        #expect(m.record.value.transferStartedMs == nil, "no start written yet")
         let error = await vaultFailure { _ = try await m.redeemSetupCode(.secret(service.secret)) }
         #expect(error?.code == VaultManager.codeTransferWaiting, "\(String(describing: error))")
         #expect(!service.api.requests.contains { $0.path == "/api/vault/enroll/redeem" }, "the code isn't spent")
-        #expect(await eventually { m.record.value.transferStartedMs == nil }, "the wait cleared the start")
-        #expect(m.transferEnd == nil)
+        service.releaseRegisters()
+        _ = try? await scan.value
+    }
+
+    /// The redeem's check after its answer refuses on the pinned device alone, when the stored start is gone (the pin's
+    /// own refusal, ``VaultManager/startOverRefusal(_:)``).
+    @Test func theRedeemsLastCheckRefusesOnThePinAlone() async throws {
+        defer { phone.close() }
+        service.holdRedeems()
+        let redeeming = Task { try await m.redeemSetupCode(.secret(service.secret)) }
+        #expect(await eventually { service.heldRedeems > 0 })
+        m.moveFlags.book.redeeming -= 1 // let a scan through, as one begun just before the redeem could be
+        _ = try await scanned()
+        m.moveFlags.book.redeeming += 1
+        try m.record.update(since: m.record.generation) { $0.transferStartedMs = nil }
+        service.releaseRedeems()
+        let error = await vaultFailure { _ = try await redeeming.value }
+        #expect(error?.kind == .enrollmentStarted, "\(String(describing: error))")
+        #expect(m.session?.device.hasVault == true && m.record.value.userGuid.isEmpty, "nothing wiped")
+    }
+
+    /// A pinned transfer on the current session's device, while the device given is an earlier, unpinned one (a scan
+    /// replaced the session): still refused.
+    @Test func aPinOnTheCurrentSessionsDeviceRefuses() async throws {
+        defer { phone.close() }
         _ = try await m.redeemSetupCode(.secret(service.secret))
-        #expect(m.phase == .setup(.newVault))
+        try await m.refresh()
+        let earlier = try #require(m.session?.device)
+        try await m.dropSession(forget: false)
+        _ = try await scanned()
+        #expect(m.session?.device !== earlier && earlier.hasVault != true)
+        try m.record.update(since: m.record.generation) { $0.transferStartedMs = nil }
+        m.moveFlags.book.startingIn += 1 // no start written, no waiter: the refusal alone
+        defer { m.moveFlags.book.startingIn -= 1 }
+        #expect(m.transferWaitingRefusal(earlier)?.code == VaultManager.codeTransferWaiting)
     }
 
     /// Pinned with no start stored (an older race wiped it): the refusal writes a start now, so the transfer's deadline

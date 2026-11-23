@@ -127,7 +127,8 @@ extension VaultManager {
     }
 
     /// A request is about to be posted: from now its outcome is unknown until its answer. Refused when a transfer started
-    /// meanwhile (nothing is posted and the record is not written) (a scan during the enrollment's manifest, enclave and attestation awaits).
+    /// meanwhile, a scan during the enrollment's manifest, enclave and attestation awaits (nothing is posted; only a
+    /// pinned transfer's missing start is written).
     private func markPosting(_ d: VaultDevice) throws {
         if let refusal = transferWaitingRefusal(d) { throw refusal }
         let nowMs = Int64(config.now().timeIntervalSince1970 * 1000)
