@@ -106,5 +106,25 @@ final class DepositCounter: @unchecked Sendable {
         }
         #expect(sent.value == 0)
     }
+
+    /// `leash.item.list` names the agent, and the item only when asked; both answers come back as the body's bytes, and
+    /// `leash.item.set` sends the body it is given. (A body with a duplicate member is refused when the reply is read, before
+    /// these calls; the fake cannot even send one.)
+    @Test func theItemWaysCallsSendTheirMembersAndReturnTheExactBytes() async throws {
+        let (d, v) = try await ops.base.pairedDevice()
+        let api = VaultApi(device: d)
+        let all = Task { try await api.leashItemList(agentID: "a1") }
+        var req = try await ops.answer(v, d, "leash.item.list", #"{"items":[{"item_id":"i1","ways":["use"]}]}"#)
+        #expect(body(req) == #"{"agent_id":"a1"}"#)
+        #expect(String(bytes: try await all.value, encoding: .utf8) == #"{"items":[{"item_id":"i1","ways":["use"]}]}"#)
+        let one = Task { try await api.leashItemList(agentID: "a1", itemID: "i9") }
+        req = try await ops.answer(v, d, "leash.item.list", #"{"items":[]}"#)
+        #expect(body(req) == #"{"agent_id":"a1","item_id":"i9"}"#)
+        _ = try await one.value
+        let set = Task { try await api.leashItemSet(Array(#"{"agent_id":"a1","item_id":"i9","ways":["use"]}"#.utf8)) }
+        req = try await ops.answer(v, d, "leash.item.set", #"{"agent_id":"a1","item_id":"i9","version":1,"ways":["use"]}"#)
+        #expect(body(req) == #"{"agent_id":"a1","item_id":"i9","ways":["use"]}"#)
+        #expect(String(bytes: try await set.value, encoding: .utf8) == #"{"agent_id":"a1","item_id":"i9","version":1,"ways":["use"]}"#)
+    }
 }
 // swiftlint:enable line_length

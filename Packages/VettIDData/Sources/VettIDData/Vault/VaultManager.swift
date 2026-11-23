@@ -160,6 +160,8 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
     @ObservationIgnored public private(set) lazy var votes: VotesManager = Self.votesManager(self)
     @ObservationIgnored public private(set) lazy var devices: DevicesManager = Self.devicesManager(self) // §10.3, memory only
     @ObservationIgnored public private(set) lazy var pairing: PairingManager = Self.pairingManager(self) // §6.7, §10.3, with devices
+    /// How an agent may use its items (VAULT-MESSAGING §10.11, ANDROID-PLAN 0.1.137 AA7; ``VaultManager+ItemWays``), in memory only.
+    @ObservationIgnored public private(set) lazy var itemWays: ItemWaysManager = Self.itemWaysManager(self)
     /// The canary manifest installed out of band (VAULT-RELEASES §10.1 step 9, VAULT-MESSAGING §11.10.1): used by the alternate channel instead of the published manifest only while it is newer.
     @ObservationIgnored public let canary: CanaryManifestManager
     /// (IOS-PLAN §6.9, ANDROID-PLAN 0.1.124) The record of this phone's last verification of the enclave its vault runs on,

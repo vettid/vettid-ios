@@ -197,6 +197,7 @@ extension VaultManager {
         history.clear()
         votes.clear()
         devices.clear()
+        itemWays.clear()
     }
 
     /// A wipe, or a deleted vault: every list, and what the phone keeps of them.
@@ -212,6 +213,7 @@ extension VaultManager {
         history.clear()
         votes.clear()
         devices.clear()
+        itemWays.clear()
         // The kept attempts at the results too (a lock keeps them; a wipe does not).
         votes.forgetStored()
     }
