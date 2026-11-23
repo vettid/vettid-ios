@@ -409,7 +409,7 @@ public final class ItemWaysViewModel {
 
     public func submitPassword() {
         // Not while the alarm shows (the keyboard's Return reaches here too): nothing is sent to be refused again.
-        guard let p = local.prompt, local.draft != nil, !p.password.isEmpty, !p.sending, !p.alarm else { return }
+        guard let p = local.prompt, canSend, !p.password.isEmpty, !p.sending, !p.alarm else { return }
         local.prompt?.password = ""
         local.prompt?.sending = true
         send(password: p.password, resent: p.resend)
@@ -422,6 +422,10 @@ public final class ItemWaysViewModel {
         if local.prompt?.sending == true { return }
         local.prompt = nil
     }
+
+    /// What `send` needs to send anything: a reading, a draft, and the item still included. No password prompt is opened, or
+    /// submitted, without it (a prompt that could send nothing would stay "sending").
+    private var canSend: Bool { local.read != nil && local.draft != nil && !local.notIncluded }
 
     private func send(password: String?, resent: Bool) {
         // An item no longer included saves nothing (AA7), also from a prompt that was open when that was learnt.
@@ -480,8 +484,8 @@ public final class ItemWaysViewModel {
             loads += 1 // a read started before this answer is older than it
             local = local.afterSaved(read, sent: sent)
         // No prompt for settings the page no longer holds (a late answer after a re-read that took them away).
-        case .needsPassword: if local.draft != nil { local.prompt = WaysPrompt() }
-        case .credentialLocked: if local.draft != nil { local.prompt = WaysPrompt(resend: true) }
+        case .needsPassword: if canSend { local.prompt = WaysPrompt() }
+        case .credentialLocked: if canSend { local.prompt = WaysPrompt(resend: true) }
         case .lockedAgain:
             local.prompt = nil
             local.notice = .lockedAgain
@@ -513,7 +517,7 @@ public final class ItemWaysViewModel {
     /// The prompt stays, empty, with the refusal.
     private func refuse(_ kind: FailureKind) {
         // The prompt it was for may be gone with the draft (a late answer): no new one then, which could never send.
-        guard local.prompt != nil || local.draft != nil else { return }
+        guard canSend else { return }
         var p = local.prompt ?? WaysPrompt()
         p.password = ""
         p.sending = false

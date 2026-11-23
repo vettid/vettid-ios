@@ -506,6 +506,33 @@ extension ItemWaysViewModelTests {
         #expect(m.state.prompt == nil)
     }
 
+    /// The item stops being included (the re-read finds it no more) while a save waits: its late refusal or prompt opens no
+    /// prompt, and a submit sends nothing and leaves nothing "sending".
+    @Test func aLateAnswerOpensNoPromptForAnItemNoLongerIncluded() async {
+        for answer in [ItemWaysSave.passwordRefused(VaultFailure(.badPassword)), .needsPassword, .credentialLocked] {
+            repo.current = #"{"agent_id":"a1","item_id":"i1","version":1,"ways":["use"]}"#
+            let m = await vm()
+            m.setReveal(true)
+            m.confirm()
+            let gate = TestDeferred<Void>()
+            repo.saveGate = gate
+            repo.answers = [answer]
+            let saves = repo.saves.count
+            m.save()
+            await pump()
+            repo.current = nil
+            m.retry()
+            await pump()
+            #expect(m.state.notIncluded && m.state.draft != nil)
+            gate.complete()
+            await m.settle()
+            #expect(m.state.prompt == nil)
+            m.submitPassword()
+            await m.settle()
+            #expect(m.state.prompt?.sending != true && repo.saves.count == saves + 1)
+        }
+    }
+
     /// A read-only re-read, and a forced read, take away an open prompt and an open program page.
     @Test func aReadOnlyReReadAndAForcedReadCloseThePromptAndTheProgramPage() async {
         let programs = #"{"agent_id":"a1","item_id":"i1","version":1,"ways":["use","run"],"run":{"programs":[{"program":"gh","env":[]}],"each":true}}"#
