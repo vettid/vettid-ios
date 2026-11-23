@@ -241,6 +241,14 @@ public enum ItemWaysRules {
         p.unicodeScalars.count <= maxPrefix && p.unicodeScalars.allSatisfy { $0 >= " " && $0 <= "~" }
     }
 
+    /// AA8 "Fail closed": whether a run's `cwd` without `member_folder` may be approved, from the item's settings as read: only
+    /// when they carry `run` without `folders` (a vault that carries `run.folders` never sends such a `cwd`). No read, or one that
+    /// did not read strictly (a duplicate member): not allowed (Android judges the lenient reading; this is stricter, chosen).
+    public static func runCwdAllowed(_ read: ItemWaysRead?) -> Bool {
+        guard case .object(let run)? = read?.strict?["run"] else { return false }
+        return !run.has("folders")
+    }
+
     static func isSha256(_ s: String) -> Bool {
         let b = Array(s.utf8)
         return b.count == sha256Hex && b.allSatisfy { (0x30...0x39).contains($0) || (0x61...0x66).contains($0) }

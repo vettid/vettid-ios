@@ -116,7 +116,47 @@ public enum ApprovalParser {
         return DeviceRequest(
             type: type, id: id, deviceName: VaultJSON.string(o, "name"), role: VaultJSON.string(o, "role"),
             requestType: approval ? VaultJSON.string(o, "type") : nil, receivedAt: at, exp: instant(VaultJSON.string(o, "exp")),
-            deviceID: VaultJSON.string(o, "device_id")
+            deviceID: VaultJSON.string(o, "device_id"),
+            held: approval ? held(o) : nil,
+            replaces: approval ? replaces(o) : nil
         )
+    }
+
+    private static func held(_ o: JsonObject) -> HeldApproval {
+        HeldApprovals.of(role: VaultJSON.string(o, "role"), type: VaultJSON.string(o, "type"), body: VaultJSON.obj(o, "body"), pending: o)
+    }
+
+    /// The ops an approval may be referred again for (§6.8 step 4).
+    private static let referredOps: Set<String> = ["item.run", "item.proxy"]
+
+    /// `replaces` of an agent's `item.run` or `item.proxy`: a non-empty string, read whatever the rest of the approval reads as.
+    private static func replaces(_ o: JsonObject) -> String? {
+        guard VaultJSON.string(o, "role") == "agent", let op = VaultJSON.obj(o, "body").flatMap({ VaultJSON.string($0, "op") }),
+              referredOps.contains(op) else { return nil }
+        return VaultJSON.string(o, "replaces").flatMap { $0.isEmpty ? nil : $0 }
+    }
+
+    /// [o], a lenient reading, as a strict object (its members in the order the encoder gives; nil when it cannot be).
+    static func reencoded(_ o: [String: Any]) -> JsonObject? {
+        guard JSONSerialization.isValidJSONObject(o), let d = try? JSONSerialization.data(withJSONObject: o, options: [.sortedKeys])
+        else { return nil }
+        return try? StrictJson.parseObject(Array(d))
+    }
+
+    /// The member that marks a lenient reading; ``HeldApprovals`` takes any agent op that carries it as deny only.
+    static let lenientMarker = "x_lenient"
+
+    /// An `approval.pending` that did not read strictly (a duplicate member somewhere), as a strict object that is deny only
+    /// (AA8 "Fail closed"): the members that name and time the approval, its `replaces`, the ``lenientMarker`` and a `body`
+    /// holding only its `op` (so that a run or a proxy still replaces the approval it names). [o] is the lenient reading.
+    public static func denyOnly(_ o: [String: Any]) -> JsonObject? {
+        let b = JsonBuilder()
+        for name in ["approval_id", "device_id", "role", "name", "type", "exp", "replaces"] {
+            if let v = o[name] as? String { b.string(name, v) }
+        }
+        let op = (o["body"] as? [String: Any])?["op"] as? String
+        b.raw(lenientMarker, "true")
+        b.raw("body", op.map { JsonBuilder().string("op", $0).build() } ?? "{}")
+        return try? StrictJson.parseObject(b.bytes())
     }
 }

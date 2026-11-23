@@ -33,6 +33,10 @@ public final class ApprovalsManager: ApprovalsRepository {
     /// Bumped on every change of the stored events, so that ``approvals`` is observed to change.
     private var storedVersion = 0
     public private(set) var forgetCount = 0
+    /// Approvals a `pending.list` read showed otherwise than their event (AA8): deny only. Memory; cleared with the lists.
+    @ObservationIgnored var mismatched: Set<String> = []
+    /// Approvals a newer one `replaces` (§6.8 step 4): gone, also when a late copy arrives. Memory; cleared with the lists.
+    @ObservationIgnored var replaced: Set<String> = []
 
     @ObservationIgnored let connections: ConnectionsManager
     @ObservationIgnored let ops: @MainActor () async throws -> any ApprovalOps
@@ -46,7 +50,7 @@ public final class ApprovalsManager: ApprovalsRepository {
     /// Counts the approvals that arrived or left (decided here or on another device), and when each did: a list read
     /// before that neither brings back one that left nor drops one that arrived (chosen; not in the spec).
     @ObservationIgnored var changes = 0
-    @ObservationIgnored private var changedAt: [String: Int] = [:]
+    @ObservationIgnored var changedAt: [String: Int] = [:]
     /// The approvals that arrived as events since the approvals were last dropped (``mayHaveBeenDropped(_:)``).
     @ObservationIgnored private var arrivedSinceForget: Set<String> = []
     /// The first page's `ts` of each `pending.list` read on its way, by read (``readPendingAsks(_:generation:)``).
@@ -163,7 +167,8 @@ public final class ApprovalsManager: ApprovalsRepository {
         let keys = Set(fromEvents.map(\.key))
         var seen = Set<String>()
         let all = (fromEvents + listed.filter { !keys.contains($0.key) } + connections.requests.map(PendingApproval.connection))
-            .filter { ($0.exp ?? .distantFuture) > t && seen.insert($0.key).inserted }
+            .filter { ($0.exp ?? .distantFuture) > t && !replaced.contains($0.key) && seen.insert($0.key).inserted }
+            .map(denyIfDiffering)
         // One question per item and subject (0.23.0 §10.12).
         return ShareQuestions.dedupe(all).sorted { $0.receivedAt > $1.receivedAt }
     }
@@ -226,6 +231,8 @@ public final class ApprovalsManager: ApprovalsRepository {
         pendingListAnswered = false
         sessionClosedAt = [:]
         listed = []
+        mismatched = []
+        replaced = []
         if !stored.isEmpty {
             stored = []
             storedVersion += 1
@@ -251,7 +258,7 @@ public final class ApprovalsManager: ApprovalsRepository {
     /// One event of the vault (§9.1): an approval to keep, or another device's decision.
     public func onEvent(_ m: VaultMessage) {
         if ApprovalParser.types.contains(m.type) {
-            keep(m.type, m.object, ts: m.ts)
+            keep(m.type, eventObject(m), ts: m.ts)
         } else if m.type == "sync.event" {
             onSync(m.object, ts: m.ts)
         }
@@ -299,7 +306,9 @@ public final class ApprovalsManager: ApprovalsRepository {
     func keep(_ type: String, _ o: JsonObject, ts: Date? = nil) {
         if ignoredByPendingList(type, o, ts: ts) { return }
         guard let p = ApprovalParser.parse(type, o, at: now()) else { return }
-        if closedAsk(p, ts: ts) || supersededSession(p, ts: ts) { return }
+        if closedAsk(p, ts: ts) || supersededSession(p, ts: ts) || replaced.contains(p.key) { return }
+        // A request referred again (§6.8 step 4): the approval it replaces goes, and never comes back.
+        let replacedByThis = Self.replacedKey(p)
         let at = now()
         changes += 1
         changedAt[p.key] = changes
@@ -323,15 +332,17 @@ public final class ApprovalsManager: ApprovalsRepository {
             d.items = d.items.filter { !named.contains($0.itemID) } + added
             listed[i] = .share(d)
         }
+        replacedByThis.map(markReplaced)
         edit { events in
             let old = events.first { parsed($0)?.key == p.key }
-            events.removeAll { parsed($0)?.key == p.key }
+            events.removeAll { e in parsed(e)?.key == p.key || replacedByThis.map { parsed(e)?.key == $0 } ?? false }
             // A device has at most one session request, and a newer one replaces the older (§6.8).
             removeSessions(ofSameDeviceAs: p, from: &events)
             // Several `share.pending` batches of one rule add up (§10.12).
             let body = if case .share = p, let old { Self.mergedShare(old.body, o) } else { o.raw }
             events.append(StoredEvent(type: type, body: body, at: at, ts: ts))
         }
+        replacedByThis.map(decided)
     }
 
     /// [o] with the items of [old] it does not name added (by `item_id`).

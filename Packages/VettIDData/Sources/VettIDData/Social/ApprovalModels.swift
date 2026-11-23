@@ -207,6 +207,11 @@ public struct DeviceRequest: Equatable, Sendable {
     public var exp: Date?
     /// The device that asked (`device_id`); a closing `sync.event` `device.session` names it (VAULT-MESSAGING 0.70.0 §10.4.2).
     public var deviceID: String?
+    /// What an `approval.pending` asks (AA5, AA8), read strictly from the vault's own text; nil for a session request.
+    public var held: HeldApproval?
+    /// The approval an agent's `item.run` or `item.proxy` referred again `replaces` (§6.8 step 4), read from the envelope
+    /// whatever ``held`` reads as: a deny-only one still replaces the approval it names.
+    public var replaces: String?
 }
 
 /// Something that waits for the member's decision (ANDROID-PLAN §4 Approvals). [key] is stable and unique across the
