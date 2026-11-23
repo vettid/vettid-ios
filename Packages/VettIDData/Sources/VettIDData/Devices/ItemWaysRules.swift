@@ -254,7 +254,44 @@ public enum ItemWaysRules {
     }
 
     /// [a] and [b] are the same settings, a `run.folders` of `[]` counting as none (the vault may answer either way).
-    public static func sameSettings(_ a: ItemWays, _ b: ItemWays) -> Bool { norm(a) == norm(b) }
+    public static func sameSettings(_ a: ItemWays, _ b: ItemWays) -> Bool { identical(norm(a), norm(b)) }
+
+    /// [a] and [b] are the same settings byte for byte (every string by its UTF-8 bytes, as ``same(_:_:)``, never Swift's `==`,
+    /// which takes canonically equivalent spellings for one string): what "nothing changed" means to a page (Save is offered only
+    /// for a difference the vault would see).
+    public static func identical(_ a: ItemWays?, _ b: ItemWays?) -> Bool {
+        guard let a, let b else { return a == nil && b == nil }
+        return same(a.agentID, b.agentID) && same(a.itemID, b.itemID) && a.version == b.version && a.ways == b.ways
+            && identical(a.run, b.run) && identical(a.proxy, b.proxy)
+    }
+
+    private static func identical(_ a: RunSettings?, _ b: RunSettings?) -> Bool {
+        guard let a, let b else { return a == nil && b == nil }
+        return a.each == b.each && list(a.programs, b.programs, programsIdentical) && foldersIdentical(a.folders, b.folders)
+    }
+
+    private static func programsIdentical(_ a: RunProgram, _ b: RunProgram) -> Bool {
+        same(a.program, b.program) && optSame(a.sha256, b.sha256) && optSame(a.path, b.path) && list(a.env, b.env, same)
+    }
+
+    private static func foldersIdentical(_ a: [RunFolder]?, _ b: [RunFolder]?) -> Bool {
+        guard let a, let b else { return a == nil && b == nil }
+        return list(a, b) { same($0.path, $1.path) && $0.write == $1.write }
+    }
+
+    private static func identical(_ a: ProxySettings?, _ b: ProxySettings?) -> Bool {
+        guard let a, let b else { return a == nil && b == nil }
+        return list(a.hosts, b.hosts, same) && same(a.header, b.header) && same(a.prefix, b.prefix)
+    }
+
+    private static func optSame(_ a: String?, _ b: String?) -> Bool {
+        guard let a, let b else { return a == nil && b == nil }
+        return same(a, b)
+    }
+
+    private static func list<T>(_ a: [T], _ b: [T], _ eq: (T, T) -> Bool) -> Bool {
+        a.count == b.count && zip(a, b).allSatisfy { eq($0, $1) }
+    }
 
     private static func norm(_ w: ItemWays) -> ItemWays {
         var w = w

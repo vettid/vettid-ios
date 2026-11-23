@@ -24,6 +24,8 @@ public final class ItemWaysViewModel {
     @ObservationIgnored private var loads = 0
     /// The last event this page has taken in (the repository holds the last one, also from before this page opened).
     @ObservationIgnored private var seenEvent: Int?
+    /// The repository's count of clears this page has taken in: a lock, the hold or a wipe ends what the page holds.
+    @ObservationIgnored private var seenCleared: Int
     private var local = ItemWaysState()
 
     public init(agentID: String, itemID: String, repo: any ItemWaysRepository, devices: any DevicesRepository, items: any ItemsRepository) {
@@ -33,8 +35,10 @@ public final class ItemWaysViewModel {
         self.devices = devices
         self.items = items
         seenEvent = repo.event?.seq
+        seenCleared = repo.cleared
         load(force: true)
         follows.add(follow(self, read: { $0.repo.event }, apply: { $0.onEvent($1) }))
+        follows.add(follow(self, read: { $0.repo.cleared }, apply: { $0.onCleared($1) }))
         if items.load != .loaded { items.refreshQuietly() }
     }
 
@@ -102,6 +106,16 @@ public final class ItemWaysViewModel {
                 local.ownerCheck = kind == .ownerCheckRequired
             }
         }
+    }
+
+    /// The vault locked, was held or wiped: nothing read before it is kept, and no prompt, password or answer survives it. The
+    /// page is empty (and its work cut off) until it is shown again.
+    private func onCleared(_ n: Int) {
+        guard n != seenCleared else { return }
+        seenCleared = n
+        loads += 1
+        work.cancelAll()
+        local = ItemWaysState()
     }
 
     private func onEvent(_ e: ItemWaysEvent?) {
@@ -379,6 +393,7 @@ public final class ItemWaysViewModel {
         local.saving = true
         local.refused = nil
         let repo = repo
+        let started = repo.cleared
         work.launch { [weak self] in
             let result: ItemWaysSave?
             do {
@@ -388,10 +403,12 @@ public final class ItemWaysViewModel {
             } catch {
                 result = .failed(error as? VaultFailure ?? VaultFailure(.other))
             }
-            self?.local.saving = false
+            // The vault answered after a lock, a hold or a wipe (`saved` all the same): the page it was for is gone.
+            guard let self, repo.cleared == started else { return }
+            local.saving = false
             guard let result else { return }
             // One resend after `credential_locked`, whatever the repository answers (AA7 "Saving").
-            if resent, case .credentialLocked = result { self?.onSaved(.lockedAgain, sent: next) } else { self?.onSaved(result, sent: next) }
+            if resent, case .credentialLocked = result { onSaved(.lockedAgain, sent: next) } else { onSaved(result, sent: next) }
         }
     }
 
@@ -400,6 +417,7 @@ public final class ItemWaysViewModel {
         local.saving = true
         local.refused = nil
         let repo = repo
+        let started = repo.cleared
         work.launch { [weak self] in
             let result: ItemWaysSave?
             do {
@@ -409,8 +427,9 @@ public final class ItemWaysViewModel {
             } catch {
                 result = .failed(error as? VaultFailure ?? VaultFailure(.other))
             }
-            self?.local.saving = false
-            if let result { self?.onSaved(result, sent: nil) }
+            guard let self, repo.cleared == started else { return }
+            local.saving = false
+            if let result { onSaved(result, sent: nil) }
         }
     }
 

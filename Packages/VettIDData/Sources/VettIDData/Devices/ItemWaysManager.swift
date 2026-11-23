@@ -123,6 +123,9 @@ public protocol ItemWaysList: AnyObject, Observable, Sendable {
     var listed: Bool { get }
     /// The last event the pages read again for.
     var event: ItemWaysEvent? { get }
+    /// Counts every ``clear()`` (a lock, the hold, a wipe): a page drops what it holds when it changes, and an answer it was
+    /// waiting for across the clear is not shown (the vault answered a save after the lock, which is `saved` all the same).
+    var cleared: Int { get }
 
     func list(_ agentID: String) async throws -> [ItemWaysRead]
 }
@@ -154,6 +157,7 @@ public final class ItemWaysManager: ItemWaysRepository {
     public private(set) var windowNotClosed: WindowNotClosed?
     /// The last `leash.item.changed` or `share.rule.*` event (``onEvent(_:)``).
     public private(set) var event: ItemWaysEvent?
+    public private(set) var cleared = 0
 
     @ObservationIgnored private let ops: @MainActor () async throws -> any ItemWaysOps
     /// The credential's unlock window: until when it is open, as this app opened it.
@@ -211,6 +215,7 @@ public final class ItemWaysManager: ItemWaysRepository {
     /// At lock, the hold and a wipe: nothing is kept, and nothing read before it is kept after it.
     public func clear() {
         generation += 1
+        cleared += 1
         items = [:]
         event = nil
     }

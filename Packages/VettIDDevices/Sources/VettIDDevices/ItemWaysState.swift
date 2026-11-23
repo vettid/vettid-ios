@@ -95,7 +95,7 @@ public struct ItemWaysState: Sendable, CustomStringConvertible, CustomDebugStrin
     public var canTurnOff: Bool { read?.strict != nil && read?.foreign == false }
 
     /// The draft differs from what was read.
-    public var dirty: Bool { draft != nil && draft != read?.ways }
+    public var dirty: Bool { draft != nil && !ItemWaysRules.identical(draft, read?.ways) }
 
     /// The open program's text was changed in its field and not applied yet.
     public var editPending: Bool {
@@ -130,7 +130,7 @@ public struct ItemWaysState: Sendable, CustomStringConvertible, CustomDebugStrin
         base.prompt = nil
         base.notice = .saved
         let now = saved.ways
-        if sent == nil || draft == nil || draft == sent {
+        if sent == nil || draft == nil || ItemWaysRules.identical(draft, sent) {
             base.read = saved
             base.draft = now
             base.changedElsewhere = false
@@ -156,12 +156,12 @@ public struct ItemWaysState: Sendable, CustomStringConvertible, CustomDebugStrin
     /// something, or [keep]) is kept with the notice, and else the page starts again from [r].
     func afterRead(_ r: ItemWaysRead, force: Bool, keep: Bool, before: ItemWays?) -> ItemWaysState {
         var s = self
-        let clean = draft == read?.ways
-        if !force, let cur = read, r.ways?.version == cur.ways?.version, r.ways == cur.ways || clean {
+        let clean = ItemWaysRules.identical(draft, read?.ways)
+        if !force, let cur = read, r.ways?.version == cur.ways?.version, ItemWaysRules.identical(r.ways, cur.ways) || clean {
             s.read = r
             if clean { s.draft = r.ways }
             s.notIncluded = false
-        } else if !force, keep || busy || draft != before {
+        } else if !force, keep || busy || !ItemWaysRules.identical(draft, before) {
             // Kept, on the read it was made from: its save meets the vault's `conflict`, with no prompt.
             s.notIncluded = false
             s.changedElsewhere = true

@@ -28,7 +28,10 @@ extension ItemWaysRules {
         let repeated = reads.contains { r in !pairs.insert(Array(r.agentID.utf8) + [0] + Array(r.itemID.utf8)).inserted }
         // Without the strict reading too, as for a duplicate member: no copy's settings can be sent back by a turn-off.
         let readOnly = { (r: ItemWaysRead) in
-            ItemWaysRead(agentID: r.agentID, itemID: r.itemID, ways: nil, rawWays: r.rawWays, strict: nil, foreign: r.foreign)
+            ItemWaysRead(
+                agentID: r.agentID, itemID: r.itemID, ways: nil, rawWays: r.rawWays, strict: nil, foreign: r.foreign,
+                answerHasFolders: r.answerHasFolders
+            )
         }
         return repeated ? reads.map(readOnly) : reads
     }

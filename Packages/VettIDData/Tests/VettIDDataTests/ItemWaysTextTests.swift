@@ -167,6 +167,23 @@ import VettIDCrypto
         #expect(!ItemWaysRules.sameSettings(a, b))
     }
 
+    /// "The same settings" is byte for byte: canonically equivalent spellings are different strings.
+    @Test func identicalSettingsAreComparedByTheirBytes() {
+        func ways(_ program: String, header: String = "Authorization") -> ItemWays {
+            ItemWays(
+                agentID: "a1", itemID: "i1", version: 1, ways: [.use, .run, .proxy],
+                run: RunSettings(programs: [RunProgram(program: program, env: ["A"])], each: true),
+                proxy: ProxySettings(hosts: ["a.example.com"], header: header, prefix: "Bearer ")
+            )
+        }
+        #expect(ItemWaysRules.identical(ways("caf\u{00E9}"), ways("caf\u{00E9}")))
+        #expect("caf\u{00E9}" == "cafe\u{0301}", "Swift's == takes them for one")
+        #expect(!ItemWaysRules.identical(ways("caf\u{00E9}"), ways("cafe\u{0301}")))
+        #expect(!ItemWaysRules.sameSettings(ways("caf\u{00E9}"), ways("cafe\u{0301}")))
+        #expect(!ItemWaysRules.identical(ways("git"), ways("git", header: "X-Api-Key")))
+        #expect(ItemWaysRules.identical(nil, nil) && !ItemWaysRules.identical(ways("git"), nil))
+    }
+
     @Test func theVaultsCapabilityIsItemWays() {
         #expect(Capabilities.itemWays == "item_ways")
     }

@@ -20,6 +20,7 @@ public final class FakeItemWays: ItemWaysRepository {
     public private(set) var items: [String: [ItemWaysRead]] = [:]
     public var listed = true
     public private(set) var event: ItemWaysEvent?
+    public private(set) var cleared = 0
     public var windowNotClosed: WindowNotClosed?
     @ObservationIgnored public var current: String? = #"{"agent_id":"a1","item_id":"i1","version":1,"ways":["use"]}"#
     @ObservationIgnored public var saves: [Sent] = []
@@ -41,6 +42,13 @@ public final class FakeItemWays: ItemWaysRepository {
     private var eventSeq = 0
 
     public init() {}
+
+    /// The vault locked, was held or wiped.
+    public func clear() {
+        cleared += 1
+        items = [:]
+        event = nil
+    }
 
     /// An event for the pages (a `leash.item.changed` or a rule event).
     public func fireEvent(_ kind: ItemWaysEvent.Kind) {

@@ -708,6 +708,51 @@ import VettIDDataTesting
         #expect(m.state.draft?.run?.programs.first.map { !m.state.pinForgotten($0) } == true)
     }
 
+    /// A save the vault answers after a lock is `saved` all the same: the page does not survive the lock to show it.
+    @Test func aSaveAnsweredAfterALockShowsNoSavedPage() async {
+        let gate = TestDeferred<Void>()
+        repo.saveGate = gate
+        let m = await vm()
+        m.setReveal(true)
+        m.confirm()
+        m.save()
+        await pump()
+        repo.clear()
+        await pump()
+        #expect(m.state.read == nil && m.state.draft == nil && m.state.prompt == nil)
+        gate.complete()
+        await m.settle()
+        #expect(m.state.notice == nil && m.state.read == nil && m.state.draft == nil)
+        #expect(!m.state.saving)
+    }
+
+    /// A password typed when the vault locks goes with the prompt.
+    @Test func aLockDropsThePromptAndItsPassword() async {
+        repo.answers = [.needsPassword]
+        let m = await vm()
+        m.setReveal(true)
+        m.confirm()
+        m.save()
+        await m.settle()
+        m.setPassword("pw")
+        repo.clear()
+        await pump()
+        #expect(m.state.prompt == nil)
+    }
+
+    /// "Nothing changed" is byte for byte: a program written with the same letters in another Unicode form is a change.
+    @Test func aProgramInAnotherUnicodeFormIsAChange() async throws {
+        repo.current = "{\"agent_id\":\"a1\",\"item_id\":\"i1\",\"version\":1,\"ways\":[\"use\",\"run\"],\"run\":{\"programs\":[{\"program\":\"caf\u{00E9}\",\"env\":[]}],\"each\":true}}"
+        let m = await vm()
+        #expect(!m.state.canSave)
+        m.openProgram(0)
+        m.setEditInput("cafe\u{0301}")
+        #expect(m.state.editPending && m.state.canSave)
+        m.save()
+        await m.settle()
+        #expect(Array(repo.saves.first?.next.run?.programs[0].program.utf8 ?? "".utf8) == Array("cafe\u{0301}".utf8))
+    }
+
     /// An event this page saw before it opened is not read for; a lock's `clear` forgets it.
     @Test func anEventFromBeforeThePageOpenedIsNotTaken() async {
         repo.fireEvent(item(nil))
