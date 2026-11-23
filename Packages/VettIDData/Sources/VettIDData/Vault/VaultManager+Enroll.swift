@@ -45,8 +45,11 @@ extension VaultManager {
     /// A request whose answer was lost may have made the vault: `vault.enrolled` then pins it on this device, and no
     /// second request is sent; a retry that meets `vault_exists` first waits ``VaultManagerConfig/enrolledGrace`` for
     /// that `vault.enrolled` before it reports the vault as another phone's.
+    /// Refused while a transfer to this phone waits (``codeTransferWaiting``): a setup code redeemed before it was scanned
+    /// would otherwise enroll another vault with that code's `user_guid` while the transfer's vault is pinned.
     public func enroll(pin: String, onStep: @MainActor (EnrollStep) -> Void) async throws {
         try await guarded {
+            if record.value.transferStartedMs != nil { throw VaultFailure(.enrollmentStarted, code: Self.codeTransferWaiting) }
             let s = try await openSession()
             let local = record.value
             onStep(.enroll)

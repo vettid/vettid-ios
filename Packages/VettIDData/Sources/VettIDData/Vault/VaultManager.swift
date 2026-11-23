@@ -648,7 +648,7 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
         // (§6.7.1) A paired transfer whose take-over never ran (its device without a valid `user_guid`: a damaged record; a
         // good one was completed or failed above): never completed, never "create a credential", never an unlock with
         // another `user_guid`. Locked, and the unlock screen says this phone cannot open the vault (``userGuidUsable``).
-        if current.transferStartedMs != nil, !current.movedIn, !current.setupComplete { return .locked }
+        if current.transferStartedMs != nil, !current.movedIn { return .locked }
         return try await pairedPhase(s, current)
     }
 
