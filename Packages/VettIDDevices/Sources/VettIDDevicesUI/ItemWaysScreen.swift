@@ -267,12 +267,16 @@ private struct WaysDialogs: ViewModifier {
                 confirmLabel: Txt.waysPinForgetConfirm, dismissLabel: Txt.waysCancel, onConfirm: actions.onConfirm
             )
             .alert(
-                "", isPresented: uncovered(Binding(get: { state.fullPin != nil }, set: { if !$0 { actions.onShowPin(nil) } }), covered: covered)
+                "", isPresented: uncovered(pinShown, covered: covered)
             ) {
                 Button(Txt.waysPinClose, role: .cancel) {}
             } message: {
                 Text(state.fullPin.map { Fingerprints.full($0) } ?? "").monospaced()
             }
+    }
+
+    private var pinShown: Binding<Bool> {
+        Binding(get: { state.fullPin != nil }, set: { if !$0 { actions.onShowPin(nil) } })
     }
 
     private func confirming(_ c: WaysConfirm) -> Binding<Bool> {

@@ -46,7 +46,8 @@ import VettIDDataTesting
     /// A pair the vault lists twice is two rows with two ids.
     @Test func everyRowHasItsOwnId() async {
         ways.listAnswer = [
-            #"{"agent_id":"a1","item_id":"i1","version":2,"ways":["use"]}"#, #"{"agent_id":"a1","item_id":"i1","version":2,"ways":["use"]}"#,
+            #"{"agent_id":"a1","item_id":"i1","version":2,"ways":["use"]}"#,
+            #"{"agent_id":"a1","item_id":"i1","version":2,"ways":["use"]}"#,
         ]
         let m = DeviceViewModel(id: "a1", repo: fake, itemWays: ways, items: items)
         await m.settle()
