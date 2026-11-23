@@ -172,6 +172,7 @@ jobs:
       WEBRTC_MAX_BEHIND: 2
     outputs:
       stale: ${{ steps.age.outputs.stale }}
+      behind: ${{ env.WEBRTC_MAX_BEHIND }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -189,11 +190,11 @@ jobs:
             echo "::notice::test run: judging $OVERRIDE instead of the pinned $pinned"
             pinned=$OVERRIDE
           fi
-          case $pinned in [0-9]*.*) ;; *) echo "::error::not a release: $pinned"; exit 1 ;; esac
+          echo "$pinned" | grep -Eq '^[1-9][0-9]*\.[0-9.]+$' || { echo "::error::not a release: $pinned"; exit 1; }
           # The newest milestone among the published releases (the list isn't
           # in version order, and "latest" is only the most recent publish).
           newest=$(gh api 'repos/webrtc-sdk/Specs/releases?per_page=50' \
-            --jq '[.[] | select(.draft | not) | select(.prerelease | not) | .tag_name | split(".")[0] | tonumber] | max') \
+            --jq '[.[] | select(.draft | not) | select(.prerelease | not) | .tag_name | select(test("^[1-9][0-9]*\\.")) | split(".")[0] | tonumber] | max') \
             || { echo "::error::webrtc-sdk/Specs' releases could not be read"; exit 1; }
           case $newest in ''|null|*[!0-9]*) echo "::error::no milestone in webrtc-sdk/Specs' releases"; exit 1 ;; esac
           have=${pinned%%.*}
@@ -228,6 +229,7 @@ jobs:
           GOVULN_FOUND: ${{ needs.govulncheck.outputs.found }}
           WEBRTC: ${{ needs.webrtc.result }}
           WEBRTC_STALE: ${{ needs.webrtc.outputs.stale }}
+          WEBRTC_MAX_BEHIND: ${{ needs.webrtc.outputs.behind }}
           ASSIGNEE: ${{ vars.SECURITY_ASSIGNEE || github.repository_owner }}
         run: |
           what=""
@@ -251,7 +253,7 @@ jobs:
           - webrtc: the WebRTC framework's age could not be checked (the job log names why)."
           elif [ "$WEBRTC_STALE" = true ]; then
             what="$what
-          - webrtc: the WebRTC framework (Packages/VettIDCallsWebRTC) is two or more Chromium milestones behind webrtc-sdk's newest release (the job log names both)."
+          - webrtc: the WebRTC framework (Packages/VettIDCallsWebRTC) is $WEBRTC_MAX_BEHIND or more Chromium milestones behind webrtc-sdk's newest release (the job log names both)."
           fi
           title="security: vulnerability scan findings"
           gh label create security --color B60205 --description "Security findings" 2>/dev/null || true
@@ -259,12 +261,17 @@ jobs:
           if [ -n "$what" ]; then
             if [ -n "$n" ]; then
               gh issue comment "$n" --body "Found again: $RUN$what"
-              gh issue edit "$n" --add-label security --add-assignee "$ASSIGNEE"
+              gh issue edit "$n" --add-label security
             else
-              gh issue create --title "$title" --label security --assignee "$ASSIGNEE" --body "The vulnerability scan on master (.github/workflows/vulns.yml) found:$what
+              url=$(gh issue create --title "$title" --label security --body "The vulnerability scan on master (.github/workflows/vulns.yml) found:$what
 
-          See $RUN."
+          See $RUN.")
+              n=${url##*/}
             fi
+            # Assigned apart, so a login that can't be assigned (a typo in
+            # SECURITY_ASSIGNEE) never keeps the findings out of the issue.
+            gh issue edit "$n" --add-assignee "$ASSIGNEE" \
+              || echo "::warning::the issue could not be assigned to $ASSIGNEE (check the SECURITY_ASSIGNEE variable)"
           elif [ -n "$n" ]; then
             gh issue close "$n" --comment "Clean on master: $RUN"
           fi
