@@ -35,6 +35,8 @@ final class FakeApprovalOps: ApprovalOps {
     var pendingPageSize = 50
     var pendingTs = Date(timeIntervalSince1970: 1_791_115_200)
     var pendingError: VaultOpError?
+    /// When set, `pending.list` answers it as bytes that do not read strictly (a duplicate member somewhere), in one page.
+    var pendingRaw: String?
     var pendingCalls: [String] = []
     /// When set, a call for a page from index [gateFrom] on waits for it (a read on its way).
     var listGate: TestDeferred<Void>?
@@ -115,6 +117,7 @@ final class FakeApprovalOps: ApprovalOps {
         pendingCalls.append(after ?? "nil")
         if let pendingError { throw pendingError }
         guard pendingSupported else { throw Self.error("unsupported_type") }
+        if let pendingRaw { return PendingListPage(body: try StrictJson.parseObject(Array("{}".utf8)), ts: pendingTs, bytes: Array(pendingRaw.utf8), strict: false) }
         var from = after.flatMap(Int.init) ?? 0
         if after != nil, pendingRestarts > 0 {
             pendingRestarts -= 1
