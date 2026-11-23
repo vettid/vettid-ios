@@ -341,7 +341,10 @@ extension VaultManager {
     /// until its deadline and then its window, in the manager. How it ended without completing is told on the welcome
     /// screen (``TransferEndNotice/transferEnd``); the phase follows every outcome. A waiter cancelled (a new transfer, an
     /// abandon, the process ending) tells nothing.
-    public func waitForTransferInBackground() {
+    public func waitForTransferInBackground() { waitForTransferInBackground(quiet: false) }
+
+    /// ``waitForTransferInBackground()``; [quiet]: its end sets no ``transferEnd`` notice.
+    func waitForTransferInBackground(quiet: Bool) {
         guard moveFlags.book.transferWaiter == nil, record.value.transferStartedMs != nil else { return }
         moveFlags.book.transferWaiter = Task { @MainActor [weak self] in
             var end: TransferEnd?
@@ -358,7 +361,7 @@ extension VaultManager {
             } catch {}
             guard let self, !Task.isCancelled else { return }
             moveFlags.book.transferWaiter = nil
-            if let end { transferEnd = end }
+            if let end, !quiet { transferEnd = end }
             try? await refresh()
         }
     }

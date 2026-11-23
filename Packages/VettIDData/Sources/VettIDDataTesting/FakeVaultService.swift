@@ -235,7 +235,7 @@ public final class FakeVaultService: @unchecked Sendable {
     var statusVaultValue: String?
     var holdsDeletionUnlinkValue = false
     var slotQueuedAfterDeletionValue = 0
-    var statusGateValue: FakeHTTPServer.Gate?, enclaveGateValue: FakeHTTPServer.Gate? // ``holdEnclaveReads()``
+    var statusGateValue, enclaveGateValue, redeemGateValue: FakeHTTPServer.Gate? // ``holdEnclaveReads()``, ``holdRedeems()``
     /// Holds the device relay's `register` answers (a session being opened) until released.
     var registerGateValue: FakeHTTPServer.Gate?
     // The rotation, a new credential and the clone alarm (FakeVaultService+Credential.swift), under ``cond``.
@@ -465,7 +465,7 @@ public final class FakeVaultService: @unchecked Sendable {
             // Every vault route is signed by the app key (§11.12.2).
             guard r.header(AppRequestSigning.header) != nil else { return .json(401, #"{"error":"unauthorized"}"#) }
             switch (r.method, r.path) {
-            case ("POST", "/api/vault/enroll/redeem"): return redeem(r)
+            case ("POST", "/api/vault/enroll/redeem"): return redeemGateValue.map { .held($0, redeem(r)) } ?? redeem(r)
             case ("GET", "/api/vault/enclave"): return enclaveGateValue.map { .held($0, enclave(r)) } ?? enclave(r)
             case ("POST", "/api/vault/enroll"): return enroll(r)
             case ("POST", "/api/vault/unlock"): return unlock(r)

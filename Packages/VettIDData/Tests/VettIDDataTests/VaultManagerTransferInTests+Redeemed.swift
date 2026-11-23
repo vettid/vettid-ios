@@ -62,8 +62,55 @@ extension VaultManagerTransferInTests {
         let error = await vaultFailure { try await m.enroll(pin: pin) { _ in } }
         #expect(error?.code == VaultManager.codeTransferWaiting, "\(String(describing: error))")
         #expect(await eventually { m.record.value.transferStartedMs == nil }, "the wait cleared the start")
+        #expect(m.transferEnd == nil, "no \"timed out\" notice for a start the member already left")
         try await m.enroll(pin: pin) { _ in }
         #expect(service.enrolls.count == 1)
+    }
+
+    /// A transfer scanned while a setup code's redeem awaits the member API: the redeem is refused once its answer is in
+    /// (`transfer_waiting`), and the transfer's start and pinned vault stay.
+    @Test func aRedeemRacingAScanKeepsTheTransfersStart() async throws {
+        defer { phone.close() }
+        service.holdRedeems()
+        let redeeming = Task { try await m.redeemSetupCode(.secret(service.secret)) }
+        #expect(await eventually { service.heldRedeems > 0 })
+        _ = try await scanned()
+        let started = m.record.value.transferStartedMs
+        #expect(started != nil)
+        service.releaseRedeems()
+        let error = await vaultFailure { _ = try await redeeming.value }
+        #expect(error?.code == VaultManager.codeTransferWaiting, "\(String(describing: error))")
+        #expect(m.record.value.transferStartedMs == started, "the start kept")
+        #expect(m.session?.device.hasVault == true && m.record.value.userGuid.isEmpty, "the transfer pinned, the code's guid not written")
+    }
+
+    /// Pinned with no start stored (an older race wiped it): the refusal writes a start now, so the transfer's deadline
+    /// and settlement window apply, and waits for it; the transfer isn't dropped.
+    @Test func aPinnedTransferWithoutItsStartGetsOneAndIsWaitedFor() async throws {
+        defer { phone.close() }
+        _ = try await m.redeemSetupCode(.secret(service.secret))
+        _ = try await scanned()
+        try m.record.update(since: m.record.generation) { $0.transferStartedMs = nil }
+        let before = m.nowMs
+        _ = await vaultFailure { try await m.enroll(pin: pin) { _ in } }
+        #expect((m.record.value.transferStartedMs ?? 0) >= before, "a start written now")
+        #expect(m.moveFlags.book.transferWaiter != nil, "waited for")
+        #expect(m.session?.device.hasVault == true, "not dropped")
+    }
+
+    /// While a scan is writing its own start, the refusal starts no waiter and writes nothing: the scan waits itself.
+    @Test func noWaiterWhileAScanIsStarting() async throws {
+        defer { phone.close() }
+        _ = try await m.redeemSetupCode(.secret(service.secret))
+        _ = try await scanned()
+        m.moveFlags.book.transferWaiter?.cancel()
+        m.moveFlags.book.transferWaiter = nil
+        try m.record.update(since: m.record.generation) { $0.transferStartedMs = nil }
+        let d = try #require(m.session?.device)
+        m.moveFlags.book.startingIn += 1
+        defer { m.moveFlags.book.startingIn -= 1 }
+        #expect(m.transferWaitingRefusal(d)?.code == VaultManager.codeTransferWaiting)
+        #expect(m.moveFlags.book.transferWaiter == nil && m.record.value.transferStartedMs == nil)
     }
 
     /// The start's write leaves nothing of an earlier transfer or setup: the start alone says a transfer is under way.
@@ -81,7 +128,8 @@ extension VaultManagerTransferInTests {
         #expect(!m.userGuidUsable)
     }
 
-    /// A completed transfer after a redeem ends with the transfer's `user_guid`, not the code's.
+    /// A completed transfer after a redeem ends with the transfer's `user_guid`, not the code's. (A regression test of
+    /// vettid-ios#319's behaviour.)
     @Test func aCompletedTransferAfterARedeemHasTheTransfersUserGuid() async throws {
         defer { phone.close() }
         _ = try await m.redeemSetupCode(.secret(service.secret))
@@ -125,7 +173,7 @@ extension VaultManagerTransferInTests {
     }
 
     /// The unlock on a transfer that is not completed, or on a damaged record, is refused (`no_user_guid`), and no
-    /// `vault.unlock` is sent.
+    /// `vault.unlock` is sent. (A regression test of vettid-ios#319's behaviour.)
     @Test(arguments: [false, true])
     func theUnlockIsRefusedWithoutAUsableUserGuid(damaged: Bool) async throws {
         defer { phone.close() }

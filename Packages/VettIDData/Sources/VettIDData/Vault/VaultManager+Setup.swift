@@ -26,6 +26,11 @@ extension VaultManager {
             }
         }
         try guardedSync {
+            // Checked again now that the code is spent: a transfer scanned while the redeem awaited the member API has
+            // written its start and pinned its vault, which the record's reset below would wipe (refused, as it is before
+            // the redeem; the spent code is the cost).
+            if record.value.transferStartedMs != nil { throw VaultFailure(.enrollmentStarted, code: Self.codeTransferWaiting) }
+            if let refusal = startOverRefusal(session?.device) { throw refusal }
             let local = record.value
             if !local.vaultID.isEmpty, r.vaultID == local.vaultID {
                 // The same vault's code again (a re-scan): what this phone knows of its enrollment is kept.
