@@ -104,7 +104,9 @@ extension VaultApi {
         if let after { b.string("after", after) }
         if let limit { b.uint("limit", UInt64(min(max(limit, 1), 100))) }
         let r = try await device.request("pending.list", body: b.bytes())
-        return PendingListPage(body: VaultJSON.object(try VaultDevice.okBody("pending.list", r)), ts: r.ts)
+        let bytes = try VaultDevice.okBody("pending.list", r)
+        let strict = (try? StrictJson.parseObject(bytes.isEmpty ? VaultJSON.empty : bytes)) != nil
+        return PendingListPage(body: VaultJSON.object(bytes), ts: r.ts, bytes: strict ? [] : bytes, strict: strict)
     }
 
     // MARK: - Critical-item uses (§10.13)
@@ -171,11 +173,18 @@ public struct GrantAnswer: Equatable, Sendable {
 
 /// A page of `pending.list` (VAULT-MESSAGING 0.70.0 §10.4.2): the response body and the vault's time when it answered.
 public struct PendingListPage: Sendable {
+    /// The answer read strictly; `{}` when it did not read so (a duplicate member somewhere): then [strict] is false.
     public var body: JsonObject
     public var ts: Date
+    /// The answer's bytes when it did not read strictly, so that it can be read leniently and every agent approval in it is
+    /// deny only (ANDROID-PLAN 0.1.138 AA8 "Fail closed"); empty otherwise.
+    public var bytes: [UInt8]
+    public var strict: Bool
 
-    public init(body: JsonObject, ts: Date) {
+    public init(body: JsonObject, ts: Date, bytes: [UInt8] = [], strict: Bool = true) {
         self.body = body
         self.ts = ts
+        self.bytes = bytes
+        self.strict = strict
     }
 }

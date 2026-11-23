@@ -147,20 +147,38 @@ extension ApprovalsManager {
                 first = answer.ts
                 if g == generation { pendingReadTs[id] = answer.ts }
             }
-            for entry in VaultJSON.objects(answer.body, "asks") {
-                let kind = VaultJSON.string(entry, "kind") ?? ""
-                guard let body = VaultJSON.obj(entry, "body") else { continue }
+            let (entries, next) = Self.entries(of: answer)
+            for (kind, body) in entries {
                 // An ask's id is unique: one listed twice means the listing started again.
                 let ask = ["approval_id", "request_id", "invocation_id"].lazy.compactMap { VaultJSON.string(body, $0) }.first
                 if let ask, !seen.insert("\(kind):\(ask)").inserted { return .restarted }
                 // Other kinds (`action`, `location`, and any a later release adds) are skipped.
                 if let type = Self.pendingKinds[kind] { asks.append(OpenAsk(type: type, body: body.raw)) }
             }
-            guard let next = VaultJSON.string(answer.body, "next"), !next.isEmpty else { return .complete(asks, ts: first) }
+            guard let next, !next.isEmpty else { return .complete(asks, ts: first) }
             if next == after { return .incomplete }
             after = next
         }
         return .incomplete
+    }
+
+    /// The entries `{kind, body}` of a page and its `next`. An answer that did not read strictly (a duplicate member somewhere) is
+    /// read leniently, and every `approval` in it is deny only (ANDROID-PLAN 0.1.138 AA8 "Fail closed"; ``ApprovalParser/denyOnly(_:)``).
+    static func entries(of answer: PendingListPage) -> (entries: [(kind: String, body: JsonObject)], next: String?) {
+        if answer.strict {
+            let all = VaultJSON.objects(answer.body, "asks").compactMap { e in
+                VaultJSON.obj(e, "body").map { (kind: VaultJSON.string(e, "kind") ?? "", body: $0) }
+            }
+            return (all, VaultJSON.string(answer.body, "next"))
+        }
+        guard let top = (try? JSONSerialization.jsonObject(with: Data(answer.bytes))) as? [String: Any] else { return ([], nil) }
+        let all = (top["asks"] as? [Any] ?? []).compactMap { e -> (kind: String, body: JsonObject)? in
+            guard let e = e as? [String: Any], let body = e["body"] as? [String: Any] else { return nil }
+            let kind = e["kind"] as? String ?? ""
+            let strict = kind == "approval" ? ApprovalParser.denyOnly(body) : ApprovalParser.reencoded(body)
+            return strict.map { (kind: kind, body: $0) }
+        }
+        return (all, top["next"] as? String)
     }
 
     /// The end of a read (merged or not): its cut goes unless a list was merged with it, and when no read is left on its
@@ -198,6 +216,8 @@ extension ApprovalsManager {
         let listed = listedAsks(asks, readTs: readTs, at: t, since: since)
         let (order, byKey, deviceOf) = (listed.order, listed.byKey, listed.deviceOf)
         pendingListAnswered = true
+        noteMismatches(byKey)
+        noteReplaced(byKey)
         // Closes no later than the list are for the list to judge now (and creations that old are ignored).
         closedAsks.removeAll { ($0.ts ?? .distantFuture) <= readTs }
         sessionClosedAt = sessionClosedAt.filter { $0.value.ts > readTs }
@@ -210,6 +230,7 @@ extension ApprovalsManager {
                     kept.append(e)
                     continue
                 }
+                if replaced.contains(p.key) { continue }
                 let listed = byKey[p.key]
                 if changedAfter(p.key, e.ts) {
                     kept.append(e)
@@ -222,14 +243,41 @@ extension ApprovalsManager {
                 have.insert(p.key)
                 if case .device(let d) = p, d.type == Self.sessionType, let id = d.deviceID { sessionDevices.insert(id) }
             }
-            for key in order where !have.contains(key) && !changed(key) {
+            for key in order where !have.contains(key) && !changed(key) && !replaced.contains(key) {
                 guard let ask = byKey[key] else { continue }
                 if let id = deviceOf[key], !sessionDevices.insert(id).inserted { continue }
                 kept.append(StoredEvent(type: ask.type, body: ask.body, at: t))
             }
             events = kept
         }
-        return Set(byKey.keys)
+        return Set(byKey.keys).subtracting(replaced)
+    }
+
+    /// AA8: an approval whose `pending.list` entry reads otherwise than the event kept for the same `approval_id` (what it asks,
+    /// its flags, `previous_*`, `replaces` or `proxy`, its name, role, type or device) is deny only, while the vault holds it.
+    private func noteMismatches(_ listed: [String: OpenAsk]) {
+        var differ = Set<String>()
+        for e in stored where e.type == Self.approvalType {
+            guard case .device(let old)? = parsed(e), let ask = listed[PendingApproval.device(old).key] else { continue }
+            guard let o = try? StrictJson.parseObject(Array(ask.body.utf8)), case .device(let new)? = ApprovalParser.parse(ask.type, o, at: now()),
+                  new.held == old.held, new.role == old.role, new.requestType == old.requestType, new.deviceName == old.deviceName,
+                  new.replaces == old.replaces, new.deviceID == old.deviceID else {
+                differ.insert(PendingApproval.device(old).key)
+                continue
+            }
+        }
+        mismatched.formUnion(differ)
+    }
+
+    /// The approvals the listed ones replace, remembered as gone (their feed items read).
+    private func noteReplaced(_ listed: [String: OpenAsk]) {
+        for ask in listed.values {
+            guard let o = try? StrictJson.parseObject(Array(ask.body.utf8)), let p = ApprovalParser.parse(ask.type, o, at: now()),
+                  let r = Self.replacedKey(p), replaced.insert(r).inserted else { continue }
+            changes += 1
+            changedAt[r] = changes
+            decided(r)
+        }
     }
 
     /// The listed asks that can be taken, in the list's order, by key, with the device of each session request: expired
