@@ -126,8 +126,9 @@ extension VaultManager {
         try await s.device.awaitEnrolled()
     }
 
-    /// A request is about to be posted: from now its outcome is unknown until its answer. Refused, with nothing written,
-    /// when a transfer started meanwhile (a scan during the enrollment's manifest, enclave and attestation awaits).
+    /// A request is about to be posted: from now its outcome is unknown until its answer. Refused when a transfer started
+    /// meanwhile, a scan during the enrollment's manifest, enclave and attestation awaits (nothing is posted; only a
+    /// pinned transfer's missing start is written).
     private func markPosting(_ d: VaultDevice) throws {
         if let refusal = transferWaitingRefusal(d) { throw refusal }
         let nowMs = Int64(config.now().timeIntervalSince1970 * 1000)
@@ -139,9 +140,24 @@ extension VaultManager {
     /// is also waited for in the background, as a refused code's is: one that nothing pinned is cleared at its end, so it
     /// refuses no longer than that.
     func transferWaitingRefusal(_ d: VaultDevice) -> VaultFailure? {
-        let pinned = d.deviceID == nil && d.hasVault && d.vaultID == nil
-        guard pinned || record.value.transferStartedMs != nil else { return nil }
-        waitForTransferInBackground()
+        // [d], or the current session's device when a scan replaced the session meanwhile.
+        let pinned = [d, session?.device].contains { $0.map { $0.deviceID == nil && $0.hasVault && $0.vaultID == nil } ?? false }
+        let started = record.value.transferStartedMs != nil
+        guard pinned || started else { return nil }
+        // Not while a scan is writing its own start (``transferIn(code:)``): it waits for its transfer itself.
+        if moveFlags.book.startingIn == 0 {
+            // Pinned with no start stored (an older race wiped it): a start written now, so the transfer's deadline and its
+            // settlement window apply. Never dropped outright: the old phone may already have approved it.
+            // (Its code isn't known, so a re-scan of it counts as a new code; and its abandon window counts from now.)
+            if pinned, !started {
+                _ = try? record.update(since: record.generation) {
+                    $0.transferIn = true
+                    $0.transferStartedMs = nowMs
+                }
+            }
+            // A leftover start that nothing pinned: the member already left it, so its end says nothing ("timed out").
+            waitForTransferInBackground(quiet: !pinned)
+        }
         return VaultFailure(.enrollmentStarted, code: Self.codeTransferWaiting)
     }
 

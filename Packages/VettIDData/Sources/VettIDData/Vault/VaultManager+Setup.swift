@@ -7,6 +7,8 @@ extension VaultManager {
     // MARK: - The setup code (§11.12.1)
 
     public func redeemSetupCode(_ code: SetupCodeInput) async throws -> String {
+        moveFlags.book.redeeming += 1
+        defer { moveFlags.book.redeeming -= 1 }
         let r: Redeemed = try await guarded {
             try prepared()
             // IOS-PLAN 0.1.38 §4.9: never while the phone could not tell (a redeem would bind K to another vault).
@@ -16,6 +18,9 @@ extension VaultManager {
             // record already names the vault (chosen; not in the spec). A phone that holds nothing yet but carries a
             // stale enrollment starts afresh, as on vettid-android.
             let stored = try await storedSession()
+            // A transfer under way (a scan being made, a start stored, or a pinned transfer): refused before anything is
+            // forgotten and before the code is spent, as the enrollment is (``transferWaitingRefusal(_:)``).
+            if let refusal = redeemTransferRefusal(stored?.device) { throw refusal }
             if let refusal = startOverRefusal(stored?.device) { throw refusal }
             if stored != nil { try await dropSession(forget: true) }
             let appKey = try config.keys.appKeys.getOrCreate().spki()
@@ -26,6 +31,11 @@ extension VaultManager {
             }
         }
         try guardedSync {
+            // Checked again now that the code is spent: a transfer scanned while the redeem awaited the member API has
+            // written its start and pinned its vault, which the record's reset below would wipe (refused, as it is before
+            // the redeem; the spent code is the cost).
+            if record.value.transferStartedMs != nil { throw VaultFailure(.enrollmentStarted, code: Self.codeTransferWaiting) }
+            if let refusal = startOverRefusal(session?.device) { throw refusal }
             let local = record.value
             if !local.vaultID.isEmpty, r.vaultID == local.vaultID {
                 // The same vault's code again (a re-scan): what this phone knows of its enrollment is kept.
@@ -40,6 +50,19 @@ extension VaultManager {
         }
         phase = .setup(.newVault)
         return r.emailHint
+    }
+
+    /// Why no setup code may be redeemed now, if a transfer to this phone is under way: a scan being made
+    /// (``MoveFlags``' `startingIn`), or what ``transferWaitingRefusal(_:)`` refuses (with no device stored: a leftover
+    /// start that can't be cleared now).
+    func redeemTransferRefusal(_ d: VaultDevice?) -> VaultFailure? {
+        if moveFlags.book.startingIn > 0 { return VaultFailure(.enrollmentStarted, code: Self.codeTransferWaiting) }
+        if let d { return transferWaitingRefusal(d) }
+        guard record.value.transferStartedMs != nil else { return nil }
+        // No device stored: nothing was pinned, so the leftover start is cleared now, as a resume clears it; one that
+        // can't be cleared (its epoch-1 record not deleted) refuses.
+        discardTransferStart(attestKey: nil)
+        return record.value.transferStartedMs == nil ? nil : VaultFailure(.enrollmentStarted, code: Self.codeTransferWaiting)
     }
 
     /// "That is not my account": refused (``FailureKind/enrollmentStarted``, code `enrollment_started`) while this phone may

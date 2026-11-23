@@ -67,6 +67,21 @@ extension FakeVaultService {
         return .json(404, #"{"code":"not_found","message":""}"#)
     }
 
+    /// Holds each answer of `POST /api/vault/enroll/redeem` (as it is when asked) until ``releaseRedeems()``.
+    public func holdRedeems() { locked { redeemGateValue = FakeHTTPServer.Gate() } }
+
+    /// The redeem answers held now.
+    public var heldRedeems: Int { locked { redeemGateValue?.waiting ?? 0 } }
+
+    /// Lets the held redeem answers through, and every later one at once.
+    public func releaseRedeems() {
+        let gate: FakeHTTPServer.Gate? = locked {
+            defer { redeemGateValue = nil }
+            return redeemGateValue
+        }
+        gate?.open()
+    }
+
     /// Holds each answer of `GET /api/vault/enclave` (as it is when asked) until ``releaseEnclaveReads()``.
     public func holdEnclaveReads() { locked { enclaveGateValue = FakeHTTPServer.Gate() } }
 
