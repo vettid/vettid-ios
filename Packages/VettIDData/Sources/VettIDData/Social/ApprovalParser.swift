@@ -143,15 +143,19 @@ public enum ApprovalParser {
         return try? StrictJson.parseObject(Array(d))
     }
 
+    /// The member that marks a lenient reading; ``HeldApprovals`` takes any agent op that carries it as deny only.
+    static let lenientMarker = "x_lenient"
+
     /// An `approval.pending` that did not read strictly (a duplicate member somewhere), as a strict object that is deny only
-    /// (AA8 "Fail closed"): the members that name and time the approval, its `replaces`, and a `body` holding only its `op`
-    /// (so that a run or a proxy still replaces the approval it names). [o] is the lenient reading, the last of a duplicate.
+    /// (AA8 "Fail closed"): the members that name and time the approval, its `replaces`, the ``lenientMarker`` and a `body`
+    /// holding only its `op` (so that a run or a proxy still replaces the approval it names). [o] is the lenient reading.
     public static func denyOnly(_ o: [String: Any]) -> JsonObject? {
         let b = JsonBuilder()
         for name in ["approval_id", "device_id", "role", "name", "type", "exp", "replaces"] {
             if let v = o[name] as? String { b.string(name, v) }
         }
         let op = (o["body"] as? [String: Any])?["op"] as? String
+        b.raw(lenientMarker, "true")
         b.raw("body", op.map { JsonBuilder().string("op", $0).build() } ?? "{}")
         return try? StrictJson.parseObject(b.bytes())
     }

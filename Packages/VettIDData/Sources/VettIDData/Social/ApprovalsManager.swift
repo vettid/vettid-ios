@@ -335,7 +335,7 @@ public final class ApprovalsManager: ApprovalsRepository {
         replacedByThis.map(markReplaced)
         edit { events in
             let old = events.first { parsed($0)?.key == p.key }
-            events.removeAll { parsed($0)?.key == p.key || parsed($0)?.key == replacedByThis }
+            events.removeAll { e in parsed(e)?.key == p.key || replacedByThis.map { parsed(e)?.key == $0 } ?? false }
             // A device has at most one session request, and a newer one replaces the older (§6.8).
             removeSessions(ofSameDeviceAs: p, from: &events)
             // Several `share.pending` batches of one rule add up (§10.12).

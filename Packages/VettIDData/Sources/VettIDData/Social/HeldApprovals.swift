@@ -133,7 +133,8 @@ public enum HeldApprovals {
     }
 
     private static func agentRequest(_ body: JsonObject, _ pending: JsonObject?) -> HeldApproval {
-        guard let pending else { return .unshown }
+        // A lenient reading (``ApprovalParser/denyOnly(_:)``) is never the strict one: every agent op in it is deny only.
+        guard let pending, !pending.has(ApprovalParser.lenientMarker) else { return .unshown }
         switch VaultJSON.string(body, "op") {
         // §6.8 step 1: these ignore an unknown member, but never one that changes what approving means (AA8).
         case "item.use": return AgentApprovals.plainShown(pending) ? itemUse(body) : .unshown

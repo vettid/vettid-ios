@@ -99,6 +99,31 @@ import VettIDDataTesting
         #expect(try isRun(request(m, "h2")))
     }
 
+    /// A lenient reading is never the strict one: a catalog or a reveal with a duplicate member is never approvable.
+    @Test func aCatalogOrRevealWithADuplicateIsNeverApprovable() async throws {
+        let m = manager()
+        let cat = #"{"op":"catalog","op":"catalog"}"#, get = #"{"op":"item.get","item_id":"i1","item_id":"i1"}"#
+        m.onEvent(event(held("h3", cat)))
+        m.onEvent(event(held("h4", get)))
+        #expect(try request(m, "h3").held == .unshown)
+        #expect(try request(m, "h4").held == .unshown)
+        // As a non-strict list page, also over a strict event kept before.
+        let m2 = manager()
+        m2.onEvent(event(held("h5", #"{"op":"catalog"}"#)))
+        #expect(try request(m2, "h5").held == .catalog)
+        ops.pendingRaw = #"{"asks":[{"kind":"approval","body":\#(held("h5", cat))},{"kind":"approval","body":\#(held("h6", get))}]}"#
+        try await m2.refreshApprovals()
+        #expect(try request(m2, "h5").held == .unshown)
+        #expect(try request(m2, "h6").held == .unshown)
+    }
+
+    @Test func aReferralKeepsAStoredEventThatDoesNotParse() throws {
+        let m = manager()
+        m.stored.append(.init(type: "approval.pending", body: "{}", at: now, ts: nil))
+        m.onEvent(event(held("h1", runBody())))
+        #expect(m.stored.count == 2, "nil is not a key to match")
+    }
+
     @Test func aListedApprovalWithADuplicateIsDenyOnly() async throws {
         let m = manager()
         let dup = held("h1", runBody().replacingOccurrences(of: #""how":"env""#, with: #""how":"stdin","how":"env""#))
