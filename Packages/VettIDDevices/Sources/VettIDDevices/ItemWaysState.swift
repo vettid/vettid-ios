@@ -184,7 +184,7 @@ public struct ItemWaysState: Sendable, CustomStringConvertible, CustomDebugStrin
     public var customMirror: Mirror { Mirror(self, children: [:]) }
 }
 
-extension Array {
+public extension Array {
     /// The element at [i], or nil when there is none.
     subscript(safe i: Int) -> Element? { indices.contains(i) ? self[i] : nil }
 }

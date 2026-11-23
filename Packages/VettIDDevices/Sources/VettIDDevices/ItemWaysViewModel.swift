@@ -434,7 +434,7 @@ public final class ItemWaysViewModel {
     }
 
     /// [sent] is the draft the save sent: an edit made while it was out stays in the draft after a `saved`.
-    private func onSaved(_ r: ItemWaysSave, sent: ItemWays?) {
+    private func onSaved(_ r: ItemWaysSave, sent: ItemWays?) { // swiftlint:disable:this cyclomatic_complexity
         switch r {
         case .saved(let read):
             loads += 1 // a read started before this answer is older than it

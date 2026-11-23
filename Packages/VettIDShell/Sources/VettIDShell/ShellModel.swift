@@ -158,6 +158,9 @@ public final class ShellModel {
     /// A device's page over Devices & agents (or the screen on top), once.
     public func openDevice(_ id: String) { pushOnce(.device(id)) }
 
+    /// How an agent may use an item (AA7), over the agent's page, once.
+    public func openItemWays(agentID: String, itemID: String) { pushOnce(.itemWays(agentID: agentID, itemID: itemID)) }
+
     /// Pairing an agent, or [desktop] a desktop, over Devices & agents, once. The drawer drops it (``navigate(_:)``): a pairing not
     /// approved is then rejected by its screen going.
     public func openPair(desktop: Bool) { pushPairing(.pair(held: false, desktop: desktop)) }

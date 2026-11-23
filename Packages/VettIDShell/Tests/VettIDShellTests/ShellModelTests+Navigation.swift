@@ -245,6 +245,17 @@ import VettIDVault
         #expect(m.path == [.notifications(archived: false)])
     }
 
+    /// How an agent may use an item (AA7): the item's page opens over the agent's page, once.
+    @Test func anItemsWaysOpenOverTheAgentsPageOnce() {
+        let m = model
+        m.openDevice("a1")
+        m.openItemWays(agentID: "a1", itemID: "i1")
+        m.openItemWays(agentID: "a1", itemID: "i1")
+        #expect(m.path == [.device("a1"), .itemWays(agentID: "a1", itemID: "i1")])
+        m.openItemWays(agentID: "a1", itemID: "i2")
+        #expect(m.path.count == 3)
+    }
+
     /// Devices & agents (ANDROID-PLAN 0.1.53 AA1): a feed item of a paired device opens its page over the screen in front, one
     /// without a device the list; a device's page opens its History once, searched for its name.
     @Test func devicesOpenTheirPageAndTheirHistoryOnce() {
