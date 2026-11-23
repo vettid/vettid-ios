@@ -53,6 +53,7 @@ public final class ItemWaysViewModel {
     public var state: ItemWaysState {
         var s = local
         s.agent = devices.devices.first { sameBytes($0.id, agentID) }
+        s.agentsLoaded = devices.load == .loaded
         let item = items.items.first { sameBytes($0.itemID, itemID) }
         s.itemName = item?.name
         s.namesLoaded = items.load == .loaded
@@ -408,7 +409,7 @@ public final class ItemWaysViewModel {
 
     public func submitPassword() {
         // Not while the alarm shows (the keyboard's Return reaches here too): nothing is sent to be refused again.
-        guard let p = local.prompt, !p.password.isEmpty, !p.sending, !p.alarm else { return }
+        guard let p = local.prompt, local.draft != nil, !p.password.isEmpty, !p.sending, !p.alarm else { return }
         local.prompt?.password = ""
         local.prompt?.sending = true
         send(password: p.password, resent: p.resend)
@@ -478,8 +479,9 @@ public final class ItemWaysViewModel {
         case .saved(let read):
             loads += 1 // a read started before this answer is older than it
             local = local.afterSaved(read, sent: sent)
-        case .needsPassword: local.prompt = WaysPrompt()
-        case .credentialLocked: local.prompt = WaysPrompt(resend: true)
+        // No prompt for settings the page no longer holds (a late answer after a re-read that took them away).
+        case .needsPassword: if local.draft != nil { local.prompt = WaysPrompt() }
+        case .credentialLocked: if local.draft != nil { local.prompt = WaysPrompt(resend: true) }
         case .lockedAgain:
             local.prompt = nil
             local.notice = .lockedAgain
@@ -510,6 +512,8 @@ public final class ItemWaysViewModel {
 
     /// The prompt stays, empty, with the refusal.
     private func refuse(_ kind: FailureKind) {
+        // The prompt it was for may be gone with the draft (a late answer): no new one then, which could never send.
+        guard local.prompt != nil || local.draft != nil else { return }
         var p = local.prompt ?? WaysPrompt()
         p.password = ""
         p.sending = false

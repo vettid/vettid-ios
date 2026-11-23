@@ -466,5 +466,91 @@ extension ItemWaysViewModelTests {
         await m.settle()
         #expect(repo.saves.first?.cur.ways?.version == 1)
     }
+
+    /// A save's late `needsPassword` or refusal, after a re-read took the settings away, opens no prompt that could never send.
+    @Test func aLateAnswerOpensNoPromptForSettingsTheReReadTookAway() async {
+        repo.current = #"{"agent_id":"a1","item_id":"i1","version":1,"ways":["use"]}"#
+        let m = await vm()
+        m.setReveal(true)
+        m.confirm()
+        let gate = TestDeferred<Void>()
+        repo.saveGate = gate
+        repo.answers = [.needsPassword]
+        m.save()
+        await pump()
+        repo.current = #"{"agent_id":"a1","item_id":"i1","version":1,"ways":["use"],"x":1}"#
+        m.retry()
+        await pump()
+        #expect(m.state.readOnly && m.state.draft == nil)
+        gate.complete()
+        await m.settle()
+        #expect(m.state.prompt == nil)
+        m.submitPassword()
+        await m.settle()
+        #expect(m.state.prompt == nil && !m.state.saving && repo.saves.count == 1)
+        // The same for a refusal of the password.
+        let gate2 = TestDeferred<Void>()
+        repo.saveGate = gate2
+        repo.answers = [.passwordRefused(VaultFailure(.badPassword))]
+        repo.current = #"{"agent_id":"a1","item_id":"i1","version":1,"ways":["use","reveal"]}"#
+        m.load()
+        await m.settle()
+        m.setReveal(false)
+        m.save()
+        await pump()
+        repo.current = #"{"agent_id":"a1","item_id":"i1","version":1,"ways":["use","reveal"],"x":1}"#
+        m.retry()
+        await pump()
+        gate2.complete()
+        await m.settle()
+        #expect(m.state.prompt == nil)
+    }
+
+    /// A read-only re-read, and a forced read, take away an open prompt and an open program page.
+    @Test func aReadOnlyReReadAndAForcedReadCloseThePromptAndTheProgramPage() async {
+        let programs = #"{"agent_id":"a1","item_id":"i1","version":1,"ways":["use","run"],"run":{"programs":[{"program":"gh","env":[]}],"each":true}}"#
+        repo.current = programs
+        repo.answers = [.needsPassword]
+        let m = await vm()
+        m.openProgram(0)
+        m.setEach(false)
+        m.confirm()
+        m.save()
+        await m.settle()
+        #expect(m.state.prompt != nil && m.state.openProgram == 0)
+        repo.current = programs.replacingOccurrences(of: #""each":true"#, with: #""each":true,"x":1"#)
+        m.retry()
+        await m.settle()
+        #expect(m.state.readOnly && m.state.prompt == nil && m.state.openProgram == nil)
+        // Forced: Show the current ones.
+        repo.current = programs
+        m.load()
+        await m.settle()
+        m.openProgram(0)
+        m.setEach(false)
+        m.confirm()
+        repo.answers = [.needsPassword]
+        m.save()
+        await m.settle()
+        #expect(m.state.prompt != nil)
+        m.load()
+        await m.settle()
+        #expect(m.state.prompt == nil && m.state.openProgram == nil && !m.state.dirty)
+    }
+
+    /// An agent gone from the loaded list is "an agent", not "Loading…" for good; a blank item name is no name.
+    @Test func goneAgentsAndBlankItemNamesHaveTheirFallbacks() async {
+        var s = ItemWaysState()
+        s.namesLoaded = true
+        s.agentsLoaded = true
+        #expect(s.agentName == DeviceStrings.devicesAnAgent)
+        s.itemName = " \u{200B} "
+        #expect(s.shownItemName == ItemWaysStrings.waysItemGone)
+        s.namesLoaded = false
+        #expect(s.shownItemName == ItemWaysStrings.waysItemLoading)
+        let m = await vm()
+        devices.devices = []
+        #expect(m.state.agentName == DeviceStrings.devicesAnAgent)
+    }
 }
 // swiftlint:enable line_length

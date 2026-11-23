@@ -40,6 +40,8 @@ func sameBytes(_ a: String, _ b: String) -> Bool { a.utf8.elementsEqual(b.utf8) 
 /// hosts and the vault's own text: nothing but the type is printed. Mirrors vettid-android `ItemWaysUiState` (without AA9's folders).
 public struct ItemWaysState: Sendable, CustomStringConvertible, CustomDebugStringConvertible, CustomReflectable {
     public var agent: DeviceInfo?
+    /// The devices list is read: an agent still missing is gone ("an agent"), not on its way.
+    public var agentsLoaded = false
     public var itemName: String?
     /// The names of the items are read (``itemName`` nil is then an item the member no longer has).
     public var namesLoaded = false
@@ -82,11 +84,15 @@ public struct ItemWaysState: Sendable, CustomStringConvertible, CustomDebugStrin
     public var readOnly: Bool { read?.readOnly == true }
 
     /// The agent's name as a sentence has it (isolated); "Loading…" until the agent is known.
-    public var agentName: String { agent.map { DeviceTexts.sentenceName($0) } ?? ItemWaysStrings.waysItemLoading }
+    public var agentName: String {
+        if let agent { return DeviceTexts.sentenceName(agent) }
+        return agentsLoaded ? DeviceStrings.devicesAnAgent : ItemWaysStrings.waysItemLoading
+    }
 
     /// The item's name, isolated as an agent's is; "Loading…" until the names are read, "An item you no longer have" after.
     public var shownItemName: String {
-        if let itemName { return AccountNames.isolate(itemName) }
+        // A blank name is no name.
+        if let itemName, let shown = AccountNames.isolateOrNull(itemName) { return shown }
         return namesLoaded ? ItemWaysStrings.waysItemGone : ItemWaysStrings.waysItemLoading
     }
 
