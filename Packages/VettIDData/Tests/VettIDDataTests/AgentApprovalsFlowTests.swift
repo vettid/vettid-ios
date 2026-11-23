@@ -55,6 +55,11 @@ import VettIDDataTesting
 
     func keys(_ m: ApprovalsManager) -> [String] { m.approvals.map(\.key).sorted() }
 
+    /// The kept events of the approval [id]: what the store holds, whatever the list of approvals shows.
+    func stored(_ m: ApprovalsManager, _ id: String) -> [ApprovalsManager.StoredEvent] {
+        m.stored.filter { $0.body.contains(#""approval_id":"\#(id)""#) }
+    }
+
     func isRun(_ d: DeviceRequest) -> Bool { if case .itemRun? = d.held { true } else { false } }
 
     @Test func aRunEventIsReadStrictlyAndKeptAsTheVaultWroteIt() throws {
@@ -126,11 +131,11 @@ import VettIDDataTesting
         #expect(run.replaces == "h1" && read == ["h1"], "its feed item is read")
         // A late copy of the old one does not bring it back.
         m.onEvent(event(held("h1", runBody())))
-        #expect(keys(m) == ["device:approval.pending:h2"])
+        #expect(keys(m) == ["device:approval.pending:h2"] && stored(m, "h1").isEmpty, "not kept either")
         // Nor does a list that still has it, while the new one replaces it there too.
         listed(held("h1", runBody()), held("h3", runBody(), top: #","replaces":"h2""#))
         try await m.refreshApprovals()
-        #expect(keys(m) == ["device:approval.pending:h3"])
+        #expect(keys(m) == ["device:approval.pending:h3"] && stored(m, "h1").isEmpty && stored(m, "h2").isEmpty, "nor kept")
     }
 
     @Test func aReplacedApprovalCannotBeDecidedFromALateCopy() async throws {
