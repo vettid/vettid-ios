@@ -170,12 +170,13 @@ private func rules() -> ItemWays { ItemWays(agentID: "a1", itemID: "i1") }
         #expect(try #require(ItemWaysRules.list(bytes(#"{"items":[{"agent_id":"a2","item_id":"i1","ways":["use"]}]}"#), agentID: "a1")?.first).readOnly)
     }
 
-    /// One item's settings are never shown under another item's name.
     /// One (agent, item) pair listed twice: every item is read only, the other items included (which copy to edit is unknown).
     @Test func aPairListedTwiceMakesTheListReadOnly() throws {
         let twice = #"{"items":[{"agent_id":"a1","item_id":"i1","version":1,"ways":["use"]},{"agent_id":"a1","item_id":"i1","version":2,"ways":["use","reveal"]},{"agent_id":"a1","item_id":"i2","version":1,"ways":["use"]}]}"#
         let all = try #require(ItemWaysRules.list(bytes(twice), agentID: "a1"))
         #expect(all.count == 3 && all.allSatisfy(\.readOnly))
+        // No copy can be turned off either: that would send its settings, which may be wider than the vault's.
+        #expect(all.allSatisfy { ItemWaysRules.withoutWay($0, "reveal") == nil })
         // The same item id for another agent is another pair.
         let two = #"{"items":[{"agent_id":"a1","item_id":"i1","version":1,"ways":["use"]},{"agent_id":"a2","item_id":"i1","version":1,"ways":["use"]}]}"#
         let read = try #require(ItemWaysRules.list(bytes(two)))
@@ -196,6 +197,7 @@ private func rules() -> ItemWays { ItemWays(agentID: "a1", itemID: "i1") }
         }
     }
 
+    /// One item's settings are never shown under another item's name.
     @Test func anEntryThatIsNotAnObjectMakesTheAnswerUnreadable() throws {
         let shifted = #"{"items":[null,{"agent_id":"a1","item_id":"B","ways":["use"]},{"agent_id":"a1","item_id":"C","version":5,"ways":["use","reveal"]}]}"#
         #expect(ItemWaysRules.list(bytes(shifted)) == nil)

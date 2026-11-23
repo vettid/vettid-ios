@@ -238,9 +238,11 @@ final class FakeWindow {
         let job = Task { @MainActor in try await m.save(cur, try narrowed(cur), password: nil) }
         try await ops.setEntered.value()
         m.clear()
+        // Listed again after the clear, before the late answer: the fresh entry stays.
+        _ = try await m.list("a1")
         ops.setGate?.complete(())
         _ = try await job.value
-        #expect(m.items.isEmpty)
+        #expect(m.items["a1"]?.map { $0.ways?.version } == [1])
     }
 
     /// A read or a save of a1's i1 replaces that entry only: a2's list and a1's other item stay as they were.
@@ -260,6 +262,29 @@ final class FakeWindow {
         _ = try await m.save(cur, try narrowed(cur), password: nil)
         #expect(m.items["a1"]?.map { $0.ways?.version } == [8, 1])
         #expect(m.items["a2"]?.map { $0.ways?.version } == [4])
+    }
+
+    /// Another agent's entry held in a1's list (a2/i1, foreign and read only) is never replaced by a1/i1's read or save,
+    /// even when it is listed first.
+    @Test func aForeignEntryWithTheSameItemIsKept() async throws {
+        let ops = FakeItemWaysOps()
+        let m = manager(ops, FakeWindow())
+        let both = #"{"items":[{"agent_id":"a2","item_id":"i1","version":4,"ways":["use"]},{"agent_id":"a1","item_id":"i1","version":1,"ways":["use","reveal"]}]}"#
+        ops.listed = both
+        _ = try await m.list("a1")
+        func foreignKept() -> Bool {
+            guard let f = m.items["a1"]?.first else { return false }
+            return f.foreign && f.readOnly && f.agentID == "a2"
+        }
+        #expect(foreignKept())
+        let read = try #require(try await m.read("a1", "i1"))
+        #expect(read.agentID == "a1" && !read.readOnly)
+        #expect(foreignKept())
+        #expect(m.items["a1"]?.last?.agentID == "a1")
+        ops.answer = #"{"agent_id":"a1","item_id":"i1","version":2,"ways":["use"]}"#
+        _ = try await m.save(read, try narrowed(read), password: nil)
+        #expect(foreignKept())
+        #expect(m.items["a1"]?.last?.ways?.version == 2)
     }
 
     @Test func aListThatIsNotAListIsAFailureNotNoItems() async throws {

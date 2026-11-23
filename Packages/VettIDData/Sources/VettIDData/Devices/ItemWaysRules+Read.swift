@@ -26,7 +26,11 @@ extension ItemWaysRules {
         }
         var pairs = Set<[UInt8]>()
         let repeated = reads.contains { r in !pairs.insert(Array(r.agentID.utf8) + [0] + Array(r.itemID.utf8)).inserted }
-        return repeated ? reads.map { $0.with(ways: nil, foreign: $0.foreign) } : reads
+        // Without the strict reading too, as for a duplicate member: no copy's settings can be sent back by a turn-off.
+        let readOnly = { (r: ItemWaysRead) in
+            ItemWaysRead(agentID: r.agentID, itemID: r.itemID, ways: nil, rawWays: r.rawWays, strict: nil, foreign: r.foreign)
+        }
+        return repeated ? reads.map(readOnly) : reads
     }
 
     /// Reads one `<item_ways>` answer (`leash.item.set`'s) strictly, as ``list(_:agentID:)`` reads each item.

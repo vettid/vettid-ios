@@ -148,7 +148,7 @@ public final class ItemWaysManager {
         let gen = generation
         let answer = try await Self.guarded { [self] in try await ops().list(agentID, itemID) }
         guard let all = ItemWaysRules.list(answer, agentID: agentID) else { throw Self.unreadable() }
-        let read = all.first { same($0.itemID, itemID) }
+        let read = all.first { same($0.itemID, itemID) && same($0.agentID, agentID) }
         guard gen == generation else { throw VaultFailure(.other, code: Self.codeVoided) }
         if let held = items[agentID] {
             items[agentID] = held.compactMap { same($0.itemID, itemID) && same($0.agentID, agentID) ? read : $0 }
