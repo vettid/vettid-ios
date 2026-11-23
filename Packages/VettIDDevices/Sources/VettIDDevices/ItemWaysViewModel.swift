@@ -394,8 +394,8 @@ public final class ItemWaysViewModel {
     public func setPassword(_ v: String) {
         guard local.prompt != nil else { return }
         local.prompt?.password = v
-        // A wrong password is forgotten as it is typed again; the alarm stays until it is closed.
-        if local.prompt?.alarm != true { local.prompt?.error = nil }
+        // Typing again forgets the last refusal, the alarm's included (vettid-android `setPassword`).
+        local.prompt?.error = nil
     }
 
     public func submitPassword() {

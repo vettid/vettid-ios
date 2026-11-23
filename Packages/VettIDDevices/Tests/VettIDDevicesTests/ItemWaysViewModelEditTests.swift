@@ -350,11 +350,13 @@ extension ItemWaysViewModelTests {
         m.submitPassword()
         await m.settle()
         #expect(m.state.prompt?.alarm == true && repo.saves.count == 2)
-        m.setPassword("again")
-        #expect(m.state.prompt?.alarm == true)
+        // The keyboard's Return while the alarm shows sends nothing.
         m.submitPassword()
         await m.settle()
         #expect(repo.saves.count == 2)
+        // Typing again clears the alarm, as on Android.
+        m.setPassword("again")
+        #expect(m.state.prompt?.alarm == false)
     }
 
     /// **Open the alarm** closes the prompt.
