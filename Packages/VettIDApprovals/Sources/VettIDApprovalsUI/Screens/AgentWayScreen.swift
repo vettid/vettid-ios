@@ -72,51 +72,10 @@ struct AgentWayScreen: View {
     // MARK: The content
 
     private var scrolled: some View {
-        // The scrolled area's own height is read here, with the geometry of its end, so that both are of the same layout pass.
-        let key = Self.contentKey(state, show)
-        return GeometryReader { area in
-            ScrollViewReader { proxy in
-                ScrollView {
-                    VStack(alignment: .leading, spacing: Spacing.s) {
-                        Color.clear.frame(height: 0).id("way_top")
-                            .background(GeometryReader { g in
-                                let top = g.frame(in: .named("way_scroll")).minY
-                                Color.clear.preference(key: WayReadingKey.self, value: WayReading(top: top, end: nil))
-                            })
-                        ForEach(rows) { row in
-                            VStack(alignment: .leading, spacing: Spacing.xs) {
-                                ForEach(Array(row.parts.enumerated()), id: \.offset) { _, part in WayPartView(part: part) }
-                            }
-                            .padding(.horizontal, Spacing.gutter)
-                        }
-                        // The end: the bottom edge of the last element, in the scrolled area's own coordinates.
-                        Color.clear.frame(height: 1)
-                            .accessibilityHidden(true)
-                            .background(GeometryReader { g in
-                                let end = g.frame(in: .named("way_scroll")).maxY
-                                Color.clear.preference(key: WayReadingKey.self, value: WayReading(top: nil, end: end))
-                            })
-                    }
-                }
-                .coordinateSpace(name: "way_scroll")
-                .onPreferenceChange(WayReadingKey.self) { r in
-                    // Tagged with the content it was measured for: the one this pass drew. What the member sees of the area
-                    // leaves out the insets the content scrolls under (a bar, the safe area).
-                    MainActor.assumeIsolated {
-                        gate.update(key: key, top: r.top, end: r.end, visibleTop: area.safeAreaInsets.top, visibleBottom: bottom(area))
-                    }
-                }
-                .onChange(of: bottom(area)) { _, _ in gate.area(visibleTop: area.safeAreaInsets.top, visibleBottom: bottom(area)) }
-                .onChange(of: area.safeAreaInsets.top) { _, top in gate.area(visibleTop: top, visibleBottom: bottom(area)) }
-                .onChange(of: Self.contentKey(state, show)) { _, _ in proxy.scrollTo("way_top", anchor: .top) }
-            }
-        }
-        .frame(minHeight: Self.minScroll)
-        .accessibilityIdentifier("agent_way_content")
+        WayScroll(rows: rows, key: Self.contentKey(state, show), gate: $gate)
+            .frame(minHeight: Self.minScroll)
+            .accessibilityIdentifier("agent_way_content")
     }
-
-    /// The bottom of what the member sees of the scrolled area.
-    private func bottom(_ area: GeometryProxy) -> Double { area.size.height - area.safeAreaInsets.bottom }
 
     // MARK: The buttons
 
@@ -162,17 +121,69 @@ struct AgentWayScreen: View {
     static let minPanel: CGFloat = 96
 }
 
-/// What the scrolled area reports: the top marker's and the end's positions, in the area's own coordinates.
-private struct WayReading: Equatable {
-    var top: Double?
-    var end: Double?
+/// The scrolled content: the rows, with the markers the gate reads. Everything is measured in one space, the scroll view's own
+/// (SwiftUI's frame of it, which is what the member sees of it: a bar or the safe area the content runs under is outside it, as a
+/// content inset): the top marker, the end, and the frame's height. So the top marker rests at 0 and the end is seen when it is at
+/// or above that height, however the scroll view is placed. Each reading carries the key of the content it was drawn for, so that
+/// every change of the content delivers a fresh one.
+struct WayScroll: View {
+    let rows: [WayRow]
+    let key: String
+    @Binding var gate: WayGate
+
+    var body: some View {
+        ScrollViewReader { proxy in
+            ScrollView {
+                VStack(alignment: .leading, spacing: Spacing.s) {
+                    Color.clear.frame(height: 0).id("way_top")
+                        .background(GeometryReader { g in
+                            let top = g.frame(in: .named("way_scroll")).minY
+                            Color.clear.preference(key: WayReadingKey.self, value: WayReading(key: key, top: top))
+                        })
+                    ForEach(rows) { row in
+                        VStack(alignment: .leading, spacing: Spacing.xs) {
+                            ForEach(Array(row.parts.enumerated()), id: \.offset) { _, part in WayPartView(part: part) }
+                        }
+                        .padding(.horizontal, Spacing.gutter)
+                    }
+                    // The end: the bottom edge of the last element.
+                    Color.clear.frame(height: 1)
+                        .accessibilityHidden(true)
+                        .background(GeometryReader { g in
+                            let end = g.frame(in: .named("way_scroll")).maxY
+                            Color.clear.preference(key: WayReadingKey.self, value: WayReading(key: key, end: end))
+                        })
+                }
+            }
+            .coordinateSpace(name: "way_scroll")
+            // The scroll view's own frame: what is shown of the content.
+            .background(GeometryReader { g in
+                Color.clear.preference(key: WayReadingKey.self, value: WayReading(key: key, height: g.size.height))
+            })
+            .onPreferenceChange(WayReadingKey.self) { r in
+                MainActor.assumeIsolated {
+                    guard let key = r.key, let height = r.height else { return }
+                    gate.update(key: key, top: r.top, end: r.end, visibleTop: 0, visibleBottom: height)
+                }
+            }
+            .onChange(of: key) { _, _ in proxy.scrollTo("way_top", anchor: .top) }
+        }
+    }
 }
 
-private struct WayReadingKey: PreferenceKey {
-    static let defaultValue = WayReading(top: nil, end: nil)
+/// What the scrolled area reports, each part by the view that knows it.
+struct WayReading: Equatable {
+    var key: String?
+    var top: Double?
+    var end: Double?
+    var height: Double?
+}
+
+struct WayReadingKey: PreferenceKey {
+    static let defaultValue = WayReading()
     static func reduce(value: inout WayReading, nextValue: () -> WayReading) {
-        let next = nextValue()
-        value = WayReading(top: next.top ?? value.top, end: next.end ?? value.end)
+        let n = nextValue()
+        value = WayReading(key: n.key ?? value.key, top: n.top ?? value.top, end: n.end ?? value.end, height: n.height ?? value.height)
     }
 }
 

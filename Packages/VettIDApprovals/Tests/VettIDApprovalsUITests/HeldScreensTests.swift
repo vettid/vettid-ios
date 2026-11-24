@@ -209,6 +209,84 @@ import VettIDApprovals
         #expect(cramped == [false], "\(cramped)")
     }
 
+    // MARK: Every change of the content delivers a reading, and what is seen is judged in the scroll view's own space
+
+    @MainActor private final class Phase {
+        var reached = false
+        var rows: [WayRow]
+        var key = "a"
+        init(rows: [WayRow]) { self.rows = rows }
+    }
+
+    private struct GateHost: View {
+        var phase: Phase
+        var inset: Bool
+        @State private var gate = WayGate(key: "a")
+        @State private var key = "a"
+
+        var body: some View {
+            let scroll = WayScroll(rows: phase.rows, key: phase.key, gate: $gate)
+                .onChange(of: phase.key, initial: true) { _, new in gate.rearm(new) }
+                .onChange(of: gate.reached && gate.key == phase.key, initial: true) { _, reached in phase.reached = reached }
+            // A scroll view runs under the safe area it touches (the insets are its content insets); one that touches none, between
+            // spacers taller than the safe area, shows all of its frame.
+            if inset { scroll } else { VStack(spacing: 0) { Color.clear.frame(height: 100); scroll; Color.clear.frame(height: 100) } }
+        }
+    }
+
+    private func rows(_ n: Int, label: String = "row") -> [WayRow] {
+        (0..<n).map { WayRow(id: "r\($0)", parts: [.line("\(label) \($0)", tag: "r\($0)")]) }
+    }
+
+    private func host(_ phase: Phase, inset: Bool) -> (UIWindow, UIHostingController<some View>) {
+        let host = UIHostingController(rootView: GateHost(phase: phase, inset: inset).vettIDTheme(.light))
+        host.additionalSafeAreaInsets = UIEdgeInsets(top: 59, left: 0, bottom: 34, right: 0)
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
+        window.rootViewController = host
+        window.makeKeyAndVisible()
+        return (window, host)
+    }
+
+    private func settle() async { for _ in 0..<20 { try? await Task.sleep(for: .milliseconds(25)) } }
+
+    /// A key change that moves nothing (a rename of the same length) delivers no new geometry: the reading carries its key, so the
+    /// content that fits is still reached, without a drag.
+    @Test func aChangeOfTheContentWithTheSameGeometryOpensAFittingGateWithoutADrag() async {
+        let phase = Phase(rows: rows(3))
+        let (window, _) = host(phase, inset: false)
+        await settle()
+        #expect(phase.reached, "fits: reached at once")
+        phase.rows = rows(3, label: "new")
+        phase.key = "b"
+        // The view is told through a new body: host again with the same phase (the window's root view is re-evaluated).
+        window.rootViewController = UIHostingController(rootView: GateHost(phase: phase, inset: false).vettIDTheme(.light))
+        await settle()
+        #expect(phase.reached, "a new key, the same geometry: reached again")
+    }
+
+    /// The end is seen when it is inside what the scroll view shows, whether it runs under the safe area (UIKit's adjusted content
+    /// insets, 121 and 38 here) or sits between spacers inside it (none): the offset that puts the content's bottom at the bottom of
+    /// what UIKit shows opens the gate, 20 pt short of it does not.
+    @Test func theEndIsSeenWhereTheScrollViewShowsItWithOrWithoutInsets() async {
+        for inset in [true, false] {
+            let phase = Phase(rows: rows(80))
+            let (window, host) = host(phase, inset: inset)
+            await settle()
+            guard let scroll = Self.scrollView(in: host.view) else { Issue.record("no scroll view"); return }
+            _ = window
+            #expect(!phase.reached, "inset \(inset): at the top")
+            let adjusted = scroll.adjustedContentInset
+            // The offset that puts the content's bottom exactly at the bottom of what is shown.
+            let last = scroll.contentSize.height - scroll.bounds.height + adjusted.bottom
+            scroll.setContentOffset(CGPoint(x: 0, y: last - 20), animated: false)
+            await settle()
+            #expect(!phase.reached, "inset \(inset): 20 pt of the end still hidden (under \(adjusted))")
+            scroll.setContentOffset(CGPoint(x: 0, y: last), animated: false)
+            await settle()
+            #expect(phase.reached, "inset \(inset): the end is shown (insets \(adjusted))")
+        }
+    }
+
     @Test func aShortRunThatFitsIsReachedAtOnce() async {
         let states = await gateStates(runState(argv: ["/usr/bin/git"]), scrollTo: [])
         #expect(states == [true], "\(states)")
