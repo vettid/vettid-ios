@@ -1,7 +1,9 @@
 import Foundation
 import Testing
+import VettIDCrypto
 @testable import VettIDData
 import VettIDDataTesting
+@testable import VettIDVault
 
 // Fixtures stay on one line each.
 // swiftlint:disable line_length
@@ -130,6 +132,16 @@ extension AgentApprovalsFlowTests {
         #expect(try await atTheGate { m, _ in m.mismatched.insert("device:approval.pending:h1") } == .requestChanged)
         #expect(try await atTheGate { m, _ in m.replaced.insert("device:approval.pending:h1") } == .notFound)
         #expect(ops.calls.isEmpty)
+    }
+
+    /// The same approval delivered again with another `exp` asks the same (it is not marked different), but it is not the
+    /// request the screen showed: its waiting time changed.
+    @Test func anApprovalDeliveredAgainWithAnotherExpAtTheGateIsNotSent() async throws {
+        let kind = try await atTheGate { m, _ in
+            m.onEvent(event(held("h1", use).replacingOccurrences(of: exp, with: Timestamps.formatMillis(now.addingTimeInterval(900)))))
+            #expect(m.mismatched.isEmpty)
+        }
+        #expect(kind == .requestChanged && ops.calls.isEmpty)
     }
 
     @Test func aScreenThatNoLongerShowsTheRequestAsItDidSendsNothing() async throws {
