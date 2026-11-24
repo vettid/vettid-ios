@@ -33,15 +33,17 @@ extension ApprovalDetailViewModel {
             guard case .device(let now)? = s.approval else { return false }
             return now.sameContent(as: d) && s.itemsRead == .read && s.heldShow == shown.show
         }
-        decideHeld(key: PendingApproval.device(d).key) { [repo] _ in
+        decideHeld(key: PendingApproval.device(d).key, generation: shown.generation) { [repo] _ in
             let r = try await repo.approveDeviceRequest(d, generation: shown.generation, stillShown: still).result
             return r == "referred" && referable ? .referred : .approved(result: r)
         }
     }
 
     /// [body] decides a request an agent holds and says how it ended; a `not_found` is "no longer waiting", any other failure
-    /// is shown with the request kept.
-    func decideHeld(key: String, _ body: @escaping @MainActor (String) async throws -> DeviceOutcome) {
+    /// is shown with the request kept. [generation]: the approvals' ``ApprovalsRepository/forgetCount`` when the screen showed
+    /// the request; a `not_found` after they were dropped since (a lock while it was on its way) is not an end: the screen says
+    /// what it says of a request dropped from this phone ("No longer on this phone"), as for one dropped while shown.
+    func decideHeld(key: String, generation: Int? = nil, _ body: @escaping @MainActor (String) async throws -> DeviceOutcome) {
         guard !local.busy else { return }
         local.busy = true
         local.error = nil
@@ -50,13 +52,21 @@ extension ApprovalDetailViewModel {
                 let outcome = try await body(key)
                 self?.local.outcome = outcome
             } catch let f as VaultFailure where f.kind == .notFound {
-                self?.local.outcome = .noLongerWaiting
+                guard let self else { return }
+                let dropped = generation.map { $0 != repo.forgetCount } ?? false
+                if !dropped { local.outcome = .noLongerWaiting }
             } catch {
                 self?.failed(error)
                 return
             }
             self?.local.busy = false
         }
+    }
+
+    /// "Try again" on a request whose item list could not be read: the list is read again, quietly; nothing is approved by it.
+    public func retryItems() {
+        guard state.offersItemsRetry else { return }
+        vault?.refreshQuietly()
     }
 
     /// "Deny and end access now" on a renewal request (0.78.0 §6.8 step 3): asks "End access for <device>?" first; nothing

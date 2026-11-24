@@ -193,9 +193,10 @@ extension ApprovalsManager {
     public func approveDeviceRequest(
         _ shown: DeviceRequest, generation: Int, stillShown: @escaping @MainActor () -> Bool
     ) async throws -> DeviceDecision {
-        // Looked up as the list shows it (a replaced, expired or differing approval already read as it should), never through the
-        // kept events; and only the request the member was shown, as bytes (its `exp`, names and read, a request that left and
-        // came back included), but not its time of arrival: the same `approval.pending` delivered again is the same request.
+        // Looked up as the list shows it (a replaced or expired approval is gone, a differing one is deny only), never through the
+        // kept events. Only the request the member was shown: every member compared as bytes (its `exp`, names, device and what
+        // it asks) but not its time of arrival, so the same `approval.pending` delivered again is the same request; no lock since
+        // the screen showed it ([generation]); and the screen still showing it as it did ([stillShown]).
         let key = PendingApproval.device(shown).key
         guard shown.type == Self.approvalType, case .device(let d)? = pending(key) else { throw VaultFailure(.notFound) }
         guard generation == forgetCount, d.sameContent(as: shown), stillShown() else { throw VaultFailure(.requestChanged) }

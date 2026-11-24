@@ -141,6 +141,9 @@ public struct ApprovalDetailState: Equatable, Sendable, CustomStringConvertible,
     /// How a decision on a request an agent holds ended: said, with OK, before the screen closes.
     public var outcome: DeviceOutcome?
 
+    /// The item list could not be read and the request says so: "Try again" reads it again (Approve stays off until a read).
+    public var offersItemsRetry: Bool { heldShow == .itemsUnread && itemsRead == .failed }
+
     /// What a request an agent holds for approval shows and allows, from the item list; nil for any other request.
     public var heldShow: HeldShow? {
         guard case .device(let d)? = approval, DeviceAsks.isHeld(d) else { return nil }
@@ -221,7 +224,7 @@ public struct ApprovalDetailState: Equatable, Sendable, CustomStringConvertible,
 public final class ApprovalDetailViewModel {
     @ObservationIgnored let repo: any ApprovalsRepository
     @ObservationIgnored private let connections: (any ConnectionsRepository)?
-    @ObservationIgnored private let vault: (any ItemsRepository)?
+    @ObservationIgnored let vault: (any ItemsRepository)?
     @ObservationIgnored let work = Work()
     @ObservationIgnored private let follows = TaskBag()
     /// The item list's ``ItemsRepository/cleared`` when it was last seen read: a later read does not turn a request's item back
@@ -256,7 +259,8 @@ public final class ApprovalDetailViewModel {
         forgetCountAtOpen = approvals.forgetCount
         self.connections = connections
         self.vault = vault
-        vault?.readIfNotLoaded()
+        // Read when it has not been, and again when the last read failed: nothing else on these screens retries it.
+        if vault?.load == .failed { vault?.refreshQuietly() } else { vault?.readIfNotLoaded() }
         local = ApprovalDetailState(key: key)
         local.approval = approvals.approvals.first { $0.key == key }
         local.items = items.sorted { $0.name.lowercased() < $1.name.lowercased() }

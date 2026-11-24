@@ -63,7 +63,9 @@ import VettIDDataTesting
         #expect(show(Self.get, read: .reading, in: []) == .noItem(use: false, loading: true), "still being read: Loading…")
         #expect(show(Self.get, read: .failed, in: []) == .itemsUnread && !show(Self.get, read: .failed, in: []).approvable, "not read: not said to be gone")
         #expect(show(Self.get, read: .failed) == .itemsUnread, "a failed re-read says why Approve is off")
-        #expect(show(.catalog, read: .failed) == .itemsUnread && show(.unshown, read: .failed) == .other && show(.desktopStepUp, read: .failed) == .desktop)
+        #expect(show(.itemUse(itemID: "i1", fieldID: "f1", data: [1]), read: .failed) == .itemsUnread && show(.itemUse(itemID: "i9", fieldID: "f1", data: [1]), read: .failed) == .itemsUnread)
+        // A catalog names no item; it keeps its own text (Approve stays off until a read, ``ApprovalDetailState/canApprove(at:)``).
+        #expect(show(.catalog, read: .failed) == .catalog && show(.unshown, read: .failed) == .other && show(.desktopStepUp, read: .failed) == .desktop)
         #expect(!show(Self.get, in: []).approvable)
         // An item whose name cleans to nothing is not named.
         let blank = [ItemSummary(itemID: "i1", version: 1, name: "\u{200B}", category: "x", sensitivity: .secret, fieldLabels: [ItemFieldLabel(fieldID: "f1", label: "T", kind: "text")])]
@@ -77,7 +79,10 @@ import VettIDDataTesting
         #expect(show(.itemRun(run)) == .later(item: "GitHub", loading: false) && !show(.itemRun(run)).approvable)
         #expect(show(.itemProxy(proxy)) == .later(item: "GitHub", loading: false))
         #expect(show(.itemRun(run), read: .reading, in: []) == .later(item: nil, loading: true))
-        #expect(show(.itemRun(run), read: .failed, in: []) == .itemsUnread)
+        // A run and a proxy are deny only whatever is read: they keep their own text after a failed read.
+        #expect(show(.itemRun(run), read: .failed) == .later(item: "GitHub", loading: false))
+        #expect(show(.itemProxy(proxy), read: .failed) == .later(item: "GitHub", loading: false))
+        #expect(show(.itemRun(run), read: .failed, in: []) == .later(item: nil, loading: false))
     }
 
     @Test func aRevealIsApprovedFromItsScreenAndTheAnswerIsSaidBeforeItCloses() async {
@@ -209,7 +214,54 @@ import VettIDDataTesting
         let m = await model()
         #expect(m.state.canApprove())
         items.load = .failed
-        #expect(!m.state.canApprove() && m.state.heldShow == .itemsUnread)
+        #expect(!m.state.canApprove() && m.state.heldShow == .itemsUnread && m.state.offersItemsRetry)
+        // The list read again after that failure: still not read until it answers, so Approve stays off meanwhile.
+        items.load = .loading
+        #expect(m.state.itemsRead == .reading && !m.state.canApprove())
+        items.load = .loaded
+        #expect(m.state.canApprove() && !m.state.offersItemsRetry)
+    }
+
+    /// A catalog, a run and a proxy say nothing of the items after a failed read; a catalog's Approve is off until a read.
+    @Test func aFailedReadLeavesACatalogRunAndProxyTheirOwnTexts() async {
+        let run = ItemRun(itemID: "i1", fieldID: "f1", program: "/bin/x", sha256: Self.sha, argv: ["x"], cwd: nil, how: .env, name: "T", env: [], flags: [], previousSha256: nil, previousPath: nil, replaces: nil)
+        let proxy = ItemProxy(itemID: "i1", fieldID: "f1", host: "api.example.com", header: "Authorization", prefix: "Bearer ", seconds: 900, replaces: nil)
+        for (h, show) in [(HeldApproval.catalog, HeldShow.catalog), (.itemRun(run), .later(item: "GitHub", loading: false)), (.itemProxy(proxy), .later(item: "GitHub", loading: false))] {
+            fake.listed = [Self.held(h)]
+            items.load = .loaded
+            let m = await model()
+            items.load = .failed
+            #expect(m.state.heldShow == show && !m.state.canApprove() && !m.state.offersItemsRetry, "\(show)")
+        }
+    }
+
+    /// A list that could not be read is read again when the screen opens, and on Try again; nothing else reads it.
+    @Test func aFailedListIsReadAgainOnOpeningAndOnTryAgain() async {
+        fake.listed = [Self.held(Self.get)]
+        items.load = .failed
+        items.fail["refreshQuietly"] = VaultFailure(.network)
+        let m = await model()
+        #expect(items.calls == ["refreshQuietly"], "read again on opening")
+        #expect(m.state.offersItemsRetry && !m.state.canApprove())
+        items.fail["refreshQuietly"] = VaultFailure(.network)
+        m.retryItems()
+        #expect(items.calls == ["refreshQuietly", "refreshQuietly"] && !m.state.canApprove(), "still failed: Approve off")
+        m.retryItems()
+        #expect(m.state.canApprove() && !m.state.offersItemsRetry, "read: Approve back")
+        m.retryItems()
+        #expect(items.calls.count == 3, "nothing to retry once read")
+    }
+
+    /// A lock while the approval is on its way drops it from this phone: "No longer on this phone", not "no longer waiting".
+    @Test func aLockWhileTheApprovalIsOnItsWayIsNoLongerOnThisPhone() async throws {
+        fake.listed = [Self.held(Self.get)]
+        let m = await model()
+        let rendered = try #require(m.shownHeld())
+        fake.fail["approveDeviceRequest"] = VaultFailure(.notFound)
+        fake.duringDeviceApproval = { [fake] in fake.forgetOpenVault() }
+        m.approve(held: rendered)
+        await m.settle()
+        #expect(m.state.outcome == nil && m.state.notHeld && !m.state.busy && m.state.error == nil)
     }
 
     /// Approve sends what the screen showed when it rendered: a request, or its item's name, that changed since is not approved.

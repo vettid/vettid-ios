@@ -239,6 +239,8 @@ public final class FakeApprovals: ApprovalsRepository {
     /// manager does, an approval whose generation is not ``forgetCount`` or whose check says no is refused
     /// (``FailureKind/requestChanged``), and recorded among the calls as `approveDeviceRequest:changed:<key>`.
     public var lastDeviceApproval: DeviceApprovalCall?
+    /// Runs while an approval is on its way, after its checks (a lock that comes meanwhile, say).
+    public var duringDeviceApproval: (@MainActor () -> Void)?
 
     public func approveDeviceRequest(
         _ shown: DeviceRequest, generation: Int, stillShown: @escaping @MainActor () -> Bool
@@ -250,6 +252,7 @@ public final class FakeApprovals: ApprovalsRepository {
             calls.append("approveDeviceRequest:changed:\(key)")
             throw VaultFailure(.requestChanged)
         }
+        duringDeviceApproval?()
         try call("approveDeviceRequest", key)
         drop(key)
         return DeviceDecision(result: deviceResult)

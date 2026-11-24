@@ -45,7 +45,7 @@ public enum ItemsRead: Equatable, Sendable {
     /// The list's [load], where [readAt] is the list's ``ItemsRepository/cleared`` when it was last seen read (kept up to
     /// date) and [cleared] that count now: a re-read on its way keeps a list read since the last drop (a lock) read; one
     /// read before a drop never counts, even when nothing looked at the list between the drop and the next read; a failed
-    /// read is never a read.
+    /// read is never a read, and the read before it no longer counts either (the screen said the list could not be read).
     public static func of(_ load: ListLoad, cleared: Int, readAt: inout Int?) -> ItemsRead {
         switch load {
         case .loaded:
@@ -53,23 +53,26 @@ public enum ItemsRead: Equatable, Sendable {
             return .read
         case .notLoaded: return .reading
         case .loading: return readAt == cleared ? .read : .reading
-        case .failed: return .failed
+        case .failed:
+            readAt = nil
+            return .failed
         }
     }
 }
 
 public enum DeviceAsks {
     /// What [d], an `approval.pending`, shows, given the item list. [read]: how far the list has been read. Only once it has been
-    /// read is what it cannot name "an item you no longer have": until then "Loading…". After a failed read, whatever it would
-    /// approve is ``HeldShow/itemsUnread``, so the screen says why Approve is off.
+    /// read is what it cannot name "an item you no longer have": until then "Loading…". After a failed read, a use or a reveal
+    /// (what names an item and its fields) is ``HeldShow/itemsUnread``, so the screen says why Approve is off; a run, a proxy
+    /// and a catalog keep what they show (a run and a proxy are deny only whatever is read; a catalog names no item), with
+    /// Approve off until a read.
     public static func show(_ d: DeviceRequest, items: [ItemSummary], read: ItemsRead = .read) -> HeldShow {
         let shown = showLoaded(d, items)
         switch (shown, read) {
         case (_, .read): return shown
         case (.noItem(let use, _), .reading): return .noItem(use: use, loading: true)
         case (.later(nil, _), .reading): return .later(item: nil, loading: true)
-        case (.desktop, .failed), (.other, .failed): return shown
-        case (_, .failed): return .itemsUnread
+        case (.use, .failed), (.get, .failed), (.noItem, .failed): return .itemsUnread
         default: return shown
         }
     }
