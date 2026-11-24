@@ -27,7 +27,7 @@ extension VaultManager: MoveRepository {
         // the notice below, the window's and the deadline's refusals, the code's expiry, the claim fetch and any drop.
         if let sas = try await sameCodeMove(code) { return sas }
         // Not while a setup code's redeem is under way: it forgets the stored device and keys (``MoveFlags``' `redeeming`).
-        if moveFlags.book.redeeming > 0 { throw VaultFailure(.enrollmentStarted, code: Self.codeTransferWaiting) }
+        if moveFlags.book.redeeming > 0 { throw VaultFailure(.enrollmentStarted, code: Self.codeRedeemUnderWay) }
         // A new move: the notice of how the last one ended goes, whatever this one does.
         transferEnd = nil
         // A refresh while this runs resumes nothing: the start may be written before its handshake is saved, and a start
@@ -153,8 +153,9 @@ extension VaultManager: MoveRepository {
     /// that ended, or a `device.paired` without a valid `user_guid` (§6.7.1), is ``codeTransferSessionEnded``; a paired one whose
     /// record lost it, the unlock's `no_user_guid`. A fin refused
     /// for good (``PairingNotCompleted``) before the deadline drops the transfer too. Any other failure before the deadline
-    /// is rethrown and the transfer kept. True once completed, always with the member's `user_guid`.
-    public func awaitTransferIn() async throws -> Bool {
+    /// is rethrown and the transfer kept. True once completed, always with the member's `user_guid`. The screen's wait is
+    /// ``awaitTransferIn()``; the background's calls this.
+    func awaitTransferInWaiting() async throws -> Bool {
         do {
             return try await awaitTransferInOnce()
         } catch {

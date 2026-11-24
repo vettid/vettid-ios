@@ -197,16 +197,20 @@ public struct TransferInContent: View {
 
 /// A failure as a notice: the vault's own text, or "Your vault did not answer…" when it did not answer; a new code refused
 /// while the last move cannot be abandoned ([code] ``VaultManager/codeTransferWaiting``) says that a move is under way.
-private struct MoveFailure: View {
+struct MoveFailure: View {
     let kind: FailureKind?
     let code: String?
     let timeScale: UInt64
 
+    /// The notice's text for [kind] with its [code].
+    static func message(_ kind: FailureKind, code: String?, timeScale: UInt64) -> String {
+        kind == .noResponse ? MoveStrings.transferInNoAnswer : kind.message(code: code, timeScale: timeScale)
+    }
+
     var body: some View {
         if let kind {
             NoticeCard(
-                .urgent, title: MoveStrings.recoverFailedTitle,
-                message: kind == .noResponse ? MoveStrings.transferInNoAnswer : kind.message(code: code, timeScale: timeScale),
+                .urgent, title: MoveStrings.recoverFailedTitle, message: Self.message(kind, code: code, timeScale: timeScale),
                 announce: .assertive
             )
             .accessibilityIdentifier("error")

@@ -349,7 +349,7 @@ extension VaultManager {
         moveFlags.book.transferWaiter = Task { @MainActor [weak self] in
             var end: TransferEnd?
             do {
-                _ = try await self?.awaitTransferIn()
+                _ = try await self?.awaitTransferInWaiting()
             } catch let f as VaultFailure where f.code == Self.codeTransferDeadline {
                 end = .timedOut
             } catch let f as VaultFailure where f.code == Self.codeTransferSessionEnded {

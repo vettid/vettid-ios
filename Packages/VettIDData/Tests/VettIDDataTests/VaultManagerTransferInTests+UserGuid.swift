@@ -69,6 +69,47 @@ extension VaultManagerTransferInTests {
         #expect(try await m.transferInWaiting() == nil, "told once")
     }
 
+    /// The same with the drop's save failing: told once in this process all the same, and the background's wait drops it
+    /// later (quietly: the member was told).
+    @Test func aStopWhoseDropFailsIsToldOnceAndDroppedLater() async throws {
+        defer { phone.close() }
+        _ = try await m.redeemSetupCode(.secret(service.secret))
+        service.transferWithoutUserGuid = true
+        _ = try await m.transferIn(code: try code())
+        service.approveTransferIn()
+        #expect(await eventually { m.session?.device.droppedWithoutUserGuid == true })
+        try await phone.restart()
+        try await m.refresh()
+        phone.deviceSaveFails.on = true
+        #expect(try await m.transferInWaiting() == .stopped)
+        #expect(m.moveFlags.book.transferWaiter != nil, "the background's wait drops it")
+        #expect(try await m.transferInWaiting() == nil, "told once")
+        phone.deviceSaveFails.on = false
+        phone.clockAhead = 661
+        phone.deadlinePauses.holding = false
+        phone.deadlinePauses.release()
+        #expect(await eventually(within: .seconds(60)) { m.record.value.transferStartedMs == nil }, "\(m.phase)")
+        #expect(m.transferEnd == .stopped, "the screen's notice, not another")
+    }
+
+    /// An untold stop pinned with no start stored: no start is adopted and nothing waits for it, so that the background
+    /// never tells it before the transfer screen does.
+    @Test func anUntoldStopWithoutItsStartIsLeftToTheScreen() async throws {
+        defer { phone.close() }
+        _ = try await m.redeemSetupCode(.secret(service.secret))
+        service.transferWithoutUserGuid = true
+        _ = try await m.transferIn(code: try code())
+        service.approveTransferIn()
+        #expect(await eventually { m.session?.device.droppedWithoutUserGuid == true })
+        try m.record.update(since: m.record.generation) { $0.transferStartedMs = nil }
+        try await phone.restart()
+        try await m.refresh()
+        #expect(m.phase == .setup(.transferWaiting), "\(m.phase)")
+        #expect(m.record.value.transferStartedMs == nil && m.moveFlags.book.transferWaiter == nil)
+        #expect(try await m.transferInWaiting() == .stopped)
+        #expect(m.phase == .setup(.newVault), "\(m.phase)")
+    }
+
     /// A transfer scanned after a setup code was redeemed, then abandoned: the redeemed code is kept (no new code needed),
     /// and while the transfer was under way its `user_guid` was not usable. A completed transfer writes its own.
     @Test func anAbandonedTransferKeepsARedeemedCode() async throws {

@@ -54,6 +54,12 @@ final class MoveBook {
     /// background ends the manager's session, and the foreground takes this one back rather than load a second device from
     /// the same stored state (one device, one writer, per transfer).
     var transferSession: VaultSession?
+    /// The screen's ``VaultManager/awaitTransferIn()`` calls under way, from their first line: nothing else starts a
+    /// background wait meanwhile (``VaultManager/watchWaitingTransfer(_:)``).
+    var screenWaits = 0
+    /// (§6.7.1) This process told the member that the move stopped on this phone (``VaultManager/transferInWaiting()``):
+    /// not told again, even when its drop could not be saved.
+    var stopTold = false
     /// The ``VaultManager/awaitTransferIn()`` calls under way (the screen's, the background's).
     var waitingIn = 0
     /// The ``VaultManager/transferIn(code:)`` calls under way: a start's resume waits for none to run (its start may be

@@ -15,8 +15,8 @@ extension DataStrings {
         )
     }
 
-    /// iPhone only (no Android, spec or IOS-PLAN §14 text; chosen; not in the spec, for the owner to approve): a setup
-    /// code, an enrollment or a start-over refused while a move to this phone is under way
+    /// iPhone only (no Android, spec or IOS-PLAN §14 text; chosen; not in the spec; owner-approved): a setup code, an
+    /// enrollment, a recovery or a start-over refused while a move to this phone is under way
     /// (``VaultManager/codeTransferWaiting``).
     static var failureTransferWaiting: String {
         String(

@@ -6,53 +6,92 @@ import VettIDVault
 // (``transferInWaiting()``). Mirrors vettid-android `TransferInResume.decide`, `StoppedMove.tells` and
 // `transferInWaiting`. Nothing here sends anything.
 extension VaultManager {
-    /// (§11.14.10 rule 5) A transfer pinned on [d] with no start stored (an older race wiped it), and no scan writing its
-    /// own: a start is written now and the transfer waited for in the background, as ``transferWaitingRefusal(_:)`` does,
-    /// so that its deadline and settlement window apply and it ends. Never dropped outright: the old phone may already
-    /// have approved it.
-    func adoptPinWithoutStart(_ d: VaultDevice) {
-        guard moveFlags.book.startingIn == 0, record.value.transferStartedMs == nil, transferWaitsHere(record.value, d)
+    /// The code of a scan refused while a setup code's redeem is under way (no move is under way then; the general text).
+    public nonisolated static let codeRedeemUnderWay = "redeem_under_way"
+
+    /// Whether a transfer to this phone is not finished on [d]: unpaired and pinned to a vault whose id it does not know yet
+    /// (only a transfer pins so: an enrollment's `vault.enrolled` pins the vault with its id), as vettid-android's pending
+    /// transfer is the device's. A stored start that nothing pins is no transfer here: it is cleared at the start's resume,
+    /// or refuses an enrollment until its background wait clears it (``transferWaitingRefusal(_:)``).
+    func transferWaitsHere(_ d: VaultDevice) -> Bool {
+        d.deviceID == nil && d.vaultID == nil && d.hasVault
+    }
+
+    /// The phase's own step for a transfer waiting on [d] (``transferWaitsHere(_:)``): one pinned with no start stored is
+    /// adopted (``adoptPinWithoutStart(_:)``), and one that nothing waits for is waited for in the background; never one that
+    /// stopped on this phone untold (the transfer screen tells it first, ``transferInWaiting()``).
+    func watchWaitingTransfer(_ d: VaultDevice) async {
+        guard !d.droppedWithoutUserGuid else { return }
+        if await adoptPinWithoutStart(d) { return }
+        let book = moveFlags.book
+        guard book.transferWaiter == nil, book.settling == nil, book.waitingIn == 0, book.startingIn == 0, book.screenWaits == 0
         else { return }
-        _ = try? record.update(since: record.generation) {
-            $0.transferIn = true
-            $0.transferStartedMs = nowMs
-        }
         waitForTransferInBackground()
     }
 
-    /// Whether a transfer to this phone is not finished on the unpaired device [d]: its start stored in [local], or [d]
-    /// pinned to a vault whose id it does not know yet (only a transfer pins so: an enrollment's `vault.enrolled` pins the
-    /// vault with its id). The same test as ``transferWaitingRefusal(_:)``'s.
-    func transferWaitsHere(_ local: LocalAccount, _ d: VaultDevice) -> Bool {
-        guard d.deviceID == nil, d.vaultID == nil else { return false }
-        return local.transferStartedMs != nil || d.hasVault
+    /// (§11.14.10 rule 5) A transfer pinned on [d] with no start stored (an older race wiped it), and no scan writing its
+    /// own. Its handshake never answered (no comparison code saved, none awaited here): nothing can complete it, so it is
+    /// dropped now, as a start's resume drops one. Otherwise its real start is unknown and may be more than 10 minutes ago:
+    /// the start stored is one deadline back from now (``writeUnknownStart()``), so that no abandon is offered and only the
+    /// settlement's window is waited for. Never dropped outright then: the old phone may already have approved it. True when
+    /// it was adopted (or dropped).
+    @discardableResult
+    func adoptPinWithoutStart(_ d: VaultDevice) async -> Bool {
+        guard moveFlags.book.startingIn == 0, record.value.transferStartedMs == nil, transferWaitsHere(d) else { return false }
+        if !d.holdsTransferSas, !d.awaitsPairingResp, await dropTransfer(d) { return true }
+        writeUnknownStart()
+        waitForTransferInBackground()
+        return true
+    }
+
+    /// A start for a transfer whose own start is unknown: its deadline now (``pairingWindow`` back), so that the abandon is
+    /// closed at once (past the vault's 10 minutes, ``abandonClosed``) and only the settlement's window runs (chosen; not in
+    /// the spec, which keeps the start: none is known here).
+    func writeUnknownStart() {
+        let started = nowMs - Int64(Self.pairingWindow * 1000)
+        _ = try? record.update(since: record.generation) {
+            $0.transferIn = true
+            $0.transferStartedMs = started
+        }
+    }
+
+    /// The screen's wait for the transfer to this phone (``MoveRepository/awaitTransferIn()``): it takes the background's
+    /// place as it begins (one waiter takes the `device.paired`; a settlement under way is joined, with its collects and its
+    /// outcome). Should it fail with the transfer kept, the background's starts again.
+    public func awaitTransferIn() async throws -> Bool {
+        moveFlags.book.screenWaits += 1
+        defer { moveFlags.book.screenWaits -= 1 }
+        moveFlags.book.transferWaiter?.cancel()
+        moveFlags.book.transferWaiter = nil
+        return try await awaitTransferInWaiting()
     }
 
     /// The transfer the screen takes up as it opens, while the phase says one waits. A comparison code shown (saved with
-    /// the handshake, so also after a restart): ``TransferInWaiting/waiting(sas:startedAt:)``, and the background's wait
-    /// stops (the screen's wait takes the `device.paired`, as a scan of the same code does, ``sameCodeMove(_:)``; should
-    /// the screen's wait fail with the transfer kept, the background's starts again, ``awaitTransferIn()``). One that
-    /// stopped on this phone untold: dropped here, as the wait would drop it, and ``TransferInWaiting/stopped``. Nil
-    /// otherwise; nothing is fetched or sent.
+    /// the handshake, so also after a restart): ``TransferInWaiting/waiting(sas:startedAt:)``; the background's wait goes on
+    /// until the screen's begins (``awaitTransferIn()``), so that nothing is left unwatched in between. One that stopped on
+    /// this phone untold: ``TransferInWaiting/stopped``, once per process, with the notice (``transferEnd``) standing until
+    /// the screen has shown it; the transfer is dropped then, and a drop that cannot be saved is left to the background's
+    /// wait. Nil otherwise; nothing is fetched or sent.
     public func transferInWaiting() async throws -> TransferInWaiting? {
         // Only while the phase says so: no session is opened for a phone with nothing set up.
         guard phase == .setup(.transferWaiting), !halted, !record.closed else { return nil }
         return try await guarded {
             let d = try await openSession().device
-            guard transferWaitsHere(record.value, d) else { return nil }
+            guard transferWaitsHere(d) else { return nil }
             if d.droppedWithoutUserGuid {
+                guard !moveFlags.book.stopTold else { return nil }
+                moveFlags.book.stopTold = true
                 moveFlags.book.transferWaiter?.cancel()
                 moveFlags.book.transferWaiter = nil
-                // The notice stands until the screen has shown it (it acknowledges it): a screen gone meanwhile leaves it
-                // to the welcome screen. A drop that cannot be saved is left to the background's wait, which drops it.
                 transferEnd = .stopped
-                if await !dropTransfer(d) { waitForTransferInBackground(quiet: true) }
+                if await !dropTransfer(d) {
+                    if record.value.transferStartedMs == nil { writeUnknownStart() }
+                    waitForTransferInBackground(quiet: true)
+                }
                 await rereadAfterTransferIn()
                 return .stopped
             }
             guard let sas = d.transferSas, let started = transferStartedAt else { return nil }
-            moveFlags.book.transferWaiter?.cancel()
-            moveFlags.book.transferWaiter = nil
             return .waiting(sas: sas, startedAt: started)
         }
     }

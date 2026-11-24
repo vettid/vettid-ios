@@ -437,7 +437,7 @@
       }
     },
     "data_failure_ios_transfer_waiting": {
-      "comment": "iPhone only: no Android text; for the owner to approve.",
+      "comment": "iPhone only: no Android text; owner-approved.",
       "extractionState": "manual",
       "localizations": {
         "en": {

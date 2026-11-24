@@ -126,6 +126,44 @@ import VettIDDataTesting
         #expect(vm.state.step != .intro && !vault.calls.contains("waitForTransferInBackground"), "\(vault.calls)")
     }
 
+    /// The model gone before the answer came: the waiting transfer is left to the background's wait.
+    @Test func aModelGoneBeforeTheAnswerHandsTheWaitBack() async throws {
+        vault.waitingTransfer = .waiting(sas: "553190", startedAt: clock.now())
+        var vm: TransferInViewModel? = transferIn()
+        #expect(vm != nil)
+        vm = nil
+        #expect(await eventually { vault.calls.contains("waitForTransferInBackground") }, "\(vault.calls)")
+        #expect(!vault.calls.contains("awaitTransferIn"))
+    }
+
+    /// (§11.14.10 rule 5) Nothing taken up: the background's wait ending while the screen is at its start is shown here,
+    /// as the screen's own end (and not again on the welcome screen).
+    @Test(arguments: [(TransferEnd.timedOut, TransferInStep.timedOut), (.declined, .rejected), (.stopped, .stopped)])
+    func theBackgroundsEndIsShownOnTheScreen(_ end: TransferEnd, _ step: TransferInStep) async throws {
+        let vm = transferIn()
+        await vm.settle()
+        #expect(vm.state.step == .intro)
+        vault.transferEnd = end
+        #expect(await eventually { vm.state.step == step }, "\(vm.state.step)")
+        #expect(vault.transferEnd == nil && vault.calls.contains("acknowledgeTransferEnd"))
+    }
+
+    /// An end already noted when the screen opened is the welcome screen's; and one while the member's own scan runs is not
+    /// shown over it.
+    @Test func anEarlierEndOrOneDuringAScanIsNotShown() async throws {
+        vault.transferEnd = .timedOut
+        let vm = transferIn()
+        await vm.settle()
+        #expect(vm.state.step == .intro && vault.transferEnd == .timedOut)
+        vault.transferEnd = nil
+        vm.scan()
+        vm.scanned(try qr())
+        await vm.settle()
+        vault.transferEnd = .declined
+        await vm.settle()
+        #expect(vm.state.step != .rejected && vault.transferEnd == .declined)
+    }
+
     /// A scan begun before the answer came is the member's: the waiting transfer is handed back to the background.
     @Test func aScanBegunMeanwhileHandsTheWaitBack() async throws {
         vault.waitingTransfer = .waiting(sas: "553190", startedAt: clock.now())

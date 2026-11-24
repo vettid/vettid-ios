@@ -141,15 +141,16 @@ extension VaultManagerTransferInTests {
         #expect(m.moveFlags.book.transferWaiter == nil && m.transferEnd == nil, "nothing waited for")
     }
 
-    /// The scan side: a scan while a redeem awaits the member API is refused (`transfer_waiting`), before it writes a
-    /// start or makes a device; the redeem then goes through.
+    /// The scan side: a scan while a redeem awaits the member API is refused (`redeem_under_way`: no move is under way, so
+    /// the general text), before it writes a start or makes a device; the redeem then goes through.
     @Test func aScanWhileARedeemIsUnderWayIsRefused() async throws {
         defer { phone.close() }
         service.holdRedeems()
         let redeeming = Task { try await m.redeemSetupCode(.secret(service.secret)) }
         #expect(await eventually { service.heldRedeems > 0 })
         let error = await vaultFailure { _ = try await m.transferIn(code: try code()) }
-        #expect(error?.code == VaultManager.codeTransferWaiting, "\(String(describing: error))")
+        #expect(error?.kind == .enrollmentStarted && error?.code == VaultManager.codeRedeemUnderWay, "\(String(describing: error))")
+        #expect(error.map { $0.kind.message(code: $0.code, timeScale: 1) } == FailureKind.enrollmentStarted.message)
         #expect(m.record.value.transferStartedMs == nil && m.session?.device.hasVault != true)
         service.releaseRedeems()
         _ = try await redeeming.value

@@ -27,6 +27,9 @@ public final class TransferInViewModel: TransferInActions {
     @ObservationIgnored private var ticker: Task<Void, Never>?
     /// The take-up of a transfer not finished as the screen opens (``resume()``).
     @ObservationIgnored private var resumer: Task<Void, Never>?
+    /// Follows the end of a transfer waited for in the background (``TransferEndNotice/transferEnd``), from after the start.
+    @ObservationIgnored private var ends: Task<Void, Never>?
+    @ObservationIgnored private var followsEnds = false
 
     public init(
         move: any MoveRepository,
@@ -39,21 +42,24 @@ public final class TransferInViewModel: TransferInActions {
         self.now = now
         self.sleep = sleep
         resume()
+        ends = follow(self, read: { $0.vault.transferEnd }, apply: { $0.backgroundEnded($1) })
+        followsEnds = true
     }
 
     deinit {
         work.cancelAll()
         resumer?.cancel()
+        ends?.cancel()
         waiter?.cancel()
         ticker?.cancel()
     }
 
     /// A transfer to this phone that is not finished (a restart, or the screen left): its code again, waiting, or the
     /// settlement's check, counted from its stored start; or "The move stopped on this phone" once. Only while the screen is
-    /// still at its start: a scan begun meanwhile is the member's. A wait taken over but not used (the screen went, or the
-    /// member left the start without a scan of their own running) is handed back to the background, as is one whose take-up
-    /// failed. A stop the screen cannot show stays the repository's notice (``TransferEndNotice/transferEnd``). Mirrors
-    /// vettid-android `TransferInViewModel`'s `init`.
+    /// still at its start: a scan begun meanwhile is the member's. A wait not taken up (the screen went, or the member left
+    /// the start without a scan of their own running), and a take-up that failed, leave the transfer to the background's
+    /// wait, started again if it is not running. A stop the screen cannot show stays the repository's notice
+    /// (``TransferEndNotice/transferEnd``). Mirrors vettid-android `TransferInViewModel`'s `init`.
     private func resume() {
         resumer = Task { @MainActor [weak self, move, vault] in
             let found: TransferInWaiting?
@@ -81,6 +87,20 @@ public final class TransferInViewModel: TransferInActions {
                 }
             }
         }
+    }
+
+    /// (§11.14.10 rule 5) The background's wait for a transfer this screen did not take up ended without completing, while
+    /// the screen is at its start: its end here, as the screen's own wait shows it (vettid-android's screen waits itself),
+    /// and not again on the welcome screen. An end already noted when the screen opened is the welcome screen's.
+    private func backgroundEnded(_ end: TransferEnd?) {
+        guard followsEnds, let end, state.step == .intro, waiter == nil else { return }
+        state.sas = nil
+        state.step = switch end {
+        case .timedOut: .timedOut
+        case .declined: .rejected
+        case .stopped: .stopped
+        }
+        vault.acknowledgeTransferEnd()
     }
 
     public func scan() {

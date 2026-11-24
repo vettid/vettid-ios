@@ -30,6 +30,12 @@ import VettIDUI
         #expect(text != FailureKind.enrollmentStarted.message)
         #expect(ErrorNotice.message(.enrollmentStarted, nil, code: VaultManager.codeEnrollmentStarted, timeScale: 1)
             == FailureKind.enrollmentStarted.message)
+        // The transfer screen's notice too (a new code refused while the last move cannot be abandoned); a scan refused
+        // during a redeem (no move under way) keeps the general text.
+        #expect(MoveFailure.message(.enrollmentStarted, code: VaultManager.codeTransferWaiting, timeScale: 1) == text)
+        #expect(MoveFailure.message(.enrollmentStarted, code: VaultManager.codeRedeemUnderWay, timeScale: 1)
+            == FailureKind.enrollmentStarted.message)
+        #expect(MoveFailure.message(.noResponse, code: VaultManager.codeTransferWaiting, timeScale: 1) == MoveStrings.transferInNoAnswer)
     }
 
     /// Every key of the package's `Localizable.xcstrings` resolves, in the built bundle, to its own non-empty text.

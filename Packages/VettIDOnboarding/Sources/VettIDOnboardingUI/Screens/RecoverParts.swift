@@ -38,11 +38,13 @@ struct ClaimFailure: View {
             GuidanceNotice(guidance: guidance, onGoToOpen: onGoToOpen)
         } else if let kind = state.error {
             let waits = kind == .rateLimited && state.retrySeconds > 0
-            let text = waits ? RecoveryStrings.recoverRateLimitedWait(formatWait(state.retrySeconds)) : kind.message(timeScale: timeScale)
+            // A recovery refused while a move to this phone is under way says that (`transfer_waiting`).
+            let own = kind.message(code: state.errorCode, timeScale: timeScale)
+            let text = waits ? RecoveryStrings.recoverRateLimitedWait(formatWait(state.retrySeconds)) : own
             // The wait counts down in the text: the failure's own text is what is said, once.
             NoticeCard(
                 .urgent, title: MoveStrings.recoverFailedTitle, message: text, announce: .assertive,
-                announcement: "\(MoveStrings.recoverFailedTitle). \(kind.message(timeScale: timeScale))",
+                announcement: "\(MoveStrings.recoverFailedTitle). \(own)",
                 spokenMessage: waits ? RecoveryStrings.recoverRateLimitedWait(spokenDuration(state.retrySeconds)) : nil
             )
                 .accessibilityIdentifier("error")
