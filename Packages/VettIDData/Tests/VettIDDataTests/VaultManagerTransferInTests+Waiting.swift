@@ -2,6 +2,7 @@ import Foundation
 import Testing
 @testable import VettIDData
 import VettIDDataTesting
+import VettIDTesting
 @testable import VettIDVault
 
 /// A transfer to this phone that is not finished opens the transfer screen again (``SetupStage/transferWaiting``), with or
@@ -156,13 +157,24 @@ extension VaultManagerTransferInTests {
         try await phone.restart()
         try await m.refresh()
         #expect(await deadlineWaiting())
+        // The approval waits at the relay for the settlement's collect (the collector is not running), which is held out
+        // with it.
         await suspendCollector()
+        let gate = FakeHTTPServer.Gate()
+        service.holdsCollectAnswers = gate
+        service.approveTransferIn()
         phone.clockAhead = 661
         phone.deadlinePauses.release()
-        #expect(await eventually { m.moveFlags.book.settling != nil }, "the settlement runs")
+        #expect(await eventually { m.moveFlags.book.settling != nil && gate.waiting > 0 }, "the settlement's collect holds it")
         #expect(try await m.transferInWaiting() != nil)
-        service.approveTransferIn()
-        #expect(try await m.awaitTransferIn())
+        let screen = Task { try await m.awaitTransferIn() }
+        #expect(await eventually { m.moveFlags.book.screenWaits == 1 && m.moveFlags.book.transferWaiter == nil })
+        #expect(m.moveFlags.book.settling != nil, "the settlement still runs")
+        service.holdsCollectAnswers = nil
+        gate.open()
+        phone.deadlinePauses.holding = false
+        phone.deadlinePauses.release()
+        #expect(try await screen.value)
         #expect(m.phase == .setup(.finishing) && m.finishMovePending)
     }
 
