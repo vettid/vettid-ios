@@ -65,10 +65,12 @@ private func itemProxy(_ h: HeldApproval) throws -> ItemProxy {
         }
     }
 
-    @Test func theCatalogARunAndAProxyAreApprovable() throws {
+    @Test func theCatalogIsApprovableAndARunAndAProxyAreReadButNotApprovable() throws {
         #expect(try held(#"{"op":"catalog"}"#) == .catalog)
-        #expect(try run().approvable)
-        #expect(try held(proxyBody, top: proxyNote).approvable)
+        // Read in full, but deny only until their screens ship (the manager refuses them on its own too).
+        guard case .itemRun = try run(), case .itemProxy = try held(proxyBody, top: proxyNote) else { Issue.record("not read"); return }
+        #expect(try !run().approvable)
+        #expect(try !held(proxyBody, top: proxyNote).approvable)
         #expect(!HeldApproval.desktopStepUp.approvable && !HeldApproval.unshown.approvable)
     }
 
@@ -79,8 +81,8 @@ private func itemProxy(_ h: HeldApproval) throws -> ItemProxy {
             return try #require(ApprovalParser.device("approval.pending", o, at: Date())?.held)
         }
         let ok = #","device_id":"A","name":"Bot","exp":"2026-11-02T12:05:00.000Z""#
-        #expect(try make(runBody, top: "", members: ok).approvable)
-        #expect(try make(proxyBody, top: proxyNote, members: ok).approvable)
+        #expect(try make(runBody, top: "", members: ok) != .unshown)
+        #expect(try make(proxyBody, top: proxyNote, members: ok) != .unshown)
         let bad = [
             #","name":"Bot","exp":"2026-11-02T12:05:00.000Z""#,
             #","device_id":"","name":"Bot","exp":"2026-11-02T12:05:00.000Z""#,
