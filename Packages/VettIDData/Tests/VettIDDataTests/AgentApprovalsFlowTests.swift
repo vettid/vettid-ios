@@ -30,13 +30,16 @@ import VettIDDataTesting
     /// (told the agent and the item it asked for).
     func manager(
         cache: [ItemSummary] = cache, cwd: @escaping @MainActor (String, String) async -> Bool = { _, _ in false },
-        gate: TestDeferred<Void>? = nil
+        gate: TestDeferred<Void>? = nil, atGate: GateMark? = nil
     ) -> ApprovalsManager {
         let ops = ops, connOps = connOps, now = now
         let c = ConnectionsManager(ops: { connOps }, now: { now })
         // [gate]: opening the vault's session takes a while (`memberApi` opens one), and `decide` awaits it.
         return ApprovalsManager(
-            connections: c, ops: { if let gate { try await gate.value() }; return ops }, now: { now }, itemCache: { cache }, runCwdAllowed: cwd
+            connections: c, ops: {
+                if let gate { atGate?.reached = true; try await gate.value() }
+                return ops
+            }, now: { now }, itemCache: { cache }, runCwdAllowed: cwd
         )
     }
 
@@ -443,12 +446,14 @@ import VettIDDataTesting
     /// `decide` awaits the vault's session before it sends: an event that arrives meanwhile is judged at the send.
     @Test func anApprovalThatChangesWhileTheSessionIsOpenedIsNotSent() async throws {
         for change in ["differs", "replaced"] {
-            let gate = TestDeferred<Void>()
-            let m = manager(gate: gate)
+            let gate = TestDeferred<Void>(), mark = GateMark()
+            let m = manager(gate: gate, atGate: mark)
             m.onEvent(event(held("h1", use)))
             let shown = try request(m, "h1")
             let task = Task { try await m.approveDeviceRequest(shown) }
-            await Task.yield()
+            // The approval waits at the gate, past every check made before the session opens.
+            for _ in 0..<100 where !mark.reached { await Task.yield() }
+            #expect(mark.reached, Comment(rawValue: change))
             if change == "differs" {
                 m.onEvent(event(held("h1", #"{"op":"item.use","item_id":"i1","field_id":"f1","action":"hmac-sha256","data":"AAED"}"#)))
             } else {
@@ -533,3 +538,8 @@ import VettIDDataTesting
 }
 
 // swiftlint:enable line_length
+
+/// Set when an approval reaches the test's gate, that is, when `decide` awaits the vault's session.
+@MainActor final class GateMark {
+    var reached = false
+}
