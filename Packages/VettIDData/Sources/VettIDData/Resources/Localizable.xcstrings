@@ -700,6 +700,17 @@
         }
       }
     },
+    "data_failure_request_changed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This request changed while you were reading it. Read it again before you answer."
+          }
+        }
+      }
+    },
     "data_failure_response_too_large": {
       "extractionState": "manual",
       "localizations": {
