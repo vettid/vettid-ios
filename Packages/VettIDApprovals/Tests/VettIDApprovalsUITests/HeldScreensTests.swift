@@ -28,7 +28,7 @@ import VettIDApprovals
         var s = ApprovalDetailState(key: "device:approval.pending:h1")
         s.approval = .device(request(h))
         s.heldItems = items
-        s.itemsLoaded = loaded
+        s.itemsRead = loaded ? .read : .reading
         return s
     }
 
@@ -50,6 +50,10 @@ import VettIDApprovals
             #expect(height(ApprovalDetailScreen(state: s, actions: DecisionActions())) > 0, "\(s)")
         }
         #expect(height(ApprovalDetailScreen(state: state(.catalog, loaded: false), actions: DecisionActions())) > 0)
+        var unread = state(.itemUse(itemID: "i9", fieldID: "f2", data: [1]))
+        unread.itemsRead = .failed
+        #expect(unread.heldShow == .itemsUnread && !unread.canApprove())
+        #expect(height(ApprovalDetailScreen(state: unread, actions: DecisionActions())) > 0)
     }
 
     @Test func theDataBoxShowsTheAgentsDataUnderItsLabel() {
@@ -71,15 +75,17 @@ import VettIDApprovals
         list.approvals = [.device(request(.itemGet(itemID: "i1", fieldIDs: ["f1"])))]
         #expect(list.heldShow(list.approvals[0]) == .get(item: "GitHub", fields: ["Token"]))
         #expect(list.heldShow(Samples.auth()) == nil && list.heldShow(Samples.device("device.session.pending")) == nil)
-        list.itemsLoaded = false
+        list.itemsRead = .reading
         list.items = []
         #expect(list.heldShow(list.approvals[0]) == .noItem(use: false, loading: true))
+        list.itemsRead = .failed
+        #expect(list.heldShow(list.approvals[0]) == .itemsUnread, "a failed read is not \"an item you no longer have\"")
         let row = ApprovalRow(approval: list.approvals[0], name: nil, held: list.heldShow(list.approvals[0]), onOpen: { _ in })
         #expect(height(row) > 0)
     }
 
     @Test func eachAnswerRenders() {
-        for o in [DeviceOutcome.denied, .noLongerWaiting, .referred, .approved(result: "ok"), .approved(result: nil), .approved(result: "forbidden"), .approved(result: "x")] {
+        for o in [DeviceOutcome.denied, .noLongerWaiting, .referred, .approved(result: "ok"), .approved(result: nil), .approved(result: "forbidden"), .approved(result: "x"), .approved(result: "not_found")] {
             var s = state(.catalog)
             s.outcome = o
             #expect(height(ApprovalDetailScreen(state: s, actions: DecisionActions())) > 0, "\(o)")

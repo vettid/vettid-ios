@@ -97,7 +97,9 @@ public struct ApprovalDetailRoute: View {
         // The share items this render shows: a tap decides these, not a question a later batch changed (§10.12).
         var shown: [String]?
         if case .share(let d)? = m.state.approval { shown = d.items.map(\.itemID) }
-        a.onApprove = { m.approve(shown: shown) }
+        // A request an agent holds as this render shows it: a tap approves that, not one that changed since.
+        let held = m.shownHeld()
+        a.onApprove = { m.approve(shown: shown, held: held) }
         a.onDeny = { m.deny(shown: shown) }
         a.onAskBlock = { m.askBlock($0) }
         a.onBlock = { m.block() }

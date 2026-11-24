@@ -160,6 +160,17 @@ extension ApprovalsStrings {
         )
     }
 
+    static var heldItemsUnreadBody: String {
+        String(
+            localized: "approvals_held_items_unread_body",
+            defaultValue: """
+                Your items could not be read, so this phone can't say what the request is about. Until they are read, you can only \
+                deny it.
+                """,
+            bundle: .module
+        )
+    }
+
     static var heldApproved: String { String(localized: "approvals_held_approved", defaultValue: "Approved", bundle: .module) }
     static var heldDenied: String { String(localized: "approvals_held_denied", defaultValue: "Denied", bundle: .module) }
     static func heldForbidden(_ who: String) -> String {
