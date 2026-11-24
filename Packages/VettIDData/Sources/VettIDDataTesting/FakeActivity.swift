@@ -233,6 +233,15 @@ public final class FakeApprovals: ApprovalsRepository {
         drop(key)
     }
 
+    /// What ``approveDeviceRequest(_:)`` answers (`approval.decide`'s `result`).
+    public var deviceResult: String? = "ok"
+
+    public func approveDeviceRequest(_ key: String) async throws -> DeviceDecision {
+        try call("approveDeviceRequest", key)
+        drop(key)
+        return DeviceDecision(result: deviceResult)
+    }
+
     /// The sessions' ends, by device; a test sets them and ``deviceSessionsKnown`` (or lets ``readDeviceSessions()`` set it).
     public var deviceSessions: [String: Date] = [:] {
         didSet { deviceSessionsVersion += 1 }

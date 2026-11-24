@@ -22,7 +22,8 @@ extension ItemsManager {
     public nonisolated static func summary(_ i: Item) -> ItemSummary {
         ItemSummary(
             itemID: i.itemID, version: i.version, name: i.name, category: i.category, sensitivity: Sensitivity.of(i.sensitivity),
-            template: i.template, tags: i.tags, labels: i.fields.map(\.label), updatedAt: OwnerCheckManager.instant(i.updatedAt)
+            template: i.template, tags: i.tags, labels: i.fields.map(\.label), updatedAt: OwnerCheckManager.instant(i.updatedAt),
+            fieldLabels: i.fields.compactMap { f in f.fieldID.map { ItemFieldLabel(fieldID: $0, label: f.label, kind: f.kind) } }
         )
     }
 

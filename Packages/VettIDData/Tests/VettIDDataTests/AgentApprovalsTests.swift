@@ -65,10 +65,40 @@ private func itemProxy(_ h: HeldApproval) throws -> ItemProxy {
         }
     }
 
-    @Test func theCatalogIsApprovableAndRunAndProxyAreReadButNotYetApprovable() throws {
+    @Test func theCatalogARunAndAProxyAreApprovable() throws {
         #expect(try held(#"{"op":"catalog"}"#) == .catalog)
-        #expect(try !run().approvable)
-        #expect(try !held(proxyBody, top: proxyNote).approvable)
+        #expect(try run().approvable)
+        #expect(try held(proxyBody, top: proxyNote).approvable)
+        #expect(!HeldApproval.desktopStepUp.approvable && !HeldApproval.unshown.approvable)
+    }
+
+    /// AA8 "Fail closed": a run or a proxy names its device and itself and has a time to end.
+    @Test func aRunOrAProxyWithoutANameDeviceOrExpIsDenyOnly() throws {
+        func make(_ body: String, top: String, members: String) throws -> HeldApproval {
+            let o = try StrictJson.parseObject(Array(#"{"approval_id":"h1","role":"agent","type":"agent.request","body":\#(body)\#(members)\#(top)}"#.utf8))
+            return try #require(ApprovalParser.device("approval.pending", o, at: Date())?.held)
+        }
+        let ok = #","device_id":"A","name":"Bot","exp":"2026-11-02T12:05:00.000Z""#
+        #expect(try make(runBody, top: "", members: ok).approvable)
+        #expect(try make(proxyBody, top: proxyNote, members: ok).approvable)
+        let bad = [
+            #","name":"Bot","exp":"2026-11-02T12:05:00.000Z""#,
+            #","device_id":"","name":"Bot","exp":"2026-11-02T12:05:00.000Z""#,
+            #","device_id":7,"name":"Bot","exp":"2026-11-02T12:05:00.000Z""#,
+            #","device_id":"A","exp":"2026-11-02T12:05:00.000Z""#,
+            #","device_id":"A","name":"","exp":"2026-11-02T12:05:00.000Z""#,
+            #","device_id":"A","name":["Bot"],"exp":"2026-11-02T12:05:00.000Z""#,
+            #","device_id":"A","name":"Bot""#,
+            #","device_id":"A","name":"Bot","exp":"soon""#,
+            #","device_id":"A","name":"Bot","exp":null"#,
+            #","device_id":"A","name":"Bot","exp":1793000000"#,
+        ]
+        for members in bad {
+            #expect(try make(runBody, top: "", members: members) == .unshown, Comment(rawValue: "run \(members)"))
+            #expect(try make(proxyBody, top: proxyNote, members: members) == .unshown, Comment(rawValue: "proxy \(members)"))
+        }
+        // A reveal, an item.use and a catalog keep reading without them: this rule is for a run and a proxy.
+        #expect(try make(use("AAEC"), top: "", members: #","name":"Bot""#) != .unshown)
     }
 
     @Test func anItemGetWithoutItsStrictEnvelopeIsDenyOnly() throws {

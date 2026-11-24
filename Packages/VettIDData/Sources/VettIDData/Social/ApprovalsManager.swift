@@ -45,6 +45,12 @@ public final class ApprovalsManager: ApprovalsRepository {
     @ObservationIgnored let now: @Sendable () -> Date
     /// The items by id, to name what a vault before 0.21.0 asks about (``SharePending``); empty when not known.
     @ObservationIgnored let itemNames: @MainActor () -> [String: ShareItem]
+    /// The items with their fields' labels, to resolve what an agent's request is about (AA5: nothing is approved that the
+    /// list cannot name); empty when not read.
+    @ObservationIgnored let itemCache: @MainActor () -> [ItemSummary]
+    /// AA8 "Fail closed": whether a run of [itemID] with a `cwd` and no `member_folder` may be approved for [agentID], from the
+    /// item's settings read now (``ItemWaysRules/runCwdAllowed(_:)``). Any failure is no.
+    @ObservationIgnored let runCwdAllowed: @MainActor (_ agentID: String, _ itemID: String) async -> Bool
     /// Bumped whenever what was read from the open vault is dropped: a list read before is not published.
     @ObservationIgnored var generation = 0
     /// Counts the approvals that arrived or left (decided here or on another device), and when each did: a list read
@@ -145,9 +151,13 @@ public final class ApprovalsManager: ApprovalsRepository {
         openUnlockWindow: @escaping @MainActor (String) async throws -> Void = { _ in },
         now: @escaping @Sendable () -> Date = { Date() },
         itemNames: @escaping @MainActor () -> [String: ShareItem] = { [:] },
+        itemCache: @escaping @MainActor () -> [ItemSummary] = { [] },
+        runCwdAllowed: @escaping @MainActor (_ agentID: String, _ itemID: String) async -> Bool = { _, _ in false },
         held: @escaping @MainActor () -> Bool = { false }
     ) {
         self.itemNames = itemNames
+        self.itemCache = itemCache
+        self.runCwdAllowed = runCwdAllowed
         sessionBook.held = held
         self.connections = connections
         self.ops = ops
@@ -333,6 +343,12 @@ public final class ApprovalsManager: ApprovalsRepository {
             listed[i] = .share(d)
         }
         replacedByThis.map(markReplaced)
+        // An approval that arrives after one kept for the same `approval_id` and asks otherwise is deny only, as a `pending.list`
+        // entry that differs is (AA8; ``noteMismatches(_:)``): a run, say, that changed its arguments is never approved as the old.
+        if case .device(let new) = p, new.type == Self.approvalType,
+           case .device(let old)? = stored.lazy.compactMap(parsed).first(where: { $0.key == p.key }), !new.asksSame(as: old) {
+            mismatched.insert(p.key)
+        }
         edit { events in
             let old = events.first { parsed($0)?.key == p.key }
             events.removeAll { e in parsed(e)?.key == p.key || replacedByThis.map { parsed(e)?.key == $0 } ?? false }
@@ -343,18 +359,6 @@ public final class ApprovalsManager: ApprovalsRepository {
             events.append(StoredEvent(type: type, body: body, at: at, ts: ts))
         }
         replacedByThis.map(decided)
-    }
-
-    /// [o] with the items of [old] it does not name added (by `item_id`).
-    static func mergedShare(_ old: String, _ o: JsonObject) -> String {
-        guard let prev = try? StrictJson.parseObject(Array(old.utf8)) else { return o.raw }
-        let newItems = VaultJSON.objects(o, "items")
-        let named = Set(newItems.compactMap { VaultJSON.string($0, "item_id") })
-        let kept = VaultJSON.objects(prev, "items").filter { !named.contains(VaultJSON.string($0, "item_id") ?? "") }
-        let b = JsonBuilder()
-        for (name, value) in o.members where name != "items" { b.raw(name, value.raw) }
-        b.raw("items", JsonBuilder.array((kept + newItems).map(\.raw)))
-        return b.build()
     }
 
     /// `sync.event`: another device decided (§10.1).
@@ -538,16 +542,6 @@ public final class ApprovalsManager: ApprovalsRepository {
     /// The ids of the items each share question's batches brought after change [since].
     private func batchedItems(since: Int) -> [String: Set<String>] {
         batchLog.filter { $0.at > since }.reduce(into: [:]) { $0[$1.key, default: []].formUnion($1.items.map(\.itemID)) }
-    }
-
-    /// [e] with only the items [ids] names, or nil when it names none of them.
-    static func withItems(_ e: StoredEvent, _ ids: Set<String>) -> StoredEvent? {
-        guard let o = try? StrictJson.parseObject(Array(e.body.utf8)) else { return nil }
-        let left = VaultJSON.objects(o, "items").filter { ids.contains(VaultJSON.string($0, "item_id") ?? "") }
-        if left.isEmpty { return nil }
-        let b = JsonBuilder()
-        for (name, value) in o.members where name != "items" { b.raw(name, value.raw) }
-        return StoredEvent(type: e.type, body: b.raw("items", JsonBuilder.array(left.map(\.raw))).build(), at: e.at)
     }
 
     /// At most this many share decisions, and as many batches, are remembered for reads on their way: past that, the

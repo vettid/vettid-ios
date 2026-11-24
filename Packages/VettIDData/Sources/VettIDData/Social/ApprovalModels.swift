@@ -212,6 +212,30 @@ public struct DeviceRequest: Equatable, Sendable {
     /// The approval an agent's `item.run` or `item.proxy` referred again `replaces` (§6.8 step 4), read from the envelope
     /// whatever ``held`` reads as: a deny-only one still replaces the approval it names.
     public var replaces: String?
+
+    /// Every string compared as UTF-8 bytes, not as canonically equivalent text (``HeldApproval/==(_:_:)``).
+    public static func == (a: DeviceRequest, b: DeviceRequest) -> Bool {
+        a.type.sameBytes(b.type) && a.id.sameBytes(b.id) && a.deviceName.sameBytes(b.deviceName) && a.role.sameBytes(b.role)
+            && a.requestType.sameBytes(b.requestType) && a.receivedAt == b.receivedAt && a.exp == b.exp
+            && a.deviceID.sameBytes(b.deviceID) && a.held == b.held && a.replaces.sameBytes(b.replaces)
+    }
+
+    /// Whether [other] asks the same as this one, as the AA8 check of a `pending.list` entry against the event kept for the same
+    /// `approval_id` needs it: what it asks, its role, type, name, device and `replaces`, as bytes. (The times are not compared:
+    /// the list does not say when the event was received.)
+    func asksSame(as other: DeviceRequest) -> Bool {
+        held == other.held && role.sameBytes(other.role) && requestType.sameBytes(other.requestType)
+            && deviceName.sameBytes(other.deviceName) && replaces.sameBytes(other.replaces) && deviceID.sameBytes(other.deviceID)
+    }
+}
+
+/// The vault's answer to an approved held request (`approval.decide{approve: true}`, §6.8): [result] is `ok`, `referred` (§6.8
+/// step 4: asked again), or the code the held request was answered with (`forbidden`, `not_found`, `program_not_allowed`, ...);
+/// nil when the answer had none.
+public struct DeviceDecision: Equatable, Sendable {
+    public var result: String?
+
+    public init(result: String?) { self.result = result }
 }
 
 /// Something that waits for the member's decision (ANDROID-PLAN §4 Approvals). [key] is stable and unique across the

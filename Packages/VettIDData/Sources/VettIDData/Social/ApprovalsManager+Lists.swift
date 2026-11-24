@@ -76,4 +76,26 @@ extension ApprovalsManager {
             return Self.listFailure(error)
         }
     }
+
+    /// [o] with the items of [old] it does not name added (by `item_id`).
+    static func mergedShare(_ old: String, _ o: JsonObject) -> String {
+        guard let prev = try? StrictJson.parseObject(Array(old.utf8)) else { return o.raw }
+        let newItems = VaultJSON.objects(o, "items")
+        let named = Set(newItems.compactMap { VaultJSON.string($0, "item_id") })
+        let kept = VaultJSON.objects(prev, "items").filter { !named.contains(VaultJSON.string($0, "item_id") ?? "") }
+        let b = JsonBuilder()
+        for (name, value) in o.members where name != "items" { b.raw(name, value.raw) }
+        b.raw("items", JsonBuilder.array((kept + newItems).map(\.raw)))
+        return b.build()
+    }
+
+    /// [e] with only the items [ids] names, or nil when it names none of them.
+    static func withItems(_ e: StoredEvent, _ ids: Set<String>) -> StoredEvent? {
+        guard let o = try? StrictJson.parseObject(Array(e.body.utf8)) else { return nil }
+        let left = VaultJSON.objects(o, "items").filter { ids.contains(VaultJSON.string($0, "item_id") ?? "") }
+        if left.isEmpty { return nil }
+        let b = JsonBuilder()
+        for (name, value) in o.members where name != "items" { b.raw(name, value.raw) }
+        return StoredEvent(type: e.type, body: b.raw("items", JsonBuilder.array(left.map(\.raw))).build(), at: e.at)
+    }
 }

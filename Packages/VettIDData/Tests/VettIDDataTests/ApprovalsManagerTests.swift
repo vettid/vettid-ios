@@ -149,9 +149,12 @@ final class FakeApprovalOps: ApprovalOps {
         if let devicesGate { try await devicesGate.value() }
         return answer
     }
+    /// What `approval.decide` answers as `result`.
+    var decideResult: String?
+
     func approvalDecide(_ approvalID: String, approve: Bool) async throws -> String? {
         try call("approvalDecide:\(approvalID):\(approve)")
-        return nil
+        return decideResult
     }
 }
 

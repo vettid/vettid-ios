@@ -58,7 +58,7 @@ public enum AgentApprovals {
 
     /// An `item.run`, or ``HeldApproval/unshown``.
     static func run(_ p: JsonObject) -> HeldApproval { // swiftlint:disable:this cyclomatic_complexity
-        guard envelope(p, allowProxy: false, allowReplaces: true), case .object(let body)? = p["body"],
+        guard named(p), envelope(p, allowProxy: false, allowReplaces: true), case .object(let body)? = p["body"],
               body.members.allSatisfy({ runBody.contains(Array($0.name.utf8)) }), let wire = flags(p) else { return .unshown }
         var flags = Set<RunFlag>()
         for w in wire {
@@ -112,7 +112,7 @@ public enum AgentApprovals {
 
     /// An `item.proxy`, or ``HeldApproval/unshown``.
     static func proxy(_ p: JsonObject) -> HeldApproval {
-        guard envelope(p, allowProxy: true, allowReplaces: true), noRunMembers(p), case .object(let body)? = p["body"],
+        guard named(p), envelope(p, allowProxy: true, allowReplaces: true), noRunMembers(p), case .object(let body)? = p["body"],
               body.members.allSatisfy({ proxyBody.contains(Array($0.name.utf8)) }),
               // Any flag on a proxy.
               let wire = flags(p), wire.isEmpty,
@@ -130,6 +130,14 @@ public enum AgentApprovals {
         return .itemProxy(ItemProxy(
             itemID: item, fieldID: field, host: host, header: header, prefix: prefix, seconds: seconds, replaces: str(p, "replaces")
         ))
+    }
+
+    /// A run or a proxy names its device and itself and has a time to end: a non-empty string `device_id` and `name`, and an `exp`
+    /// that reads as a time. The screen says who asks and for how long it waits, and the approval expires at `exp`; without
+    /// them it would show "an agent" that never expires, so it is deny only (AA8 "Fail closed").
+    private static func named(_ p: JsonObject) -> Bool {
+        guard let device = str(p, "device_id"), !device.isEmpty, let name = str(p, "name"), !name.isEmpty else { return false }
+        return ApprovalParser.instant(str(p, "exp")) != nil
     }
 
     /// Known top-level members only; `proxy` and `replaces` only where they belong.
