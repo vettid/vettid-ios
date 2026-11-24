@@ -133,6 +133,18 @@ public struct ApprovalDetailState: Equatable, Sendable, CustomStringConvertible,
     public var held = false
     /// The session request the renewal's texts name, kept when it left the screen (a hold drops it).
     public var endRequest: PendingApproval?
+    /// The member's items with their fields' labels, to name what an agent's request is about (AA5, AA8); the Vault list.
+    public var heldItems: [ItemSummary] = []
+    /// The item list has been read at least once (loaded or failed): until then a request's item is "Loading…".
+    public var itemsLoaded = true
+    /// How a decision on a request an agent holds ended: said, with OK, before the screen closes.
+    public var outcome: DeviceOutcome?
+
+    /// What a request an agent holds for approval shows and allows, from the item list; nil for any other request.
+    public var heldShow: HeldShow? {
+        guard case .device(let d)? = approval, DeviceAsks.isHeld(d) else { return nil }
+        return DeviceAsks.show(d, items: heldItems, loaded: itemsLoaded)
+    }
 
     public init(key: String) { self.key = key }
 
@@ -175,7 +187,9 @@ public struct ApprovalDetailState: Equatable, Sendable, CustomStringConvertible,
     public func canApprove(at now: Date = Date()) -> Bool {
         guard !expired(at: now) else { return false }
         return switch approval {
-        case nil, .device?: false
+        case nil: false
+        // An agent's held request: only what is shown in full, once the item list says what it is about (AA5, AA8).
+        case .device?: itemsLoaded && heldShow?.approvable == true
         case .grant?: !grantIndexes.isEmpty
         // 0.10.3: only once the safety code is known, and only once per member.
         case .connection(.incoming(let r))?: r.state == .pending
@@ -209,6 +223,9 @@ public final class ApprovalDetailViewModel {
     @ObservationIgnored private let vault: (any ItemsRepository)?
     @ObservationIgnored let work = Work()
     @ObservationIgnored private let follows = TaskBag()
+    /// Whether the item list was ever read (loaded or failed): a later read does not turn a request's item back into
+    /// "Loading…" or switch Approve off.
+    @ObservationIgnored private var itemsSettled = false
     /// The screen's own state (``state`` adds what the repositories hold); the document's part is kept by
     /// `ApprovalDetailViewModel+Document.swift`.
     var local: ApprovalDetailState
@@ -218,7 +235,7 @@ public final class ApprovalDetailViewModel {
     /// request is judged by a read answered since (0.78.0 §6.8 step 3: the list is read when the request is shown).
     @ObservationIgnored private var sessionReadsAtOpen = 0
     /// Whether the device's session was last known live: a failed end is cleared when it then ends (nil: not known yet).
-    @ObservationIgnored private var sessionWasLive: Bool?
+    @ObservationIgnored var sessionWasLive: Bool?
     /// A session request's screen asks for the sessions while it is open: given back when the model goes.
     @ObservationIgnored private var sessionsAsk: DeviceSessionsAsk?
     /// The device of the session request, from when the screen first holds it (nil for any other request).
@@ -270,7 +287,12 @@ public final class ApprovalDetailViewModel {
 
     public var state: ApprovalDetailState {
         var s = local
-        if let vault { s.items = Self.answers(vault.items) }
+        if let vault {
+            s.items = Self.answers(vault.items)
+            s.heldItems = vault.items
+            if vault.load == .loaded || vault.load == .failed { itemsSettled = true }
+            s.itemsLoaded = itemsSettled
+        }
         let now = repo.approvals.first { $0.key == local.key }
         s.approval = now ?? local.approval
         // Dropped by a lock or a hold while open, it is no longer held, not decided (IOS-PLAN §6.9). Of the kinds
@@ -280,6 +302,7 @@ public final class ApprovalDetailViewModel {
         let dropped = repo.forgetCount != forgetCountAtOpen
         // While access is being ended from the screen of a request that had left, that screen stays.
         let left = now == nil && local.approval != nil && !local.done && (!local.busy || local.ending) && local.criticalResult == nil
+            && local.outcome == nil
         let lost = dropped && (!PendingApproval.eventOnly(key: local.key) || repo.mayHaveBeenDropped(local.key))
         s.gone = left && !lost
         // Missing at the opening: not held only when it may have been dropped; one decided elsewhere stays "Already decided".
@@ -440,9 +463,10 @@ public final class ApprovalDetailViewModel {
     /// [shown]: for a share decision, the item ids the screen showed when the member tapped. Only those are decided, so a
     /// `share.pending` batch that lands just before the tap is not included or declined unseen (VAULT-MESSAGING §10.12).
     /// Mirrors vettid-android `ApprovalDetailViewModel.approve`.
-    public func approve(shown: [String]? = nil) {
+    public func approve(shown: [String]? = nil) { // swiftlint:disable:this cyclomatic_complexity
         let s = state
         guard let a = s.approval, s.canApprove() else { return }
+        if case .device(let d) = a { return approveHeld(d) }
         let (repo, pw) = (repo, s.password)
         decide { [weak self] in
             switch a {
@@ -476,6 +500,12 @@ public final class ApprovalDetailViewModel {
     /// [shown]: as for ``approve(shown:)``; only the share items the screen showed are declined.
     public func deny(shown: [String]? = nil) {
         guard let a = state.approval else { return }
+        if case .device(let d) = a, DeviceAsks.isHeld(d) {
+            return decideHeld(key: a.key) { [repo] key in
+                try await repo.declineDeviceRequest(key)
+                return .denied
+            }
+        }
         let repo = repo
         decide {
             switch a {
@@ -487,52 +517,6 @@ public final class ApprovalDetailViewModel {
             // "Do not share": every item of the question declined (§10.12 `share.decide{decline}`).
             case .share(let d): try await repo.decideShare(d.ruleID, include: [], decline: shown ?? d.items.map(\.itemID))
             case .device: try await repo.declineDeviceRequest(a.key)
-            }
-        }
-    }
-
-    /// "Deny and end access now" on a renewal request (0.78.0 §6.8 step 3): asks "End access for <device>?" first; nothing
-    /// is sent yet. From the screen of a request that left, only a failure's Try again, while the session is live.
-    public func askEndAccess() {
-        let s = state
-        guard !s.busy, !s.held, s.renewalUntil() != nil else { return }
-        if (s.gone || s.notHeld) && s.endFailure == nil { return }
-        local.confirmEnd = true
-        local.endFailure = nil
-    }
-
-    public func dismissEndAccess() { local.confirmEnd = false }
-
-    public func dismissEndFailure() { local.endFailure = nil }
-
-    /// The member confirmed: `device.session.end{device_id}` alone, never `device.session.deny` as well (0.78.0 §6.8 step
-    /// 3): the end drops the pending request and is audited and synced once, as an end. A confirmation already open stays
-    /// and ends access when confirmed, even after the session passed or the request left; nothing is sent while the vault
-    /// is held. A failure says so and leaves the request open; Try again asks the confirmation again.
-    public func endAccess() {
-        let s = state
-        guard s.confirmEnd, !s.busy, !repo.vaultHeld, let device = Self.sessionDevice(s.approval ?? local.approval) else { return }
-        local.confirmEnd = false
-        local.ending = s.gone || s.notHeld
-        local.busy = true
-        local.endFailure = nil
-        let repo = repo
-        work.launch { [weak self] in
-            do {
-                try await repo.endDeviceAccess(device)
-                guard let self else { return }
-                // The device's asks left with the end; the screen closes.
-                local.busy = false
-                local.ending = false
-                local.done = true
-            } catch {
-                guard let self else { return }
-                // What the clock says now: a session that passed while the end was on its way is not "ended" again by the
-                // read the failure brings, which would clear the failure at once.
-                sessionWasLive = state.renewalUntil() != nil
-                local.busy = false
-                local.ending = false
-                local.endFailure = failureKind(error)
             }
         }
     }
@@ -580,7 +564,7 @@ public final class ApprovalDetailViewModel {
         }
     }
 
-    private func failed(_ error: any Error) {
+    func failed(_ error: any Error) {
         if error is DocumentRestarted {
             local.password = ""
             local.busy = false

@@ -341,7 +341,7 @@ import VettIDDataTesting
         #expect(fake.lastShare?.include == [] && fake.lastShare?.decline == ["s1", "s2"])
     }
 
-    @Test func aDevicesRequestCanOnlyBeDeclined() async {
+    @Test func aDevicesRequestThatCannotBeShownCanOnlyBeDeclined() async {
         fake.listed = [Samples.device()]
         let m = await model("device:approval.pending:d1")
         #expect(!m.state.canApprove())
@@ -350,7 +350,16 @@ import VettIDDataTesting
         #expect(fake.calls.isEmpty)
         m.deny()
         await m.settle()
-        #expect(fake.calls == ["declineDeviceRequest:device:approval.pending:d1"] && m.state.done)
+        // An agent's or a desktop's held request says "Denied" before it closes (AA5); a session request just closes.
+        #expect(fake.calls == ["declineDeviceRequest:device:approval.pending:d1"] && m.state.outcome == .denied && !m.state.done)
+        m.finish()
+        #expect(m.state.done)
+        fake.calls = []
+        fake.listed = [Samples.device("device.session.pending")]
+        let s = await model("device:device.session.pending:d1")
+        s.deny()
+        await s.settle()
+        #expect(fake.calls == ["declineDeviceRequest:device:device.session.pending:d1"] && s.state.done && s.state.outcome == nil)
     }
 
     @Test func thePasswordGoesWithTheScreenAndIsNeverPrinted() async {

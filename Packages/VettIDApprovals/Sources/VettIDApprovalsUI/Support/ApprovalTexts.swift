@@ -103,6 +103,92 @@ enum ApprovalTexts {
         }
     }
 
+    /// The title of [a]; an agent's held request, with what it shows, is ``heldTitle(_:_:)``.
+    static func title(_ a: PendingApproval, name: String? = nil, held: HeldShow?) -> String {
+        if case .device = a, let held { return heldTitle(a, held) }
+        return title(a, name: name)
+    }
+
+    /// The decision screen's body; an agent's held request, with what it shows, is ``heldBody(_:)``.
+    static func body(_ a: PendingApproval, name: String?, held: HeldShow?) -> String? {
+        if case .device = a, let held { return heldBody(held) }
+        return body(a, name: name)
+    }
+
+    /// An agent's held request's title (the row's and the screen's), AA5: what it asks, with the item from the member's list.
+    static func heldTitle(_ a: PendingApproval, _ show: HeldShow) -> String {
+        let who = deviceSentenceStart(a)
+        switch show {
+        case .use(let item, _, _, _): return ApprovalsStrings.heldUseTitle(who, AccountNames.isolate(item))
+        case .get(let item, _): return ApprovalsStrings.heldGetTitle(who, AccountNames.isolate(item))
+        case .catalog: return ApprovalsStrings.heldCatalogTitle(who)
+        case .noItem(let use, let loading):
+            let item = loading ? ApprovalsStrings.loading : ApprovalsStrings.heldNoItem
+            return use ? ApprovalsStrings.heldUseTitle(who, item) : ApprovalsStrings.heldGetTitle(who, item)
+        case .later(let item, let loading):
+            return ApprovalsStrings.heldLaterTitle(
+                who, item.map { AccountNames.isolate($0) } ?? (loading ? ApprovalsStrings.loading : ApprovalsStrings.heldNoItem)
+            )
+        case .desktop, .other: return ApprovalsStrings.heldOtherTitle(who)
+        }
+    }
+
+    /// An agent's held request's body on its screen; none for a reveal, whose lines follow (``HeldFacts``).
+    static func heldBody(_ show: HeldShow) -> String? {
+        switch show {
+        case .use(_, let field, _, _): ApprovalsStrings.heldUseBody(AccountNames.isolate(field))
+        case .get: nil
+        case .catalog: ApprovalsStrings.heldCatalogBody
+        case .noItem(_, let loading): loading ? ApprovalsStrings.loading : ApprovalsStrings.heldNoItemBody
+        case .later: ApprovalsStrings.heldLaterBody
+        case .desktop: ApprovalsStrings.heldDesktopBody
+        case .other: ApprovalsStrings.heldOtherBody
+        }
+    }
+
+    /// The kind of device: Agent, Desktop, else Device.
+    static func kindWord(_ d: DeviceRequest) -> String {
+        switch AccountNames.cleaned(d.role)?.lowercased() {
+        case "agent": ApprovalsStrings.kindAgent
+        case "desktop": ApprovalsStrings.kindDesktop
+        default: ApprovalsStrings.kindDevice
+        }
+    }
+
+    /// "Waiting for 8 more minutes" (to [exp], whole minutes); nil without an `exp`.
+    static func waitingText(_ exp: Date?, now: Date) -> String? {
+        guard let exp else { return nil }
+        let minutes = max(0, Int(exp.timeIntervalSince(now) / 60))
+        return minutes <= 0 ? ApprovalsStrings.waitingLess : ApprovalsStrings.waitingMinutes(minutes)
+    }
+
+    /// A held request's row line: "Agent · Waiting for 4 more minutes".
+    static func heldSupporting(_ d: DeviceRequest, now: Date) -> String {
+        [kindWord(d), waitingText(d.exp, now: now)].compactMap { $0 }.joined(separator: " · ")
+    }
+
+    /// How a decision on a held request ended, as the screen says it (AA5 "Answers to `approval.decide`").
+    static func outcome(_ o: DeviceOutcome, who: String) -> String { // swiftlint:disable:this cyclomatic_complexity
+        switch o {
+        case .denied: return ApprovalsStrings.heldDenied
+        case .noLongerWaiting: return ApprovalsStrings.noLongerWaiting
+        // Not "Approved": the new approval is a new entry (AA8 "Referred again"; its text comes with the run and proxy screens).
+        case .referred: return ApprovalsStrings.noLongerWaiting
+        case .approved(let result):
+            switch result {
+            // The vault did not say whether it was done: not "Approved".
+            case nil: return ApprovalsStrings.heldNoResult
+            case "ok": return ApprovalsStrings.heldApproved
+            case "not_found": return ApprovalsStrings.noLongerWaiting
+            case "forbidden": return ApprovalsStrings.heldForbidden(who)
+            case "session_required", "denied": return ApprovalsStrings.heldSessionEnded(who)
+            case "way_not_allowed": return ApprovalsStrings.heldWayNotAllowed
+            case let code?:
+                return ApprovalsStrings.heldOtherResult(AccountNames.isolateOrNull(AccountNames.cleanedCapped(code, max: 64)) ?? "?")
+            }
+        }
+    }
+
     /// A challenge's note on its screen: the connection's own words in full (lines kept, isolated, §10.4); without them,
     /// a `signin` or `approval` challenge says no details were given, and one without a purpose shows nothing.
     static func contextNote(_ x: AuthenticationRequest) -> String? {
@@ -143,7 +229,7 @@ enum ApprovalTexts {
         case .grant: ApprovalsStrings.grantApprove
         case .critical: ApprovalsStrings.criticalApprove
         case .share: ApprovalsStrings.shareApprove
-        case .device: nil
+        case .device(let d): DeviceAsks.isHeld(d) ? ApprovalsStrings.approve : nil
         }
     }
 

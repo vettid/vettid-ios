@@ -25,8 +25,18 @@ public struct ApprovalsState: Equatable, Sendable, CustomStringConvertible, Cust
     public var busy = false
     /// The connections by id, for the names a request's row shows.
     public var connections: [String: ConnectionInfo] = [:]
+    /// The member's items with their fields' labels, to name what an agent's request is about (AA5, AA8).
+    public var items: [ItemSummary] = []
+    /// The item list has been read (loaded or failed): until then a request's item is "Loading…".
+    public var itemsLoaded = true
 
     public init() {}
+
+    /// What the request [a] an agent holds for approval shows (its row's title), nil for any other.
+    public func heldShow(_ a: PendingApproval) -> HeldShow? {
+        guard case .device(let d) = a, DeviceAsks.isHeld(d) else { return nil }
+        return DeviceAsks.show(d, items: items, loaded: itemsLoaded)
+    }
 
     /// The rows: one per approval, a connection's asks within 10 minutes as one batch (§10.4.1).
     public var entries: [ApprovalEntry] { AskBatches.group(approvals) }
@@ -69,6 +79,8 @@ public final class ApprovalsViewModel {
     @ObservationIgnored private let approvals: any ApprovalsRepository
     @ObservationIgnored private let connections: any ConnectionsRepository
     @ObservationIgnored private let ownerChecks: (any OwnerCheckRepository)?
+    @ObservationIgnored private let vault: (any ItemsRepository)?
+    @ObservationIgnored private var itemsSettled = false
     @ObservationIgnored private let work = Work()
     @ObservationIgnored private let follows = TaskBag()
     private var local = ApprovalsState()
@@ -76,13 +88,17 @@ public final class ApprovalsViewModel {
     @ObservationIgnored private var reads = 0
 
     /// [ownerChecks]: a list refused because the daily check was due reads again by itself once a check passes, as
-    /// vettid-android's `checkCleared`.
+    /// vettid-android's `checkCleared`. [items]: the Vault list, which names what an agent's request is about; read quietly
+    /// when it has not been read.
     public init(
-        approvals: any ApprovalsRepository, connections: any ConnectionsRepository, ownerChecks: (any OwnerCheckRepository)? = nil
+        approvals: any ApprovalsRepository, connections: any ConnectionsRepository, ownerChecks: (any OwnerCheckRepository)? = nil,
+        items: (any ItemsRepository)? = nil
     ) {
         self.approvals = approvals
         self.connections = connections
         self.ownerChecks = ownerChecks
+        vault = items
+        items?.readIfNotLoaded()
         refresh()
         if ownerChecks != nil {
             follows.add(follow(self, read: { $0.ownerChecks?.ownerCheck }, apply: { $0.onOwnerCheck($1) }))
@@ -102,6 +118,11 @@ public final class ApprovalsViewModel {
         let all = connections.connections
         s.paused = all.filter { $0.asks?.paused == true }
         s.connections = Dictionary(all.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        if let vault {
+            s.items = vault.items
+            if vault.load == .loaded || vault.load == .failed { itemsSettled = true }
+            s.itemsLoaded = itemsSettled
+        }
         return s
     }
 
