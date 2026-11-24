@@ -6,14 +6,19 @@ import VettIDUI
 
 /// A string as ANDROID-PLAN 0.1.137 AA8 "How a string is shown" draws it: in full in a monospace box, left to right and isolated,
 /// an escaped code point in a highlighted box, spaces marked, characters outside printable ASCII highlighted with the look-alike
-/// line under it. (The approvals of AA8 will use it too.) Mirrors vettid-android `ShownStringBox`.
-struct ShownStringBox: View {
+/// line under it. The approvals of AA8 use it too (``VettIDApprovals``'s run and proxy screens). Mirrors vettid-android `ShownStringBox`.
+public struct ShownStringBox: View {
     @Environment(\.vettIDColors) private var colors
     let text: String
+    let identifier: String
 
-    init(_ text: String) { self.text = text }
+    /// [identifier]: the box's accessibility identifier (tests find it by it).
+    public init(_ text: String, identifier: String = "shown_string") {
+        self.text = text
+        self.identifier = identifier
+    }
 
-    var body: some View {
+    public var body: some View {
         let pieces = ShownString.pieces(text)
         VStack(alignment: .leading, spacing: Spacing.xs) {
             Text(shown(pieces))
@@ -26,7 +31,7 @@ struct ShownStringBox: View {
                 .environment(\.layoutDirection, .leftToRight)
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel(spoken(pieces))
-                .accessibilityIdentifier("shown_string")
+                .accessibilityIdentifier(identifier)
             if ShownString.lookalike(pieces) {
                 Text(ItemWaysStrings.waysStringLookalike)
                     .vettIDFont(.bodySmall)

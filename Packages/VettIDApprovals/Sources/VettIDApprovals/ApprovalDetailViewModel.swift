@@ -140,10 +140,17 @@ public struct ApprovalDetailState: Equatable, Sendable, CustomStringConvertible,
     /// How a decision on a request an agent holds ended: said, with OK, before the screen closes.
     public var outcome: DeviceOutcome?
 
+    /// AA8 "Fail closed": whether the item's settings, read for the run's own agent and item, allow its `cwd` (it has no
+    /// `member_folder`); nil until that read answers. A run with a `cwd` is Deny only until it is true.
+    public var cwdAllowed: Bool?
+
     /// What a request an agent holds for approval shows and allows, from the item list; nil for any other request.
     public var heldShow: HeldShow? {
         guard case .device(let d)? = approval, DeviceAsks.isHeld(d) else { return nil }
-        return DeviceAsks.show(d, items: heldItems, loaded: itemsLoaded)
+        let shown = DeviceAsks.show(d, items: heldItems, loaded: itemsLoaded)
+        // A run's `cwd` without `member_folder` is shown only once the item's settings allow it (AA8).
+        if case .run(let r, _, _) = shown, r.hasCwd, cwdAllowed != true { return .other }
+        return shown
     }
 
     public init(key: String) { self.key = key }
@@ -226,6 +233,10 @@ public final class ApprovalDetailViewModel {
     /// Whether the item list was ever read (loaded or failed): a later read does not turn a request's item back into
     /// "Loading…" or switch Approve off.
     @ObservationIgnored private var itemsSettled = false
+    /// The cwd rule's read was started (once per screen), and the wait after each failed read: there are as many reads as waits
+    /// (AA8). Tests shorten them.
+    @ObservationIgnored var cwdRead = false
+    @ObservationIgnored let cwdWaits: [Duration]
     /// The screen's own state (``state`` adds what the repositories hold); the document's part is kept by
     /// `ApprovalDetailViewModel+Document.swift`.
     var local: ApprovalDetailState
@@ -249,8 +260,9 @@ public final class ApprovalDetailViewModel {
     /// and followed as it changes (without either none, so a category entry cannot be granted: chosen; not in the spec).
     public init(
         key: String, approvals: any ApprovalsRepository, connections: (any ConnectionsRepository)? = nil, items: [AnswerItem] = [],
-        vault: (any ItemsRepository)? = nil
+        vault: (any ItemsRepository)? = nil, cwdWaits: [Duration] = [.seconds(2), .seconds(5), .seconds(15)]
     ) {
+        self.cwdWaits = cwdWaits
         repo = approvals
         forgetCountAtOpen = approvals.forgetCount
         self.connections = connections
@@ -265,6 +277,8 @@ public final class ApprovalDetailViewModel {
             // A session request held only after the screen opened (from the feed, before the list answered) is followed
             // from when it arrives.
             m.followSessions()
+            // An approval listed after the screen opened (a cold start, an unlock): its run's cwd rule is read then.
+            m.readCwdRule()
         }))
         // A critical-item request from the list has only the payload's hash: the payload is fetched (§10.13).
         if case .critical(let c)? = local.approval, c.payload.isEmpty {
@@ -278,6 +292,7 @@ public final class ApprovalDetailViewModel {
             }
         }
         loadDocument()
+        readCwdRule()
     }
 
     deinit {

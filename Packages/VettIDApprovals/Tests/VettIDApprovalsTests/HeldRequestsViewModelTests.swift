@@ -34,7 +34,7 @@ import VettIDDataTesting
     static let key = "device:approval.pending:h1"
 
     func model(_ items: (any ItemsRepository)? = nil) async -> ApprovalDetailViewModel {
-        let m = ApprovalDetailViewModel(key: Self.key, approvals: fake, connections: connections, vault: items ?? self.items)
+        let m = ApprovalDetailViewModel(key: Self.key, approvals: fake, connections: connections, vault: items ?? self.items, cwdWaits: Self.quick)
         await m.settle()
         return m
     }
@@ -67,13 +67,27 @@ import VettIDDataTesting
         #expect(show(Self.get, in: blank) == .noItem(use: false, loading: false))
     }
 
-    /// Until AA8's screens (the next step), a run and a proxy are shown by "a way this version can't show": deny only.
-    @Test func aRunAndAProxyAreNotYetApprovedHere() {
-        let run = ItemRun(itemID: "i1", fieldID: "f1", program: "/bin/x", sha256: Self.sha, argv: ["x"], cwd: nil, how: .env, name: "T", env: [], flags: [], previousSha256: nil, previousPath: nil, replaces: nil)
-        let proxy = ItemProxy(itemID: "i1", fieldID: "f1", host: "api.example.com", header: "Authorization", prefix: "Bearer ", seconds: 900, replaces: nil)
-        #expect(show(.itemRun(run)) == .later(item: "GitHub", loading: false) && !show(.itemRun(run)).approvable)
-        #expect(show(.itemProxy(proxy)) == .later(item: "GitHub", loading: false))
-        #expect(show(.itemRun(run), loaded: false, in: []) == .later(item: nil, loading: true))
+    static func run(
+        argv: [String] = ["x"], flags: Set<RunFlag> = [], cwd: String? = nil, previous: (String, String)? = nil, replaces: String? = nil
+    ) -> ItemRun {
+        ItemRun(
+            itemID: "i1", fieldID: "f1", program: "/bin/x", sha256: sha, argv: argv, cwd: cwd, how: .env, name: "T", env: [], flags: flags,
+            previousSha256: previous?.0, previousPath: previous?.1, replaces: replaces
+        )
+    }
+
+    static let proxy = ItemProxy(itemID: "i1", fieldID: "f1", host: "api.example.com", header: "Authorization", prefix: "Bearer ", seconds: 900, replaces: nil)
+
+    /// AA8: a run and a proxy are shown from the item list on their own screens, and approvable.
+    @Test func aRunAndAProxyAreShownAndApprovable() {
+        let run = Self.run()
+        #expect(show(.itemRun(run)) == .run(run, item: "GitHub", field: "Token") && show(.itemRun(run)).approvable)
+        #expect(show(.itemProxy(Self.proxy)) == .proxy(Self.proxy, item: "GitHub", field: "Token") && show(.itemProxy(Self.proxy)).approvable)
+        #expect(show(.itemRun(run), in: []) == .noItem(use: true, loading: false), "an item you no longer have")
+        #expect(show(.itemProxy(Self.proxy), loaded: false, in: []) == .noItem(use: true, loading: true))
+        var other = run
+        other.fieldID = "f9"
+        #expect(show(.itemRun(other)) == .noItem(use: true, loading: false), "a field the list cannot name")
     }
 
     @Test func aRevealIsApprovedFromItsScreenAndTheAnswerIsSaidBeforeItCloses() async {
@@ -159,9 +173,8 @@ import VettIDDataTesting
         #expect(m.state.canApprove())
     }
 
-    @Test func aRunAndAnUnshownRequestAreNeverApprovedFromTheScreen() async {
-        let run = ItemRun(itemID: "i1", fieldID: "f1", program: "/bin/x", sha256: Self.sha, argv: ["x"], cwd: nil, how: .env, name: "T", env: [], flags: [], previousSha256: nil, previousPath: nil, replaces: nil)
-        for h in [HeldApproval.itemRun(run), .unshown, .desktopStepUp] {
+    @Test func anUnshownRequestAndADesktopsAreNeverApprovedFromTheScreen() async {
+        for h in [HeldApproval.unshown, .desktopStepUp] {
             fake.listed = [Self.held(h)]
             let m = await model()
             #expect(!m.state.canApprove())
@@ -175,6 +188,89 @@ import VettIDDataTesting
         fake.listed = [Samples.device("device.session.pending")]
         let m = ApprovalDetailViewModel(key: "device:device.session.pending:d1", approvals: fake, connections: connections, vault: items)
         #expect(m.state.heldShow == nil && !m.state.canApprove())
+    }
+
+    // MARK: - A run and a proxy (AA8)
+
+    static let quick: [Duration] = [.milliseconds(1), .milliseconds(1), .milliseconds(1)]
+
+    @Test func aRunIsApprovedFromItsScreenAndSaysWhatTheVaultAnswered() async {
+        fake.listed = [Self.held(.itemRun(Self.run(flags: [.programUnrecorded])))]
+        fake.recorded = true
+        let m = await model()
+        #expect(m.state.canApprove() && m.state.heldShow == .run(Self.run(flags: [.programUnrecorded]), item: "GitHub", field: "Token"))
+        m.approve()
+        await m.settle()
+        #expect(m.state.outcome == .approved(result: "ok", way: .run, pinRecorded: true, item: "GitHub"))
+        #expect(fake.calls == ["approveDeviceRequest:\(Self.key)"])
+    }
+
+    @Test func aFingerprintIsSaidRecordedOnlyWhenTheSettingsShowItAndOnlyForTheFlagsThatRecordOne() async {
+        for (flags, recorded, said) in [(Set<RunFlag>([.programUnrecorded]), false, false), ([.programChanged], true, true), ([.shell], true, false)] {
+            fake.listed = [Self.held(.itemRun(Self.run(flags: flags, previous: flags.contains(.programChanged) ? (Self.sha, "/bin/x") : nil)))]
+            fake.recorded = recorded
+            let m = await model()
+            m.approve()
+            await m.settle()
+            guard case .approved(_, _, let pin, _)? = m.state.outcome else { Issue.record("no outcome"); return }
+            #expect(pin == said, Comment(rawValue: "\(flags) \(recorded)"))
+        }
+    }
+
+    @Test func aProxyIsApprovedAndAnAnswerOfNotFoundIsItsOwn() async {
+        fake.listed = [Self.held(.itemProxy(Self.proxy))]
+        fake.deviceResult = "not_found"
+        let m = await model()
+        m.approve()
+        await m.settle()
+        #expect(m.state.outcome == .approved(result: "not_found", way: .proxy, pinRecorded: false, item: "GitHub"))
+    }
+
+    @Test func aRunOrProxyReferredAgainClosesWithItsText() async {
+        for h in [HeldApproval.itemRun(Self.run()), .itemProxy(Self.proxy)] {
+            fake.listed = [Self.held(h)]
+            fake.deviceResult = "referred"
+            let m = await model()
+            m.approve()
+            await m.settle()
+            #expect(m.state.outcome == .referred)
+        }
+    }
+
+    /// AA8 "Fail closed": a `cwd` without `member_folder` is Deny only until the item's settings, read for the run's own agent and
+    /// item, allow it; three failed reads end Deny only.
+    @Test func aRunWithACwdIsDenyOnlyUntilTheSettingsAllowIt() async {
+        fake.listed = [Self.held(.itemRun(Self.run(cwd: "/home/me")))]
+        fake.cwdRuleQueue = [nil, nil, true]
+        let m = ApprovalDetailViewModel(key: Self.key, approvals: fake, connections: connections, vault: items, cwdWaits: Self.quick)
+        #expect(m.state.heldShow == .other && !m.state.canApprove(), "unanswered: deny only")
+        for _ in 0..<200 where m.state.cwdAllowed == nil { try? await Task.sleep(for: .milliseconds(10)) }
+        #expect(m.state.cwdAllowed == true && m.state.canApprove() && fake.cwdReads == 3)
+    }
+
+    @Test func aRunWithACwdStaysDenyOnlyAfterThreeFailedReadsOrWithFolders() async {
+        fake.listed = [Self.held(.itemRun(Self.run(cwd: "/home/me")))]
+        fake.cwdRule = nil
+        let failing = ApprovalDetailViewModel(key: Self.key, approvals: fake, connections: connections, vault: items, cwdWaits: Self.quick)
+        for _ in 0..<200 where failing.state.cwdAllowed == nil { try? await Task.sleep(for: .milliseconds(10)) }
+        #expect(failing.state.cwdAllowed == false && !failing.state.canApprove() && fake.cwdReads == 3)
+        fake.cwdRule = false
+        let folders = await model()
+        for _ in 0..<200 where folders.state.cwdAllowed == nil { try? await Task.sleep(for: .milliseconds(10)) }
+        #expect(folders.state.cwdAllowed == false && folders.state.heldShow == .other)
+        // A run without a cwd never reads.
+        let reads = fake.cwdReads
+        fake.listed = [Self.held(.itemRun(Self.run()))]
+        let plain = await model()
+        #expect(plain.state.canApprove() && fake.cwdReads == reads)
+    }
+
+    @Test func aRunListedAfterTheScreenOpenedReadsItsRuleThen() async {
+        let m = await model()
+        #expect(m.state.approval == nil)
+        fake.listed = [Self.held(.itemRun(Self.run(cwd: "/home/me")))]
+        for _ in 0..<200 where m.state.cwdAllowed == nil { try? await Task.sleep(for: .milliseconds(10)) }
+        #expect(m.state.cwdAllowed == true)
     }
 }
 

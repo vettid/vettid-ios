@@ -92,6 +92,85 @@ import VettIDApprovals
         #expect(!state(.unshown).canApprove() && !state(.desktopStepUp).canApprove() && !state(.itemUse(itemID: "i9", fieldID: "f1", data: [1])).canApprove())
         #expect(!state(.catalog, loaded: false).canApprove())
     }
+
+    // MARK: - A run and a proxy (AA8)
+
+    private let sha = String(repeating: "1a2b3c4d5e6f7a8b", count: 4)
+
+    private func runState(argv: [String], flags: Set<RunFlag> = [], replaces: String? = nil) -> ApprovalDetailState {
+        let r = ItemRun(itemID: "i1", fieldID: "f1", program: argv[0], sha256: sha, argv: argv, cwd: nil, how: .env, name: "T", env: [], flags: flags, previousSha256: nil, previousPath: nil, replaces: replaces)
+        return state(.itemRun(r))
+    }
+
+    @Test func aRunAProxyAndAnExpiredOneRender() {
+        for s in [runState(argv: ["/usr/bin/git", "push"]), runState(argv: ["/usr/bin/git"], flags: [.shell, .programUnrecorded], replaces: "h0"),
+                  state(.itemProxy(ItemProxy(itemID: "i1", fieldID: "f1", host: "api.example.com", header: "Authorization", prefix: "Bearer ", seconds: 90, replaces: nil)))] {
+            #expect(height(ApprovalDetailScreen(state: s, actions: DecisionActions())) > 0)
+        }
+        let s = runState(argv: ["/usr/bin/git"])
+        guard case .device(let d)? = s.approval, let show = s.heldShow else { Issue.record("no request"); return }
+        #expect(height(AgentWayScreen(state: s, request: d, show: show, actions: DecisionActions(), now: Date(), expired: true)) > 0)
+    }
+
+    @Test func aRunsAnswerAndItsPinRender() {
+        for o in [DeviceOutcome.approved(result: "ok", way: .run, pinRecorded: true, item: "GitHub"), .approved(result: "cwd_not_allowed", way: .run), .referred] {
+            var s = runState(argv: ["/usr/bin/git"])
+            s.outcome = o
+            #expect(height(ApprovalDetailScreen(state: s, actions: DecisionActions())) > 0, "\(o)")
+        }
+    }
+
+    // MARK: The gate on screen
+
+    /// The screen in a window, laid out; each of [scrollTo] ("end", "top") applied in turn; whether the gate says reached before
+    /// and after each.
+    private func gateStates(_ s: ApprovalDetailState, scrollTo: [String]) async -> [Bool] {
+        guard case .device(let d)? = s.approval, let show = s.heldShow else { return [] }
+        let seen = Seen()
+        var screen = AgentWayScreen(state: s, request: d, show: show, actions: DecisionActions(), now: Date())
+        screen.onGate = { seen.reached = $0 }
+        let host = UIHostingController(rootView: screen.vettIDTheme(.light))
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
+        window.rootViewController = host
+        window.makeKeyAndVisible()
+        var out: [Bool] = []
+        for step in [""] + scrollTo {
+            if let scroll = Self.scrollView(in: host.view) {
+                switch step {
+                case "end": scroll.setContentOffset(CGPoint(x: 0, y: max(0, scroll.contentSize.height - scroll.bounds.height)), animated: false)
+                case "top": scroll.setContentOffset(.zero, animated: false)
+                default: break
+                }
+            }
+            for _ in 0..<20 { try? await Task.sleep(for: .milliseconds(25)) }
+            out.append(seen.reached)
+        }
+        return out
+    }
+
+    private final class Seen { var reached = false }
+
+    private static func scrollView(in v: UIView) -> UIScrollView? {
+        var found: [UIScrollView] = []
+        func walk(_ v: UIView) {
+            if let s = v as? UIScrollView, s.contentSize.height > 0 { found.append(s) }
+            v.subviews.forEach(walk)
+        }
+        walk(v)
+        // The scrolled content is the tallest scroll view (the button panel's lines are another, short one).
+        return found.max { $0.contentSize.height < $1.contentSize.height }
+    }
+
+    @Test func approveWaitsForTheEndOfALongRunAndStaysEnabledScrollingBack() async {
+        let long = ["/usr/bin/git"] + (1...64).map { "arg-\($0)-" + String(repeating: "x", count: 500) }
+        let states = await gateStates(runState(argv: long), scrollTo: ["end", "top"])
+        #expect(states == [false, true, true], "disabled, then the end, then back up: still reached \(states)")
+    }
+
+    @Test func aShortRunThatFitsIsReachedAtOnce() async {
+        let states = await gateStates(runState(argv: ["/usr/bin/git"]), scrollTo: [])
+        #expect(states == [true], "\(states)")
+    }
 }
 
 // swiftlint:enable line_length

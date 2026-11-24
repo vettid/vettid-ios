@@ -13,6 +13,8 @@ let package = Package(
     dependencies: [
         .package(path: "../VettIDData"),
         .package(path: "../VettIDUI"),
+        // The string rule's box (AA8: a run's and a proxy's strings are shown as the item's page shows them).
+        .package(path: "../VettIDDevices"),
         // An approval's document (its parsed payload), and in the tests critical-use payloads and their hashes.
         .package(path: "../VettIDCrypto"),
     ],
@@ -32,6 +34,7 @@ let package = Package(
                 "VettIDApprovals",
                 .product(name: "VettIDData", package: "VettIDData"),
                 .product(name: "VettIDUI", package: "VettIDUI", condition: .when(platforms: [.iOS])),
+                .product(name: "VettIDDevices", package: "VettIDDevices", condition: .when(platforms: [.iOS])),
             ],
             resources: [.process("Resources/Localizable.xcstrings")]
         ),

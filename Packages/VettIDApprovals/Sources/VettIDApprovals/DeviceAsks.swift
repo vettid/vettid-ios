@@ -10,10 +10,14 @@ public enum HeldShow: Equatable, Sendable, CustomStringConvertible {
     /// `item.get`: the item and the field labels, or nil for all fields and notes.
     case get(item: String, fields: [String]?)
     case catalog
+    /// `item.run` (AA8): the run as the vault holds it, the item's and the field's names from the item list.
+    case run(ItemRun, item: String, field: String)
+    /// `item.proxy` (AA8): the proxy as the vault's note has it, the item's and the field's names from the item list.
+    case proxy(ItemProxy, item: String, field: String)
     /// The item (or a field) is not in the app's item list: "an item you no longer have", deny only. [loading]: the list is
     /// still being read.
     case noItem(use: Bool, loading: Bool)
-    /// An op this version shows by a later one (a run and a proxy until their screens), the item named when known.
+    /// An op this version shows by a later one (no longer used for a run or a proxy), the item named when known.
     case later(item: String?, loading: Bool)
     case desktop
     case other
@@ -21,7 +25,7 @@ public enum HeldShow: Equatable, Sendable, CustomStringConvertible {
     /// Whether Approve is offered.
     public var approvable: Bool {
         switch self {
-        case .use, .get, .catalog: true
+        case .use, .get, .catalog, .run, .proxy: true
         default: false
         }
     }
@@ -46,10 +50,15 @@ public enum DeviceAsks {
     /// Whether [d] is an approval an agent or a desktop holds (not a session request).
     public static func isHeld(_ d: DeviceRequest) -> Bool { d.type == "approval.pending" }
 
-    private static func showLoaded(_ d: DeviceRequest, _ items: [ItemSummary]) -> HeldShow {
+    private static func showLoaded(_ d: DeviceRequest, _ items: [ItemSummary]) -> HeldShow { // swiftlint:disable:this cyclomatic_complexity
         func item(_ id: String) -> ItemSummary? { items.first { $0.itemID.sameBytes(id) } }
         func label(_ i: ItemSummary?, _ field: String) -> String? {
             AccountNames.cleaned(i?.fieldLabels.first { $0.fieldID.sameBytes(field) }?.label)
+        }
+        // The item's and the field's names as the list has them, cleaned; nil when either does not name.
+        func named(_ i: ItemSummary?, _ fieldID: String) -> (String, String)? {
+            guard let name = AccountNames.cleaned(i?.name), let field = label(i, fieldID) else { return nil }
+            return (name, field)
         }
         switch d.held {
         case .itemUse(let itemID, let fieldID, let data)?:
@@ -65,8 +74,12 @@ public enum DeviceAsks {
             }
             return .get(item: name, fields: labels?.compactMap { $0 })
         case .catalog?: return .catalog
-        case .itemRun(let r)?: return .later(item: AccountNames.cleaned(item(r.itemID)?.name), loading: false)
-        case .itemProxy(let p)?: return .later(item: AccountNames.cleaned(item(p.itemID)?.name), loading: false)
+        case .itemRun(let r)?:
+            guard case let (name, field)? = named(item(r.itemID), r.fieldID) else { return .noItem(use: true, loading: false) }
+            return .run(r, item: name, field: field)
+        case .itemProxy(let p)?:
+            guard case let (name, field)? = named(item(p.itemID), p.fieldID) else { return .noItem(use: true, loading: false) }
+            return .proxy(p, item: name, field: field)
         case .desktopStepUp?: return .desktop
         case .unshown?, nil: return .other
         }
@@ -76,10 +89,15 @@ public enum DeviceAsks {
 /// How a decision on a request an agent holds ended (said before the screen closes). Mirrors vettid-android `DeviceOutcome`.
 public enum DeviceOutcome: Equatable, Sendable {
     /// `approval.decide{approve: true}` answered [result] (`ok`, or the code the held request was answered with); nil: no result.
-    case approved(result: String?)
-    /// `{result: "referred"}` (§6.8 step 4): not done yet; the new approval is a new entry, to be opened anew.
+    /// [way]: a run or a proxy (AA8 has its own texts); [pinRecorded]: after an `ok` that records a fingerprint, the item's settings
+    /// read since show it (AA8 "Approving and the pin"), for [item].
+    case approved(result: String?, way: AgentWay? = nil, pinRecorded: Bool = false, item: String? = nil)
+    /// `{result: "referred"}` (§6.8 step 4), for a run or a proxy: not done yet; the new approval is a new entry, to be opened anew.
     case referred
     case denied
     /// The vault answered `not_found` (replaced, decided elsewhere, dropped): "This request is no longer waiting."
     case noLongerWaiting
 }
+
+/// The two ways an agent uses a secret that AA8's screens show.
+public enum AgentWay: Equatable, Sendable { case run, proxy }
