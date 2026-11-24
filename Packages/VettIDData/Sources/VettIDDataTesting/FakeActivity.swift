@@ -243,6 +243,19 @@ public final class FakeApprovals: ApprovalsRepository {
         return DeviceDecision(result: deviceResult)
     }
 
+    /// What ``runCwdRule(agentID:itemID:)`` answers (nil: the read failed), and how many reads were asked.
+    public var cwdRule: Bool? = true
+    public private(set) var cwdReads = 0
+    /// What ``programRecorded(agentID:itemID:program:sha256:)`` answers.
+    public var recorded = false
+
+    public func runCwdRule(agentID: String, itemID: String) async -> Bool? {
+        cwdReads += 1
+        return cwdRule
+    }
+
+    public func programRecorded(agentID: String, itemID: String, program: String, sha256: String) async -> Bool { recorded }
+
     /// The sessions' ends, by device; a test sets them and ``deviceSessionsKnown`` (or lets ``readDeviceSessions()`` set it).
     public var deviceSessions: [String: Date] = [:] {
         didSet { deviceSessionsVersion += 1 }

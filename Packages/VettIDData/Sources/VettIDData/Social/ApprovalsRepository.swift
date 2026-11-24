@@ -122,6 +122,12 @@ public protocol ApprovalsRepository: ConnectionRequestsRepository {
     /// ``FailureKind/notFound`` for one that is gone. The vault's `result` is the answer; a request referred again
     /// (`referred`) leaves, the new one comes as a new approval.
     func approveDeviceRequest(_ shown: DeviceRequest) async throws -> DeviceDecision
+    /// AA8 "Fail closed": whether a run of [itemID] with a `cwd` and no `member_folder` may be approved for [agentID], from the
+    /// item's settings read now: only when they carry `run` without `folders`. nil: the read failed (a retry may answer).
+    func runCwdRule(agentID: String, itemID: String) async -> Bool?
+    /// AA8 "Approving and the pin": whether the item's settings, read now, record [program] at that path with that fingerprint.
+    /// False for a read that fails.
+    func programRecorded(agentID: String, itemID: String, program: String, sha256: String) async -> Bool
     /// When each desktop's or agent's access session ends, by device, as the vault last said (VAULT-MESSAGING 0.78.0 §6.8
     /// step 3: a renewal request is one from a device whose session has not expired).
     var deviceSessions: [String: Date] { get }

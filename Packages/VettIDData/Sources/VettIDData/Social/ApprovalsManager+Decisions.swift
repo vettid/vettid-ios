@@ -197,9 +197,15 @@ extension ApprovalsManager {
         let key = PendingApproval.device(shown).key
         guard shown.type == Self.approvalType, case .device(let d)? = pending(key) else { throw VaultFailure(.notFound) }
         guard d == shown else { throw VaultFailure(.notSupported) }
-        try await checkApprovable(d)
+        guard let held = d.held, held.approvable, HeldApprovals.nameable(held, itemCache()) else { throw VaultFailure(.notSupported) }
         var result: String?
         try await decide(key) { o in
+            // A run with a `cwd` and no `member_folder` only when the item's settings, read now for the request's own agent and
+            // item, carry `run` without `folders` (AA8): read here, after `ops()` and before the last check, which has no `await`
+            // between it and the send.
+            if case .itemRun(let run) = held, run.hasCwd, await self.runCwdRule(agentID: d.deviceID ?? "", itemID: run.itemID) != true {
+                throw VaultFailure(.notSupported)
+            }
             // `ops()` may have waited (a session is opened), and an event or a list read may have changed the approval since the
             // checks: judged again here, with no `await` between this and the send.
             guard case .device(let now)? = self.pending(key), now == shown, !self.mismatched.contains(key),
@@ -210,13 +216,20 @@ extension ApprovalsManager {
         return DeviceDecision(result: result)
     }
 
-    /// Only what is read in full and whose item and field the item list names; a run with a `cwd` and no `member_folder` only when
-    /// the item's settings, read now, carry `run` without `folders` (AA8). Else ``FailureKind/notSupported``, nothing sent.
-    private func checkApprovable(_ d: DeviceRequest) async throws {
-        guard let held = d.held, held.approvable, HeldApprovals.nameable(held, itemCache()) else { throw VaultFailure(.notSupported) }
-        if case .itemRun(let run) = held, run.hasCwd, !(await runCwdAllowed(d.deviceID ?? "", run.itemID)) {
-            throw VaultFailure(.notSupported)
+    public func runCwdRule(agentID: String, itemID: String) async -> Bool? {
+        do {
+            // Settings listed for another agent are not this agent's.
+            return ItemWaysRules.runCwdAllowed(try await itemWaysRead(agentID, itemID), agentID: agentID, itemID: itemID)
+        } catch {
+            return nil
         }
+    }
+
+    public func programRecorded(agentID: String, itemID: String, program: String, sha256: String) async -> Bool {
+        guard let read = (try? await itemWaysRead(agentID, itemID)).flatMap({ $0 }), !read.foreign, read.agentID.sameBytes(agentID),
+              let programs = read.ways?.run?.programs else { return false }
+        // The matched entry records the run's file at its `path` (a bare-name entry's `program` is only its name).
+        return programs.contains { ($0.path.map { $0.sameBytes(program) } ?? false) && ($0.sha256.map { $0.sameBytes(sha256) } ?? false) }
     }
 
     /// Drops every open ask of the device [deviceID] (its session request and its held approvals) and marks their feed
