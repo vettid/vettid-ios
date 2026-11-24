@@ -25,6 +25,8 @@ public final class TransferInViewModel: TransferInActions {
     @ObservationIgnored private let work = Work()
     @ObservationIgnored private var waiter: Task<Void, Never>?
     @ObservationIgnored private var ticker: Task<Void, Never>?
+    /// The take-up of a transfer not finished as the screen opens (``resume()``).
+    @ObservationIgnored private var resumer: Task<Void, Never>?
 
     public init(
         move: any MoveRepository,
@@ -36,12 +38,42 @@ public final class TransferInViewModel: TransferInActions {
         self.vault = vault
         self.now = now
         self.sleep = sleep
+        resume()
     }
 
     deinit {
         work.cancelAll()
+        resumer?.cancel()
         waiter?.cancel()
         ticker?.cancel()
+    }
+
+    /// A transfer to this phone that is not finished (a restart, or the screen left): its code again, waiting, or the
+    /// settlement's check, counted from its stored start; or "The move stopped on this phone" once. Only while the screen is
+    /// still at its start: a scan begun meanwhile is the member's. A wait taken over but not used (the member began a scan,
+    /// or the screen went) is handed back to the background. Mirrors vettid-android `TransferInViewModel`'s `init`.
+    private func resume() {
+        resumer = Task { @MainActor [weak self, move, vault] in
+            let found: TransferInWaiting?
+            do {
+                found = try await move.transferInWaiting()
+            } catch {
+                return
+            }
+            guard let found else { return }
+            guard !Task.isCancelled, let vm = self, vm.state.step == .intro, vm.waiter == nil else {
+                if case .waiting = found { move.waitForTransferInBackground() }
+                return
+            }
+            switch found {
+            case .stopped:
+                vm.state.step = .stopped
+            case .waiting(let sas, let startedAt):
+                vm.waiter = Task { @MainActor [weak vm, move, vault] in
+                    await Self.awaitApproval(Weak(vm), move, vault, sas: sas, deadline: startedAt.addingTimeInterval(Self.window))
+                }
+            }
+        }
     }
 
     public func scan() {

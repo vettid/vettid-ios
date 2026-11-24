@@ -16,7 +16,8 @@ struct ErrorNotice: View {
     var body: some View {
         if let kind = state.error {
             let text = override != nil && kind == override
-                ? overrideText ?? kind.message(timeScale: timeScale) : Self.message(kind, state.errorRetryAt, timeScale: timeScale)
+                ? overrideText ?? kind.message(timeScale: timeScale)
+                : Self.message(kind, state.errorRetryAt, code: state.errorCode, timeScale: timeScale)
             NoticeCard(.urgent, title: OnboardingStrings.progressFailed, message: text, announce: .assertive)
                 .padding(.top, Spacing.l)
                 .accessibilityIdentifier("error")
@@ -25,10 +26,11 @@ struct ErrorNotice: View {
 }
 
 extension ErrorNotice {
-    /// The failure's text at the vault's [timeScale]; a refused start-over (iPhone only) says from when it is possible.
-    static func message(_ kind: FailureKind, _ retryAt: Date?, timeScale: UInt64) -> String {
+    /// The failure's text at the vault's [timeScale]; a refused start-over (iPhone only) says from when it is possible, and
+    /// one refused while a move to this phone is under way ([code] ``VaultManager/codeTransferWaiting``) says that.
+    static func message(_ kind: FailureKind, _ retryAt: Date?, code: String? = nil, timeScale: UInt64) -> String {
         if kind == .enrollmentStarted, let retryAt { return FailureKind.enrollmentStartedText(after: retryAt) }
-        return kind.message(timeScale: timeScale)
+        return kind.message(code: code, timeScale: timeScale)
     }
 }
 

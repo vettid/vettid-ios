@@ -34,6 +34,10 @@ public enum SetupStage: Equatable, Sendable, CaseIterable {
     case newVault
     /// The account has a vault this device does not hold (one app per vault, VAULT-MESSAGING §3.5.9).
     case vaultElsewhere
+    /// A transfer to this phone that is not finished (VAULT-MESSAGING §6.7.1, §11.14.10 rule 5): it waits for the old
+    /// phone's approval or is being settled, or it stopped on this phone and the member has not been told yet. The
+    /// transfer screen opens again (``TransferInBackground/transferInWaiting()``), whether or not a setup code was redeemed.
+    case transferWaiting
     /// Enrolled and paired, but the Protean Credential is not created yet (§3.5.7).
     case needsCredential
     /// Everything done; the member has not left the final onboarding screen yet.

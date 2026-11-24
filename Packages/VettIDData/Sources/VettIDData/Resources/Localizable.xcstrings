@@ -436,6 +436,18 @@
         }
       }
     },
+    "data_failure_ios_transfer_waiting": {
+      "comment": "iPhone only: no Android text; for the owner to approve.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A move from your old phone to this phone is still under way. Wait until it ends, then try again."
+          }
+        }
+      }
+    },
     "data_failure_limit": {
       "extractionState": "manual",
       "localizations": {

@@ -45,18 +45,26 @@ extension VaultManagerTransferInTests {
         #expect(phone.attester.discarded == phone.attester.attested)
     }
 
-    /// The device dropped a malformed `device.paired` and the app ended before anyone waited for it: the next start says
-    /// "The move stopped on this phone" (``TransferEnd/stopped``), never a silent drop.
-    @Test func aDropBeforeTheAppEndedIsToldAtTheNextStart() async throws {
+    /// The device dropped a malformed `device.paired` and the app ended before anyone waited for it: the next start opens
+    /// the transfer screen (``SetupStage/transferWaiting``), with or without a redeemed code, which says "The move stopped on
+    /// this phone" once (``TransferInWaiting/stopped``), never a silent drop; the transfer is dropped then, and the phase
+    /// goes back as before the move.
+    @Test(arguments: [false, true])
+    func aDropBeforeTheAppEndedIsToldAtTheNextStart(redeemed: Bool) async throws {
         defer { phone.close() }
+        if redeemed { _ = try await m.redeemSetupCode(.secret(service.secret)) }
         service.transferWithoutUserGuid = true
         _ = try await m.transferIn(code: try code())
         service.approveTransferIn()
         #expect(await eventually { m.session?.device.droppedWithoutUserGuid == true }, "dropped as it was handled")
         try await phone.restart()
         try await m.refresh()
-        #expect(await eventually { m.transferEnd == .stopped }, "\(String(describing: m.transferEnd))")
+        #expect(m.phase == .setup(.transferWaiting), "\(m.phase)")
+        #expect(m.moveFlags.book.transferWaiter == nil && m.transferEnd == nil, "left to the transfer screen")
+        #expect(try await m.transferInWaiting() == .stopped)
         #expect(!deviceHoldsVault && m.record.value.transferStartedMs == nil)
+        #expect(m.phase == (redeemed ? .setup(.newVault) : .signedOut), "\(m.phase)")
+        #expect(try await m.transferInWaiting() == nil, "told once")
     }
 
     /// A transfer scanned after a setup code was redeemed, then abandoned: the redeemed code is kept (no new code needed),

@@ -116,7 +116,7 @@ public struct TransferInContent: View {
         ) {
             VStack(alignment: .leading, spacing: Spacing.l) {
                 NoticeCard(.info, title: MoveStrings.recoverNeedTitle, message: MoveStrings.transferInNeedBody)
-                MoveFailure(kind: state.error, timeScale: timeScale)
+                MoveFailure(kind: state.error, code: state.errorCode, timeScale: timeScale)
             }
         }
         .accessibilityElement(children: .contain)
@@ -131,7 +131,7 @@ public struct TransferInContent: View {
             VStack(alignment: .leading, spacing: Spacing.l) {
                 ScannerBox(onText: actions.scanned, onTypeInstead: actions.paste, camera: camera, typeLabel: MoveStrings.transferInPaste)
                 InputProblem(kind: state.inputProblem)
-                MoveFailure(kind: state.error, timeScale: timeScale)
+                MoveFailure(kind: state.error, code: state.errorCode, timeScale: timeScale)
             }
         }
         .accessibilityElement(children: .contain)
@@ -156,7 +156,7 @@ public struct TransferInContent: View {
                 }
                 .accessibilityIdentifier("transfer_code")
                 InputProblem(kind: state.inputProblem)
-                MoveFailure(kind: state.error, timeScale: timeScale)
+                MoveFailure(kind: state.error, code: state.errorCode, timeScale: timeScale)
             }
         }
         .accessibilityElement(children: .contain)
@@ -195,16 +195,19 @@ public struct TransferInContent: View {
     }
 }
 
-/// A failure as a notice: the vault's own text, or "Your vault did not answer…" when it did not answer.
+/// A failure as a notice: the vault's own text, or "Your vault did not answer…" when it did not answer; a new code refused
+/// while the last move cannot be abandoned ([code] ``VaultManager/codeTransferWaiting``) says that a move is under way.
 private struct MoveFailure: View {
     let kind: FailureKind?
+    let code: String?
     let timeScale: UInt64
 
     var body: some View {
         if let kind {
             NoticeCard(
                 .urgent, title: MoveStrings.recoverFailedTitle,
-                message: kind == .noResponse ? MoveStrings.transferInNoAnswer : kind.message(timeScale: timeScale), announce: .assertive
+                message: kind == .noResponse ? MoveStrings.transferInNoAnswer : kind.message(code: code, timeScale: timeScale),
+                announce: .assertive
             )
             .accessibilityIdentifier("error")
         }

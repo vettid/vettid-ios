@@ -168,6 +168,8 @@ extension VaultManager: MoveRepository {
                record.value.transferStartedMs != nil, let d = session?.device, d.deviceID == nil {
                 waitForTransferInBackground()
             }
+            // The phase follows a transfer the screen's wait ended (the background's reads it again itself).
+            if !(error is CancellationError) { await rereadAfterTransferIn() }
             throw error
         }
     }
@@ -363,10 +365,10 @@ extension VaultManager: MoveRepository {
     /// Once per process, at the start (before anything else is decided about this phone; §11.14.10 rule 5): a transfer whose
     /// `device.paired` arrived is completed whatever its age; one still waiting is waited for in the background
     /// (``waitForTransferInBackground()``): before its deadline until it, past it for the settlement window (rule 5,
-    /// VAULT-MESSAGING 0.85.2), and then applied or dropped. Meanwhile the welcome screen is shown and no enrollment can
-    /// start (the vault is pinned, ``startOverRefusal(_:)``); a new code can be scanned before the end of the vault's 10
-    /// minutes, not from then on (``abandonClosed``). Waiting before the deadline is (chosen; not in the spec): Android
-    /// shows the welcome screen and does not wait.
+    /// VAULT-MESSAGING 0.85.2), and then applied or dropped. Meanwhile the transfer screen is shown (``SetupStage/transferWaiting``;
+    /// its wait takes the background's place, ``transferInWaiting()``) and no enrollment can start (the vault is pinned,
+    /// ``startOverRefusal(_:)``); a new code can be scanned before the vault's 10 minutes end, not after (``abandonClosed``).
+    /// The background's wait until the screen takes over is (chosen; not in the spec): vettid-android's screen alone waits.
     @discardableResult
     func resumeTransferIn(_ s: VaultSession) async -> TransferSettled? {
         guard moveFlags.book.startingIn == 0, !moveFlags.book.transferResumed else { return nil }
@@ -380,9 +382,9 @@ extension VaultManager: MoveRepository {
             return nil
         }
         if d.deviceID == nil, d.droppedWithoutUserGuid {
-            // (§6.7.1) The device dropped a malformed `device.paired` before the process ended, and nobody was told: the
-            // background's wait says so ("The move stopped on this phone") and drops the transfer.
-            waitForTransferInBackground()
+            // (§6.7.1) A malformed `device.paired` dropped before the process ended, nobody told: the transfer screen says so
+            // and drops the transfer (``SetupStage/transferWaiting``, ``transferInWaiting()``; vettid-android `StoppedMove`),
+            // not the background, whose end only the welcome screen tells (never shown after a redeemed code).
             return nil
         }
         if d.deviceID == nil, !d.holdsTransferSas, !d.awaitsPairingResp {
@@ -441,6 +443,7 @@ extension VaultManager: MoveRepository {
             } else {
                 await dropTransfer(s.device)
             }
+            await rereadAfterTransferIn()
         }
     }
 

@@ -86,6 +86,10 @@ public final class OnboardingViewModel: OnboardingActions {
                 }
             case .vaultElsewhere:
                 if s.step != .progress && !moving { go(.vaultElsewhere) }
+            // A transfer to this phone that is not finished (after a restart, with or without a redeemed code): its screen
+            // again, which takes it up (``TransferInViewModel``), never the new vault's steps.
+            case .transferWaiting:
+                if s.step != .transferIn { go(.transferIn) }
             case .recovering:
                 if s.step != .recover {
                     state.step = .recover
