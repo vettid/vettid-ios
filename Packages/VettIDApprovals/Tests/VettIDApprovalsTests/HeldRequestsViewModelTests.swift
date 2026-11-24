@@ -90,7 +90,9 @@ import VettIDDataTesting
     }
 
     @Test func theVaultsAnswersAreKeptAsTheyCame() async {
-        for (result, outcome) in [("referred", DeviceOutcome.referred), ("forbidden", .approved(result: "forbidden")), ("way_not_allowed", .approved(result: "way_not_allowed"))] {
+        // Only a run or a proxy is referred again; for a reveal `referred` is a result like another (AA5's "Approved, but your vault
+        // answered: referred.").
+        for (result, outcome) in [("referred", DeviceOutcome.approved(result: "referred")), ("forbidden", .approved(result: "forbidden")), ("way_not_allowed", .approved(result: "way_not_allowed"))] {
             fake.listed = [Self.held(Self.get)]
             fake.deviceResult = result
             let m = await model()

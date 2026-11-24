@@ -236,7 +236,8 @@ public final class FakeApprovals: ApprovalsRepository {
     /// What ``approveDeviceRequest(_:)`` answers (`approval.decide`'s `result`).
     public var deviceResult: String? = "ok"
 
-    public func approveDeviceRequest(_ key: String) async throws -> DeviceDecision {
+    public func approveDeviceRequest(_ shown: DeviceRequest) async throws -> DeviceDecision {
+        let key = PendingApproval.device(shown).key
         try call("approveDeviceRequest", key)
         drop(key)
         return DeviceDecision(result: deviceResult)

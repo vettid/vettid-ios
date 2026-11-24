@@ -7,9 +7,17 @@ extension ApprovalDetailViewModel {
     /// An agent's held request, approved (`approval.decide{approve: true}`, §6.8): the vault's answer is said before the screen
     /// closes. Never from a list entry or a notification: only here, from its own screen.
     func approveHeld(_ d: DeviceRequest) {
-        decideHeld(key: PendingApproval.device(d).key) { [repo] key in
-            let r = try await repo.approveDeviceRequest(key).result
-            return r == "referred" ? .referred : .approved(result: r)
+        // Only the request the member was shown, as bytes (``ApprovalsRepository/approveDeviceRequest(_:)``). Only a run or a
+        // proxy is referred again (§6.8 step 4): for any other op `referred` is a result like the rest (AA5's "Approved, but
+        // your vault answered: referred.").
+        let referable: Bool
+        switch d.held {
+        case .itemRun?, .itemProxy?: referable = true
+        default: referable = false
+        }
+        decideHeld(key: PendingApproval.device(d).key) { [repo] _ in
+            let r = try await repo.approveDeviceRequest(d).result
+            return r == "referred" && referable ? .referred : .approved(result: r)
         }
     }
 

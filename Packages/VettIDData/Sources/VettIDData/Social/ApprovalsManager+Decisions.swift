@@ -190,15 +190,23 @@ extension ApprovalsManager {
         }
     }
 
-    public func approveDeviceRequest(_ key: String) async throws -> DeviceDecision {
+    public func approveDeviceRequest(_ shown: DeviceRequest) async throws -> DeviceDecision {
         // Looked up as the list shows it (a replaced, expired or differing approval already read as it should), never through the
-        // kept events.
-        guard case .device(let d)? = pending(key), d.type == Self.approvalType else { throw VaultFailure(.notFound) }
+        // kept events; and only the request the member was shown, as bytes (its `exp`, names and read, a request that left and
+        // came back included).
+        let key = PendingApproval.device(shown).key
+        guard shown.type == Self.approvalType, case .device(let d)? = pending(key) else { throw VaultFailure(.notFound) }
+        guard d == shown else { throw VaultFailure(.notSupported) }
         try await checkApprovable(d)
-        // The check may have waited (the item's settings are read): what is approved is what is listed now, as it was checked.
-        guard case .device(let now)? = pending(key), now == d else { throw VaultFailure(.notSupported) }
         var result: String?
-        try await decide(key) { result = try await $0.approvalDecide(d.id, approve: true) }
+        try await decide(key) { o in
+            // `ops()` may have waited (a session is opened), and an event or a list read may have changed the approval since the
+            // checks: judged again here, with no `await` between this and the send.
+            guard case .device(let now)? = self.pending(key), now == shown, !self.mismatched.contains(key),
+                  !self.replaced.contains(key), let held = now.held, held.approvable,
+                  HeldApprovals.nameable(held, self.itemCache()) else { throw VaultFailure(.notSupported) }
+            result = try await o.approvalDecide(d.id, approve: true)
+        }
         return DeviceDecision(result: result)
     }
 
