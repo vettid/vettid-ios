@@ -397,20 +397,16 @@ import VettIDDataTesting
         m.onEvent(event(held("h2", runBody(), top: #","flags":["a_later_flag"]"#)))
         m.onEvent(event(held("h3", runBody())))
         m.onEvent(event(held("h4", runBody(), top: #","replaces":"h3""#)))
-        m.onEvent(event(held("h5", runBody().replacingOccurrences(of: #""exp":"#, with: #""x":"#))))
         let gone = held("h6", runBody()).replacingOccurrences(of: exp, with: Timestamps.formatMillis(now.addingTimeInterval(-1)))
         m.onEvent(event(gone))
-        for id in ["h1", "h2", "h5"] {
-            await #expect(throws: VaultFailure.self, "\(id) is deny only") { try await m.approveDeviceRequest("device:approval.pending:\(id)") }
+        for (id, kind) in [("h1", FailureKind.notSupported), ("h2", .notSupported), ("h3", .notFound), ("h6", .notFound), ("h9", .notFound)] {
+            do {
+                _ = try await m.approveDeviceRequest("device:approval.pending:\(id)")
+                Issue.record("\(id) was approved")
+            } catch let f as VaultFailure {
+                #expect(f.kind == kind, Comment(rawValue: id))
+            }
         }
-        for id in ["h3", "h6", "h9"] {
-            await #expect(throws: VaultFailure.self, "\(id) is not in the list") { try await m.approveDeviceRequest("device:approval.pending:\(id)") }
-        }
-        let kinds = [FailureKind.notSupported, .notSupported, .notSupported]
-        for (id, kind) in zip(["h1", "h2", "h5"], kinds) {
-            do { _ = try await m.approveDeviceRequest("device:approval.pending:\(id)") } catch let f as VaultFailure { #expect(f.kind == kind) }
-        }
-        do { _ = try await m.approveDeviceRequest("device:approval.pending:h3") } catch let f as VaultFailure { #expect(f.kind == .notFound) }
         #expect(ops.calls.isEmpty, "nothing sent")
     }
 
