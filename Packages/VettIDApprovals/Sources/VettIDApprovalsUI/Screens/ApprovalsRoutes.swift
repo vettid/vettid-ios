@@ -18,18 +18,21 @@ public struct ApprovalsRoute: View {
     private let approvals: any ApprovalsRepository
     private let connections: any ConnectionsRepository
     private let ownerChecks: (any OwnerCheckRepository)?
+    private let items: (any ItemsRepository)?
     private let chrome: ShellChrome
     private let host: ApprovalsHost
     @State private var model: ApprovalsViewModel?
 
-    /// [ownerChecks]: a list refused because the daily check was due reads again once a check passes.
+    /// [ownerChecks]: a list refused because the daily check was due reads again once a check passes. [items]: the Vault list,
+    /// which names what an agent's request is about.
     public init(
         approvals: any ApprovalsRepository, connections: any ConnectionsRepository, ownerChecks: (any OwnerCheckRepository)? = nil,
-        chrome: ShellChrome, host: ApprovalsHost
+        items: (any ItemsRepository)? = nil, chrome: ShellChrome, host: ApprovalsHost
     ) {
         self.approvals = approvals
         self.connections = connections
         self.ownerChecks = ownerChecks
+        self.items = items
         self.chrome = chrome
         self.host = host
     }
@@ -38,7 +41,7 @@ public struct ApprovalsRoute: View {
         ApprovalsScreen(state: model?.state ?? ApprovalsState(), chrome: chrome, actions: actions)
             .onAppear {
                 guard model == nil else { return }
-                model = ApprovalsViewModel(approvals: approvals, connections: connections, ownerChecks: ownerChecks)
+                model = ApprovalsViewModel(approvals: approvals, connections: connections, ownerChecks: ownerChecks, items: items)
             }
     }
 

@@ -116,6 +116,12 @@ public protocol ApprovalsRepository: ConnectionRequestsRepository {
 
     /// Declines a desktop's or agent's request (§6.8), by its ``PendingApproval/key``.
     func declineDeviceRequest(_ key: String) async throws
+    /// Approves the request [shown] an agent holds for approval (`approval.decide{approve: true}`, §6.8): only if the request listed
+    /// now is that one, byte for byte, and only what the app shows in full (AA5, AA8): ``FailureKind/notSupported``, nothing sent, for anything else, for an
+    /// item or field the item list cannot name, and for a run whose `cwd` the item's settings, read now, do not allow;
+    /// ``FailureKind/notFound`` for one that is gone. The vault's `result` is the answer; a request referred again
+    /// (`referred`) leaves, the new one comes as a new approval.
+    func approveDeviceRequest(_ shown: DeviceRequest) async throws -> DeviceDecision
     /// When each desktop's or agent's access session ends, by device, as the vault last said (VAULT-MESSAGING 0.78.0 §6.8
     /// step 3: a renewal request is one from a device whose session has not expired).
     var deviceSessions: [String: Date] { get }

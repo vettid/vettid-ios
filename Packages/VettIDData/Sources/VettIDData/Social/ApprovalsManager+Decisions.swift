@@ -190,6 +190,35 @@ extension ApprovalsManager {
         }
     }
 
+    public func approveDeviceRequest(_ shown: DeviceRequest) async throws -> DeviceDecision {
+        // Looked up as the list shows it (a replaced, expired or differing approval already read as it should), never through the
+        // kept events; and only the request the member was shown, as bytes (its `exp`, names and read, a request that left and
+        // came back included).
+        let key = PendingApproval.device(shown).key
+        guard shown.type == Self.approvalType, case .device(let d)? = pending(key) else { throw VaultFailure(.notFound) }
+        guard d == shown else { throw VaultFailure(.notSupported) }
+        try await checkApprovable(d)
+        var result: String?
+        try await decide(key) { o in
+            // `ops()` may have waited (a session is opened), and an event or a list read may have changed the approval since the
+            // checks: judged again here, with no `await` between this and the send.
+            guard case .device(let now)? = self.pending(key), now == shown, !self.mismatched.contains(key),
+                  !self.replaced.contains(key), let held = now.held, held.approvable,
+                  HeldApprovals.nameable(held, self.itemCache()) else { throw VaultFailure(.notSupported) }
+            result = try await o.approvalDecide(d.id, approve: true)
+        }
+        return DeviceDecision(result: result)
+    }
+
+    /// Only what is read in full and whose item and field the item list names; a run with a `cwd` and no `member_folder` only when
+    /// the item's settings, read now, carry `run` without `folders` (AA8). Else ``FailureKind/notSupported``, nothing sent.
+    private func checkApprovable(_ d: DeviceRequest) async throws {
+        guard let held = d.held, held.approvable, HeldApprovals.nameable(held, itemCache()) else { throw VaultFailure(.notSupported) }
+        if case .itemRun(let run) = held, run.hasCwd, !(await runCwdAllowed(d.deviceID ?? "", run.itemID)) {
+            throw VaultFailure(.notSupported)
+        }
+    }
+
     /// Drops every open ask of the device [deviceID] (its session request and its held approvals) and marks their feed
     /// items read. The vault sends `approval.decided` and `sync.event` `device.session` to the member's other devices only
     /// (§10.1), so the app that ended the device's access or unlinked it calls this itself, once the vault has answered

@@ -18,7 +18,7 @@ import VettIDApprovals
             .appendingPathComponent("Sources/VettIDApprovalsUI/Resources/Localizable.xcstrings")
         let doc = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
         let keys = try #require((doc["strings"] as? [String: Any])?.keys)
-        #expect(keys.count == 215)
+        #expect(keys.count == 248)
         let missing = "\u{0}missing"
         for key in keys {
             let text = ApprovalsStrings.bundle.localizedString(forKey: key, value: missing, table: nil)
@@ -98,7 +98,8 @@ import VettIDApprovals
         #expect(ApprovalTexts.approveLabel(.connection(Samples.incoming())) == "The codes match: connect")
         #expect(ApprovalTexts.approveLabel(.connection(Samples.incoming(state: .approved))) == nil)
         #expect(ApprovalTexts.approveLabel(.connection(Samples.outgoing())) == "The codes match: approve")
-        #expect(ApprovalTexts.approveLabel(.connection(Samples.outgoing(sas: nil))) == nil && ApprovalTexts.approveLabel(Samples.device()) == nil)
+        #expect(ApprovalTexts.approveLabel(.connection(Samples.outgoing(sas: nil))) == nil && ApprovalTexts.approveLabel(Samples.device("device.session.pending")) == nil)
+        #expect(ApprovalTexts.approveLabel(Samples.device()) == "Approve", "an agent's held request; the screen offers it only where the app can approve")
         #expect(ApprovalTexts.approveLabel(Samples.critical()) == "Allow this one use" && ApprovalTexts.approveLabel(Samples.share()) == "Share the ticked items")
         #expect(ApprovalTexts.denyLabel(Samples.share()) == "Do not share" && ApprovalTexts.denyLabel(Samples.auth()) == "Deny")
     }

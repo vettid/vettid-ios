@@ -134,6 +134,20 @@ public struct ItemFieldView: Equatable, Hashable, Sendable, CustomStringConverti
     public var customMirror: Mirror { Mirror(self, children: [:]) }
 }
 
+/// A field's metadata, never its value: its id and label and kind. Names a field in an agent's request (AA5, AA8). Mirrors
+/// vettid-android `FieldLabel`.
+public struct ItemFieldLabel: Equatable, Hashable, Sendable {
+    public var fieldID: String
+    public var label: String
+    public var kind: String
+
+    public init(fieldID: String, label: String, kind: String) {
+        self.fieldID = fieldID
+        self.label = label
+        self.kind = kind
+    }
+}
+
 /// An item in the list (`item.list`: metadata, never values or notes). Mirrors vettid-android `ItemSummary`.
 public struct ItemSummary: Equatable, Hashable, Sendable, Identifiable, CustomStringConvertible {
     public var itemID: String
@@ -146,10 +160,12 @@ public struct ItemSummary: Equatable, Hashable, Sendable, Identifiable, CustomSt
     /// The fields' labels, in order (shown as the row's second line).
     public var labels: [String]
     public var updatedAt: Date?
+    /// The fields' ids with their labels and kinds (never values): names a field in an agent's request.
+    public var fieldLabels: [ItemFieldLabel]
 
     public init(
         itemID: String, version: Int64, name: String, category: String, sensitivity: Sensitivity, template: String? = nil,
-        tags: [String] = [], labels: [String] = [], updatedAt: Date? = nil
+        tags: [String] = [], labels: [String] = [], updatedAt: Date? = nil, fieldLabels: [ItemFieldLabel] = []
     ) {
         self.itemID = itemID
         self.version = version
@@ -160,6 +176,7 @@ public struct ItemSummary: Equatable, Hashable, Sendable, Identifiable, CustomSt
         self.tags = tags
         self.labels = labels
         self.updatedAt = updatedAt
+        self.fieldLabels = fieldLabels
     }
 
     public var id: String { itemID }
@@ -212,7 +229,8 @@ public struct ItemDetail: Equatable, Sendable, CustomStringConvertible, CustomRe
     public var summary: ItemSummary {
         ItemSummary(
             itemID: itemID, version: version, name: name, category: category, sensitivity: sensitivity, template: template,
-            tags: tags, labels: fields.map(\.label), updatedAt: updatedAt
+            tags: tags, labels: fields.map(\.label), updatedAt: updatedAt,
+            fieldLabels: fields.compactMap { f in f.fieldID.map { ItemFieldLabel(fieldID: $0, label: f.label, kind: f.kind) } }
         )
     }
 

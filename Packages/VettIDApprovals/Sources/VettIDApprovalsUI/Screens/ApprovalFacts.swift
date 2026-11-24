@@ -55,10 +55,14 @@ struct Facts: View {
     var service = false
     /// A renewal request (0.78.0 §6.8 step 3): its notice says what a deny does instead of the decline-only line.
     var renewal = false
+    /// What an agent's held request shows (AA5), from the member's item list.
+    var held: HeldShow?
+    var now = Date()
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             switch approval {
+            case .device(let d) where held != nil: HeldFacts(request: d, show: held ?? .other, now: now)
             case .connection(.incoming(let r)): incoming(r)
             case .connection(.outgoing(let r)): outgoing(r)
             case .authentication(let x):
@@ -376,6 +380,60 @@ struct ShareFacts: View {
         .buttonStyle(.plain)
         .accessibilityAddTraits(on ? .isSelected : [])
         .accessibilityIdentifier("share_item_\(i.itemID)")
+    }
+}
+
+/// An agent's held request on its screen (AA5): how long it waits, the kind of device (so that an agent calling itself "Work
+/// desktop" still shows "Agent"), and what it asks: for `item.use` the data the result is computed over, in a box with its label
+/// and length so that the agent's text cannot pass for one of the app's own lines; for a reveal the fields and, always, that
+/// the agent's app may keep the value in its history. Mirrors vettid-android `HeldFacts`.
+struct HeldFacts: View {
+    @Environment(\.vettIDColors) private var colors
+    let request: DeviceRequest
+    let show: HeldShow
+    let now: Date
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            if let waiting = ApprovalTexts.waitingText(request.exp, now: now) {
+                Text(waiting).vettIDFont(.bodyMedium).padding(.bottom, Spacing.m).accessibilityIdentifier("device_waiting")
+            }
+            Text(ApprovalTexts.kindWord(request)).vettIDFont(.titleMedium).accessibilityIdentifier("device_kind")
+            switch show {
+            case .use(_, _, let data, let bytes): useData(data, bytes: bytes).padding(.top, Spacing.m)
+            case .get(_, let fields): reveal(fields).padding(.top, Spacing.m)
+            default: EmptyView()
+            }
+        }
+    }
+
+    private func useData(_ data: DataView, bytes: Int) -> some View {
+        VStack(alignment: .leading, spacing: Spacing.xs) {
+            Text(ApprovalsStrings.heldUseData).vettIDFont(.labelMedium)
+            Text(ApprovalsStrings.heldUseBytes(bytes)).vettIDFont(.labelMedium).accessibilityIdentifier("use_data_bytes")
+            switch data {
+            case .text(let t): Text(t).vettIDFont(.bodyLarge).accessibilityIdentifier("use_data_text")
+            case .hex(let h):
+                Text(ApprovalsStrings.heldUseDataHex).vettIDFont(.bodySmall)
+                Text(h).vettIDFont(.bodyMedium).monospaced().accessibilityIdentifier("use_data_hex")
+            }
+        }
+        .padding(Spacing.m)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .overlay(RoundedRectangle(cornerRadius: VettIDShape.small).stroke(colors.outline))
+        // One element: the label, the length and the agent's text are read together, as the agent's data.
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("use_data_box")
+    }
+
+    private func reveal(_ fields: [String]?) -> some View {
+        VStack(alignment: .leading, spacing: Spacing.m) {
+            Text(fields.map { ApprovalsStrings.heldGetFields($0.map { AccountNames.isolate($0) }.joined(separator: ", ")) }
+                ?? ApprovalsStrings.heldGetAll)
+                .vettIDFont(.bodyLarge).accessibilityIdentifier("get_fields")
+            // Always, with or without the `history` flag (since 0.42.0 every item.get is a reveal).
+            Text(ApprovalsStrings.heldGetHistory).vettIDFont(.bodyLarge).accessibilityIdentifier("get_history")
+        }
     }
 }
 #endif

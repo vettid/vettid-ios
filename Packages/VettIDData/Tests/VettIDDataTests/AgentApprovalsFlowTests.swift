@@ -20,10 +20,27 @@ import VettIDDataTesting
 
     init() { ops.pendingSupported = true }
 
-    func manager() -> ApprovalsManager {
+    /// The item list as the app has it: item `i1` with fields `f1` and `f2`.
+    static let cache = [ItemSummary(
+        itemID: "i1", version: 1, name: "GitHub", category: "login", sensitivity: .secret,
+        fieldLabels: [ItemFieldLabel(fieldID: "f1", label: "Token", kind: "password"), ItemFieldLabel(fieldID: "f2", label: "User", kind: "text")]
+    )]
+
+    /// [cache] the item list the approval is resolved against; [cwd] answers whether the item's settings allow a run's `cwd`
+    /// (told the agent and the item it asked for).
+    func manager(
+        cache: [ItemSummary] = cache, cwd: @escaping @MainActor (String, String) async -> Bool = { _, _ in false },
+        gate: TestDeferred<Void>? = nil, atGate: GateMark? = nil
+    ) -> ApprovalsManager {
         let ops = ops, connOps = connOps, now = now
         let c = ConnectionsManager(ops: { connOps }, now: { now })
-        return ApprovalsManager(connections: c, ops: { ops }, now: { now })
+        // [gate]: opening the vault's session takes a while (`memberApi` opens one), and `decide` awaits it.
+        return ApprovalsManager(
+            connections: c, ops: {
+                if let gate { atGate?.reached = true; try await gate.value() }
+                return ops
+            }, now: { now }, itemCache: { cache }, runCwdAllowed: cwd
+        )
     }
 
     func event(_ body: String, ts: Date? = nil) -> VaultMessage {
@@ -53,6 +70,12 @@ import VettIDDataTesting
         return d
     }
 
+    /// Approves what the list shows for [id], or, for one it does not show, a bare request of that id (what a screen kept).
+    func approve(_ m: ApprovalsManager, _ id: String) async throws -> DeviceDecision {
+        let shown = (try? request(m, id)) ?? DeviceRequest(type: "approval.pending", id: id, receivedAt: now)
+        return try await m.approveDeviceRequest(shown)
+    }
+
     func keys(_ m: ApprovalsManager) -> [String] { m.approvals.map(\.key).sorted() }
 
     /// The kept events of the approval [id]: what the store holds, whatever the list of approvals shows.
@@ -69,7 +92,7 @@ import VettIDDataTesting
         m.onEvent(event(held("h2", runBody().replacingOccurrences(of: #""how":"env""#, with: #""how":"stdin","how":"env""#))))
         guard case .itemRun(let run)? = try request(m, "h1").held else { throw CocoaError(.fileNoSuchFile) }
         #expect(run.argv == ["git", "status"])
-        #expect(try request(m, "h1").held?.approvable == false, "not approvable before AA8's screens")
+        #expect(try request(m, "h1").held?.approvable == false, "read in full, deny only until their screens ship")
         // Kept and shown, but deny only: the member can still deny it. Made again from what was stored: still deny only.
         #expect(try request(m, "h2").held == .unshown)
         #expect(m.stored.contains { $0.body.contains(#""how":"stdin""#) } == false, "the unreadable text is not kept")
@@ -245,6 +268,258 @@ import VettIDDataTesting
         #expect(try request(m, "h2").held == .unshown)
     }
 
+    // MARK: - The check of one approval against another is by bytes, both ways, and a lock forgets it
+
+    /// "é" as one code point (NFC) and as "e" and a combining acute (NFD): the same to `String ==`, never the same bytes.
+    let nfc = "caf\u{00E9}", nfd = "cafe\u{0301}"
+
+    @Test func theHeldRequestsAreComparedAsBytesNotAsCanonicallyEquivalentText() throws {
+        #expect(nfc == nfd, "the premise: Swift's String == takes them as one")
+        func run(_ arg: String) throws -> HeldApproval {
+            let o = try StrictJson.parseObject(Array(held("h1", runBody("[\"git\",\"\(arg)\"]")).utf8))
+            return try #require(ApprovalParser.device("approval.pending", o, at: now)?.held)
+        }
+        #expect(try run(nfc) == run(nfc))
+        #expect(try run(nfc) != run(nfd))
+        #expect(try run(nfd) == run(nfd))
+        let get = { (f: String) in HeldApproval.itemGet(itemID: "i1", fieldIDs: [f]) }
+        #expect(get(nfc) != get(nfd))
+        #expect(HeldApproval.itemUse(itemID: nfc, fieldID: "f", data: [1]) != HeldApproval.itemUse(itemID: nfd, fieldID: "f", data: [1]))
+        let proxy = { (h: String) in HeldApproval.itemProxy(ItemProxy(itemID: "i", fieldID: "f", host: h, header: "A", prefix: "", seconds: 60, replaces: nil)) }
+        #expect(proxy(nfc) != proxy(nfd) && proxy(nfc) == proxy(nfc))
+        // The device request too: its name, role, device and `replaces`.
+        let a = DeviceRequest(type: "approval.pending", id: "h1", deviceName: nfc, role: "agent", receivedAt: now)
+        var b = a
+        b.deviceName = nfd
+        #expect(a != b && !a.asksSame(as: b))
+        let x = DeviceRequest(type: "approval.pending", id: "h1", receivedAt: now, deviceID: nfc)
+        let y = DeviceRequest(type: "approval.pending", id: "h1", receivedAt: now, deviceID: nfd)
+        #expect(a.asksSame(as: a) && !x.asksSame(as: y) && x.asksSame(as: x))
+    }
+
+    @Test func aListedApprovalThatDiffersOnlyByCanonicalEquivalenceIsDenyOnly() async throws {
+        let m = manager()
+        m.onEvent(event(held("h1", runBody("[\"git\",\"\(nfc)\"]"))))
+        m.onEvent(event(held("h2", runBody(), name: nfc)))
+        m.onEvent(event(held("h3", runBody("[\"git\",\"\(nfc)\"]"))))
+        listed(held("h1", runBody("[\"git\",\"\(nfd)\"]")), held("h2", runBody(), name: nfd), held("h3", runBody("[\"git\",\"\(nfc)\"]")))
+        try await m.refreshApprovals()
+        #expect(try request(m, "h1").held == .unshown, "another argument as bytes")
+        #expect(try request(m, "h2").held == .unshown, "another name as bytes")
+        #expect(try isRun(request(m, "h3")), "the same bytes: still read")
+    }
+
+    @Test func anApprovalThatArrivesAfterOneWithTheSameIdAndOtherContentIsDenyOnly() throws {
+        let m = manager()
+        m.onEvent(event(held("h1", runBody())))
+        m.onEvent(event(held("h2", runBody())))
+        m.onEvent(event(held("h3", use)))
+        #expect(try isRun(request(m, "h1")))
+        // The same text again (a replay, a repeat): still read.
+        m.onEvent(event(held("h1", runBody())))
+        #expect(try isRun(request(m, "h1")))
+        // Another argument, another device, another name, another kind: never taken as the old one.
+        m.onEvent(event(held("h1", runBody(#"["git","push","--force"]"#))))
+        m.onEvent(event(held("h2", runBody(), device: "B")))
+        m.onEvent(event(held("h3", #"{"op":"item.use","item_id":"i1","field_id":"f1","action":"hmac-sha256","data":"AAED"}"#)))
+        #expect(try request(m, "h1").held == .unshown)
+        #expect(try request(m, "h2").held == .unshown)
+        #expect(try request(m, "h3").held == .unshown)
+        #expect(m.mismatched == ["device:approval.pending:h1", "device:approval.pending:h2", "device:approval.pending:h3"])
+        // And by bytes: only the spelling differs.
+        m.onEvent(event(held("h4", runBody("[\"git\",\"\(nfc)\"]"))))
+        m.onEvent(event(held("h4", runBody("[\"git\",\"\(nfd)\"]"))))
+        #expect(try request(m, "h4").held == .unshown)
+    }
+
+    @Test func aLockForgetsWhatWasMarkedDifferentAndWhatWasReplaced() async throws {
+        let m = manager()
+        m.onEvent(event(held("h1", runBody())))
+        m.onEvent(event(held("h1", runBody(#"["git","push"]"#))))
+        m.onEvent(event(held("h2", runBody())))
+        m.onEvent(event(held("h3", runBody(), top: #","replaces":"h2""#)))
+        #expect(m.mismatched == ["device:approval.pending:h1"] && m.replaced == ["device:approval.pending:h2"])
+        #expect(keys(m) == ["device:approval.pending:h1", "device:approval.pending:h3"])
+        m.forgetOpenVault()
+        #expect(m.mismatched.isEmpty && m.replaced.isEmpty && keys(m).isEmpty)
+        // After the lock the vault's list is read again: h1 is what the vault holds now (read, not deny only), and a late copy
+        // of the old h2 is not held back by a mark from before the lock.
+        listed(held("h1", runBody(#"["git","push"]"#)), held("h2", runBody()))
+        try await m.refreshApprovals()
+        #expect(try isRun(request(m, "h1")) && isRun(request(m, "h2")))
+        #expect(m.mismatched.isEmpty && m.replaced.isEmpty)
+    }
+
+    // MARK: - Approving: what is looked up, and what is checked again
+
+    /// A run and a proxy, otherwise fully valid and nameable, are read but deny only until their screens ship: the manager
+    /// refuses them on its own, whatever the screen offers, and calls neither the vault nor the item's settings.
+    @Test func aRunAndAProxyAreRefusedWithoutCallingTheVault() async throws {
+        var asked = 0
+        let m = manager(cwd: { _, _ in asked += 1; return true })
+        let withCwd = runBody().replacingOccurrences(of: #""how":"env""#, with: #""cwd":"/home/me","how":"env""#)
+        m.onEvent(event(held("h1", runBody())))
+        m.onEvent(event(held("h2", #"{"op":"item.proxy","item_id":"i1","field_id":"f1","host":"api.example.com","seconds":3600}"#, top: #","proxy":{"host":"api.example.com","header":"Authorization","prefix":"Bearer "}"#)))
+        m.onEvent(event(held("h3", withCwd)))
+        for id in ["h1", "h2", "h3"] {
+            #expect(try request(m, id).held?.approvable == false && request(m, id).held != .unshown, "read, not approvable")
+            do {
+                _ = try await approve(m, "\(id)")
+                Issue.record("\(id) was approved")
+            } catch let f as VaultFailure {
+                #expect(f.kind == .notSupported, Comment(rawValue: id))
+            }
+        }
+        #expect(ops.calls.isEmpty && asked == 0, "nothing sent, no settings read")
+        #expect(keys(m).count == 3, "they stay, to be denied")
+    }
+
+    @Test func anItemUseOrRevealIsApprovedWithApprovalDecide() async throws {
+        let m = manager()
+        m.onEvent(event(held("h1", use)))
+        m.onEvent(event(held("h2", #"{"op":"item.get","item_id":"i1","fields":["f1"]}"#)))
+        _ = try await approve(m, "h1")
+        _ = try await approve(m, "h2")
+        #expect(ops.calls == ["approvalDecide:h1:true", "approvalDecide:h2:true"] && keys(m).isEmpty, "decided: they leave")
+    }
+
+    @Test func anItemOrAFieldTheListCannotNameIsNotApproved() async throws {
+        let m = manager()
+        for (id, body) in [
+            ("h1", use.replacingOccurrences(of: #""item_id":"i1""#, with: #""item_id":"i9""#)),
+            ("h2", #"{"op":"item.get","item_id":"i9"}"#),
+            ("h3", use.replacingOccurrences(of: #""field_id":"f1""#, with: #""field_id":"f9""#)),
+            ("h4", #"{"op":"item.get","item_id":"i1","fields":["f1","f9"]}"#),
+        ] {
+            m.onEvent(event(held(id, body)))
+            await #expect(throws: VaultFailure.self) { try await approve(m, "\(id)") }
+        }
+        let empty = manager(cache: [])
+        empty.onEvent(event(held("h1", use)))
+        await #expect(throws: VaultFailure.self) { try await approve(empty, "h1") }
+        // An item whose name is nothing once cleaned is not named either.
+        let blank = manager(cache: [ItemSummary(itemID: "i1", version: 1, name: "\u{200B}", category: "x", sensitivity: .secret, fieldLabels: Self.cache[0].fieldLabels)])
+        blank.onEvent(event(held("h1", use)))
+        await #expect(throws: VaultFailure.self) { try await approve(blank, "h1") }
+        #expect(ops.calls.isEmpty)
+    }
+
+    @Test func anApprovalThatIsDenyOnlyOrDifferingOrReplacedOrGoneIsNeverApproved() async throws {
+        let m = manager()
+        m.onEvent(event(held("h1", runBody())))
+        m.onEvent(event(held("h1", runBody(#"["git","push"]"#))))
+        m.onEvent(event(held("h2", runBody(), top: #","flags":["a_later_flag"]"#)))
+        m.onEvent(event(held("h3", runBody())))
+        m.onEvent(event(held("h4", runBody(), top: #","replaces":"h3""#)))
+        let gone = held("h6", runBody()).replacingOccurrences(of: exp, with: Timestamps.formatMillis(now.addingTimeInterval(-1)))
+        m.onEvent(event(gone))
+        for (id, kind) in [("h1", FailureKind.notSupported), ("h2", .notSupported), ("h3", .notFound), ("h6", .notFound), ("h9", .notFound)] {
+            do {
+                _ = try await approve(m, "\(id)")
+                Issue.record("\(id) was approved")
+            } catch let f as VaultFailure {
+                #expect(f.kind == kind, Comment(rawValue: id))
+            }
+        }
+        #expect(ops.calls.isEmpty, "nothing sent")
+    }
+
+    @Test func aDesktopsStepUpAndAnOtherOpAreNotApproved() async throws {
+        let m = manager()
+        m.onEvent(event(held("h1", #"{"op":"item.put"}"#)))
+        m.onEvent(event(held("h2", #"{"op":"catalog"}"#).replacingOccurrences(of: #""role":"agent""#, with: #""role":"desktop""#)))
+        for id in ["h1", "h2"] {
+            await #expect(throws: VaultFailure.self) { try await approve(m, "\(id)") }
+        }
+        #expect(ops.calls.isEmpty)
+    }
+
+    @Test func aSessionRequestIsNotApprovedHere() async throws {
+        let m = manager()
+        m.onEvent(VaultMessage(inner: Inner(id: Ulid.new(), type: "device.session.pending", ts: now, body: Array(#"{"request_id":"s1","device_id":"A","role":"agent","name":"Bot","seconds":900,"exp":"\#(exp)"}"#.utf8))))
+        await #expect(throws: VaultFailure.self) { try await m.approveDeviceRequest(DeviceRequest(type: "device.session.pending", id: "s1", receivedAt: now)) }
+        #expect(ops.calls.isEmpty)
+    }
+
+    // MARK: - What is sent is what was shown, and what is listed when it is sent
+
+    /// `decide` awaits the vault's session before it sends: an event that arrives meanwhile is judged at the send.
+    @Test func anApprovalThatChangesWhileTheSessionIsOpenedIsNotSent() async throws {
+        for change in ["differs", "replaced"] {
+            let gate = TestDeferred<Void>(), mark = GateMark()
+            let m = manager(gate: gate, atGate: mark)
+            m.onEvent(event(held("h1", use)))
+            let shown = try request(m, "h1")
+            let task = Task { try await m.approveDeviceRequest(shown) }
+            // The approval waits at the gate, past every check made before the session opens.
+            for _ in 0..<100 where !mark.reached { await Task.yield() }
+            #expect(mark.reached, Comment(rawValue: change))
+            if change == "differs" {
+                m.onEvent(event(held("h1", #"{"op":"item.use","item_id":"i1","field_id":"f1","action":"hmac-sha256","data":"AAED"}"#)))
+            } else {
+                m.onEvent(event(held("h2", runBody(), top: #","replaces":"h1""#)))
+            }
+            gate.complete(())
+            do {
+                _ = try await task.value
+                Issue.record("\(change): sent")
+            } catch let f as VaultFailure {
+                #expect(f.kind == .notSupported, Comment(rawValue: change))
+            }
+            #expect(ops.calls.isEmpty, Comment(rawValue: change))
+        }
+        // Unchanged: sent once the session is open.
+        let gate = TestDeferred<Void>()
+        let m = manager(gate: gate)
+        m.onEvent(event(held("h1", use)))
+        let shown = try request(m, "h1")
+        let task = Task { try await m.approveDeviceRequest(shown) }
+        await Task.yield()
+        gate.complete(())
+        _ = try await task.value
+        #expect(ops.calls == ["approvalDecide:h1:true"])
+    }
+
+    /// Only the request the member was shown: another `exp`, name, item or time of arrival is not approved.
+    @Test func onlyTheRequestThatWasShownIsApproved() async throws {
+        let m = manager()
+        m.onEvent(event(held("h1", use)))
+        let shown = try request(m, "h1")
+        var later = shown
+        later.exp = shown.exp.map { $0.addingTimeInterval(60) }
+        var renamed = shown
+        renamed.deviceName = "Bot2"
+        var other = shown
+        other.held = .itemUse(itemID: "i1", fieldID: "f2", data: [0, 1, 2])
+        var came = shown
+        came.receivedAt = shown.receivedAt.addingTimeInterval(5)
+        for stale in [later, renamed, other, came] {
+            do {
+                _ = try await m.approveDeviceRequest(stale)
+                Issue.record("approved a request that was not shown")
+            } catch let f as VaultFailure {
+                #expect(f.kind == .notSupported)
+            }
+        }
+        #expect(ops.calls.isEmpty)
+        _ = try await m.approveDeviceRequest(shown)
+        #expect(ops.calls == ["approvalDecide:h1:true"])
+    }
+
+    /// The vault's answers to `approval.decide` are handed on as they came, and a `not_found` from the vault drops the approval.
+    @Test func approvalDecideAnswersAreHanded() async throws {
+        ops.decideResult = "referred"
+        let m = manager()
+        m.onEvent(event(held("h1", use)))
+        let d = try await approve(m, "h1")
+        #expect(d.result == "referred")
+        // `not_found` from the vault: the approval leaves, the failure is thrown.
+        m.onEvent(event(held("h2", use)))
+        ops.errors["approvalDecide"] = FakeApprovalOps.error("not_found")
+        await #expect(throws: VaultFailure.self) { try await approve(m, "h2") }
+        #expect(keys(m).isEmpty)
+    }
+
     /// Whatever the store still holds, a replaced approval is not shown (defence in depth: the store drops it as well).
     @Test func aReplacedApprovalIsNeverShown() throws {
         let m = manager()
@@ -263,3 +538,8 @@ import VettIDDataTesting
 }
 
 // swiftlint:enable line_length
+
+/// Set when an approval reaches the test's gate, that is, when `decide` awaits the vault's session.
+@MainActor final class GateMark {
+    var reached = false
+}

@@ -362,7 +362,8 @@ public struct AppShell: View {
         case .approvals:
             if let approvals, let connections {
                 ApprovalsRoute(
-                    approvals: approvals, connections: connections, ownerChecks: ownerChecks, chrome: chrome, host: approvalsHost
+                    approvals: approvals, connections: connections, ownerChecks: ownerChecks, items: items, chrome: chrome,
+                    host: approvalsHost
                 )
             } else {
                 ComingLaterScreen(destination: model.destination, chrome: chrome)

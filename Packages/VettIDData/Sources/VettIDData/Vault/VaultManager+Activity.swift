@@ -49,6 +49,13 @@ extension VaultManager {
                 }
                 return names
             },
+            // AA5, AA8: an agent's request is approved only for an item and fields this list names.
+            itemCache: { ref.manager?.items.items ?? [] },
+            // AA8 "Fail closed": the item's settings, read now; any failure is no.
+            runCwdAllowed: { agent, item in
+                guard let manager = ref.manager, let read = try? await manager.itemWays.read(agent, item) else { return false }
+                return ItemWaysRules.runCwdAllowed(read)
+            },
             held: { ref.manager?.ownerChecks.ownerCheck?.state == .held }
         )
         feed.onChanged = { ref.manager?.feedSeen($0) }

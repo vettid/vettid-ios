@@ -169,7 +169,8 @@ public struct ApprovalsScreen: View {
         switch e {
         case .one(let a):
             ApprovalRow(
-                approval: a, name: state.connectionName(a.connectionID), service: state.isService(a), onOpen: actions.onOpen
+                approval: a, name: state.connectionName(a.connectionID), service: state.isService(a), held: state.heldShow(a),
+                onOpen: actions.onOpen
             )
         case .batch(let connectionID, let asks):
             BatchRow(
@@ -188,13 +189,24 @@ struct ApprovalRow: View {
     let approval: PendingApproval
     let name: String?
     var service = false
+    /// What an agent's held request shows (its title and line), from the member's item list.
+    var held: HeldShow?
     let onOpen: @MainActor (String) -> Void
 
     var body: some View {
+        if held != nil {
+            // "Waiting for 8 more minutes" is read again every 20 seconds while shown (as Android's `rememberNow`).
+            TimelineView(.periodic(from: .now, by: 20)) { context in row(now: context.date) }
+        } else {
+            row(now: Date())
+        }
+    }
+
+    private func row(now: Date) -> some View {
         let who = ApprovalTexts.who(approval, name: name)
-        VettIDListRow(
-            title: ApprovalTexts.title(approval, name: name),
-            supporting: ApprovalTexts.supporting(approval, name: name),
+        return VettIDListRow(
+            title: ApprovalTexts.title(approval, name: name, held: held),
+            supporting: supporting(now: now),
             meta: ApprovalTimes.short(approval.receivedAt),
             tileName: AccountNames.cleaned(who) ?? "?",
             emphasized: approval.needsDecision,
@@ -202,6 +214,12 @@ struct ApprovalRow: View {
             onTap: { onOpen(approval.key) }
         )
         .accessibilityIdentifier("approval_\(approval.key)")
+    }
+
+    /// An agent's held request says who asks and how long it waits; any other row, who and what.
+    private func supporting(now: Date) -> String {
+        if case .device(let d) = approval, held != nil { return ApprovalTexts.heldSupporting(d, now: now) }
+        return ApprovalTexts.supporting(approval, name: name)
     }
 }
 

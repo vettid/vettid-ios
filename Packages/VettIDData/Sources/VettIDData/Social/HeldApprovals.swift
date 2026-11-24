@@ -24,8 +24,8 @@ public enum HeldApproval: Equatable, Sendable, CustomStringConvertible, CustomDe
     /// Any other type or op, or a body that does not read: deny only.
     case unshown
 
-    /// Whether the request can be approved here: only what the app shows in full. A run and a proxy are read (AA8's rules)
-    /// but not yet approvable: their screens come with the next step, so they stay deny only until then.
+    /// Whether the request can be approved here: only what the app shows in full. A run and a proxy are read (AA8's rules) but
+    /// stay deny only until their screens ship.
     public var approvable: Bool {
         switch self {
         case .itemUse, .itemGet, .catalog: true
@@ -46,6 +46,45 @@ public enum HeldApproval: Equatable, Sendable, CustomStringConvertible, CustomDe
     }
 
     public var debugDescription: String { description }
+
+    /// Two held requests ask the same thing when every string they hold is the same bytes (AA8: a list entry is compared with
+    /// the event kept for the same `approval_id`). Swift's `String ==` treats canonically equivalent text (an NFC and an NFD
+    /// spelling) as equal, which would let a changed argument pass as the same, so every string is compared as UTF-8.
+    public static func == (a: HeldApproval, b: HeldApproval) -> Bool {
+        switch (a, b) {
+        case let (.itemUse(i, f, d), .itemUse(i2, f2, d2)): i.sameBytes(i2) && f.sameBytes(f2) && d == d2
+        case let (.itemGet(i, f), .itemGet(i2, f2)): i.sameBytes(i2) && f.sameBytes(f2)
+        case (.catalog, .catalog), (.desktopStepUp, .desktopStepUp), (.unshown, .unshown): true
+        case let (.itemRun(x), .itemRun(y)): x == y
+        case let (.itemProxy(x), .itemProxy(y)): x == y
+        default: false
+        }
+    }
+}
+
+extension String {
+    /// Whether [other] is the same UTF-8 bytes (not merely canonically equivalent text).
+    public func sameBytes(_ other: String) -> Bool { utf8.elementsEqual(other.utf8) }
+}
+
+extension Optional where Wrapped == String {
+    public func sameBytes(_ other: String?) -> Bool {
+        switch (self, other) {
+        case (nil, nil): true
+        case let (a?, b?): a.sameBytes(b)
+        default: false
+        }
+    }
+}
+
+extension Optional where Wrapped == [String] {
+    public func sameBytes(_ other: [String]?) -> Bool {
+        switch (self, other) {
+        case (nil, nil): true
+        case let (a?, b?): a.count == b.count && zip(a, b).allSatisfy { $0.sameBytes($1) }
+        default: false
+        }
+    }
 }
 
 /// An `item.run` held for approval, everything from the vault's `approval.pending` (`body`, `flags`, `previous_*`,
@@ -77,6 +116,17 @@ public struct ItemRun: Equatable, Sendable, CustomStringConvertible, CustomDebug
     public struct EnvEntry: Equatable, Sendable {
         public var name: String
         public var value: String
+
+        public static func == (a: EnvEntry, b: EnvEntry) -> Bool { a.name.sameBytes(b.name) && a.value.sameBytes(b.value) }
+    }
+
+    /// Every string compared as bytes (see ``HeldApproval/==(_:_:)``).
+    public static func == (a: ItemRun, b: ItemRun) -> Bool {
+        a.itemID.sameBytes(b.itemID) && a.fieldID.sameBytes(b.fieldID) && a.program.sameBytes(b.program)
+            && a.sha256.sameBytes(b.sha256) && a.argv.count == b.argv.count && zip(a.argv, b.argv).allSatisfy { $0.sameBytes($1) }
+            && a.cwd.sameBytes(b.cwd) && a.how == b.how && a.name.sameBytes(b.name) && a.env == b.env && a.flags == b.flags
+            && a.previousSha256.sameBytes(b.previousSha256) && a.previousPath.sameBytes(b.previousPath)
+            && a.replaces.sameBytes(b.replaces)
     }
 }
 
@@ -93,6 +143,12 @@ public struct ItemProxy: Equatable, Sendable, CustomStringConvertible, CustomDeb
 
     public var description: String { "ItemProxy" }
     public var debugDescription: String { "ItemProxy" }
+
+    /// Every string compared as bytes (see ``HeldApproval/==(_:_:)``).
+    public static func == (a: ItemProxy, b: ItemProxy) -> Bool {
+        a.itemID.sameBytes(b.itemID) && a.fieldID.sameBytes(b.fieldID) && a.host.sameBytes(b.host) && a.header.sameBytes(b.header)
+            && a.prefix.sameBytes(b.prefix) && a.seconds == b.seconds && a.replaces.sameBytes(b.replaces)
+    }
 }
 
 /// How a run gets the secret (`body.how`).
@@ -130,6 +186,27 @@ public enum HeldApprovals {
         if role == "desktop" { return .desktopStepUp }
         guard role == "agent", type == "agent.request", let body else { return .unshown }
         return agentRequest(body, pending)
+    }
+
+    /// Whether the item list can name everything [h] is about: the item for an `item.use`, `item.get`, run or proxy, the field of
+    /// an `item.use`, run or proxy, every field of an `item.get`. Anything else is not approved: nothing is shown unseen. The names
+    /// are those the screen shows, so an item or field whose name cleans to nothing is not named.
+    public static func nameable(_ h: HeldApproval?, _ items: [ItemSummary]) -> Bool {
+        func fields(_ id: String) -> Set<String>? {
+            guard let item = items.first(where: { $0.itemID.sameBytes(id) }), AccountNames.cleaned(item.name) != nil else { return nil }
+            return Set(item.fieldLabels.filter { AccountNames.cleaned($0.label) != nil }.map(\.fieldID))
+        }
+        func has(_ item: String, _ field: String) -> Bool { fields(item)?.contains { $0.sameBytes(field) } == true }
+        switch h {
+        case .itemUse(let item, let field, _)?: return has(item, field)
+        case .itemGet(let item, let ids)?:
+            guard let have = fields(item) else { return false }
+            return ids?.allSatisfy { id in have.contains { $0.sameBytes(id) } } ?? true
+        case .itemRun(let r)?: return has(r.itemID, r.fieldID)
+        case .itemProxy(let p)?: return has(p.itemID, p.fieldID)
+        case .catalog?: return true
+        default: return false
+        }
     }
 
     private static func agentRequest(_ body: JsonObject, _ pending: JsonObject?) -> HeldApproval {

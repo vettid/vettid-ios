@@ -68,6 +68,8 @@ public struct ApprovalDetailScreen: View {
                     withdrawn(a)
                 } else if let status = state.criticalResult {
                     result(status)
+                } else if let outcome = state.outcome {
+                    held(a, outcome)
                 } else if state.retryUntil != nil || a.exp != nil || state.sessionEnd != nil {
                     // A password backoff counts down and the approve button comes back at its end; a request that expires
                     // while open turns into "Already decided"; a renewal whose session passes reads as a first request.
@@ -171,7 +173,7 @@ public struct ApprovalDetailScreen: View {
     private var step: Step {
         if state.approval == nil || state.gone { return state.notHeld ? .notHeld : .gone }
         if state.withdrawn { return .withdrawn }
-        return state.criticalResult == nil ? .decision : .result
+        return state.criticalResult == nil && state.outcome == nil ? .decision : .result
     }
 
     @ViewBuilder private func live(_ a: PendingApproval, now: Date) -> some View {
@@ -188,11 +190,29 @@ public struct ApprovalDetailScreen: View {
         .accessibilityIdentifier("critical_result")
     }
 
+    /// How a decision on an agent's held request ended, said before the screen closes (AA5).
+    private func held(_ a: PendingApproval, _ outcome: DeviceOutcome) -> some View {
+        FormScaffold(
+            title: ApprovalTexts.outcome(outcome, who: ApprovalTexts.deviceSentenceInline(a)), primaryLabel: ApprovalsStrings.ok,
+            onPrimary: actions.onFinish, onBack: actions.onFinish
+        ) { EmptyView() }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("device_outcome")
+    }
+
+    /// The approve button is not offered where the app cannot approve (an agent's request it cannot show in full, or while the
+    /// item list is read), as on Android: only Deny stays.
+    private func approveLabel(_ a: PendingApproval, now: Date) -> String? {
+        if state.onlyDeny { return nil }
+        if case .device = a, !state.canApprove(at: now) { return nil }
+        return ApprovalTexts.approveLabel(a)
+    }
+
     private func decision(_ a: PendingApproval, now: Date) -> some View {
         FormScaffold(
-            title: ApprovalTexts.title(a, name: state.connectionName),
-            message: ApprovalTexts.body(a, name: state.connectionName),
-            primaryLabel: state.onlyDeny ? nil : ApprovalTexts.approveLabel(a),
+            title: ApprovalTexts.title(a, name: state.connectionName, held: state.heldShow),
+            message: ApprovalTexts.body(a, name: state.connectionName, held: state.heldShow),
+            primaryLabel: approveLabel(a, now: now),
             primaryEnabled: state.canApprove(at: now),
             busy: state.busy,
             secondaryLabel: ApprovalTexts.denyLabel(a),
@@ -249,7 +269,7 @@ struct DecisionContent: View {
             default:
                 Facts(
                     approval: approval, name: state.connectionName, service: state.connectionIsService,
-                    renewal: state.renewalUntil(at: now) != nil
+                    renewal: state.renewalUntil(at: now) != nil, held: state.heldShow, now: now
                 )
             }
             // An approval's document (§10.4), before the password and Approve; Approve waits for its end on screen.
