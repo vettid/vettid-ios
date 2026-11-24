@@ -80,10 +80,24 @@ extension VaultManagerTransferInTests {
         #expect(await eventually { m.session?.device.droppedWithoutUserGuid == true })
         try await phone.restart()
         try await m.refresh()
+        let d = try #require(m.session?.device)
+        let pin = d.mem.withLock { d.st.vault }
         phone.deviceSaveFails.on = true
         #expect(try await m.transferInWaiting() == .stopped)
         #expect(m.moveFlags.book.transferWaiter != nil, "the background's wait drops it")
+        // Told once even while the stop still shows (here put back in memory, as a device whose drop did not take would
+        // keep it).
+        d.mem.withLock {
+            d.st.vault = pin
+            d.st.transferNoUserGuid = true
+        }
+        try await m.refresh()
+        #expect(m.phase == .setup(.transferWaiting))
         #expect(try await m.transferInWaiting() == nil, "told once")
+        d.mem.withLock {
+            d.st.vault = nil
+            d.st.transferNoUserGuid = nil
+        }
         phone.deviceSaveFails.on = false
         phone.clockAhead = 661
         phone.deadlinePauses.holding = false
