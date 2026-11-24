@@ -134,7 +134,8 @@ public enum AgentApprovals {
 
     /// Every agent op names its device and itself and has a time to end: a non-empty string `device_id` and `name`, and an `exp`
     /// that reads as a time. The screen says who asks and for how long it waits, and the approval expires at `exp`; without
-    /// them it would show "an agent" that never expires, so it is deny only (AA8 "Fail closed").
+    /// them it would show "an agent" that never expires, so it is deny only: for a run and a proxy as AA8 "Fail closed" says;
+    /// for a use, a reveal and a catalog (chosen; not in the spec: stricter than vettid-android, which does not check it).
     private static func named(_ p: JsonObject) -> Bool {
         guard let device = str(p, "device_id"), !device.isEmpty, let name = str(p, "name"), !name.isEmpty else { return false }
         return ApprovalParser.instant(str(p, "exp")) != nil

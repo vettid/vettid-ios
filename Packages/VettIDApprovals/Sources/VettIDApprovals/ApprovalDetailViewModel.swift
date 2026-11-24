@@ -224,9 +224,9 @@ public final class ApprovalDetailViewModel {
     @ObservationIgnored private let vault: (any ItemsRepository)?
     @ObservationIgnored let work = Work()
     @ObservationIgnored private let follows = TaskBag()
-    /// Whether the item list was read since it was last dropped: a later read does not turn a request's item back into
-    /// "Loading…" or switch Approve off. A failed read is not a read, and a drop (a lock) starts over.
-    @ObservationIgnored private var itemsSettled = false
+    /// The item list's ``ItemsRepository/cleared`` when it was last seen read: a later read does not turn a request's item back
+    /// into "Loading…" or switch Approve off, unless the list was dropped (a lock) since. A failed read is not a read.
+    @ObservationIgnored private var itemsReadAt: Int?
     /// The screen's own state (``state`` adds what the repositories hold); the document's part is kept by
     /// `ApprovalDetailViewModel+Document.swift`.
     var local: ApprovalDetailState
@@ -295,7 +295,7 @@ public final class ApprovalDetailViewModel {
         if let vault {
             s.items = Self.answers(vault.items)
             s.heldItems = vault.items
-            s.itemsRead = ItemsRead.of(vault.load, settled: &itemsSettled)
+            s.itemsRead = ItemsRead.of(vault.load, cleared: vault.cleared, readAt: &itemsReadAt)
         }
         let now = repo.approvals.first { $0.key == local.key }
         s.approval = now ?? local.approval

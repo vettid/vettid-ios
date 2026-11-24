@@ -15,8 +15,9 @@ extension ApprovalDetailViewModel {
     /// An agent's held request, approved (`approval.decide{approve: true}`, §6.8): the vault's answer is said before the screen
     /// closes. Never from a list entry or a notification: only here, from its own screen.
     func approveHeld(_ shown: ShownHeld) {
-        // Only the request the member was shown, as bytes, and only while the screen shows it as it did: an item or a field
-        // renamed, or a list read, since the render is not approved (``ApprovalsRepository/approveDeviceRequest(_:generation:stillShown:)``).
+        // Only the request the member was shown, as bytes, and only while the screen shows it as it did: a request whose item or
+        // field was renamed, or whose item list was read again, since the render is not approved
+        // (``ApprovalsRepository/approveDeviceRequest(_:generation:stillShown:)``).
         // Only a run or a proxy is referred again (§6.8 step 4): for any other op `referred` is a result like the rest (AA5's
         // "Approved, but your vault answered: referred.").
         let d = shown.request

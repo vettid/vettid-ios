@@ -42,17 +42,17 @@ public enum ItemsRead: Equatable, Sendable {
     /// The read failed: what it does not name is not known to be gone.
     case failed
 
-    /// The list's [load], where [settled] says whether it was read since it was last dropped (and is kept up to date): a
-    /// re-read on its way keeps a read list read; a drop (a lock) starts over; a failed read is never a read.
-    public static func of(_ load: ListLoad, settled: inout Bool) -> ItemsRead {
+    /// The list's [load], where [readAt] is the list's ``ItemsRepository/cleared`` when it was last seen read (kept up to
+    /// date) and [cleared] that count now: a re-read on its way keeps a list read since the last drop (a lock) read; one
+    /// read before a drop never counts, even when nothing looked at the list between the drop and the next read; a failed
+    /// read is never a read.
+    public static func of(_ load: ListLoad, cleared: Int, readAt: inout Int?) -> ItemsRead {
         switch load {
         case .loaded:
-            settled = true
+            readAt = cleared
             return .read
-        case .notLoaded:
-            settled = false
-            return .reading
-        case .loading: return settled ? .read : .reading
+        case .notLoaded: return .reading
+        case .loading: return readAt == cleared ? .read : .reading
         case .failed: return .failed
         }
     }
@@ -60,15 +60,16 @@ public enum ItemsRead: Equatable, Sendable {
 
 public enum DeviceAsks {
     /// What [d], an `approval.pending`, shows, given the item list. [read]: how far the list has been read. Only once it has been
-    /// read is what it cannot name "an item you no longer have": until then "Loading…", and after a failed read
-    /// ``HeldShow/itemsUnread``.
+    /// read is what it cannot name "an item you no longer have": until then "Loading…". After a failed read, whatever it would
+    /// approve is ``HeldShow/itemsUnread``, so the screen says why Approve is off.
     public static func show(_ d: DeviceRequest, items: [ItemSummary], read: ItemsRead = .read) -> HeldShow {
         let shown = showLoaded(d, items)
         switch (shown, read) {
         case (_, .read): return shown
         case (.noItem(let use, _), .reading): return .noItem(use: use, loading: true)
         case (.later(nil, _), .reading): return .later(item: nil, loading: true)
-        case (.noItem, .failed), (.later(nil, _), .failed): return .itemsUnread
+        case (.desktop, .failed), (.other, .failed): return shown
+        case (_, .failed): return .itemsUnread
         default: return shown
         }
     }

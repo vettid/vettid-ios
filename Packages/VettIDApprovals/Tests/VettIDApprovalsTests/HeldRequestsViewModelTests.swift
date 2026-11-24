@@ -62,7 +62,8 @@ import VettIDDataTesting
         #expect(show(Self.get, in: []) == .noItem(use: false, loading: false))
         #expect(show(Self.get, read: .reading, in: []) == .noItem(use: false, loading: true), "still being read: Loading…")
         #expect(show(Self.get, read: .failed, in: []) == .itemsUnread && !show(Self.get, read: .failed, in: []).approvable, "not read: not said to be gone")
-        #expect(show(Self.get, read: .failed) == .get(item: "GitHub", fields: ["Token"]), "what it names is named whatever the last read did")
+        #expect(show(Self.get, read: .failed) == .itemsUnread, "a failed re-read says why Approve is off")
+        #expect(show(.catalog, read: .failed) == .itemsUnread && show(.unshown, read: .failed) == .other && show(.desktopStepUp, read: .failed) == .desktop)
         #expect(!show(Self.get, in: []).approvable)
         // An item whose name cleans to nothing is not named.
         let blank = [ItemSummary(itemID: "i1", version: 1, name: "\u{200B}", category: "x", sensitivity: .secret, fieldLabels: [ItemFieldLabel(fieldID: "f1", label: "T", kind: "text")])]
@@ -184,6 +185,31 @@ import VettIDDataTesting
         await m.settle()
         for _ in 0..<50 where items.calls.filter({ $0 == "refreshQuietly" }).count < 2 { await Task.yield() }
         #expect(items.calls.filter { $0 == "refreshQuietly" }.count == 2 && m.state.canApprove())
+    }
+
+    /// A lock clears the list and the read after it starts before any screen state is read (behind the lock screen nothing
+    /// renders): the list read before the lock still does not count, on the detail screen or in the list.
+    @Test func aListClearedAndBeingReadAgainUnseenIsNotTakenAsRead() async {
+        fake.listed = [Self.held(Self.get)]
+        let m = await model()
+        let list = ApprovalsViewModel(approvals: fake, connections: connections, items: items)
+        #expect(m.state.canApprove() && list.state.itemsRead == .read)
+        items.clear()
+        items.load = .loading
+        #expect(m.state.itemsRead == .reading && !m.state.canApprove() && m.state.heldShow == .noItem(use: false, loading: true))
+        #expect(list.state.itemsRead == .reading && list.state.heldShow(list.state.approvals[0]) == .noItem(use: false, loading: true))
+        items.add(FakeItems.item("i1", "GitHub", sensitivity: .secret, fields: [("Token", "x")]))
+        items.load = .loaded
+        #expect(m.state.canApprove() && list.state.itemsRead == .read)
+    }
+
+    /// A re-read that fails after the list was read: Approve is off, and the screen says why.
+    @Test func aFailedReReadSaysWhyApproveIsOff() async {
+        fake.listed = [Self.held(Self.get)]
+        let m = await model()
+        #expect(m.state.canApprove())
+        items.load = .failed
+        #expect(!m.state.canApprove() && m.state.heldShow == .itemsUnread)
     }
 
     /// Approve sends what the screen showed when it rendered: a request, or its item's name, that changed since is not approved.

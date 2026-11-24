@@ -80,7 +80,8 @@ public final class ApprovalsViewModel {
     @ObservationIgnored private let connections: any ConnectionsRepository
     @ObservationIgnored private let ownerChecks: (any OwnerCheckRepository)?
     @ObservationIgnored private let vault: (any ItemsRepository)?
-    @ObservationIgnored private var itemsSettled = false
+    /// The item list's ``ItemsRepository/cleared`` when it was last seen read (``ItemsRead/of(_:cleared:readAt:)``).
+    @ObservationIgnored private var itemsReadAt: Int?
     @ObservationIgnored private let work = Work()
     @ObservationIgnored private let follows = TaskBag()
     private var local = ApprovalsState()
@@ -120,7 +121,7 @@ public final class ApprovalsViewModel {
         s.connections = Dictionary(all.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
         if let vault {
             s.items = vault.items
-            s.itemsRead = ItemsRead.of(vault.load, settled: &itemsSettled)
+            s.itemsRead = ItemsRead.of(vault.load, cleared: vault.cleared, readAt: &itemsReadAt)
         }
         return s
     }
