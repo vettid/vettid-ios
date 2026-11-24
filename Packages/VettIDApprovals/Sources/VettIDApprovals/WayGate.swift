@@ -13,31 +13,60 @@ public struct WayGate: Equatable, Sendable {
     /// end measured before the screen went back to the top (the old content's) never marks the new content as reached.
     private var sawTop = false
 
+    /// A reading, with the key of the content it was measured for: kept, so that one that arrives before the gate is armed for its
+    /// key (the layout of the new content comes before the change of key is seen) is judged when it is armed.
+    private struct Reading: Equatable, Sendable {
+        var key: String
+        var top: Double?
+        var end: Double?
+        var visibleTop: Double
+        var visibleBottom: Double
+    }
+
+    private var last: Reading?
+
     public init(key: String) { self.key = key }
 
     /// A reading measured for the content [key]: the top marker's position [top] and the end of the last element [end] (its bottom
-    /// edge), in the scrolled area's coordinates, in an area of height [viewport] that ends above the buttons and inside the safe
-    /// area. A nil `top` or `end` is not laid out. A reading for another key is ignored.
-    public mutating func update(key: String, top: Double?, end: Double?, viewport: Double) {
-        guard key == self.key, viewport > 0 else { return }
-        if !sawTop {
-            guard let top, Self.atTop(top) else { return }
-            sawTop = true
-        }
-        if let end, Self.endReached(end: end, viewport: viewport) { reached = true }
+    /// edge), in the scrolled area's coordinates. [visibleTop] and [visibleBottom] bound what the member sees of the area: its top
+    /// and bottom insets (a bar or the safe area the content scrolls under) are outside them, and the top marker rests at
+    /// [visibleTop]. A nil `top` or `end` is not laid out. A reading for another key waits for the gate to be armed for it.
+    public mutating func update(key: String, top: Double?, end: Double?, visibleTop: Double, visibleBottom: Double) {
+        last = Reading(key: key, top: top, end: end, visibleTop: visibleTop, visibleBottom: visibleBottom)
+        judge()
     }
 
-    /// What is shown changed: the gate is armed again for [key]. The same key changes nothing.
+    /// The area's insets or height changed (a rotation): the last reading is judged against the new bounds.
+    public mutating func area(visibleTop: Double, visibleBottom: Double) {
+        guard var l = last else { return }
+        l.visibleTop = visibleTop
+        l.visibleBottom = visibleBottom
+        last = l
+        judge()
+    }
+
+    private mutating func judge() {
+        guard let l = last, l.key == key, l.visibleBottom > l.visibleTop else { return }
+        if !sawTop {
+            guard let top = l.top, Self.atTop(top, visibleTop: l.visibleTop) else { return }
+            sawTop = true
+        }
+        if let end = l.end, Self.endReached(end: end, visibleBottom: l.visibleBottom) { reached = true }
+    }
+
+    /// What is shown changed: the gate is armed again for [key], and a reading kept for that key is judged at once (content that
+    /// fits needs no further reading). The same key changes nothing.
     public mutating func rearm(_ key: String) {
         guard key != self.key else { return }
         self.key = key
         reached = false
         sawTop = false
+        judge()
     }
 
-    /// Pure: the bottom edge ([end]) is inside the area of height [viewport], to a half point.
-    public static func endReached(end: Double, viewport: Double) -> Bool { end <= viewport + 0.5 }
+    /// Pure: the bottom edge ([end]) is inside the visible area, to a half point.
+    public static func endReached(end: Double, visibleBottom: Double) -> Bool { end <= visibleBottom + 0.5 }
 
-    /// Pure: the top marker is at the top of the area, to a point.
-    public static func atTop(_ top: Double) -> Bool { abs(top) <= 1 }
+    /// Pure: the top marker is at the top of the visible area (where it rests), to a point.
+    public static func atTop(_ top: Double, visibleTop: Double = 0) -> Bool { abs(top - visibleTop) <= 1 }
 }

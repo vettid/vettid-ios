@@ -25,8 +25,6 @@ struct AgentWayScreen: View {
     var onGate: (Bool) -> Void = { _ in }
 
     @State private var gate: WayGate
-    /// The last reading, for a change of the area's height (a rotation).
-    @State private var reading: WayReading?
 
     init(state: ApprovalDetailState, request: DeviceRequest, show: HeldShow, actions: DecisionActions, now: Date, expired: Bool = false) {
         self.state = state
@@ -63,9 +61,9 @@ struct AgentWayScreen: View {
         }
         .onChange(of: reached, initial: true) { _, reached in onGate(reached) }
         .onChange(of: key) { _, new in
-            // Armed again; readings of the old content, its offset included, are not the new content's.
+            // Armed again; readings of the old content, its offset included, are not the new content's. A reading of the new
+            // content that came before this is judged now.
             gate.rearm(new)
-            reading = nil
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("agent_way")
@@ -102,21 +100,23 @@ struct AgentWayScreen: View {
                 }
                 .coordinateSpace(name: "way_scroll")
                 .onPreferenceChange(WayReadingKey.self) { r in
-                    // Tagged with the content it was measured for: the one this pass drew.
+                    // Tagged with the content it was measured for: the one this pass drew. What the member sees of the area
+                    // leaves out the insets the content scrolls under (a bar, the safe area).
                     MainActor.assumeIsolated {
-                        reading = r
-                        gate.update(key: key, top: r.top, end: r.end, viewport: area.size.height)
+                        gate.update(key: key, top: r.top, end: r.end, visibleTop: area.safeAreaInsets.top, visibleBottom: bottom(area))
                     }
                 }
-                .onChange(of: area.size.height) { _, height in
-                    gate.update(key: key, top: reading?.top, end: reading?.end, viewport: height)
-                }
+                .onChange(of: bottom(area)) { _, _ in gate.area(visibleTop: area.safeAreaInsets.top, visibleBottom: bottom(area)) }
+                .onChange(of: area.safeAreaInsets.top) { _, top in gate.area(visibleTop: top, visibleBottom: bottom(area)) }
                 .onChange(of: Self.contentKey(state, show)) { _, _ in proxy.scrollTo("way_top", anchor: .top) }
             }
         }
         .frame(minHeight: Self.minScroll)
         .accessibilityIdentifier("agent_way_content")
     }
+
+    /// The bottom of what the member sees of the scrolled area.
+    private func bottom(_ area: GeometryProxy) -> Double { area.size.height - area.safeAreaInsets.bottom }
 
     // MARK: The buttons
 

@@ -148,13 +148,18 @@ import VettIDApprovals
 
     /// The screen in a window, laid out; each of [scrollTo] ("end", "top") applied in turn; whether the gate says reached before
     /// and after each.
-    private func gateStates(_ s: ApprovalDetailState, scrollTo: [String]) async -> [Bool] {
+    private func gateStates(_ s: ApprovalDetailState, scrollTo: [String], insets: Bool = false, height: CGFloat = 844) async -> [Bool] {
         guard case .device(let d)? = s.approval, let show = s.heldShow else { return [] }
         let seen = Seen()
         var screen = AgentWayScreen(state: s, request: d, show: show, actions: DecisionActions(), now: Date())
         screen.onGate = { seen.reached = $0 }
-        let host = UIHostingController(rootView: screen.vettIDTheme(.light))
-        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
+        // The app's own container: a navigation stack (its bar hidden, the screen has its own Back), in a window of a real scene
+        // when the tests are hosted in the app, with the safe-area insets of a phone (a top and a bottom one) added when [insets].
+        let host = UIHostingController(rootView: NavigationStack { screen.toolbar(.hidden, for: .navigationBar) }.vettIDTheme(.light))
+        if insets { host.additionalSafeAreaInsets = UIEdgeInsets(top: 59, left: 0, bottom: 34, right: 0) }
+        let scene = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first
+        let window = scene.map { UIWindow(windowScene: $0) } ?? UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
+        window.frame = CGRect(x: 0, y: 0, width: 390, height: height)
         window.rootViewController = host
         window.makeKeyAndVisible()
         var out: [Bool] = []
@@ -189,6 +194,19 @@ import VettIDApprovals
         let long = ["/usr/bin/git"] + (1...64).map { "arg-\($0)-" + String(repeating: "x", count: 500) }
         let states = await gateStates(runState(argv: long), scrollTo: ["end", "top"])
         #expect(states == [false, true, true], "disabled, then the end, then back up: still reached \(states)")
+    }
+
+    /// Under the safe area of a phone (a top and a bottom inset), in the app's navigation container: the top marker rests at the
+    /// inset, and the end clears the bottom one.
+    @Test func theGateWorksWithSafeAreaInsetsInANavigationStack() async {
+        let long = ["/usr/bin/git"] + (1...64).map { "arg-\($0)-" + String(repeating: "x", count: 500) }
+        let states = await gateStates(runState(argv: long), scrollTo: ["end", "top"], insets: true)
+        #expect(states == [false, true, true], "\(states)")
+        // Content that fits (a tall window): reached at once. In a short one the same content does not fit, and is not reached.
+        let fits = await gateStates(runState(argv: ["/usr/bin/git"]), scrollTo: [], insets: true, height: 1_400)
+        #expect(fits == [true], "content that fits is reached at once: \(fits)")
+        let cramped = await gateStates(runState(argv: ["/usr/bin/git"]), scrollTo: [], insets: true, height: 844)
+        #expect(cramped == [false], "\(cramped)")
     }
 
     @Test func aShortRunThatFitsIsReachedAtOnce() async {
