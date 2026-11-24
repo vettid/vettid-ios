@@ -130,7 +130,9 @@ import VettIDApprovals
         #expect(ApprovalDetailScreen(state: decided, actions: DecisionActions()).expiredWay(at: Date()) == nil)
         var other = state(.catalog)
         other.gone = true
-        other.approval = s.approval
+        var catalog = request(.catalog)
+        catalog.exp = Date().addingTimeInterval(-1)
+        other.approval = .device(catalog)
         #expect(ApprovalDetailScreen(state: other, actions: DecisionActions()).expiredWay(at: Date()) == nil, "only a run or a proxy")
     }
 
