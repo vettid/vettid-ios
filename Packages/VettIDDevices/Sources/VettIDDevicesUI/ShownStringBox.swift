@@ -36,7 +36,7 @@ public struct ShownStringBox: View {
                 Text(ItemWaysStrings.waysStringLookalike)
                     .vettIDFont(.bodySmall)
                     .foregroundStyle(colors.onSurfaceVariant)
-                    .accessibilityIdentifier("shown_string_lookalike")
+                    .accessibilityIdentifier(identifier + "_lookalike")
             }
         }
     }

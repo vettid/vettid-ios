@@ -72,26 +72,46 @@ import Testing
 
     @Test func onceReachedItStaysReachedAndAChangeOfWhatIsShownArmsItAgain() {
         var g = WayGate(key: "a")
-        g.update(end: nil, viewport: 600)
+        g.update(key: "a", top: nil, end: nil, viewport: 600)
         #expect(!g.reached, "not laid out")
-        g.update(end: 1_000, viewport: 600)
+        g.update(key: "a", top: 0, end: 1_000, viewport: 600)
         #expect(!g.reached)
-        g.update(end: 590, viewport: 600)
+        g.update(key: "a", top: -400, end: 590, viewport: 600)
         #expect(g.reached)
-        g.update(end: 1_000, viewport: 600)
+        g.update(key: "a", top: 0, end: 1_000, viewport: 600)
         #expect(g.reached, "scrolled back up: still reached")
         g.rearm("a")
         #expect(g.reached, "the same content: nothing changes")
         g.rearm("b")
         #expect(!g.reached && g.key == "b")
-        // Content that fits is reached once it is laid out, judged again from the geometry of the new content.
-        g.update(end: 300, viewport: 600)
+        g.update(key: "a", top: 0, end: 300, viewport: 600)
+        #expect(!g.reached, "a reading of the old content")
+    }
+
+    /// Readings measured before the screen went back to the top are the old content's: they never open the new content's gate.
+    @Test func staleReadingsAfterAChangeNeverOpenTheGateUntilTheTopIsSeen() {
+        var g = WayGate(key: "a")
+        g.update(key: "a", top: 0, end: 590, viewport: 600)
         #expect(g.reached)
-        g.rearm("c")
-        g.update(end: 300, viewport: 600)
-        g.rearm("d")
-        g.rejudge()
-        #expect(!g.reached, "the old geometry is not the new content's")
+        g.rearm("b")
+        // The old offset (scrolled to the end) and the old end, delivered for the new key.
+        g.update(key: "b", top: -900, end: 590, viewport: 600)
+        g.update(key: "b", top: -900, end: 400, viewport: 600)
+        #expect(!g.reached)
+        // The top is back, the end is below the fold: still not reached.
+        g.update(key: "b", top: 0, end: 1_500, viewport: 600)
+        #expect(!g.reached)
+        // Then the end, as the member scrolls.
+        g.update(key: "b", top: -900, end: 590, viewport: 600)
+        #expect(g.reached)
+    }
+
+    @Test func contentThatFitsAfterAChangeIsReachedWithoutADrag() {
+        var g = WayGate(key: "a")
+        g.update(key: "a", top: 0, end: 1_500, viewport: 600)
+        g.rearm("b")
+        g.update(key: "b", top: 0, end: 300, viewport: 600)
+        #expect(g.reached, "a reading at the top whose end is visible")
     }
 }
 

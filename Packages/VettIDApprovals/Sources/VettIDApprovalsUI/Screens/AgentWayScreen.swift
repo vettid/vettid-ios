@@ -25,7 +25,8 @@ struct AgentWayScreen: View {
     var onGate: (Bool) -> Void = { _ in }
 
     @State private var gate: WayGate
-    @State private var endY: Double?
+    /// The last reading, for a change of the area's height (a rotation).
+    @State private var reading: WayReading?
 
     init(state: ApprovalDetailState, request: DeviceRequest, show: HeldShow, actions: DecisionActions, now: Date, expired: Bool = false) {
         self.state = state
@@ -60,11 +61,11 @@ struct AgentWayScreen: View {
                 }
             }
         }
-        .onChange(of: gate.reached, initial: true) { _, reached in onGate(reached) }
+        .onChange(of: reached, initial: true) { _, reached in onGate(reached) }
         .onChange(of: key) { _, new in
+            // Armed again; readings of the old content, its offset included, are not the new content's.
             gate.rearm(new)
-            // Laid out again, the new content is judged from its own geometry.
-            Task { @MainActor in gate.rejudge() }
+            reading = nil
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("agent_way")
@@ -74,11 +75,16 @@ struct AgentWayScreen: View {
 
     private var scrolled: some View {
         // The scrolled area's own height is read here, with the geometry of its end, so that both are of the same layout pass.
-        GeometryReader { area in
+        let key = Self.contentKey(state, show)
+        return GeometryReader { area in
             ScrollViewReader { proxy in
                 ScrollView {
                     VStack(alignment: .leading, spacing: Spacing.s) {
                         Color.clear.frame(height: 0).id("way_top")
+                            .background(GeometryReader { g in
+                                let top = g.frame(in: .named("way_scroll")).minY
+                                Color.clear.preference(key: WayReadingKey.self, value: WayReading(top: top, end: nil))
+                            })
                         ForEach(rows) { row in
                             VStack(alignment: .leading, spacing: Spacing.xs) {
                                 ForEach(Array(row.parts.enumerated()), id: \.offset) { _, part in WayPartView(part: part) }
@@ -89,18 +95,22 @@ struct AgentWayScreen: View {
                         Color.clear.frame(height: 1)
                             .accessibilityHidden(true)
                             .background(GeometryReader { g in
-                                Color.clear.preference(key: WayEndKey.self, value: g.frame(in: .named("way_scroll")).maxY)
+                                let end = g.frame(in: .named("way_scroll")).maxY
+                                Color.clear.preference(key: WayReadingKey.self, value: WayReading(top: nil, end: end))
                             })
                     }
                 }
                 .coordinateSpace(name: "way_scroll")
-                .onPreferenceChange(WayEndKey.self) { end in
+                .onPreferenceChange(WayReadingKey.self) { r in
+                    // Tagged with the content it was measured for: the one this pass drew.
                     MainActor.assumeIsolated {
-                        endY = end
-                        gate.update(end: end, viewport: area.size.height)
+                        reading = r
+                        gate.update(key: key, top: r.top, end: r.end, viewport: area.size.height)
                     }
                 }
-                .onChange(of: area.size.height) { _, height in gate.update(end: endY, viewport: height) }
+                .onChange(of: area.size.height) { _, height in
+                    gate.update(key: key, top: reading?.top, end: reading?.end, viewport: height)
+                }
                 .onChange(of: Self.contentKey(state, show)) { _, _ in proxy.scrollTo("way_top", anchor: .top) }
             }
         }
@@ -110,8 +120,11 @@ struct AgentWayScreen: View {
 
     // MARK: The buttons
 
+    /// The gate is open for what is shown now (not for content it was armed for before).
+    private var reached: Bool { gate.reached && gate.key == Self.contentKey(state, show) }
+
     private func panel(linesMax: CGFloat) -> some View {
-        let enabled = gate.reached && state.canApprove(at: now) && !state.busy
+        let enabled = reached && state.canApprove(at: now) && !state.busy
         return VStack(spacing: Spacing.s) {
             // The text lines give way to the scroll area; the buttons never do.
             ScrollView {
@@ -120,7 +133,7 @@ struct AgentWayScreen: View {
                         let text = ApprovalTexts.failure(error, retryUntil: state.retryUntil, limit: state.limit, now: now)
                         WayLine(text: text, warning: true).announcedOnce(text, .assertive).accessibilityIdentifier("failure")
                     }
-                    if !gate.reached && large { hint }
+                    if !reached && large { hint }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -133,10 +146,10 @@ struct AgentWayScreen: View {
                 PrimaryButton(ApprovalsStrings.approve, busy: state.busy, action: actions.onApprove)
                     .disabled(!enabled)
                     // What VoiceOver says of the disabled button: why it is.
-                    .accessibilityHint(gate.reached ? "" : ApprovalsStrings.wayScrollHint)
+                    .accessibilityHint(reached ? "" : ApprovalsStrings.wayScrollHint)
                     .accessibilityIdentifier("agent_way_approve")
             }
-            if !gate.reached && !large { hint }
+            if !reached && !large { hint }
         }
         .padding(Spacing.gutter)
     }
@@ -149,9 +162,18 @@ struct AgentWayScreen: View {
     static let minPanel: CGFloat = 96
 }
 
-private struct WayEndKey: PreferenceKey {
-    static let defaultValue: Double? = nil
-    static func reduce(value: inout Double?, nextValue: () -> Double?) { value = nextValue() ?? value }
+/// What the scrolled area reports: the top marker's and the end's positions, in the area's own coordinates.
+private struct WayReading: Equatable {
+    var top: Double?
+    var end: Double?
+}
+
+private struct WayReadingKey: PreferenceKey {
+    static let defaultValue = WayReading(top: nil, end: nil)
+    static func reduce(value: inout WayReading, nextValue: () -> WayReading) {
+        let next = nextValue()
+        value = WayReading(top: next.top ?? value.top, end: next.end ?? value.end)
+    }
 }
 
 /// One part of a row.
@@ -206,7 +228,6 @@ private struct PinLine: View {
             Text(WayRows.pinText(sha256, full: full)).vettIDFont(.bodyMedium).monospaced().frame(maxWidth: .infinity, alignment: .leading)
         }
         .buttonStyle(.plain)
-        .accessibilityAddTraits(.isButton)
         .onChange(of: sha256) { _, _ in full = false }
     }
 }

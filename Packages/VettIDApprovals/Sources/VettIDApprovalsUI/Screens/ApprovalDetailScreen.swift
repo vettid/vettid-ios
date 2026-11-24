@@ -79,6 +79,10 @@ public struct ApprovalDetailScreen: View {
                 }
             } else if state.notHeld {
                 notHeld
+            } else if let ended = expiredWay(at: Date()) {
+                // A run or a proxy that expired and left the list says so on its own screen, with no buttons (AA8 "Refused or
+                // expired"), not "Already decided".
+                AgentWayScreen(state: state, request: ended.0, show: ended.1, actions: actions, now: Date(), expired: true)
             } else {
                 gone
             }
@@ -205,6 +209,13 @@ public struct ApprovalDetailScreen: View {
         case .run?, .proxy?: state.heldShow
         default: nil
         }
+    }
+
+    /// The run or proxy that ended by its `exp`: gone from the list, not decided here, `exp` passed.
+    func expiredWay(at now: Date) -> (DeviceRequest, HeldShow)? {
+        guard state.gone, state.outcome == nil, state.expired(at: now), case .device(let d)? = state.approval, let way = wayShow
+        else { return nil }
+        return (d, way)
     }
 
     @ViewBuilder private func current(_ a: PendingApproval, now: Date) -> some View {

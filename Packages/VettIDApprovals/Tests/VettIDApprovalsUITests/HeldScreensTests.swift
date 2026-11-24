@@ -112,6 +112,28 @@ import VettIDApprovals
         #expect(height(AgentWayScreen(state: s, request: d, show: show, actions: DecisionActions(), now: Date(), expired: true)) > 0)
     }
 
+    /// A run that expired and left the list says so on its own screen, not "Already decided" (AA8 "Refused or expired").
+    @Test func anExpiredRunThatLeftTheListSaysSo() {
+        var s = runState(argv: ["/usr/bin/git"])
+        guard case .device(var d)? = s.approval else { Issue.record("no request"); return }
+        d.exp = Date().addingTimeInterval(-1)
+        s.approval = .device(d)
+        s.gone = true
+        let screen = ApprovalDetailScreen(state: s, actions: DecisionActions())
+        #expect(screen.expiredWay(at: Date()) != nil)
+        #expect(height(screen) > 0)
+        var decided = s
+        decided.approval = .device(request(.itemRun(ItemRun(itemID: "i1", fieldID: "f1", program: "/x", sha256: sha, argv: ["/x"], cwd: nil, how: .env, name: "T", env: [], flags: [], previousSha256: nil, previousPath: nil, replaces: nil))))
+        #expect(ApprovalDetailScreen(state: decided, actions: DecisionActions()).expiredWay(at: Date()) == nil, "gone but not expired: Already decided")
+        decided.approval = s.approval
+        decided.outcome = .denied
+        #expect(ApprovalDetailScreen(state: decided, actions: DecisionActions()).expiredWay(at: Date()) == nil)
+        var other = state(.catalog)
+        other.gone = true
+        other.approval = s.approval
+        #expect(ApprovalDetailScreen(state: other, actions: DecisionActions()).expiredWay(at: Date()) == nil, "only a run or a proxy")
+    }
+
     @Test func aRunsAnswerAndItsPinRender() {
         for o in [DeviceOutcome.approved(result: "ok", way: .run, pinRecorded: true, item: "GitHub"), .approved(result: "cwd_not_allowed", way: .run), .referred] {
             var s = runState(argv: ["/usr/bin/git"])
