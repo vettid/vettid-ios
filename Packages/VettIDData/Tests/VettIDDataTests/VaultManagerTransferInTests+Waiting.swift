@@ -50,14 +50,24 @@ extension VaultManagerTransferInTests {
         #expect(m.phase == .setup(.transferWaiting), "\(m.phase)")
     }
 
-    /// The device pinned to a transfer's vault with no start stored (a redeem racing a scan wipes it): the move's phase too.
-    @Test func aPinWithoutItsStartIsTheMovesPhase() async throws {
+    /// The device pinned to a transfer's vault with no start stored (a redeem racing a scan wipes it), after a restart: the
+    /// move's phase too, a start is written for it and it is waited for, so that its deadline ends it and the phone goes back
+    /// to its new vault (never stuck on the move).
+    @Test func aPinWithoutItsStartIsTheMovesPhaseAndEnds() async throws {
         defer { phone.close() }
         _ = try await m.redeemSetupCode(.secret(service.secret))
         _ = try await scanned()
         try m.record.update(since: m.record.generation) { $0.transferStartedMs = nil }
+        try await phone.restart()
         try await m.refresh()
         #expect(m.phase == .setup(.transferWaiting), "\(m.phase)")
+        #expect(m.record.value.transferStartedMs != nil, "a start written for the pin")
+        #expect(m.moveFlags.book.transferWaiter != nil, "waited for in the background")
+        #expect(await deadlineWaiting())
+        phone.clockAhead = 661
+        phone.deadlinePauses.release()
+        #expect(await eventually(within: .seconds(30)) { m.phase == .setup(.newVault) }, "\(m.phase)")
+        #expect(!deviceHoldsVault && m.record.value.transferStartedMs == nil)
     }
 
     /// The transfer the screen took up, abandoned: the phone goes back to its redeemed code's new vault, or to the welcome

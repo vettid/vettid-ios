@@ -649,7 +649,10 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
             // an enrollment for), with or without a redeemed code. It waits for the old phone, is being settled, or stopped
             // on this phone untold (``VaultDevice/droppedWithoutUserGuid``, still pinned): the transfer screen again, never
             // the new vault's steps that would only be refused.
-            if transferWaitsHere(current, d) { return .setup(.transferWaiting) }
+            if transferWaitsHere(current, d) {
+                adoptPinWithoutStart(d)
+                return .setup(.transferWaiting)
+            }
             // A redeemed code: enroll. The enrollment itself answers vault_exists for a vault this phone does not hold.
             return current.userGuid.isEmpty ? .signedOut : .setup(.newVault)
         }

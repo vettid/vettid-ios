@@ -150,7 +150,13 @@ public final class FakeVaultRepository: CustomStringConvertible {
     /// What ``TransferInBackground/transferInWaiting()`` answers (a transfer not finished, as a restart finds it); a
     /// ``TransferInWaiting/stopped`` is answered once.
     public var waitingTransfer: TransferInWaiting?
+    /// Set: ``transferInWaiting()`` fails with it, once.
+    public var waitingTransferFailure: VaultFailure?
     public func transferInWaiting() async throws -> TransferInWaiting? {
+        if let f = waitingTransferFailure {
+            waitingTransferFailure = nil
+            throw f
+        }
         defer { if waitingTransfer == .stopped { waitingTransfer = nil } }
         return waitingTransfer
     }

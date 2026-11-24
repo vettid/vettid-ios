@@ -50,24 +50,31 @@ public final class TransferInViewModel: TransferInActions {
 
     /// A transfer to this phone that is not finished (a restart, or the screen left): its code again, waiting, or the
     /// settlement's check, counted from its stored start; or "The move stopped on this phone" once. Only while the screen is
-    /// still at its start: a scan begun meanwhile is the member's. A wait taken over but not used (the member began a scan,
-    /// or the screen went) is handed back to the background. Mirrors vettid-android `TransferInViewModel`'s `init`.
+    /// still at its start: a scan begun meanwhile is the member's. A wait taken over but not used (the screen went, or the
+    /// member left the start without a scan of their own running) is handed back to the background, as is one whose take-up
+    /// failed. A stop the screen cannot show stays the repository's notice (``TransferEndNotice/transferEnd``). Mirrors
+    /// vettid-android `TransferInViewModel`'s `init`.
     private func resume() {
         resumer = Task { @MainActor [weak self, move, vault] in
             let found: TransferInWaiting?
             do {
                 found = try await move.transferInWaiting()
             } catch {
+                // The take-up failed: the background waits for the transfer again (nothing if it still does).
+                move.waitForTransferInBackground()
                 return
             }
             guard let found else { return }
             guard !Task.isCancelled, let vm = self, vm.state.step == .intro, vm.waiter == nil else {
-                if case .waiting = found { move.waitForTransferInBackground() }
+                // Never while the member's own scan runs: its transfer is waited for by the screen.
+                if case .waiting = found, self?.waiter == nil { move.waitForTransferInBackground() }
                 return
             }
             switch found {
             case .stopped:
                 vm.state.step = .stopped
+                // Told here: not again on the welcome screen.
+                vault.acknowledgeTransferEnd()
             case .waiting(let sas, let startedAt):
                 vm.waiter = Task { @MainActor [weak vm, move, vault] in
                     await Self.awaitApproval(Weak(vm), move, vault, sas: sas, deadline: startedAt.addingTimeInterval(Self.window))

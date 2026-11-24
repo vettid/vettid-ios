@@ -62,6 +62,8 @@ extension VaultManagerTransferInTests {
         #expect(m.phase == .setup(.transferWaiting), "\(m.phase)")
         #expect(m.moveFlags.book.transferWaiter == nil && m.transferEnd == nil, "left to the transfer screen")
         #expect(try await m.transferInWaiting() == .stopped)
+        // The notice stands until the screen has shown it (a screen gone meanwhile leaves it to the welcome screen).
+        #expect(m.transferEnd == .stopped)
         #expect(!deviceHoldsVault && m.record.value.transferStartedMs == nil)
         #expect(m.phase == (redeemed ? .setup(.newVault) : .signedOut), "\(m.phase)")
         #expect(try await m.transferInWaiting() == nil, "told once")
