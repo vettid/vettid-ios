@@ -90,14 +90,25 @@ public struct ApprovalDetailRoute: View {
     }
 
     private var actions: DecisionActions {
+        guard let m = model else {
+            var a = DecisionActions()
+            a.onBack = host.onBack
+            return a
+        }
+        return Self.actions(m, host: host)
+    }
+
+    /// The decision's actions for one render of [m]'s screen: what is approved or denied is what this render shows.
+    static func actions(_ m: ApprovalDetailViewModel, host: ApprovalsHost) -> DecisionActions {
         var a = DecisionActions()
         a.onBack = host.onBack
-        guard let m = model else { return a }
         a.onPassword = { m.setPassword($0) }
         // The share items this render shows: a tap decides these, not a question a later batch changed (§10.12).
         var shown: [String]?
         if case .share(let d)? = m.state.approval { shown = d.items.map(\.itemID) }
-        a.onApprove = { m.approve(shown: shown) }
+        // A request an agent holds as this render shows it: a tap approves that, not one that changed since.
+        let held = m.shownHeld()
+        a.onApprove = { m.approve(shown: shown, held: held) }
         a.onDeny = { m.deny(shown: shown) }
         a.onAskBlock = { m.askBlock($0) }
         a.onBlock = { m.block() }
@@ -115,6 +126,7 @@ public struct ApprovalDetailRoute: View {
         a.onDismissEndFailure = { m.dismissEndFailure() }
         a.onForgetSecrets = { m.forgetSecrets() }
         a.onRetryDocument = { m.retryDocument() }
+        a.onRetryItems = { m.retryItems() }
         a.onDocumentShownWhole = { m.documentShownWhole($0, generation: $1) }
         return a
     }

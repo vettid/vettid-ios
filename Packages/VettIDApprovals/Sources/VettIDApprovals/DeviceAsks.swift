@@ -15,6 +15,12 @@ public enum HeldShow: Equatable, Sendable, CustomStringConvertible {
     case noItem(use: Bool, loading: Bool)
     /// An op this version shows by a later one (a run and a proxy until their screens), the item named when known.
     case later(item: String?, loading: Bool)
+    /// The item list could not be read, so what the request is about cannot be named, nor said to be gone: deny only until a
+    /// read answers.
+    case itemsUnread
+    /// A run or a proxy whose item the list does not name, after a failed read: said without an item (it is not known to be
+    /// gone), deny only as ``later(item:loading:)``.
+    case laterUnread
     case desktop
     case other
 
@@ -30,15 +36,47 @@ public enum HeldShow: Equatable, Sendable, CustomStringConvertible {
     public var description: String { "HeldShow" }
 }
 
+/// How far the item list a held request is named from has been read.
+public enum ItemsRead: Equatable, Sendable {
+    /// Not read yet, or being read for the first time since it was dropped (a lock).
+    case reading
+    /// Read: what it does not name is gone.
+    case read
+    /// The read failed: what it does not name is not known to be gone.
+    case failed
+
+    /// The list's [load], where [readAt] is the list's ``ItemsRepository/cleared`` when it was last seen read (kept up to
+    /// date) and [cleared] that count now: a re-read on its way keeps a list read since the last drop (a lock) read; one
+    /// read before a drop never counts, even when nothing looked at the list between the drop and the next read; a failed
+    /// read is never a read, and the read before it no longer counts either (the screen said the list could not be read).
+    public static func of(_ load: ListLoad, cleared: Int, readAt: inout Int?) -> ItemsRead {
+        switch load {
+        case .loaded:
+            readAt = cleared
+            return .read
+        case .notLoaded: return .reading
+        case .loading: return readAt == cleared ? .read : .reading
+        case .failed:
+            readAt = nil
+            return .failed
+        }
+    }
+}
+
 public enum DeviceAsks {
-    /// What [d], an `approval.pending`, shows, given the item list. [loaded]: the list has been read (loaded or failed): until
-    /// then what it cannot name is "Loading…", not "an item you no longer have".
-    public static func show(_ d: DeviceRequest, items: [ItemSummary], loaded: Bool = true) -> HeldShow {
+    /// What [d], an `approval.pending`, shows, given the item list. [read]: how far the list has been read. Only once it has been
+    /// read is what it cannot name "an item you no longer have": until then "Loading…". After a failed read, a use or a reveal
+    /// (what names an item and its fields) is ``HeldShow/itemsUnread``, so the screen says why Approve is off; a run and a proxy
+    /// keep what they show (deny only whatever is read), without an item they cannot name (``HeldShow/laterUnread``); a catalog
+    /// names no item and needs no list (``ApprovalDetailState/canApprove(at:)``).
+    public static func show(_ d: DeviceRequest, items: [ItemSummary], read: ItemsRead = .read) -> HeldShow {
         let shown = showLoaded(d, items)
-        if loaded { return shown }
-        switch shown {
-        case .noItem(let use, _): return .noItem(use: use, loading: true)
-        case .later(let item, _) where item == nil: return .later(item: nil, loading: true)
+        switch (shown, read) {
+        case (_, .read): return shown
+        case (.noItem(let use, _), .reading): return .noItem(use: use, loading: true)
+        case (.later(nil, _), .reading): return .later(item: nil, loading: true)
+        case (.use, .failed), (.get, .failed), (.noItem, .failed): return .itemsUnread
+        case (.later(nil, _), .failed): return .laterUnread
         default: return shown
         }
     }
@@ -55,7 +93,9 @@ public enum DeviceAsks {
         case .itemUse(let itemID, let fieldID, let data)?:
             let i = item(itemID)
             guard let name = AccountNames.cleaned(i?.name), let field = label(i, fieldID) else { return .noItem(use: true, loading: false) }
-            return .use(item: name, field: field, data: DataView.of(data), bytes: data.count)
+            // More than `item.use` carries is never shown (``DataView/maxBytes``).
+            guard let view = DataView.of(data) else { return .other }
+            return .use(item: name, field: field, data: view, bytes: data.count)
         case .itemGet(let itemID, let ids)?:
             let i = item(itemID)
             let labels = ids?.map { label(i, $0) }
@@ -73,6 +113,24 @@ public enum DeviceAsks {
     }
 }
 
+/// A request an agent holds as one render of its screen showed it: the request, what it showed of it, and the approvals'
+/// ``ApprovalsRepository/forgetCount`` then. Approve sends only this, and only while the screen still shows the same
+/// (``ApprovalDetailViewModel/approve(shown:held:)``).
+public struct ShownHeld: Equatable, Sendable, CustomStringConvertible {
+    public var request: DeviceRequest
+    public var show: HeldShow
+    public var generation: Int
+
+    public init(request: DeviceRequest, show: HeldShow, generation: Int) {
+        self.request = request
+        self.show = show
+        self.generation = generation
+    }
+
+    /// Never what the agent chose.
+    public var description: String { "ShownHeld" }
+}
+
 /// How a decision on a request an agent holds ended (said before the screen closes). Mirrors vettid-android `DeviceOutcome`.
 public enum DeviceOutcome: Equatable, Sendable {
     /// `approval.decide{approve: true}` answered [result] (`ok`, or the code the held request was answered with); nil: no result.
@@ -80,6 +138,7 @@ public enum DeviceOutcome: Equatable, Sendable {
     /// `{result: "referred"}` (§6.8 step 4): not done yet; the new approval is a new entry, to be opened anew.
     case referred
     case denied
-    /// The vault answered `not_found` (replaced, decided elsewhere, dropped): "This request is no longer waiting."
+    /// The vault answered `not_found` as an error (replaced, decided elsewhere, dropped), or the request expired or was dropped
+    /// here before it was sent: "This request is no longer waiting." (A `{result: "not_found"}` is an ``approved(result:)``.)
     case noLongerWaiting
 }

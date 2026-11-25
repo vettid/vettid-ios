@@ -190,30 +190,46 @@ extension ApprovalsManager {
         }
     }
 
-    public func approveDeviceRequest(_ shown: DeviceRequest) async throws -> DeviceDecision {
-        // Looked up as the list shows it (a replaced, expired or differing approval already read as it should), never through the
-        // kept events; and only the request the member was shown, as bytes (its `exp`, names and read, a request that left and
-        // came back included).
+    public func approveDeviceRequest(
+        _ shown: DeviceRequest, generation: Int, stillShown: @escaping @MainActor () -> Bool
+    ) async throws -> DeviceDecision {
+        // Looked up as the list shows it (a replaced or expired approval is gone, a differing one is deny only), never through the
+        // kept events. Only the request the member was shown: every member compared as bytes (its `exp`, names, device and what
+        // it asks) but not its time of arrival, so the same `approval.pending` delivered again is the same request; no lock since
+        // the screen showed it ([generation]); and the screen still showing it as it did ([stillShown]).
         let key = PendingApproval.device(shown).key
         guard shown.type == Self.approvalType, case .device(let d)? = pending(key) else { throw VaultFailure(.notFound) }
-        guard d == shown else { throw VaultFailure(.notSupported) }
+        guard generation == forgetCount, d.sameContent(as: shown), stillShown() else { throw VaultFailure(.requestChanged) }
         try await checkApprovable(d)
         var result: String?
-        try await decide(key) { o in
-            // `ops()` may have waited (a session is opened), and an event or a list read may have changed the approval since the
-            // checks: judged again here, with no `await` between this and the send.
-            guard case .device(let now)? = self.pending(key), now == shown, !self.mismatched.contains(key),
-                  !self.replaced.contains(key), let held = now.held, held.approvable,
-                  HeldApprovals.nameable(held, self.itemCache()) else { throw VaultFailure(.notSupported) }
-            result = try await o.approvalDecide(d.id, approve: true)
+        var goneAtSend = false
+        do {
+            try await decide(key) { o in
+                // `ops()` may have waited (a session is opened), and an event, a list read, a lock or the item list may have changed
+                // the approval since the checks: judged again here, with no `await` between this and the send.
+                guard case .device(let now)? = self.pending(key) else {
+                    goneAtSend = true
+                    throw VaultFailure(.requestChanged)
+                }
+                guard generation == self.forgetCount, now.sameContent(as: shown), !self.mismatched.contains(key),
+                      !self.replaced.contains(key), let held = now.held, held.approvable,
+                      HeldApprovals.nameable(held, self.itemCache()), stillShown() else { throw VaultFailure(.requestChanged) }
+                result = try await o.approvalDecide(d.id, approve: true)
+            }
+        } catch let f as VaultFailure where goneAtSend && f.kind == .requestChanged {
+            // Expired, or dropped by a lock, while the session opened: no longer waiting here. Thrown past `decide`, which would
+            // count a `not_found` as the vault's own and forget the approval.
+            throw VaultFailure(.notFound)
         }
         return DeviceDecision(result: result)
     }
 
     /// Only what is read in full and whose item and field the item list names; a run with a `cwd` and no `member_folder` only when
-    /// the item's settings, read now, carry `run` without `folders` (AA8). Else ``FailureKind/notSupported``, nothing sent.
+    /// the item's settings, read now, carry `run` without `folders` (AA8). Else nothing sent: ``FailureKind/notSupported`` for what
+    /// this version does not approve, ``FailureKind/requestChanged`` for an item or field the list no longer names.
     private func checkApprovable(_ d: DeviceRequest) async throws {
-        guard let held = d.held, held.approvable, HeldApprovals.nameable(held, itemCache()) else { throw VaultFailure(.notSupported) }
+        guard let held = d.held, held.approvable else { throw VaultFailure(.notSupported) }
+        guard HeldApprovals.nameable(held, itemCache()) else { throw VaultFailure(.requestChanged) }
         if case .itemRun(let run) = held, run.hasCwd, !(await runCwdAllowed(d.deviceID ?? "", run.itemID)) {
             throw VaultFailure(.notSupported)
         }

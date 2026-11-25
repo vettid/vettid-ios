@@ -5,7 +5,7 @@ import Testing
 /// ANDROID-PLAN 0.1.116 AA5, decision 18: an `item.use`'s data is shown as text only when it is printable UTF-8, else as hex.
 /// Mirrors vettid-android `DataViewTest`.
 @Suite struct DataViewTests {
-    private func view(_ s: String) -> DataView { DataView.of(Array(s.utf8)) }
+    private func view(_ s: String) -> DataView? { DataView.of(Array(s.utf8)) }
 
     @Test func printableUtf8IsShownAsText() {
         #expect(view("hello, wörld\nsecond line\twith a tab") == .text("hello, wörld\nsecond line\twith a tab"))
@@ -35,6 +35,14 @@ import Testing
         if case .text = view("a" + String(repeating: " ", count: 9) + "b") { Issue.record("a run of blanks") }
         if case .text = view("a" + String(repeating: "\u{2003}", count: 9) + "b") { Issue.record("a run of wide blanks") }
         #expect(view("a" + String(repeating: " ", count: 8) + "b") == .text("a" + String(repeating: " ", count: 8) + "b"))
+    }
+
+    /// No more than `item.use`'s own bound (§10.11) is ever shown, as text or as hex.
+    @Test func moreThanTheDataBoundIsNotShownAtAll() {
+        #expect(DataView.maxBytes == 16_384)
+        #expect(DataView.of(Array(repeating: 0x61, count: 16_384)) == .text(String(repeating: "a", count: 16_384)))
+        #expect(DataView.of(Array(repeating: 0x61, count: 16_385)) == nil)
+        #expect(DataView.of(Array(repeating: 0xFF, count: 16_385)) == nil)
     }
 
     @Test func hexIsLowerCaseTwoDigitsASpaceBetween() {

@@ -30,16 +30,17 @@ import VettIDDataTesting
     /// (told the agent and the item it asked for).
     func manager(
         cache: [ItemSummary] = cache, cwd: @escaping @MainActor (String, String) async -> Bool = { _, _ in false },
-        gate: TestDeferred<Void>? = nil, atGate: GateMark? = nil
+        gate: TestDeferred<Void>? = nil, atGate: GateMark? = nil, clock: TestClock? = nil
     ) -> ApprovalsManager {
         let ops = ops, connOps = connOps, now = now
         let c = ConnectionsManager(ops: { connOps }, now: { now })
-        // [gate]: opening the vault's session takes a while (`memberApi` opens one), and `decide` awaits it.
+        // [gate]: opening the vault's session takes a while (`memberApi` opens one), and `decide` awaits it. [atGate]'s cache,
+        // when set, is the item list from then on; [clock], when set, is the time.
         return ApprovalsManager(
             connections: c, ops: {
                 if let gate { atGate?.reached = true; try await gate.value() }
                 return ops
-            }, now: { now }, itemCache: { cache }, runCwdAllowed: cwd
+            }, now: { clock?.date ?? now }, itemCache: { atGate?.cache ?? cache }, runCwdAllowed: cwd
         )
     }
 
@@ -73,7 +74,7 @@ import VettIDDataTesting
     /// Approves what the list shows for [id], or, for one it does not show, a bare request of that id (what a screen kept).
     func approve(_ m: ApprovalsManager, _ id: String) async throws -> DeviceDecision {
         let shown = (try? request(m, id)) ?? DeviceRequest(type: "approval.pending", id: id, receivedAt: now)
-        return try await m.approveDeviceRequest(shown)
+        return try await m.approveDeviceRequest(shown, generation: m.forgetCount, stillShown: { true })
     }
 
     func keys(_ m: ApprovalsManager) -> [String] { m.approvals.map(\.key).sorted() }
@@ -437,7 +438,7 @@ import VettIDDataTesting
     @Test func aSessionRequestIsNotApprovedHere() async throws {
         let m = manager()
         m.onEvent(VaultMessage(inner: Inner(id: Ulid.new(), type: "device.session.pending", ts: now, body: Array(#"{"request_id":"s1","device_id":"A","role":"agent","name":"Bot","seconds":900,"exp":"\#(exp)"}"#.utf8))))
-        await #expect(throws: VaultFailure.self) { try await m.approveDeviceRequest(DeviceRequest(type: "device.session.pending", id: "s1", receivedAt: now)) }
+        await #expect(throws: VaultFailure.self) { try await m.approveDeviceRequest(DeviceRequest(type: "device.session.pending", id: "s1", receivedAt: now), generation: m.forgetCount, stillShown: { true }) }
         #expect(ops.calls.isEmpty)
     }
 
@@ -450,7 +451,7 @@ import VettIDDataTesting
             let m = manager(gate: gate, atGate: mark)
             m.onEvent(event(held("h1", use)))
             let shown = try request(m, "h1")
-            let task = Task { try await m.approveDeviceRequest(shown) }
+            let task = Task { try await m.approveDeviceRequest(shown, generation: m.forgetCount, stillShown: { true }) }
             // The approval waits at the gate, past every check made before the session opens.
             for _ in 0..<100 where !mark.reached { await Task.yield() }
             #expect(mark.reached, Comment(rawValue: change))
@@ -464,7 +465,8 @@ import VettIDDataTesting
                 _ = try await task.value
                 Issue.record("\(change): sent")
             } catch let f as VaultFailure {
-                #expect(f.kind == .notSupported, Comment(rawValue: change))
+                // Another request in its place is one that changed; one replaced is no longer waiting.
+                #expect(f.kind == (change == "differs" ? .requestChanged : .notFound), Comment(rawValue: change))
             }
             #expect(ops.calls.isEmpty, Comment(rawValue: change))
         }
@@ -473,14 +475,15 @@ import VettIDDataTesting
         let m = manager(gate: gate)
         m.onEvent(event(held("h1", use)))
         let shown = try request(m, "h1")
-        let task = Task { try await m.approveDeviceRequest(shown) }
+        let task = Task { try await m.approveDeviceRequest(shown, generation: m.forgetCount, stillShown: { true }) }
         await Task.yield()
         gate.complete(())
         _ = try await task.value
         #expect(ops.calls == ["approvalDecide:h1:true"])
     }
 
-    /// Only the request the member was shown: another `exp`, name, item or time of arrival is not approved.
+    /// Only the request the member was shown: another `exp`, name or item is not approved; another time of arrival (the same
+    /// `approval.pending` delivered again) is the same request.
     @Test func onlyTheRequestThatWasShownIsApproved() async throws {
         let m = manager()
         m.onEvent(event(held("h1", use)))
@@ -493,16 +496,20 @@ import VettIDDataTesting
         other.held = .itemUse(itemID: "i1", fieldID: "f2", data: [0, 1, 2])
         var came = shown
         came.receivedAt = shown.receivedAt.addingTimeInterval(5)
-        for stale in [later, renamed, other, came] {
+        for stale in [later, renamed, other] {
             do {
-                _ = try await m.approveDeviceRequest(stale)
+                _ = try await m.approveDeviceRequest(stale, generation: m.forgetCount, stillShown: { true })
                 Issue.record("approved a request that was not shown")
             } catch let f as VaultFailure {
-                #expect(f.kind == .notSupported)
+                #expect(f.kind == .requestChanged)
             }
         }
+        // Nor one shown before a lock, nor one whose screen no longer shows it as it did.
+        for (generation, still) in [(m.forgetCount + 1, true), (m.forgetCount, false)] {
+            await #expect(throws: VaultFailure.self) { try await m.approveDeviceRequest(shown, generation: generation, stillShown: { still }) }
+        }
         #expect(ops.calls.isEmpty)
-        _ = try await m.approveDeviceRequest(shown)
+        _ = try await m.approveDeviceRequest(came, generation: m.forgetCount, stillShown: { true })
         #expect(ops.calls == ["approvalDecide:h1:true"])
     }
 
@@ -542,4 +549,6 @@ import VettIDDataTesting
 /// Set when an approval reaches the test's gate, that is, when `decide` awaits the vault's session.
 @MainActor final class GateMark {
     var reached = false
+    /// The item list from now on, when set.
+    var cache: [ItemSummary]?
 }

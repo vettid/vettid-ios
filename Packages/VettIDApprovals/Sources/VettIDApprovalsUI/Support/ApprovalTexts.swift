@@ -129,7 +129,8 @@ enum ApprovalTexts {
             return ApprovalsStrings.heldLaterTitle(
                 who, item.map { AccountNames.isolate($0) } ?? (loading ? ApprovalsStrings.loading : ApprovalsStrings.heldNoItem)
             )
-        case .desktop, .other: return ApprovalsStrings.heldOtherTitle(who)
+        // What it is about cannot be named (the item list could not be read): said without an item.
+        case .desktop, .other, .itemsUnread, .laterUnread: return ApprovalsStrings.heldOtherTitle(who)
         }
     }
 
@@ -140,7 +141,8 @@ enum ApprovalTexts {
         case .get: nil
         case .catalog: ApprovalsStrings.heldCatalogBody
         case .noItem(_, let loading): loading ? ApprovalsStrings.loading : ApprovalsStrings.heldNoItemBody
-        case .later: ApprovalsStrings.heldLaterBody
+        case .later, .laterUnread: ApprovalsStrings.heldLaterBody
+        case .itemsUnread: ApprovalsStrings.heldItemsUnreadBody
         case .desktop: ApprovalsStrings.heldDesktopBody
         case .other: ApprovalsStrings.heldOtherBody
         }
@@ -168,7 +170,7 @@ enum ApprovalTexts {
     }
 
     /// How a decision on a held request ended, as the screen says it (AA5 "Answers to `approval.decide`").
-    static func outcome(_ o: DeviceOutcome, who: String) -> String { // swiftlint:disable:this cyclomatic_complexity
+    static func outcome(_ o: DeviceOutcome, who: String) -> String {
         switch o {
         case .denied: return ApprovalsStrings.heldDenied
         case .noLongerWaiting: return ApprovalsStrings.noLongerWaiting
@@ -179,7 +181,8 @@ enum ApprovalTexts {
             // The vault did not say whether it was done: not "Approved".
             case nil: return ApprovalsStrings.heldNoResult
             case "ok": return ApprovalsStrings.heldApproved
-            case "not_found": return ApprovalsStrings.noLongerWaiting
+            // `{result: "not_found"}` is an answer like the others ("Approved, but your vault answered: not_found."); only the
+            // error `not_found` is "no longer waiting" (AA5 "Answers to `approval.decide`").
             case "forbidden": return ApprovalsStrings.heldForbidden(who)
             case "session_required", "denied": return ApprovalsStrings.heldSessionEnded(who)
             case "way_not_allowed": return ApprovalsStrings.heldWayNotAllowed
