@@ -99,6 +99,205 @@ import VettIDApprovals
         // Only what names items waits for the list; a catalog names none.
         #expect(!state(.itemGet(itemID: "i1", fieldIDs: ["f1"]), loaded: false).canApprove() && state(.catalog, loaded: false).canApprove())
     }
+
+    // MARK: - A run and a proxy (AA8)
+
+    private let sha = String(repeating: "1a2b3c4d5e6f7a8b", count: 4)
+
+    private func runState(argv: [String], flags: Set<RunFlag> = [], replaces: String? = nil) -> ApprovalDetailState {
+        let r = ItemRun(itemID: "i1", fieldID: "f1", program: argv[0], sha256: sha, argv: argv, cwd: nil, how: .env, name: "T", env: [], flags: flags, previousSha256: nil, previousPath: nil, replaces: replaces)
+        return state(.itemRun(r))
+    }
+
+    @Test func aRunAProxyAndAnExpiredOneRender() {
+        for s in [runState(argv: ["/usr/bin/git", "push"]), runState(argv: ["/usr/bin/git"], flags: [.shell, .programUnrecorded], replaces: "h0"),
+                  state(.itemProxy(ItemProxy(itemID: "i1", fieldID: "f1", host: "api.example.com", header: "Authorization", prefix: "Bearer ", seconds: 90, replaces: nil)))] {
+            #expect(height(ApprovalDetailScreen(state: s, actions: DecisionActions())) > 0)
+        }
+        let s = runState(argv: ["/usr/bin/git"])
+        guard case .device(let d)? = s.approval, let show = s.heldShow else { Issue.record("no request"); return }
+        #expect(height(AgentWayScreen(state: s, request: d, show: show, actions: DecisionActions(), now: Date(), expired: true)) > 0)
+    }
+
+    /// A run that expired and left the list says so on its own screen, not "Already decided" (AA8 "Refused or expired").
+    @Test func anExpiredRunThatLeftTheListSaysSo() {
+        var s = runState(argv: ["/usr/bin/git"])
+        guard case .device(var d)? = s.approval else { Issue.record("no request"); return }
+        d.exp = Date().addingTimeInterval(-1)
+        s.approval = .device(d)
+        s.gone = true
+        let screen = ApprovalDetailScreen(state: s, actions: DecisionActions())
+        #expect(screen.expiredWay(at: Date()) != nil)
+        #expect(height(screen) > 0)
+        var decided = s
+        decided.approval = .device(request(.itemRun(ItemRun(itemID: "i1", fieldID: "f1", program: "/x", sha256: sha, argv: ["/x"], cwd: nil, how: .env, name: "T", env: [], flags: [], previousSha256: nil, previousPath: nil, replaces: nil))))
+        #expect(ApprovalDetailScreen(state: decided, actions: DecisionActions()).expiredWay(at: Date()) == nil, "gone but not expired: Already decided")
+        decided.approval = s.approval
+        decided.outcome = .denied
+        #expect(ApprovalDetailScreen(state: decided, actions: DecisionActions()).expiredWay(at: Date()) == nil)
+        var other = state(.catalog)
+        other.gone = true
+        var catalog = request(.catalog)
+        catalog.exp = Date().addingTimeInterval(-1)
+        other.approval = .device(catalog)
+        #expect(ApprovalDetailScreen(state: other, actions: DecisionActions()).expiredWay(at: Date()) == nil, "only a run or a proxy")
+    }
+
+    @Test func aRunsAnswerAndItsPinRender() {
+        for o in [DeviceOutcome.approved(result: "ok", way: .run, pinRecorded: true, item: "GitHub"), .approved(result: "cwd_not_allowed", way: .run), .referred] {
+            var s = runState(argv: ["/usr/bin/git"])
+            s.outcome = o
+            #expect(height(ApprovalDetailScreen(state: s, actions: DecisionActions())) > 0, "\(o)")
+        }
+    }
+
+    // MARK: The gate on screen
+
+    /// The screen in a window, laid out; each of [scrollTo] ("end", "top") applied in turn; whether the gate says reached before
+    /// and after each.
+    private func gateStates(_ s: ApprovalDetailState, scrollTo: [String], insets: Bool = false, height: CGFloat = 844) async -> [Bool] {
+        guard case .device(let d)? = s.approval, let show = s.heldShow else { return [] }
+        let seen = Seen()
+        var screen = AgentWayScreen(state: s, request: d, show: show, actions: DecisionActions(), now: Date())
+        screen.onGate = { seen.reached = $0 }
+        // The app's own container: a navigation stack (its bar hidden, the screen has its own Back), in a window of a real scene
+        // when the tests are hosted in the app, with the safe-area insets of a phone (a top and a bottom one) added when [insets].
+        let host = UIHostingController(rootView: NavigationStack { screen.toolbar(.hidden, for: .navigationBar) }.vettIDTheme(.light))
+        if insets { host.additionalSafeAreaInsets = UIEdgeInsets(top: 59, left: 0, bottom: 34, right: 0) }
+        let scene = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first
+        let window = scene.map { UIWindow(windowScene: $0) } ?? UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
+        window.frame = CGRect(x: 0, y: 0, width: 390, height: height)
+        window.rootViewController = host
+        window.makeKeyAndVisible()
+        var out: [Bool] = []
+        for step in [""] + scrollTo {
+            if let scroll = Self.scrollView(in: host.view) {
+                switch step {
+                case "end": scroll.setContentOffset(CGPoint(x: 0, y: max(0, scroll.contentSize.height - scroll.bounds.height)), animated: false)
+                case "top": scroll.setContentOffset(.zero, animated: false)
+                default: break
+                }
+            }
+            for _ in 0..<20 { try? await Task.sleep(for: .milliseconds(25)) }
+            out.append(seen.reached)
+        }
+        return out
+    }
+
+    private final class Seen { var reached = false }
+
+    private static func scrollView(in v: UIView) -> UIScrollView? {
+        var found: [UIScrollView] = []
+        func walk(_ v: UIView) {
+            if let s = v as? UIScrollView, s.contentSize.height > 0 { found.append(s) }
+            v.subviews.forEach(walk)
+        }
+        walk(v)
+        // The scrolled content is the tallest scroll view (the button panel's lines are another, short one).
+        return found.max { $0.contentSize.height < $1.contentSize.height }
+    }
+
+    @Test func approveWaitsForTheEndOfALongRunAndStaysEnabledScrollingBack() async {
+        let long = ["/usr/bin/git"] + (1...64).map { "arg-\($0)-" + String(repeating: "x", count: 500) }
+        let states = await gateStates(runState(argv: long), scrollTo: ["end", "top"])
+        #expect(states == [false, true, true], "disabled, then the end, then back up: still reached \(states)")
+    }
+
+    /// Under the safe area of a phone (a top and a bottom inset), in the app's navigation container: the top marker rests at the
+    /// inset, and the end clears the bottom one.
+    @Test func theGateWorksWithSafeAreaInsetsInANavigationStack() async {
+        let long = ["/usr/bin/git"] + (1...64).map { "arg-\($0)-" + String(repeating: "x", count: 500) }
+        let states = await gateStates(runState(argv: long), scrollTo: ["end", "top"], insets: true)
+        #expect(states == [false, true, true], "\(states)")
+        // Content that fits (a tall window): reached at once. In a short one the same content does not fit, and is not reached.
+        let fits = await gateStates(runState(argv: ["/usr/bin/git"]), scrollTo: [], insets: true, height: 1_400)
+        #expect(fits == [true], "content that fits is reached at once: \(fits)")
+        let cramped = await gateStates(runState(argv: ["/usr/bin/git"]), scrollTo: [], insets: true, height: 844)
+        #expect(cramped == [false], "\(cramped)")
+    }
+
+    // MARK: Every change of the content delivers a reading, and what is seen is judged in the scroll view's own space
+
+    @MainActor private final class Phase {
+        var reached = false
+        var rows: [WayRow]
+        var key = "a"
+        init(rows: [WayRow]) { self.rows = rows }
+    }
+
+    private struct GateHost: View {
+        var phase: Phase
+        var inset: Bool
+        @State private var gate = WayGate(key: "a")
+        @State private var key = "a"
+
+        var body: some View {
+            let scroll = WayScroll(rows: phase.rows, key: phase.key, gate: $gate)
+                .onChange(of: phase.key, initial: true) { _, new in gate.rearm(new) }
+                .onChange(of: gate.reached && gate.key == phase.key, initial: true) { _, reached in phase.reached = reached }
+            // A scroll view runs under the safe area it touches (the insets are its content insets); one that touches none, between
+            // spacers taller than the safe area, shows all of its frame.
+            if inset { scroll } else { VStack(spacing: 0) { Color.clear.frame(height: 100); scroll; Color.clear.frame(height: 100) } }
+        }
+    }
+
+    private func rows(_ n: Int, label: String = "row") -> [WayRow] {
+        (0..<n).map { WayRow(id: "r\($0)", parts: [.line("\(label) \($0)", tag: "r\($0)")]) }
+    }
+
+    private func host(_ phase: Phase, inset: Bool) -> (UIWindow, UIHostingController<some View>) {
+        let host = UIHostingController(rootView: GateHost(phase: phase, inset: inset).vettIDTheme(.light))
+        host.additionalSafeAreaInsets = UIEdgeInsets(top: 59, left: 0, bottom: 34, right: 0)
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
+        window.rootViewController = host
+        window.makeKeyAndVisible()
+        return (window, host)
+    }
+
+    private func settle() async { for _ in 0..<20 { try? await Task.sleep(for: .milliseconds(25)) } }
+
+    /// A key change that moves nothing (a rename of the same length) delivers no new geometry: the reading carries its key, so the
+    /// content that fits is still reached, without a drag.
+    @Test func aChangeOfTheContentWithTheSameGeometryOpensAFittingGateWithoutADrag() async {
+        let phase = Phase(rows: rows(3))
+        let (window, _) = host(phase, inset: false)
+        await settle()
+        #expect(phase.reached, "fits: reached at once")
+        phase.rows = rows(3, label: "new")
+        phase.key = "b"
+        // The view is told through a new body: host again with the same phase (the window's root view is re-evaluated).
+        window.rootViewController = UIHostingController(rootView: GateHost(phase: phase, inset: false).vettIDTheme(.light))
+        await settle()
+        #expect(phase.reached, "a new key, the same geometry: reached again")
+    }
+
+    /// The end is seen when it is inside what the scroll view shows, whether it runs under the safe area (UIKit's adjusted content
+    /// insets, 121 and 38 here) or sits between spacers inside it (none): the offset that puts the content's bottom at the bottom of
+    /// what UIKit shows opens the gate, 20 pt short of it does not.
+    @Test func theEndIsSeenWhereTheScrollViewShowsItWithOrWithoutInsets() async {
+        for inset in [true, false] {
+            let phase = Phase(rows: rows(80))
+            let (window, host) = host(phase, inset: inset)
+            await settle()
+            guard let scroll = Self.scrollView(in: host.view) else { Issue.record("no scroll view"); return }
+            _ = window
+            #expect(!phase.reached, "inset \(inset): at the top")
+            let adjusted = scroll.adjustedContentInset
+            // The offset that puts the content's bottom exactly at the bottom of what is shown.
+            let last = scroll.contentSize.height - scroll.bounds.height + adjusted.bottom
+            scroll.setContentOffset(CGPoint(x: 0, y: last - 20), animated: false)
+            await settle()
+            #expect(!phase.reached, "inset \(inset): 20 pt of the end still hidden (under \(adjusted))")
+            scroll.setContentOffset(CGPoint(x: 0, y: last), animated: false)
+            await settle()
+            #expect(phase.reached, "inset \(inset): the end is shown (insets \(adjusted))")
+        }
+    }
+
+    @Test func aShortRunThatFitsIsReachedAtOnce() async {
+        let states = await gateStates(runState(argv: ["/usr/bin/git"]), scrollTo: [])
+        #expect(states == [true], "\(states)")
+    }
 }
 
 // swiftlint:enable line_length

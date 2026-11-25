@@ -34,7 +34,7 @@ import VettIDDataTesting
     static let key = "device:approval.pending:h1"
 
     func model(_ items: (any ItemsRepository)? = nil) async -> ApprovalDetailViewModel {
-        let m = ApprovalDetailViewModel(key: Self.key, approvals: fake, connections: connections, vault: items ?? self.items)
+        let m = ApprovalDetailViewModel(key: Self.key, approvals: fake, connections: connections, vault: items ?? self.items, cwdWaits: Self.quick)
         await m.settle()
         return m
     }
@@ -72,18 +72,30 @@ import VettIDDataTesting
         #expect(show(Self.get, in: blank) == .noItem(use: false, loading: false))
     }
 
-    /// Until AA8's screens (the next step), a run and a proxy are shown by "a way this version can't show": deny only.
-    @Test func aRunAndAProxyAreNotYetApprovedHere() {
-        let run = ItemRun(itemID: "i1", fieldID: "f1", program: "/bin/x", sha256: Self.sha, argv: ["x"], cwd: nil, how: .env, name: "T", env: [], flags: [], previousSha256: nil, previousPath: nil, replaces: nil)
-        let proxy = ItemProxy(itemID: "i1", fieldID: "f1", host: "api.example.com", header: "Authorization", prefix: "Bearer ", seconds: 900, replaces: nil)
-        #expect(show(.itemRun(run)) == .later(item: "GitHub", loading: false) && !show(.itemRun(run)).approvable)
-        #expect(show(.itemProxy(proxy)) == .later(item: "GitHub", loading: false))
-        #expect(show(.itemRun(run), read: .reading, in: []) == .later(item: nil, loading: true))
-        // A run and a proxy are deny only whatever is read: they keep their own text after a failed read.
-        #expect(show(.itemRun(run), read: .failed) == .later(item: "GitHub", loading: false))
-        #expect(show(.itemProxy(proxy), read: .failed) == .later(item: "GitHub", loading: false))
-        #expect(show(.itemRun(run), read: .failed, in: []) == .laterUnread, "not said to be an item you no longer have")
-        #expect(show(.itemProxy(proxy), read: .failed, in: []) == .laterUnread && !HeldShow.laterUnread.approvable)
+    static func run(
+        argv: [String] = ["x"], flags: Set<RunFlag> = [], cwd: String? = nil, previous: (String, String)? = nil, replaces: String? = nil
+    ) -> ItemRun {
+        ItemRun(
+            itemID: "i1", fieldID: "f1", program: "/bin/x", sha256: sha, argv: argv, cwd: cwd, how: .env, name: "T", env: [], flags: flags,
+            previousSha256: previous?.0, previousPath: previous?.1, replaces: replaces
+        )
+    }
+
+    static let proxy = ItemProxy(itemID: "i1", fieldID: "f1", host: "api.example.com", header: "Authorization", prefix: "Bearer ", seconds: 900, replaces: nil)
+
+    /// AA8: a run and a proxy are shown from the item list on their own screens, and approvable.
+    @Test func aRunAndAProxyAreShownAndApprovable() {
+        let run = Self.run()
+        #expect(show(.itemRun(run)) == .run(run, item: "GitHub", field: "Token") && show(.itemRun(run)).approvable)
+        #expect(show(.itemProxy(Self.proxy)) == .proxy(Self.proxy, item: "GitHub", field: "Token") && show(.itemProxy(Self.proxy)).approvable)
+        #expect(show(.itemRun(run), in: []) == .noItem(use: true, loading: false), "an item you no longer have")
+        #expect(show(.itemProxy(Self.proxy), read: .reading, in: []) == .noItem(use: true, loading: true))
+        var other = run
+        other.fieldID = "f9"
+        #expect(show(.itemRun(other)) == .noItem(use: true, loading: false), "a field the list cannot name")
+        // After a failed read a run and a proxy name an item they cannot name now: the items could not be read, deny only.
+        #expect(show(.itemRun(run), read: .failed) == .itemsUnread && show(.itemProxy(Self.proxy), read: .failed) == .itemsUnread)
+        #expect(show(.itemRun(run), read: .failed, in: []) == .itemsUnread && !HeldShow.itemsUnread.approvable)
     }
 
     @Test func aRevealIsApprovedFromItsScreenAndTheAnswerIsSaidBeforeItCloses() async {
@@ -223,18 +235,16 @@ import VettIDDataTesting
         #expect(m.state.canApprove() && !m.state.offersItemsRetry)
     }
 
-    /// A catalog, a run and a proxy say nothing of the items after a failed read; a catalog's Approve is off until a read.
-    /// After a failed read a run and a proxy keep their text, deny only; a catalog, which names no item, is approved without the
-    /// list (it is not about one item, so "your items could not be read" would not say why).
-    @Test func aFailedReadLeavesACatalogRunAndProxyTheirOwnTexts() async {
-        let run = ItemRun(itemID: "i1", fieldID: "f1", program: "/bin/x", sha256: Self.sha, argv: ["x"], cwd: nil, how: .env, name: "T", env: [], flags: [], previousSha256: nil, previousPath: nil, replaces: nil)
-        let proxy = ItemProxy(itemID: "i1", fieldID: "f1", host: "api.example.com", header: "Authorization", prefix: "Bearer ", seconds: 900, replaces: nil)
-        for (h, show) in [(HeldApproval.itemRun(run), HeldShow.later(item: "GitHub", loading: false)), (.itemProxy(proxy), .later(item: "GitHub", loading: false))] {
+    /// After a failed read a run and a proxy, which name an item and its field (AA8), say the items could not be read and offer
+    /// Try again, deny only meanwhile; a catalog, which names no item, is approved without the list (it is not about one item,
+    /// so "your items could not be read" would not say why).
+    @Test func aFailedReadLeavesACatalogApprovableAndARunOrProxyUnread() async {
+        for h in [HeldApproval.itemRun(Self.run()), .itemProxy(Self.proxy)] {
             fake.listed = [Self.held(h)]
             items.load = .loaded
             let m = await model()
             items.load = .failed
-            #expect(m.state.heldShow == show && !m.state.canApprove() && !m.state.offersItemsRetry, "\(show)")
+            #expect(m.state.heldShow == .itemsUnread && !m.state.canApprove() && m.state.offersItemsRetry, "\(h)")
         }
         fake.listed = [Self.held(.catalog)]
         let m = await model()
@@ -316,9 +326,8 @@ import VettIDDataTesting
         #expect(fake.calls == ["approveDeviceRequest:changed:\(Self.key)"])
     }
 
-    @Test func aRunAndAnUnshownRequestAreNeverApprovedFromTheScreen() async {
-        let run = ItemRun(itemID: "i1", fieldID: "f1", program: "/bin/x", sha256: Self.sha, argv: ["x"], cwd: nil, how: .env, name: "T", env: [], flags: [], previousSha256: nil, previousPath: nil, replaces: nil)
-        for h in [HeldApproval.itemRun(run), .unshown, .desktopStepUp] {
+    @Test func anUnshownRequestAndADesktopsAreNeverApprovedFromTheScreen() async {
+        for h in [HeldApproval.unshown, .desktopStepUp] {
             fake.listed = [Self.held(h)]
             let m = await model()
             #expect(!m.state.canApprove())
@@ -332,6 +341,183 @@ import VettIDDataTesting
         fake.listed = [Samples.device("device.session.pending")]
         let m = ApprovalDetailViewModel(key: "device:device.session.pending:d1", approvals: fake, connections: connections, vault: items)
         #expect(m.state.heldShow == nil && !m.state.canApprove())
+    }
+
+    // MARK: - A run and a proxy (AA8)
+
+    /// Two waits: three reads.
+    static let quick: [Duration] = [.milliseconds(1), .milliseconds(1)]
+
+    @Test func aRunIsApprovedFromItsScreenAndSaysWhatTheVaultAnswered() async {
+        fake.listed = [Self.held(.itemRun(Self.run(flags: [.programUnrecorded])))]
+        fake.recorded = true
+        let m = await model()
+        #expect(m.state.canApprove() && m.state.heldShow == .run(Self.run(flags: [.programUnrecorded]), item: "GitHub", field: "Token"))
+        m.approve(held: m.shownHeld())
+        await m.settle()
+        #expect(m.state.outcome == .approved(result: "ok", way: .run, pinRecorded: true, item: "GitHub"))
+        #expect(fake.calls == ["approveDeviceRequest:\(Self.key)"])
+    }
+
+    @Test func aFingerprintIsSaidRecordedOnlyWhenTheSettingsShowItAndOnlyForTheFlagsThatRecordOne() async {
+        for (flags, recorded, said) in [(Set<RunFlag>([.programUnrecorded]), false, false), ([.programChanged], true, true), ([.shell], true, false)] {
+            fake.listed = [Self.held(.itemRun(Self.run(flags: flags, previous: flags.contains(.programChanged) ? (Self.sha, "/bin/x") : nil)))]
+            fake.recorded = recorded
+            let m = await model()
+            m.approve(held: m.shownHeld())
+            await m.settle()
+            guard case .approved(_, _, let pin, _)? = m.state.outcome else { Issue.record("no outcome"); return }
+            #expect(pin == said, Comment(rawValue: "\(flags) \(recorded)"))
+        }
+    }
+
+    @Test func aProxyIsApprovedAndAnAnswerOfNotFoundIsItsOwn() async {
+        fake.listed = [Self.held(.itemProxy(Self.proxy))]
+        fake.deviceResult = "not_found"
+        let m = await model()
+        m.approve(held: m.shownHeld())
+        await m.settle()
+        #expect(m.state.outcome == .approved(result: "not_found", way: .proxy, pinRecorded: false, item: "GitHub"))
+    }
+
+    @Test func aRunOrProxyReferredAgainClosesWithItsText() async {
+        for h in [HeldApproval.itemRun(Self.run()), .itemProxy(Self.proxy)] {
+            fake.listed = [Self.held(h)]
+            fake.deviceResult = "referred"
+            let m = await model()
+            m.approve(held: m.shownHeld())
+            await m.settle()
+            #expect(m.state.outcome == .referred)
+        }
+    }
+
+    /// AA8 "Fail closed": a `cwd` without `member_folder` is Deny only until the item's settings, read for the run's own agent and
+    /// item, allow it; the run's own screen shows meanwhile, saying its rule is being checked.
+    @Test func aRunWithACwdIsDenyOnlyUntilTheSettingsAllowIt() async {
+        let run = Self.run(cwd: "/home/me")
+        fake.listed = [Self.held(.itemRun(run))]
+        fake.cwdRuleQueue = [nil, nil, true]
+        let m = ApprovalDetailViewModel(key: Self.key, approvals: fake, connections: connections, vault: items, cwdWaits: Self.quick)
+        #expect(m.state.heldShow == .run(run, item: "GitHub", field: "Token") && m.state.cwdCheck == .checking && !m.state.canApprove(), "its own screen, deny only")
+        for _ in 0..<200 where m.state.cwdAllowed == nil { try? await Task.sleep(for: .milliseconds(10)) }
+        #expect(m.state.cwdAllowed == true && m.state.cwdCheck == nil && m.state.canApprove() && fake.cwdReads == 3)
+    }
+
+    /// Three failed reads: the run's screen says it cannot be checked yet, with Try again, and no wait after the last read; Try
+    /// again and an unlock read again. With `folders` it is Deny only, on its own screen.
+    @Test func aRunWithACwdWhoseRuleCannotBeReadOffersTryAgain() async {
+        let run = Self.run(cwd: "/home/me")
+        fake.listed = [Self.held(.itemRun(run))]
+        fake.cwdRule = nil
+        let waits: [Duration] = [.milliseconds(1), .milliseconds(1)]
+        let failing = ApprovalDetailViewModel(key: Self.key, approvals: fake, connections: connections, vault: items, cwdWaits: waits)
+        for _ in 0..<200 where !failing.state.cwdFailed { try? await Task.sleep(for: .milliseconds(10)) }
+        #expect(failing.state.cwdCheck == .failed && !failing.state.canApprove() && fake.cwdReads == 3 && failing.state.heldShow == .run(run, item: "GitHub", field: "Token"))
+        // Try again.
+        fake.cwdRuleQueue = [true]
+        failing.retryCwdRule()
+        for _ in 0..<200 where failing.state.cwdAllowed == nil { try? await Task.sleep(for: .milliseconds(10)) }
+        #expect(failing.state.cwdCheck == nil && failing.state.canApprove() && fake.cwdReads == 4)
+        failing.retryCwdRule()
+        #expect(fake.cwdReads == 4, "nothing to retry once read")
+        // An unlock: the approval held again reads a failed rule again.
+        let locked = ApprovalDetailViewModel(key: Self.key, approvals: fake, connections: connections, vault: items, cwdWaits: waits)
+        for _ in 0..<200 where !locked.state.cwdFailed { try? await Task.sleep(for: .milliseconds(10)) }
+        let before = fake.cwdReads
+        fake.cwdRule = true
+        fake.forgetOpenVault()
+        fake.listed = [Self.held(.itemRun(run))]
+        for _ in 0..<200 where locked.state.cwdAllowed == nil { try? await Task.sleep(for: .milliseconds(10)) }
+        #expect(locked.state.cwdAllowed == true && fake.cwdReads == before + 1)
+        // Folders: Deny only, on its own screen.
+        fake.cwdRule = false
+        let folders = await model()
+        for _ in 0..<200 where folders.state.cwdAllowed == nil { try? await Task.sleep(for: .milliseconds(10)) }
+        #expect(folders.state.cwdCheck == .notAllowed && !folders.state.canApprove() && folders.state.heldShow == .run(run, item: "GitHub", field: "Token"))
+        // A run without a cwd never reads.
+        let reads = fake.cwdReads
+        fake.listed = [Self.held(.itemRun(Self.run()))]
+        let plain = await model()
+        #expect(plain.state.canApprove() && plain.state.cwdCheck == nil && fake.cwdReads == reads)
+    }
+
+    /// The rule holds only for the agent and the item it was read for.
+    @Test func aCwdRuleReadForAnotherAgentOrItemIsNotTheRunsRule() async {
+        fake.listed = [Self.held(.itemRun(Self.run(cwd: "/home/me")))]
+        let m = ApprovalDetailViewModel(key: Self.key, approvals: fake, connections: connections, vault: items, cwdWaits: Self.quick)
+        for _ in 0..<200 where m.state.cwdAllowed == nil { try? await Task.sleep(for: .milliseconds(10)) }
+        #expect(m.state.canApprove() && m.state.cwdReadFor == CwdReadFor(agentID: "A", itemID: "i1"))
+        for other in [CwdReadFor(agentID: "B", itemID: "i1"), CwdReadFor(agentID: "A", itemID: "i2")] {
+            m.local.cwdReadFor = other
+            #expect(m.state.cwdCheck != nil && !m.state.canApprove(), "\(other)")
+        }
+    }
+
+    /// "Already decided" stays so after `exp` passes: only a request still held at its `exp` expired (AA8 "Refused or expired").
+    @Test func aRequestDecidedElsewhereBeforeItsExpDidNotExpire() async {
+        let exp = Date().addingTimeInterval(300)
+        var d = DeviceRequest(type: "approval.pending", id: "h1", deviceName: "Bot", role: "agent", requestType: "agent.request", receivedAt: Samples.t0, exp: exp, deviceID: "A", held: .itemRun(Self.run()))
+        fake.listed = [.device(d)]
+        let m = await model()
+        #expect(m.state.leftAt == nil && m.state.endedByExpiry(at: exp.addingTimeInterval(1)), "held at its exp: it expires")
+        fake.listed = []
+        await m.settle()
+        #expect(m.state.gone && m.state.leftAt != nil && !m.state.endedByExpiry(at: exp.addingTimeInterval(60)), "gone before exp: not expired")
+        // Held until its `exp`: expired.
+        d.id = "h2"
+        let held = ApprovalDetailState(key: "device:approval.pending:h2")
+        var s = held
+        s.approval = .device(d)
+        #expect(s.endedByExpiry(at: exp.addingTimeInterval(1)) && !s.endedByExpiry(at: exp.addingTimeInterval(-1)))
+        s.leftAt = exp.addingTimeInterval(5)
+        #expect(s.endedByExpiry(at: exp.addingTimeInterval(10)), "dropped after its exp")
+    }
+
+    /// "Approved" is said at once; that the fingerprint is recorded comes when the read answers.
+    @Test func approvedIsSaidBeforeThePinIsRead() async {
+        fake.listed = [Self.held(.itemRun(Self.run(flags: [.programUnrecorded])))]
+        fake.recorded = true
+        fake.pinHold = TestDeferred<Void>()
+        let m = await model()
+        m.approve(held: m.shownHeld())
+        for _ in 0..<200 where m.state.outcome == nil { await Task.yield() }
+        #expect(m.state.outcome == .approved(result: "ok", way: .run, pinRecorded: false, item: "GitHub"), "at once")
+        fake.pinHold?.complete(())
+        await m.settle()
+        #expect(m.state.outcome == .approved(result: "ok", way: .run, pinRecorded: true, item: "GitHub"))
+    }
+
+    @Test func aRunListedAfterTheScreenOpenedReadsItsRuleThen() async {
+        let m = await model()
+        #expect(m.state.approval == nil)
+        fake.listed = [Self.held(.itemRun(Self.run(cwd: "/home/me")))]
+        for _ in 0..<200 where m.state.cwdAllowed == nil { try? await Task.sleep(for: .milliseconds(10)) }
+        #expect(m.state.cwdAllowed == true)
+    }
+
+    /// A run and a proxy go through the same render-time capture as a use: renamed since the render, or across a lock, nothing is
+    /// approved; rendered again, the request is sent as shown now.
+    @Test func aRunOrProxyIsApprovedOnlyAsRendered() async throws {
+        for h in [HeldApproval.itemRun(Self.run()), .itemProxy(Self.proxy)] {
+            fake.calls = []
+            fake.listed = [Self.held(h)]
+            items.add(FakeItems.item("i1", "GitHub", sensitivity: .secret, fields: [("Token", "x"), ("User", "y")]))
+            let m = await model()
+            let rendered = try #require(m.shownHeld())
+            items.add(FakeItems.item("i1", "GitHub (work)", sensitivity: .secret, fields: [("Token", "x"), ("User", "y")]))
+            m.approve(held: rendered)
+            await m.settle()
+            #expect(fake.calls == ["approveDeviceRequest:changed:\(Self.key)"] && m.state.error == .requestChanged, "renamed: \(h)")
+            let again = try #require(m.shownHeld())
+            fake.forgetOpenVault()
+            fake.listed = [Self.held(h)]
+            m.approve(held: again)
+            await m.settle()
+            #expect(fake.calls.last == "approveDeviceRequest:changed:\(Self.key)", "across a lock: \(h)")
+            m.approve(held: m.shownHeld())
+            await m.settle()
+            #expect(fake.calls.last == "approveDeviceRequest:\(Self.key)", "rendered again: \(h)")
+        }
     }
 }
 

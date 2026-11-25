@@ -24,11 +24,10 @@ public enum HeldApproval: Equatable, Sendable, CustomStringConvertible, CustomDe
     /// Any other type or op, or a body that does not read: deny only.
     case unshown
 
-    /// Whether the request can be approved here: only what the app shows in full. A run and a proxy are read (AA8's rules) but
-    /// stay deny only until their screens ship.
+    /// Whether the request can be approved here: only what the app shows in full (a run and a proxy on AA8's screens).
     public var approvable: Bool {
         switch self {
-        case .itemUse, .itemGet, .catalog: true
+        case .itemUse, .itemGet, .catalog, .itemRun, .itemProxy: true
         default: false
         }
     }

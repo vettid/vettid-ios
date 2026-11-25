@@ -18,14 +18,18 @@ extension ApprovalDetailViewModel {
         // Only the request the member was shown, as bytes, and only while the screen shows it as it did: a request whose item or
         // field was renamed, or whose item list was read again, since the render is not approved
         // (``ApprovalsRepository/approveDeviceRequest(_:generation:stillShown:)``).
-        // Only a run or a proxy is referred again (§6.8 step 4): for any other op `referred` is a result like the rest (AA5's
-        // "Approved, but your vault answered: referred.").
         let d = shown.request
         guard shown.show.approvable else { return }
-        let referable: Bool
+        let way: AgentWay?
         switch d.held {
-        case .itemRun?, .itemProxy?: referable = true
-        default: referable = false
+        case .itemRun?: way = .run
+        case .itemProxy?: way = .proxy
+        default: way = nil
+        }
+        var item: String?
+        switch shown.show {
+        case .run(_, let name, _), .proxy(_, let name, _): item = name
+        default: item = nil
         }
         let still: @MainActor () -> Bool = { [weak self] in
             guard let self else { return false }
@@ -33,10 +37,64 @@ extension ApprovalDetailViewModel {
             guard case .device(let now)? = s.approval else { return false }
             return now.sameContent(as: d) && (s.itemsRead == .read || shown.show == .catalog) && s.heldShow == shown.show
         }
-        decideHeld(key: PendingApproval.device(d).key, generation: shown.generation) { [repo] _ in
+        decideHeld(key: PendingApproval.device(d).key, generation: shown.generation) { [weak self, repo] _ in
             let r = try await repo.approveDeviceRequest(d, generation: shown.generation, stillShown: still).result
-            return r == "referred" && referable ? .referred : .approved(result: r)
+            // Only a run or a proxy is referred again (§6.8 step 4): not done, the new approval is a new decision. For any other op
+            // `referred` is a result like the rest (AA5's "Approved, but your vault answered: referred.").
+            if r == "referred", way != nil { return .referred }
+            let outcome = DeviceOutcome.approved(result: r, way: way, pinRecorded: false, item: item)
+            if r == "ok", case .itemRun(let run)? = d.held, !run.flags.isDisjoint(with: [.programUnrecorded, .programChanged]) {
+                self?.readPin(d, run, after: outcome)
+            }
+            return outcome
         }
+    }
+
+    /// AA8 "Approving and the pin": "Approved" is said at once; that the fingerprint is now recorded is added only when the item's
+    /// settings, read now, show the matched entry with this run's `sha256` and `program`, and only to the same outcome.
+    private func readPin(_ d: DeviceRequest, _ run: ItemRun, after outcome: DeviceOutcome) {
+        guard case .approved(let r, let way, _, let item) = outcome else { return }
+        let repo = repo
+        work.launch { [weak self] in
+            let recorded = await repo.programRecorded(
+                agentID: d.deviceID ?? "", itemID: run.itemID, program: run.program, sha256: run.sha256
+            )
+            guard recorded, let self, local.outcome == outcome else { return }
+            local.outcome = .approved(result: r, way: way, pinRecorded: true, item: item)
+        }
+    }
+
+    /// AA8 "Fail closed": a run's `cwd` without `member_folder` is approved only once the item's settings, read for its own agent
+    /// and item, allow it; its screen shows meanwhile, Deny only (``ApprovalDetailState/cwdCheck``). One read, and one more
+    /// after each wait of ``cwdWaits``; when every read failed the screen says so, with Try again (``retryCwdRule()``), and an
+    /// unlock reads again.
+    func readCwdRule() {
+        guard !cwdRead, case .device(let d)? = local.approval, case .itemRun(let run)? = d.held, run.hasCwd, let agent = d.deviceID
+        else { return }
+        cwdRead = true
+        local.cwdFailed = false
+        let (repo, waits) = (repo, cwdWaits)
+        work.launch { [weak self] in
+            for attempt in 0...waits.count {
+                if attempt > 0 {
+                    try? await Task.sleep(for: waits[attempt - 1])
+                    if Task.isCancelled { return }
+                }
+                if let ok = await repo.runCwdRule(agentID: agent, itemID: run.itemID) {
+                    self?.local.cwdReadFor = CwdReadFor(agentID: agent, itemID: run.itemID)
+                    self?.local.cwdAllowed = ok
+                    return
+                }
+            }
+            self?.local.cwdFailed = true
+        }
+    }
+
+    /// "Try again" on a run whose cwd rule could not be read: the reads start over. Nothing is approved by it.
+    public func retryCwdRule() {
+        guard state.cwdCheck == .failed else { return }
+        cwdRead = false
+        readCwdRule()
     }
 
     /// [body] decides a request an agent holds and says how it ended; a `not_found` is "no longer waiting", any other failure
@@ -114,4 +172,53 @@ extension ApprovalDetailViewModel {
             }
         }
     }
+}
+
+// What a request an agent holds shows and allows on its screen.
+extension ApprovalDetailState {
+    /// The item list could not be read and the request says so: "Try again" reads it again (Approve stays off until a read).
+    public var offersItemsRetry: Bool { heldShow == .itemsUnread && itemsRead == .failed }
+
+    /// What a request an agent holds for approval shows and allows, from the item list; nil for any other request.
+    public var heldShow: HeldShow? {
+        guard case .device(let d)? = approval, DeviceAsks.isHeld(d) else { return nil }
+        return DeviceAsks.show(d, items: heldItems, read: itemsRead)
+    }
+
+    /// Where a run's `cwd` (without `member_folder`) stands (AA8 "Fail closed"): nil when it has none, or once the item's
+    /// settings, read for its own agent and item, allow it; else Deny only, on the run's own screen.
+    public var cwdCheck: CwdCheck? {
+        guard case .device(let d)? = approval, DeviceAsks.isHeld(d), case .itemRun(let r)? = d.held, r.hasCwd else { return nil }
+        if cwdAllowed == true, cwdReadFor?.matches(agentID: d.deviceID ?? "", itemID: r.itemID) == true { return nil }
+        if cwdFailed { return .failed }
+        return cwdAllowed == false ? .notAllowed : .checking
+    }
+
+    /// The run or proxy ended by its `exp` (AA8 "Refused or expired"): `exp` has passed, and the request was still held then (one
+    /// that left the list before, decided elsewhere, did not expire).
+    public func endedByExpiry(at now: Date = Date()) -> Bool {
+        guard let exp = approval?.exp, exp <= now else { return false }
+        return leftAt.map { $0 >= exp } ?? true
+    }
+}
+
+/// The agent and the item a run's cwd rule was read for (AA8 "Fail closed").
+public struct CwdReadFor: Equatable, Sendable {
+    public var agentID: String
+    public var itemID: String
+
+    /// Whether it was read for [agentID] and [itemID], as bytes.
+    public func matches(agentID: String, itemID: String) -> Bool {
+        self.agentID.sameBytes(agentID) && self.itemID.sameBytes(itemID)
+    }
+}
+
+/// Where a run's cwd rule stands while it does not allow the run (``ApprovalDetailState/cwdCheck``).
+public enum CwdCheck: Equatable, Sendable {
+    /// Being read: "Checking where this may run…".
+    case checking
+    /// Every read failed: "This can't be shown yet. Try again.", with Try again.
+    case failed
+    /// The item's settings do not allow it (they carry `folders`): Deny only.
+    case notAllowed
 }

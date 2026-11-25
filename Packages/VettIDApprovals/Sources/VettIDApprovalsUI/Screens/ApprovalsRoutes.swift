@@ -127,6 +127,7 @@ public struct ApprovalDetailRoute: View {
         a.onForgetSecrets = { m.forgetSecrets() }
         a.onRetryDocument = { m.retryDocument() }
         a.onRetryItems = { m.retryItems() }
+        a.onRetryCwd = { m.retryCwdRule() }
         a.onDocumentShownWhole = { m.documentShownWhole($0, generation: $1) }
         return a
     }

@@ -249,6 +249,13 @@ public enum ItemWaysRules {
         return !run.has("folders")
     }
 
+    /// ``runCwdAllowed(_:)`` for the settings of [agentID] and [itemID] only: settings listed for another agent (`foreign`), or for
+    /// another item, never allow a run of this one.
+    public static func runCwdAllowed(_ read: ItemWaysRead?, agentID: String, itemID: String) -> Bool {
+        guard let read, !read.foreign, read.agentID.sameBytes(agentID), read.itemID.sameBytes(itemID) else { return false }
+        return runCwdAllowed(read)
+    }
+
     static func isSha256(_ s: String) -> Bool {
         let b = Array(s.utf8)
         return b.count == sha256Hex && b.allSatisfy { (0x30...0x39).contains($0) || (0x61...0x66).contains($0) }

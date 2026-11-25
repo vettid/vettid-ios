@@ -38,6 +38,8 @@ public struct DecisionActions {
     public var onRetryDocument: @MainActor () -> Void = {}
     /// The item list could not be read: read it again (``ApprovalDetailState/offersItemsRetry``).
     public var onRetryItems: @MainActor () -> Void = {}
+    /// A run's cwd rule could not be read: read it again (``ApprovalDetailState/cwdCheck``).
+    public var onRetryCwd: @MainActor () -> Void = {}
     /// The whole of the document of that hash, in that generation, has been on screen.
     public var onDocumentShownWhole: @MainActor (String, Int) -> Void = { _, _ in }
 
@@ -77,10 +79,14 @@ public struct ApprovalDetailScreen: View {
                     // while open turns into "Already decided"; a renewal whose session passes reads as a first request.
                     TimelineView(.periodic(from: .now, by: 1)) { context in live(a, now: context.date) }
                 } else {
-                    decision(a, now: Date())
+                    current(a, now: Date())
                 }
             } else if state.notHeld {
                 notHeld
+            } else if let ended = expiredWay(at: Date()) {
+                // A run or a proxy that expired and left the list says so on its own screen, with no buttons (AA8 "Refused or
+                // expired"), not "Already decided".
+                AgentWayScreen(state: state, request: ended.0, show: ended.1, actions: actions, now: Date(), expired: true)
             } else {
                 gone
             }
@@ -180,7 +186,16 @@ public struct ApprovalDetailScreen: View {
 
     @ViewBuilder private func live(_ a: PendingApproval, now: Date) -> some View {
         // Expired while open: "Already decided" in its place, a new screen for VoiceOver.
-        if state.expired(at: now) { gone.onAppear { Announcer.screenChanged() } } else { decision(a, now: now) }
+        if state.expired(at: now) {
+            // A run or a proxy that expired while open says so on its own screen, with no buttons (AA8 "Refused or expired").
+            if case .device(let d) = a, let way = wayShow {
+                AgentWayScreen(state: state, request: d, show: way, actions: actions, now: now, expired: true)
+            } else {
+                gone.onAppear { Announcer.screenChanged() }
+            }
+        } else {
+            current(a, now: now)
+        }
     }
 
     private func result(_ status: String) -> some View {
@@ -192,12 +207,42 @@ public struct ApprovalDetailScreen: View {
         .accessibilityIdentifier("critical_result")
     }
 
+    /// A run or a proxy held for approval, which has its own screen (AA8).
+    private var wayShow: HeldShow? {
+        switch state.heldShow {
+        case .run?, .proxy?: state.heldShow
+        default: nil
+        }
+    }
+
+    /// The run or proxy that ended by its `exp`: gone from the list, not decided here, `exp` passed.
+    func expiredWay(at now: Date) -> (DeviceRequest, HeldShow)? {
+        guard state.gone, state.outcome == nil, state.endedByExpiry(at: now), case .device(let d)? = state.approval, let way = wayShow
+        else { return nil }
+        return (d, way)
+    }
+
+    @ViewBuilder private func current(_ a: PendingApproval, now: Date) -> some View {
+        if case .device(let d) = a, let way = wayShow {
+            AgentWayScreen(state: state, request: d, show: way, actions: actions, now: now)
+        } else {
+            decision(a, now: now)
+        }
+    }
+
     /// How a decision on an agent's held request ended, said before the screen closes (AA5).
     private func held(_ a: PendingApproval, _ outcome: DeviceOutcome) -> some View {
         FormScaffold(
             title: ApprovalTexts.outcome(outcome, who: ApprovalTexts.deviceSentenceInline(a)), primaryLabel: ApprovalsStrings.ok,
             onPrimary: actions.onFinish, onBack: actions.onFinish
-        ) { EmptyView() }
+        ) {
+            // AA8 "Approving and the pin": said only once the item's settings, read after the approval, show it.
+            if case .approved(_, _, true, let item?) = outcome {
+                Text(ApprovalsStrings.runPinRecorded(AccountNames.isolate(item)))
+                    .vettIDFont(.bodyMedium)
+                    .accessibilityIdentifier("device_pin_recorded")
+            }
+        }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("device_outcome")
     }

@@ -65,12 +65,10 @@ private func itemProxy(_ h: HeldApproval) throws -> ItemProxy {
         }
     }
 
-    @Test func theCatalogIsApprovableAndARunAndAProxyAreReadButNotApprovable() throws {
+    @Test func theCatalogARunAndAProxyAreApprovable() throws {
         #expect(try held(#"{"op":"catalog"}"#) == .catalog)
-        // Read in full, but deny only until their screens ship (the manager refuses them on its own too).
-        guard case .itemRun = try run(), case .itemProxy = try held(proxyBody, top: proxyNote) else { Issue.record("not read"); return }
-        #expect(try !run().approvable)
-        #expect(try !held(proxyBody, top: proxyNote).approvable)
+        #expect(try run().approvable)
+        #expect(try held(proxyBody, top: proxyNote).approvable)
         #expect(!HeldApproval.desktopStepUp.approvable && !HeldApproval.unshown.approvable)
     }
 

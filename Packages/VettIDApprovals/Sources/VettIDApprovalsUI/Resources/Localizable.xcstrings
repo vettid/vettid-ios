@@ -2833,6 +2833,694 @@
           }
         }
       }
+    },
+    "approvals_run_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ wants to run a program with %2$@"
+          }
+        }
+      }
+    },
+    "approvals_run_summary": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@, %2$@, %3$@ in all"
+          }
+        }
+      }
+    },
+    "approvals_way_field": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Field: %@"
+          }
+        }
+      }
+    },
+    "approvals_run_program": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Program"
+          }
+        }
+      }
+    },
+    "approvals_run_fingerprint": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fingerprint: %@"
+          }
+        }
+      }
+    },
+    "approvals_run_asked_as": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Asked for as:"
+          }
+        }
+      }
+    },
+    "approvals_run_arguments": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Arguments"
+          }
+        }
+      }
+    },
+    "approvals_run_no_arguments": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No arguments"
+          }
+        }
+      }
+    },
+    "approvals_run_secret_file": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "(the secret file's path)"
+          }
+        }
+      }
+    },
+    "approvals_run_cwd_checking": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Checking where this may run…"
+          }
+        }
+      }
+    },
+    "approvals_run_cwd_unchecked": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This can't be shown yet. Try again."
+          }
+        }
+      }
+    },
+    "approvals_run_runs_in": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Runs in"
+          }
+        }
+      }
+    },
+    "approvals_run_new_folder": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A new, empty folder of its own"
+          }
+        }
+      }
+    },
+    "approvals_run_secret_given": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Secret given as"
+          }
+        }
+      }
+    },
+    "approvals_run_how_env": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "variable %@"
+          }
+        }
+      }
+    },
+    "approvals_run_how_stdin": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "standard input"
+          }
+        }
+      }
+    },
+    "approvals_run_how_file": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "a temporary file, its path in variable %@"
+          }
+        }
+      }
+    },
+    "approvals_run_other_variables": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Other variables"
+          }
+        }
+      }
+    },
+    "approvals_run_none": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "None"
+          }
+        }
+      }
+    },
+    "approvals_run_warn_shell": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This program can run other programs or code given to it, so the command can do anything with your secret. Read every argument."
+          }
+        }
+      }
+    },
+    "approvals_run_warn_inline_code": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This runs code given on the command line. It can do anything with your secret."
+          }
+        }
+      }
+    },
+    "approvals_run_warn_unbound": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Any program could be asked for. Approve only a command you recognize."
+          }
+        }
+      }
+    },
+    "approvals_run_warn_unrecorded": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "First run of this program with this item. Fingerprint: %@. If you approve, later runs of this exact file may run without asking, as this item's settings allow."
+          }
+        }
+      }
+    },
+    "approvals_run_warn_changed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This program has changed since you approved it. Before: %1$@. Now: %2$@. If you did not update it, deny. If you approve, this file's fingerprint replaces the recorded one, and later runs of it may run without asking, as this item's settings allow."
+          }
+        }
+      }
+    },
+    "approvals_run_warn_moved": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This program moved to %1$@. It was approved at %2$@. Before: %3$@. Now: %4$@. If you did not move or update it, deny. If you approve, this file's fingerprint replaces the recorded one, and later runs of it may run without asking, as this item's settings allow."
+          }
+        }
+      }
+    },
+    "approvals_run_moved_to": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "moved to %@"
+          }
+        }
+      }
+    },
+    "approvals_way_kb": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ KB"
+          }
+        }
+      }
+    },
+    "approvals_way_mb": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ MB"
+          }
+        }
+      }
+    },
+    "approvals_run_approved_before": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Approved before"
+          }
+        }
+      }
+    },
+    "approvals_run_now": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Now"
+          }
+        }
+      }
+    },
+    "approvals_run_batch_file": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This is a Windows batch file. Its fingerprint covers this file only, not the programs it starts (for an npm tool, node and its packages)."
+          }
+        }
+      }
+    },
+    "approvals_run_runs_commands": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This program can run other commands given in its arguments. Read every argument."
+          }
+        }
+      }
+    },
+    "approvals_way_approved": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Approved."
+          }
+        }
+      }
+    },
+    "approvals_run_pin_recorded": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This program's fingerprint is now recorded for %@."
+          }
+        }
+      }
+    },
+    "approvals_proxy_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ wants to use %2$@ with %3$@ for %4$@."
+          }
+        }
+      }
+    },
+    "approvals_proxy_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The agent will not see it; the key is sent only to %@."
+          }
+        }
+      }
+    },
+    "approvals_proxy_sent_as": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sent as: %1$@: %2$@••••••••"
+          }
+        }
+      }
+    },
+    "approvals_proxy_ends_sooner": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "It may end sooner, when %@'s access ends."
+          }
+        }
+      }
+    },
+    "approvals_way_scroll_hint": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scroll to the end to approve."
+          }
+        }
+      }
+    },
+    "approvals_way_referred": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not done yet: something changed while you were deciding, so you are asked again."
+          }
+        }
+      }
+    },
+    "approvals_run_asked_again": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Asked again. This item's settings or its recorded program changed while you were deciding. Check the details again."
+          }
+        }
+      }
+    },
+    "approvals_proxy_asked_again": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Asked again. This item's API settings changed while you were deciding. Check the details again."
+          }
+        }
+      }
+    },
+    "approvals_run_program_not_allowed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Approved, but this item no longer allows that program, so nothing was done."
+          }
+        }
+      }
+    },
+    "approvals_run_env_not_allowed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Approved, but this program may no longer receive those variables, so nothing was done."
+          }
+        }
+      }
+    },
+    "approvals_run_cwd_not_allowed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Approved, but that folder or file is no longer allowed for this item, so nothing was done."
+          }
+        }
+      }
+    },
+    "approvals_run_not_found": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Approved, but the item or its field is gone, so the program was not run."
+          }
+        }
+      }
+    },
+    "approvals_proxy_not_found": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Approved, but the item or its field is gone, so the key was not sent."
+          }
+        }
+      }
+    },
+    "approvals_way_forbidden": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Approved, but your vault refused it, so nothing was done. %@ may no longer have a permission that covers it, may be paused, or this request was asked again too many times."
+          }
+        }
+      }
+    },
+    "approvals_way_expired": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This request expired, so nothing was done."
+          }
+        }
+      }
+    },
+    "approvals_run_arguments_count": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld argument"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld arguments"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "approvals_run_variables_count": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld variable"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld variables"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "approvals_way_bytes": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld byte"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld bytes"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "approvals_way_seconds": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld second"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld seconds"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "approvals_duration_minutes": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld minute"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld minutes"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "approvals_duration_hours": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld hour"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld hours"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "approvals_string_empty": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "(empty)"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

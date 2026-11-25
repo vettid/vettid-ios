@@ -48,9 +48,9 @@ public final class ApprovalsManager: ApprovalsRepository {
     /// The items with their fields' labels, to resolve what an agent's request is about (AA5: nothing is approved that the
     /// list cannot name); empty when not read.
     @ObservationIgnored let itemCache: @MainActor () -> [ItemSummary]
-    /// AA8 "Fail closed": whether a run of [itemID] with a `cwd` and no `member_folder` may be approved for [agentID], from the
-    /// item's settings read now (``ItemWaysRules/runCwdAllowed(_:)``). Any failure is no.
-    @ObservationIgnored let runCwdAllowed: @MainActor (_ agentID: String, _ itemID: String) async -> Bool
+    /// The item's settings for an agent and an item, read now (`leash.item.list`): a run's `cwd` rule (AA8 "Fail closed") and the
+    /// recorded fingerprint after an approval. Throws when the read fails.
+    @ObservationIgnored let itemWaysRead: @MainActor (_ agentID: String, _ itemID: String) async throws -> ItemWaysRead?
     /// Bumped whenever what was read from the open vault is dropped: a list read before is not published.
     @ObservationIgnored var generation = 0
     /// Counts the approvals that arrived or left (decided here or on another device), and when each did: a list read
@@ -152,12 +152,12 @@ public final class ApprovalsManager: ApprovalsRepository {
         now: @escaping @Sendable () -> Date = { Date() },
         itemNames: @escaping @MainActor () -> [String: ShareItem] = { [:] },
         itemCache: @escaping @MainActor () -> [ItemSummary] = { [] },
-        runCwdAllowed: @escaping @MainActor (_ agentID: String, _ itemID: String) async -> Bool = { _, _ in false },
+        itemWaysRead: @escaping @MainActor (_ agentID: String, _ itemID: String) async throws -> ItemWaysRead? = { _, _ in nil },
         held: @escaping @MainActor () -> Bool = { false }
     ) {
         self.itemNames = itemNames
         self.itemCache = itemCache
-        self.runCwdAllowed = runCwdAllowed
+        self.itemWaysRead = itemWaysRead
         sessionBook.held = held
         self.connections = connections
         self.ops = ops

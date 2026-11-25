@@ -79,13 +79,14 @@ extension AgentApprovalsFlowTests {
     // MARK: - What changes while the session is opened (the gate)
 
     /// Runs one approval of `h1` (a use) that waits at the gate while [change] happens, and returns how it ended.
+    /// [body] and [top] the approval (a use by default).
     func atTheGate(
-        clock: TestClock? = nil, stillShown: @escaping @MainActor () -> Bool = { true },
+        _ body: String? = nil, top: String = "", clock: TestClock? = nil, stillShown: @escaping @MainActor () -> Bool = { true },
         _ change: (ApprovalsManager, GateMark) throws -> Void
     ) async throws -> FailureKind? {
         let gate = TestDeferred<Void>(), mark = GateMark()
-        let m = manager(gate: gate, atGate: mark, clock: clock)
-        m.onEvent(event(held("h1", use)))
+        let m = manager(cwd: { _, _ in true }, gate: gate, atGate: mark, clock: clock)
+        m.onEvent(event(held("h1", body ?? use, top: top)))
         let shown = try request(m, "h1")
         let generation = m.forgetCount
         let task = Task { try await m.approveDeviceRequest(shown, generation: generation, stillShown: stillShown) }
@@ -122,15 +123,26 @@ extension AgentApprovalsFlowTests {
         #expect(try await atTheGate { _, mark in mark.cache = Self.cache } == nil)
     }
 
+    /// The approvals the gate tests are run for: a use, a run, a run with a `cwd`, a proxy.
+    var gateBodies: [(body: String?, top: String)] {
+        let cwd = runBody().replacingOccurrences(of: #""how":"env""#, with: #""cwd":"/home/me","how":"env""#)
+        return [(nil, ""), (runBody(), ""), (cwd, ""), (Self.proxyBody, Self.proxyNote)]
+    }
+
     @Test func anApprovalThatExpiresAtTheGateIsNotSent() async throws {
-        let clock = TestClock(Int64(now.timeIntervalSince1970 * 1000))
-        #expect(try await atTheGate(clock: clock) { _, _ in clock.advance(601_000) } == .notFound)
+        for (body, top) in gateBodies {
+            let clock = TestClock(Int64(now.timeIntervalSince1970 * 1000))
+            #expect(try await atTheGate(body, top: top, clock: clock) { _, _ in clock.advance(601_000) } == .notFound, Comment(rawValue: body ?? "use"))
+        }
         #expect(ops.calls.isEmpty)
     }
 
     @Test func anApprovalMarkedDifferentOrReplacedAtTheGateIsNotSent() async throws {
-        #expect(try await atTheGate { m, _ in m.mismatched.insert("device:approval.pending:h1") } == .requestChanged)
-        #expect(try await atTheGate { m, _ in m.replaced.insert("device:approval.pending:h1") } == .notFound)
+        for (body, top) in gateBodies {
+            let c = Comment(rawValue: body ?? "use")
+            #expect(try await atTheGate(body, top: top) { m, _ in m.mismatched.insert("device:approval.pending:h1") } == .requestChanged, c)
+            #expect(try await atTheGate(body, top: top) { m, _ in m.replaced.insert("device:approval.pending:h1") } == .notFound, c)
+        }
         #expect(ops.calls.isEmpty)
     }
 
@@ -149,6 +161,88 @@ extension AgentApprovalsFlowTests {
         #expect(try await atTheGate(stillShown: { still }) { _, _ in still = false } == .requestChanged)
         #expect(ops.calls.isEmpty)
     }
+
+    /// The gate judges a run and a proxy (and a run's `cwd` rule, read after the session opens) as it judges a use: a lock, the
+    /// item leaving the list, a screen that no longer shows it as it did, all send nothing; unchanged, it is sent.
+    @Test func aRunOrAProxyIsJudgedAtTheGateAsAUseIs() async throws {
+        let cwd = runBody().replacingOccurrences(of: #""how":"env""#, with: #""cwd":"/home/me","how":"env""#)
+        struct Way { var name, body, top: String }
+        let ways = [Way(name: "run", body: runBody(), top: ""), Way(name: "run with a cwd", body: cwd, top: ""), Way(name: "proxy", body: Self.proxyBody, top: Self.proxyNote)]
+        for way in ways {
+            let (name, body, top) = (way.name, way.body, way.top)
+            let c = Comment(rawValue: name)
+            #expect(try await atTheGate(body, top: top) { m, _ in m.forgetOpenVault() } == .notFound, c)
+            #expect(try await atTheGate(body, top: top) { m, _ in
+                m.forgetOpenVault()
+                m.onEvent(event(held("h1", body, top: top)))
+            } == .requestChanged, c)
+            #expect(try await atTheGate(body, top: top) { _, mark in mark.cache = [] } == .requestChanged, c)
+            var still = true
+            #expect(try await atTheGate(body, top: top, stillShown: { still }) { _, _ in still = false } == .requestChanged, c)
+            #expect(ops.calls.isEmpty, c)
+            #expect(try await atTheGate(body, top: top) { _, _ in } == nil, c)
+            ops.calls = []
+        }
+    }
+
+    /// What changes while a run's cwd rule is being read (after the session opens) is judged at the gate too: the read is before
+    /// the gate's last check, and nothing waits between that check and the send.
+    @Test func whatChangesWhileTheCwdRuleIsReadIsNotSent() async throws {
+        let cwd = runBody().replacingOccurrences(of: #""how":"env""#, with: #""cwd":"/home/me","how":"env""#)
+        for change in ["lock", "item", "screen"] {
+            let box = GateBox(), mark = GateMark()
+            let m = manager(read: { a, i in
+                switch change {
+                case "lock": box.manager?.forgetOpenVault()
+                case "item": mark.cache = []
+                default: box.still = false
+                }
+                return try Self.settings(folders: false, agent: a, item: i)
+            }, atGate: mark)
+            box.manager = m
+            m.onEvent(event(held("h1", cwd)))
+            let shown = try request(m, "h1")
+            do {
+                _ = try await m.approveDeviceRequest(shown, generation: m.forgetCount, stillShown: { box.still })
+                Issue.record("\(change): sent")
+            } catch let f as VaultFailure {
+                #expect(f.kind == (change == "lock" ? .notFound : .requestChanged), Comment(rawValue: change))
+            }
+        }
+        #expect(ops.calls.isEmpty)
+    }
+
+    /// A lock while the session opens makes the cwd rule's read fail too: the approval is gone ("no longer waiting"), not a `cwd`
+    /// that is not allowed.
+    @Test func aLockWhileTheSessionOpensOnARunWithACwdIsGone() async throws {
+        let cwd = runBody().replacingOccurrences(of: #""how":"env""#, with: #""cwd":"/home/me","how":"env""#)
+        let gate = TestDeferred<Void>(), mark = GateMark(), box = GateBox()
+        let m = manager(read: { a, i in
+            // The vault is locked: the settings cannot be read.
+            if box.manager?.forgetCount != 0 { throw VaultFailure(.network) }
+            return try Self.settings(folders: false, agent: a, item: i)
+        }, gate: gate, atGate: mark)
+        box.manager = m
+        m.onEvent(event(held("h1", cwd)))
+        let shown = try request(m, "h1")
+        let task = Task { try await m.approveDeviceRequest(shown, generation: m.forgetCount, stillShown: { true }) }
+        for _ in 0..<100 where !mark.reached { await Task.yield() }
+        m.forgetOpenVault()
+        gate.complete(())
+        do {
+            _ = try await task.value
+            Issue.record("sent")
+        } catch let f as VaultFailure {
+            #expect(f.kind == .notFound)
+        }
+        #expect(ops.calls.isEmpty)
+    }
+}
+
+/// What a test's settings read changes in the manager it belongs to.
+@MainActor final class GateBox {
+    var manager: ApprovalsManager?
+    var still = true
 }
 
 // swiftlint:enable line_length
