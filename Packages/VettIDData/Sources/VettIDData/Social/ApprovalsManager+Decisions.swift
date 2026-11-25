@@ -207,10 +207,11 @@ extension ApprovalsManager {
             try await decide(key) { o in
                 // A run with a `cwd` and no `member_folder` only when the item's settings, read now for the request's own agent and
                 // item, carry `run` without `folders` (AA8): read here, after `ops()` and before the last check, which has no
-                // `await` between it and the send.
-                if case .itemRun(let run)? = d.held, run.hasCwd,
-                   await self.runCwdRule(agentID: d.deviceID ?? "", itemID: run.itemID) != true {
-                    throw VaultFailure(.notSupported)
+                // `await` between it and the send. Its answer is judged after that check, so a request that is gone or changed
+                // meanwhile says so, not that its `cwd` is not allowed.
+                var cwdAllowed = true
+                if case .itemRun(let run)? = d.held, run.hasCwd {
+                    cwdAllowed = await self.runCwdRule(agentID: d.deviceID ?? "", itemID: run.itemID) == true
                 }
                 // `ops()` and that read may have waited, and an event, a list read, a lock or the item list may have changed the
                 // approval since the checks: judged again here, with no `await` between this and the send.
@@ -221,6 +222,7 @@ extension ApprovalsManager {
                 guard generation == self.forgetCount, now.sameContent(as: shown), !self.mismatched.contains(key),
                       !self.replaced.contains(key), let held = now.held, held.approvable,
                       HeldApprovals.nameable(held, self.itemCache()), stillShown() else { throw VaultFailure(.requestChanged) }
+                guard cwdAllowed else { throw VaultFailure(.notSupported) }
                 result = try await o.approvalDecide(d.id, approve: true)
             }
         } catch let f as VaultFailure where goneAtSend && f.kind == .requestChanged {

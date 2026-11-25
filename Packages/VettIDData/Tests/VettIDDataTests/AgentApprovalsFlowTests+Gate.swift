@@ -173,6 +173,65 @@ extension AgentApprovalsFlowTests {
             ops.calls = []
         }
     }
+
+    /// What changes while a run's cwd rule is being read (after the session opens) is judged at the gate too: the read is before
+    /// the gate's last check, and nothing waits between that check and the send.
+    @Test func whatChangesWhileTheCwdRuleIsReadIsNotSent() async throws {
+        let cwd = runBody().replacingOccurrences(of: #""how":"env""#, with: #""cwd":"/home/me","how":"env""#)
+        for change in ["lock", "item", "screen"] {
+            let box = GateBox(), mark = GateMark()
+            let m = manager(read: { a, i in
+                switch change {
+                case "lock": box.manager?.forgetOpenVault()
+                case "item": mark.cache = []
+                default: box.still = false
+                }
+                return try Self.settings(folders: false, agent: a, item: i)
+            }, atGate: mark)
+            box.manager = m
+            m.onEvent(event(held("h1", cwd)))
+            let shown = try request(m, "h1")
+            do {
+                _ = try await m.approveDeviceRequest(shown, generation: m.forgetCount, stillShown: { box.still })
+                Issue.record("\(change): sent")
+            } catch let f as VaultFailure {
+                #expect(f.kind == (change == "lock" ? .notFound : .requestChanged), Comment(rawValue: change))
+            }
+        }
+        #expect(ops.calls.isEmpty)
+    }
+
+    /// A lock while the session opens makes the cwd rule's read fail too: the approval is gone ("no longer waiting"), not a `cwd`
+    /// that is not allowed.
+    @Test func aLockWhileTheSessionOpensOnARunWithACwdIsGone() async throws {
+        let cwd = runBody().replacingOccurrences(of: #""how":"env""#, with: #""cwd":"/home/me","how":"env""#)
+        let gate = TestDeferred<Void>(), mark = GateMark(), box = GateBox()
+        let m = manager(read: { a, i in
+            // The vault is locked: the settings cannot be read.
+            if box.manager?.forgetCount != 0 { throw VaultFailure(.network) }
+            return try Self.settings(folders: false, agent: a, item: i)
+        }, gate: gate, atGate: mark)
+        box.manager = m
+        m.onEvent(event(held("h1", cwd)))
+        let shown = try request(m, "h1")
+        let task = Task { try await m.approveDeviceRequest(shown, generation: m.forgetCount, stillShown: { true }) }
+        for _ in 0..<100 where !mark.reached { await Task.yield() }
+        m.forgetOpenVault()
+        gate.complete(())
+        do {
+            _ = try await task.value
+            Issue.record("sent")
+        } catch let f as VaultFailure {
+            #expect(f.kind == .notFound)
+        }
+        #expect(ops.calls.isEmpty)
+    }
+}
+
+/// What a test's settings read changes in the manager it belongs to.
+@MainActor final class GateBox {
+    var manager: ApprovalsManager?
+    var still = true
 }
 
 // swiftlint:enable line_length
