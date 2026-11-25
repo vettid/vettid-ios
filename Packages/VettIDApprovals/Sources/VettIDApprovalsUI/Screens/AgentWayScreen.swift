@@ -88,6 +88,7 @@ struct AgentWayScreen: View {
             // The text lines give way to the scroll area; the buttons never do.
             ScrollView {
                 VStack(alignment: .leading, spacing: Spacing.s) {
+                    cwdLine
                     if let error = state.error {
                         let text = ApprovalTexts.failure(error, retryUntil: state.retryUntil, limit: state.limit, now: now)
                         WayLine(text: text, warning: true).announcedOnce(text, .assertive).accessibilityIdentifier("failure")
@@ -114,6 +115,16 @@ struct AgentWayScreen: View {
     }
 
     private var hint: some View { WayLine(text: ApprovalsStrings.wayScrollHint).accessibilityIdentifier("agent_way_hint") }
+
+    /// Why a run with a `cwd` is Deny only for now (AA8 "Fail closed"), with Try again when its rule could not be read.
+    @ViewBuilder private var cwdLine: some View {
+        if let check = state.cwdCheck, let text = ApprovalTexts.cwdLine(check) {
+            WayLine(text: text).accessibilityIdentifier("agent_way_cwd")
+            if check == .failed {
+                NoticeAction(label: ApprovalsStrings.retry, identifier: "agent_way_cwd_retry") { actions.onRetryCwd() }
+            }
+        }
+    }
 
     /// The least height the scrolled content keeps (AA8, at the largest Dynamic Type size).
     static let minScroll: CGFloat = 120

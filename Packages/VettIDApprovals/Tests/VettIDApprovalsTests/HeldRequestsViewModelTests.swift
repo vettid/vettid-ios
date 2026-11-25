@@ -345,7 +345,8 @@ import VettIDDataTesting
 
     // MARK: - A run and a proxy (AA8)
 
-    static let quick: [Duration] = [.milliseconds(1), .milliseconds(1), .milliseconds(1)]
+    /// Two waits: three reads.
+    static let quick: [Duration] = [.milliseconds(1), .milliseconds(1)]
 
     @Test func aRunIsApprovedFromItsScreenAndSaysWhatTheVaultAnswered() async {
         fake.listed = [Self.held(.itemRun(Self.run(flags: [.programUnrecorded])))]
@@ -391,31 +392,53 @@ import VettIDDataTesting
     }
 
     /// AA8 "Fail closed": a `cwd` without `member_folder` is Deny only until the item's settings, read for the run's own agent and
-    /// item, allow it; three failed reads end Deny only.
+    /// item, allow it; the run's own screen shows meanwhile, saying its rule is being checked.
     @Test func aRunWithACwdIsDenyOnlyUntilTheSettingsAllowIt() async {
-        fake.listed = [Self.held(.itemRun(Self.run(cwd: "/home/me")))]
+        let run = Self.run(cwd: "/home/me")
+        fake.listed = [Self.held(.itemRun(run))]
         fake.cwdRuleQueue = [nil, nil, true]
         let m = ApprovalDetailViewModel(key: Self.key, approvals: fake, connections: connections, vault: items, cwdWaits: Self.quick)
-        #expect(m.state.heldShow == .other && !m.state.canApprove(), "unanswered: deny only")
+        #expect(m.state.heldShow == .run(run, item: "GitHub", field: "Token") && m.state.cwdCheck == .checking && !m.state.canApprove(), "its own screen, deny only")
         for _ in 0..<200 where m.state.cwdAllowed == nil { try? await Task.sleep(for: .milliseconds(10)) }
-        #expect(m.state.cwdAllowed == true && m.state.canApprove() && fake.cwdReads == 3)
+        #expect(m.state.cwdAllowed == true && m.state.cwdCheck == nil && m.state.canApprove() && fake.cwdReads == 3)
     }
 
-    @Test func aRunWithACwdStaysDenyOnlyAfterThreeFailedReadsOrWithFolders() async {
-        fake.listed = [Self.held(.itemRun(Self.run(cwd: "/home/me")))]
+    /// Three failed reads: the run's screen says it cannot be checked yet, with Try again, and no wait after the last read; Try
+    /// again and an unlock read again. With `folders` it is Deny only, on its own screen.
+    @Test func aRunWithACwdWhoseRuleCannotBeReadOffersTryAgain() async {
+        let run = Self.run(cwd: "/home/me")
+        fake.listed = [Self.held(.itemRun(run))]
         fake.cwdRule = nil
-        let failing = ApprovalDetailViewModel(key: Self.key, approvals: fake, connections: connections, vault: items, cwdWaits: Self.quick)
+        let waits: [Duration] = [.milliseconds(1), .milliseconds(1)]
+        let failing = ApprovalDetailViewModel(key: Self.key, approvals: fake, connections: connections, vault: items, cwdWaits: waits)
+        for _ in 0..<200 where !failing.state.cwdFailed { try? await Task.sleep(for: .milliseconds(10)) }
+        #expect(failing.state.cwdCheck == .failed && !failing.state.canApprove() && fake.cwdReads == 3 && failing.state.heldShow == .run(run, item: "GitHub", field: "Token"))
+        // Try again.
+        fake.cwdRuleQueue = [true]
+        failing.retryCwdRule()
         for _ in 0..<200 where failing.state.cwdAllowed == nil { try? await Task.sleep(for: .milliseconds(10)) }
-        #expect(failing.state.cwdAllowed == false && !failing.state.canApprove() && fake.cwdReads == 3)
+        #expect(failing.state.cwdCheck == nil && failing.state.canApprove() && fake.cwdReads == 4)
+        failing.retryCwdRule()
+        #expect(fake.cwdReads == 4, "nothing to retry once read")
+        // An unlock: the approval held again reads a failed rule again.
+        let locked = ApprovalDetailViewModel(key: Self.key, approvals: fake, connections: connections, vault: items, cwdWaits: waits)
+        for _ in 0..<200 where !locked.state.cwdFailed { try? await Task.sleep(for: .milliseconds(10)) }
+        let before = fake.cwdReads
+        fake.cwdRule = true
+        fake.forgetOpenVault()
+        fake.listed = [Self.held(.itemRun(run))]
+        for _ in 0..<200 where locked.state.cwdAllowed == nil { try? await Task.sleep(for: .milliseconds(10)) }
+        #expect(locked.state.cwdAllowed == true && fake.cwdReads == before + 1)
+        // Folders: Deny only, on its own screen.
         fake.cwdRule = false
         let folders = await model()
         for _ in 0..<200 where folders.state.cwdAllowed == nil { try? await Task.sleep(for: .milliseconds(10)) }
-        #expect(folders.state.cwdAllowed == false && folders.state.heldShow == .other)
+        #expect(folders.state.cwdCheck == .notAllowed && !folders.state.canApprove() && folders.state.heldShow == .run(run, item: "GitHub", field: "Token"))
         // A run without a cwd never reads.
         let reads = fake.cwdReads
         fake.listed = [Self.held(.itemRun(Self.run()))]
         let plain = await model()
-        #expect(plain.state.canApprove() && fake.cwdReads == reads)
+        #expect(plain.state.canApprove() && plain.state.cwdCheck == nil && fake.cwdReads == reads)
     }
 
     /// The rule holds only for the agent and the item it was read for.
@@ -426,8 +449,42 @@ import VettIDDataTesting
         #expect(m.state.canApprove() && m.state.cwdReadFor == CwdReadFor(agentID: "A", itemID: "i1"))
         for other in [CwdReadFor(agentID: "B", itemID: "i1"), CwdReadFor(agentID: "A", itemID: "i2")] {
             m.local.cwdReadFor = other
-            #expect(m.state.heldShow == .other && !m.state.canApprove(), "\(other)")
+            #expect(m.state.cwdCheck != nil && !m.state.canApprove(), "\(other)")
         }
+    }
+
+    /// "Already decided" stays so after `exp` passes: only a request still held at its `exp` expired (AA8 "Refused or expired").
+    @Test func aRequestDecidedElsewhereBeforeItsExpDidNotExpire() async {
+        let exp = Date().addingTimeInterval(300)
+        var d = DeviceRequest(type: "approval.pending", id: "h1", deviceName: "Bot", role: "agent", requestType: "agent.request", receivedAt: Samples.t0, exp: exp, deviceID: "A", held: .itemRun(Self.run()))
+        fake.listed = [.device(d)]
+        let m = await model()
+        #expect(m.state.leftAt == nil && m.state.endedByExpiry(at: exp.addingTimeInterval(1)), "held at its exp: it expires")
+        fake.listed = []
+        await m.settle()
+        #expect(m.state.gone && m.state.leftAt != nil && !m.state.endedByExpiry(at: exp.addingTimeInterval(60)), "gone before exp: not expired")
+        // Held until its `exp`: expired.
+        d.id = "h2"
+        let held = ApprovalDetailState(key: "device:approval.pending:h2")
+        var s = held
+        s.approval = .device(d)
+        #expect(s.endedByExpiry(at: exp.addingTimeInterval(1)) && !s.endedByExpiry(at: exp.addingTimeInterval(-1)))
+        s.leftAt = exp.addingTimeInterval(5)
+        #expect(s.endedByExpiry(at: exp.addingTimeInterval(10)), "dropped after its exp")
+    }
+
+    /// "Approved" is said at once; that the fingerprint is recorded comes when the read answers.
+    @Test func approvedIsSaidBeforeThePinIsRead() async {
+        fake.listed = [Self.held(.itemRun(Self.run(flags: [.programUnrecorded])))]
+        fake.recorded = true
+        fake.pinHold = TestDeferred<Void>()
+        let m = await model()
+        m.approve(held: m.shownHeld())
+        for _ in 0..<200 where m.state.outcome == nil { await Task.yield() }
+        #expect(m.state.outcome == .approved(result: "ok", way: .run, pinRecorded: false, item: "GitHub"), "at once")
+        fake.pinHold?.complete(())
+        await m.settle()
+        #expect(m.state.outcome == .approved(result: "ok", way: .run, pinRecorded: true, item: "GitHub"))
     }
 
     @Test func aRunListedAfterTheScreenOpenedReadsItsRuleThen() async {

@@ -2933,6 +2933,28 @@
         }
       }
     },
+    "approvals_run_cwd_checking": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Checking where this may run…"
+          }
+        }
+      }
+    },
+    "approvals_run_cwd_unchecked": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This can't be shown yet. Try again."
+          }
+        }
+      }
+    },
     "approvals_run_runs_in": {
       "extractionState": "manual",
       "localizations": {

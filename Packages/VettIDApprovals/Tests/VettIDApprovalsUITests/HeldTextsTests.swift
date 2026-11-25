@@ -31,17 +31,11 @@ import Testing
         #expect(ApprovalTexts.title(a, held: .noItem(use: false, loading: true)) == "\(bot) wants to see Loading…")
         #expect(ApprovalTexts.body(a, name: nil, held: .noItem(use: false, loading: false)) == "This phone can't find that item or field any more, so you can only deny the request.")
         #expect(ApprovalTexts.body(a, name: nil, held: .noItem(use: false, loading: true)) == "Loading…")
-        #expect(ApprovalTexts.title(a, held: .later(item: "GitHub", loading: false)) == "\(bot) wants to use \(iso("GitHub")) in a way this version of VettID can't show")
-        #expect(ApprovalTexts.title(a, held: .later(item: nil, loading: false)) == "\(bot) wants to use an item you no longer have in a way this version of VettID can't show")
-        #expect(ApprovalTexts.body(a, name: nil, held: .later(item: nil, loading: false)) == "Update VettID to see the details. Until then you can only deny it.")
         #expect(ApprovalTexts.title(a, held: .other) == "\(bot) asks to approve a request" && ApprovalTexts.title(a, held: .desktop) == "\(bot) asks to approve a request")
         #expect(ApprovalTexts.body(a, name: nil, held: .desktop) == "Desktop requests can't be shown in this version of VettID, so you can only deny them.")
         #expect(ApprovalTexts.body(a, name: nil, held: .other) == "This version of VettID can't show this request, so you can only deny it.")
         // The item list could not be read: neither "an item you no longer have" nor "Loading…".
         #expect(ApprovalTexts.title(a, held: .itemsUnread) == ApprovalTexts.title(a, held: .other))
-        // A run or a proxy whose item a failed read cannot name: no item in its title, its own body.
-        #expect(ApprovalTexts.title(a, held: .laterUnread) == ApprovalTexts.title(a, held: .other) && !ApprovalTexts.title(a, held: .laterUnread).contains("no longer have"))
-        #expect(ApprovalTexts.body(a, name: nil, held: .laterUnread) == "Update VettID to see the details. Until then you can only deny it.")
         #expect(ApprovalTexts.body(a, name: nil, held: .itemsUnread) == "Your items could not be read, so this phone can't say what the request is about. Until they are read, you can only deny it.")
     }
 

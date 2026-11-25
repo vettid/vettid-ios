@@ -129,12 +129,8 @@ enum ApprovalTexts {
         case .noItem(let use, let loading):
             let item = loading ? ApprovalsStrings.loading : ApprovalsStrings.heldNoItem
             return use ? ApprovalsStrings.heldUseTitle(who, item) : ApprovalsStrings.heldGetTitle(who, item)
-        case .later(let item, let loading):
-            return ApprovalsStrings.heldLaterTitle(
-                who, item.map { AccountNames.isolate($0) } ?? (loading ? ApprovalsStrings.loading : ApprovalsStrings.heldNoItem)
-            )
         // What it is about cannot be named (the item list could not be read): said without an item.
-        case .desktop, .other, .itemsUnread, .laterUnread: return ApprovalsStrings.heldOtherTitle(who)
+        case .desktop, .other, .itemsUnread: return ApprovalsStrings.heldOtherTitle(who)
         }
     }
 
@@ -146,7 +142,6 @@ enum ApprovalTexts {
         case .get, .run, .proxy: nil
         case .catalog: ApprovalsStrings.heldCatalogBody
         case .noItem(_, let loading): loading ? ApprovalsStrings.loading : ApprovalsStrings.heldNoItemBody
-        case .later, .laterUnread: ApprovalsStrings.heldLaterBody
         case .itemsUnread: ApprovalsStrings.heldItemsUnreadBody
         case .desktop: ApprovalsStrings.heldDesktopBody
         case .other: ApprovalsStrings.heldOtherBody
@@ -172,6 +167,16 @@ enum ApprovalTexts {
     /// A held request's row line: "Agent · Waiting for 4 more minutes".
     static func heldSupporting(_ d: DeviceRequest, now: Date) -> String {
         [kindWord(d), waitingText(d.exp, now: now)].compactMap { $0 }.joined(separator: " · ")
+    }
+
+    /// Why a run with a `cwd` is Deny only for now (``CwdCheck``): its rule is being read, could not be read, or does not allow it
+    /// (the item's settings carry folders, which this version does not show: the line for what it cannot show).
+    static func cwdLine(_ check: CwdCheck) -> String? {
+        switch check {
+        case .checking: ApprovalsStrings.runCwdChecking
+        case .failed: ApprovalsStrings.runCwdUnchecked
+        case .notAllowed: ApprovalsStrings.heldOtherBody
+        }
     }
 
     /// How a decision on a held request ended, as the screen says it (AA5 "Answers to `approval.decide`", AA8 "Refused or expired").

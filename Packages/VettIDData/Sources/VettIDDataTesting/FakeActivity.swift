@@ -271,7 +271,13 @@ public final class FakeApprovals: ApprovalsRepository {
         return cwdRuleQueue.isEmpty ? cwdRule : cwdRuleQueue.removeFirst()
     }
 
-    public func programRecorded(agentID: String, itemID: String, program: String, sha256: String) async -> Bool { recorded }
+    /// When set, ``programRecorded(agentID:itemID:program:sha256:)`` waits for it before it answers.
+    public var pinHold: TestDeferred<Void>?
+
+    public func programRecorded(agentID: String, itemID: String, program: String, sha256: String) async -> Bool {
+        if let pinHold { _ = try? await pinHold.value() }
+        return recorded
+    }
 
     /// The sessions' ends, by device; a test sets them and ``deviceSessionsKnown`` (or lets ``readDeviceSessions()`` set it).
     public var deviceSessions: [String: Date] = [:] {

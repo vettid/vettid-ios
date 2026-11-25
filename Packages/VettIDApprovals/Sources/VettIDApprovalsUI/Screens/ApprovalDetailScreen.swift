@@ -38,6 +38,8 @@ public struct DecisionActions {
     public var onRetryDocument: @MainActor () -> Void = {}
     /// The item list could not be read: read it again (``ApprovalDetailState/offersItemsRetry``).
     public var onRetryItems: @MainActor () -> Void = {}
+    /// A run's cwd rule could not be read: read it again (``ApprovalDetailState/cwdCheck``).
+    public var onRetryCwd: @MainActor () -> Void = {}
     /// The whole of the document of that hash, in that generation, has been on screen.
     public var onDocumentShownWhole: @MainActor (String, Int) -> Void = { _, _ in }
 
@@ -215,7 +217,7 @@ public struct ApprovalDetailScreen: View {
 
     /// The run or proxy that ended by its `exp`: gone from the list, not decided here, `exp` passed.
     func expiredWay(at now: Date) -> (DeviceRequest, HeldShow)? {
-        guard state.gone, state.outcome == nil, state.expired(at: now), case .device(let d)? = state.approval, let way = wayShow
+        guard state.gone, state.outcome == nil, state.endedByExpiry(at: now), case .device(let d)? = state.approval, let way = wayShow
         else { return nil }
         return (d, way)
     }

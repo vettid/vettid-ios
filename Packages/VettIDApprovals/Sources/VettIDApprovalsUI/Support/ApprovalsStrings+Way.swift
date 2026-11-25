@@ -55,6 +55,13 @@ extension ApprovalsStrings {
         )
     }
 
+    // (chosen; not in the spec), for the owner's approval: a run's `cwd` line while its rule is read, and after every read failed.
+    static var runCwdChecking: String {
+        String(localized: "approvals_run_cwd_checking", defaultValue: "Checking where this may run…", bundle: .module)
+    }
+    static var runCwdUnchecked: String {
+        String(localized: "approvals_run_cwd_unchecked", defaultValue: "This can't be shown yet. Try again.", bundle: .module)
+    }
     static var runRunsIn: String { String(localized: "approvals_run_runs_in", defaultValue: "Runs in", bundle: .module) }
     static var runNewFolder: String {
         String(
