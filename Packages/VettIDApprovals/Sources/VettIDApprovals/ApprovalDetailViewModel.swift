@@ -193,7 +193,8 @@ public struct ApprovalDetailState: Equatable, Sendable, CustomStringConvertible,
         return switch approval {
         case nil: false
         // An agent's held request: only what is shown in full, once the item list says what it is about (AA5, AA8).
-        case .device?: itemsRead == .read && heldShow?.approvable == true
+        // A catalog names no item: approved without the list (``HeldApprovals/nameable(_:_:)`` holds for it whatever the list).
+        case .device?: heldShow?.approvable == true && (itemsRead == .read || heldShow == .catalog)
         case .grant?: !grantIndexes.isEmpty
         // 0.10.3: only once the safety code is known, and only once per member.
         case .connection(.incoming(let r))?: r.state == .pending

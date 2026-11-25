@@ -39,6 +39,9 @@ import Testing
         #expect(ApprovalTexts.body(a, name: nil, held: .other) == "This version of VettID can't show this request, so you can only deny it.")
         // The item list could not be read: neither "an item you no longer have" nor "Loading…".
         #expect(ApprovalTexts.title(a, held: .itemsUnread) == ApprovalTexts.title(a, held: .other))
+        // A run or a proxy whose item a failed read cannot name: no item in its title, its own body.
+        #expect(ApprovalTexts.title(a, held: .laterUnread) == ApprovalTexts.title(a, held: .other) && !ApprovalTexts.title(a, held: .laterUnread).contains("no longer have"))
+        #expect(ApprovalTexts.body(a, name: nil, held: .laterUnread) == "Update VettID to see the details. Until then you can only deny it.")
         #expect(ApprovalTexts.body(a, name: nil, held: .itemsUnread) == "Your items could not be read, so this phone can't say what the request is about. Until they are read, you can only deny it.")
     }
 

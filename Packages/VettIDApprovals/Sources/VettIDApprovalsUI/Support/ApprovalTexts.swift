@@ -130,7 +130,7 @@ enum ApprovalTexts {
                 who, item.map { AccountNames.isolate($0) } ?? (loading ? ApprovalsStrings.loading : ApprovalsStrings.heldNoItem)
             )
         // What it is about cannot be named (the item list could not be read): said without an item.
-        case .desktop, .other, .itemsUnread: return ApprovalsStrings.heldOtherTitle(who)
+        case .desktop, .other, .itemsUnread, .laterUnread: return ApprovalsStrings.heldOtherTitle(who)
         }
     }
 
@@ -141,7 +141,7 @@ enum ApprovalTexts {
         case .get: nil
         case .catalog: ApprovalsStrings.heldCatalogBody
         case .noItem(_, let loading): loading ? ApprovalsStrings.loading : ApprovalsStrings.heldNoItemBody
-        case .later: ApprovalsStrings.heldLaterBody
+        case .later, .laterUnread: ApprovalsStrings.heldLaterBody
         case .itemsUnread: ApprovalsStrings.heldItemsUnreadBody
         case .desktop: ApprovalsStrings.heldDesktopBody
         case .other: ApprovalsStrings.heldOtherBody

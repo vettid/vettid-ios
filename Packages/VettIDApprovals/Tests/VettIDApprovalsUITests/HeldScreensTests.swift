@@ -96,7 +96,8 @@ import VettIDApprovals
     @Test func approveIsOfferedOnlyWhereTheAppCanApprove() {
         #expect(state(.catalog).canApprove() && state(.itemGet(itemID: "i1", fieldIDs: ["f1"])).canApprove())
         #expect(!state(.unshown).canApprove() && !state(.desktopStepUp).canApprove() && !state(.itemUse(itemID: "i9", fieldID: "f1", data: [1])).canApprove())
-        #expect(!state(.catalog, loaded: false).canApprove())
+        // Only what names items waits for the list; a catalog names none.
+        #expect(!state(.itemGet(itemID: "i1", fieldIDs: ["f1"]), loaded: false).canApprove() && state(.catalog, loaded: false).canApprove())
     }
 }
 

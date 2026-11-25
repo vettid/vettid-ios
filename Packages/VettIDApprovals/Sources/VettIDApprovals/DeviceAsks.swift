@@ -18,6 +18,9 @@ public enum HeldShow: Equatable, Sendable, CustomStringConvertible {
     /// The item list could not be read, so what the request is about cannot be named, nor said to be gone: deny only until a
     /// read answers.
     case itemsUnread
+    /// A run or a proxy whose item the list does not name, after a failed read: said without an item (it is not known to be
+    /// gone), deny only as ``later(item:loading:)``.
+    case laterUnread
     case desktop
     case other
 
@@ -63,9 +66,9 @@ public enum ItemsRead: Equatable, Sendable {
 public enum DeviceAsks {
     /// What [d], an `approval.pending`, shows, given the item list. [read]: how far the list has been read. Only once it has been
     /// read is what it cannot name "an item you no longer have": until then "Loading…". After a failed read, a use or a reveal
-    /// (what names an item and its fields) is ``HeldShow/itemsUnread``, so the screen says why Approve is off; a run, a proxy
-    /// and a catalog keep what they show (a run and a proxy are deny only whatever is read; a catalog names no item), with
-    /// Approve off until a read.
+    /// (what names an item and its fields) is ``HeldShow/itemsUnread``, so the screen says why Approve is off; a run and a proxy
+    /// keep what they show (deny only whatever is read), without an item they cannot name (``HeldShow/laterUnread``); a catalog
+    /// names no item and needs no list (``ApprovalDetailState/canApprove(at:)``).
     public static func show(_ d: DeviceRequest, items: [ItemSummary], read: ItemsRead = .read) -> HeldShow {
         let shown = showLoaded(d, items)
         switch (shown, read) {
@@ -73,6 +76,7 @@ public enum DeviceAsks {
         case (.noItem(let use, _), .reading): return .noItem(use: use, loading: true)
         case (.later(nil, _), .reading): return .later(item: nil, loading: true)
         case (.use, .failed), (.get, .failed), (.noItem, .failed): return .itemsUnread
+        case (.later(nil, _), .failed): return .laterUnread
         default: return shown
         }
     }

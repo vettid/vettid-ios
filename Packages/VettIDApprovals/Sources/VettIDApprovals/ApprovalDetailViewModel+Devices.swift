@@ -31,7 +31,7 @@ extension ApprovalDetailViewModel {
             guard let self else { return false }
             let s = state
             guard case .device(let now)? = s.approval else { return false }
-            return now.sameContent(as: d) && s.itemsRead == .read && s.heldShow == shown.show
+            return now.sameContent(as: d) && (s.itemsRead == .read || shown.show == .catalog) && s.heldShow == shown.show
         }
         decideHeld(key: PendingApproval.device(d).key, generation: shown.generation) { [repo] _ in
             let r = try await repo.approveDeviceRequest(d, generation: shown.generation, stillShown: still).result

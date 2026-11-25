@@ -64,7 +64,7 @@ import VettIDDataTesting
         #expect(show(Self.get, read: .failed, in: []) == .itemsUnread && !show(Self.get, read: .failed, in: []).approvable, "not read: not said to be gone")
         #expect(show(Self.get, read: .failed) == .itemsUnread, "a failed re-read says why Approve is off")
         #expect(show(.itemUse(itemID: "i1", fieldID: "f1", data: [1]), read: .failed) == .itemsUnread && show(.itemUse(itemID: "i9", fieldID: "f1", data: [1]), read: .failed) == .itemsUnread)
-        // A catalog names no item; it keeps its own text (Approve stays off until a read, ``ApprovalDetailState/canApprove(at:)``).
+        // A catalog names no item; it keeps its own text, and needs no list (``ApprovalDetailState/canApprove(at:)``).
         #expect(show(.catalog, read: .failed) == .catalog && show(.unshown, read: .failed) == .other && show(.desktopStepUp, read: .failed) == .desktop)
         #expect(!show(Self.get, in: []).approvable)
         // An item whose name cleans to nothing is not named.
@@ -82,7 +82,8 @@ import VettIDDataTesting
         // A run and a proxy are deny only whatever is read: they keep their own text after a failed read.
         #expect(show(.itemRun(run), read: .failed) == .later(item: "GitHub", loading: false))
         #expect(show(.itemProxy(proxy), read: .failed) == .later(item: "GitHub", loading: false))
-        #expect(show(.itemRun(run), read: .failed, in: []) == .later(item: nil, loading: false))
+        #expect(show(.itemRun(run), read: .failed, in: []) == .laterUnread, "not said to be an item you no longer have")
+        #expect(show(.itemProxy(proxy), read: .failed, in: []) == .laterUnread && !HeldShow.laterUnread.approvable)
     }
 
     @Test func aRevealIsApprovedFromItsScreenAndTheAnswerIsSaidBeforeItCloses() async {
@@ -223,16 +224,25 @@ import VettIDDataTesting
     }
 
     /// A catalog, a run and a proxy say nothing of the items after a failed read; a catalog's Approve is off until a read.
+    /// After a failed read a run and a proxy keep their text, deny only; a catalog, which names no item, is approved without the
+    /// list (it is not about one item, so "your items could not be read" would not say why).
     @Test func aFailedReadLeavesACatalogRunAndProxyTheirOwnTexts() async {
         let run = ItemRun(itemID: "i1", fieldID: "f1", program: "/bin/x", sha256: Self.sha, argv: ["x"], cwd: nil, how: .env, name: "T", env: [], flags: [], previousSha256: nil, previousPath: nil, replaces: nil)
         let proxy = ItemProxy(itemID: "i1", fieldID: "f1", host: "api.example.com", header: "Authorization", prefix: "Bearer ", seconds: 900, replaces: nil)
-        for (h, show) in [(HeldApproval.catalog, HeldShow.catalog), (.itemRun(run), .later(item: "GitHub", loading: false)), (.itemProxy(proxy), .later(item: "GitHub", loading: false))] {
+        for (h, show) in [(HeldApproval.itemRun(run), HeldShow.later(item: "GitHub", loading: false)), (.itemProxy(proxy), .later(item: "GitHub", loading: false))] {
             fake.listed = [Self.held(h)]
             items.load = .loaded
             let m = await model()
             items.load = .failed
             #expect(m.state.heldShow == show && !m.state.canApprove() && !m.state.offersItemsRetry, "\(show)")
         }
+        fake.listed = [Self.held(.catalog)]
+        let m = await model()
+        items.load = .failed
+        #expect(m.state.heldShow == .catalog && m.state.canApprove() && !m.state.offersItemsRetry)
+        m.approve(held: m.shownHeld())
+        await m.settle()
+        #expect(fake.calls == ["approveDeviceRequest:\(Self.key)"] && m.state.outcome == .approved(result: "ok"))
     }
 
     /// A list that could not be read is read again when the screen opens, and on Try again; nothing else reads it.
