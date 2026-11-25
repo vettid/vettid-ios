@@ -34,6 +34,10 @@ import Testing
         #expect(ApprovalTexts.title(a, held: .other) == "\(bot) asks to approve a request" && ApprovalTexts.title(a, held: .desktop) == "\(bot) asks to approve a request")
         #expect(ApprovalTexts.body(a, name: nil, held: .desktop) == "Desktop requests can't be shown in this version of VettID, so you can only deny them.")
         #expect(ApprovalTexts.body(a, name: nil, held: .other) == "This version of VettID can't show this request, so you can only deny it.")
+        // A run with a `cwd` waiting on its rule (chosen; not in the spec, for the owner's approval), and one whose settings carry
+        // folders.
+        #expect(ApprovalTexts.cwdLine(.checking) == "Checking where this may run…" && ApprovalTexts.cwdLine(.failed) == "This can't be shown yet. Try again.")
+        #expect(ApprovalTexts.cwdLine(.notAllowed) == "This version of VettID can't show this request, so you can only deny it.")
         // The item list could not be read: neither "an item you no longer have" nor "Loading…".
         #expect(ApprovalTexts.title(a, held: .itemsUnread) == ApprovalTexts.title(a, held: .other))
         #expect(ApprovalTexts.body(a, name: nil, held: .itemsUnread) == "Your items could not be read, so this phone can't say what the request is about. Until they are read, you can only deny it.")
