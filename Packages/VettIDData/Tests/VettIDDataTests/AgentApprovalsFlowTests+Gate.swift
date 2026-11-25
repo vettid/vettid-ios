@@ -123,15 +123,26 @@ extension AgentApprovalsFlowTests {
         #expect(try await atTheGate { _, mark in mark.cache = Self.cache } == nil)
     }
 
+    /// The approvals the gate tests are run for: a use, a run, a run with a `cwd`, a proxy.
+    var gateBodies: [(body: String?, top: String)] {
+        let cwd = runBody().replacingOccurrences(of: #""how":"env""#, with: #""cwd":"/home/me","how":"env""#)
+        return [(nil, ""), (runBody(), ""), (cwd, ""), (Self.proxyBody, Self.proxyNote)]
+    }
+
     @Test func anApprovalThatExpiresAtTheGateIsNotSent() async throws {
-        let clock = TestClock(Int64(now.timeIntervalSince1970 * 1000))
-        #expect(try await atTheGate(clock: clock) { _, _ in clock.advance(601_000) } == .notFound)
+        for (body, top) in gateBodies {
+            let clock = TestClock(Int64(now.timeIntervalSince1970 * 1000))
+            #expect(try await atTheGate(body, top: top, clock: clock) { _, _ in clock.advance(601_000) } == .notFound, Comment(rawValue: body ?? "use"))
+        }
         #expect(ops.calls.isEmpty)
     }
 
     @Test func anApprovalMarkedDifferentOrReplacedAtTheGateIsNotSent() async throws {
-        #expect(try await atTheGate { m, _ in m.mismatched.insert("device:approval.pending:h1") } == .requestChanged)
-        #expect(try await atTheGate { m, _ in m.replaced.insert("device:approval.pending:h1") } == .notFound)
+        for (body, top) in gateBodies {
+            let c = Comment(rawValue: body ?? "use")
+            #expect(try await atTheGate(body, top: top) { m, _ in m.mismatched.insert("device:approval.pending:h1") } == .requestChanged, c)
+            #expect(try await atTheGate(body, top: top) { m, _ in m.replaced.insert("device:approval.pending:h1") } == .notFound, c)
+        }
         #expect(ops.calls.isEmpty)
     }
 

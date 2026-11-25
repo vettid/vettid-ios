@@ -54,7 +54,6 @@ extension AgentApprovalsFlowTests {
             ("another agent", { _, i in try Self.settings(folders: false, agent: "B", item: i) }),
             ("another item", { a, _ in try Self.settings(folders: false, agent: a, item: "i2") }),
             ("no settings", { _, _ in nil }),
-            ("failed", { _, _ in throw VaultFailure(.network) }),
         ]
         for (name, read) in reads {
             let m = manager(read: read)
@@ -70,16 +69,35 @@ extension AgentApprovalsFlowTests {
         #expect(await manager(read: { _, _ in throw VaultFailure(.network) }).runCwdRule(agentID: "A", itemID: "i1") == nil, "failed: nil, to retry")
     }
 
+    /// A read of the cwd rule that fails at the send is not "not supported": it says the rule could not be checked (the read's own
+    /// failure, to try again), and never reads as the approval's own end or change.
+    @Test func aFailedCwdReadAtTheSendSaysItCouldNotBeChecked() async throws {
+        let failures: [(VaultFailure, FailureKind)] = [
+            (VaultFailure(.network), .network), (VaultFailure(.noResponse), .noResponse), (VaultFailure(.notFound), .other),
+            (VaultFailure(.notSupported), .other), (VaultFailure(.requestChanged), .other),
+        ]
+        for (failure, kind) in failures {
+            let m = manager(read: { _, _ in throw failure })
+            m.onEvent(event(held("h1", withCwd)))
+            do { _ = try await approve(m, "h1"); Issue.record("approved") } catch let f as VaultFailure {
+                #expect(f.kind == kind, Comment(rawValue: "\(failure.kind)"))
+            }
+            #expect(keys(m) == ["device:approval.pending:h1"], "the approval stays, to try again")
+        }
+        #expect(ops.calls.isEmpty)
+    }
+
     /// The cwd rule is judged after the session is open, with the item's settings of that moment.
     @Test func theSettingsAreReadAfterTheSessionIsOpenedAndJudgedAtTheSend() async throws {
-        let gate = TestDeferred<Void>()
+        let gate = TestDeferred<Void>(), mark = GateMark()
         let allow = Allow()
         allow.allowed = true
-        let m = manager(read: { a, i in try Self.settings(folders: !allow.allowed, agent: a, item: i) }, gate: gate)
+        let m = manager(read: { a, i in try Self.settings(folders: !allow.allowed, agent: a, item: i) }, gate: gate, atGate: mark)
         m.onEvent(event(held("h1", withCwd)))
         let shown = try request(m, "h1")
         let task = Task { try await m.approveDeviceRequest(shown, generation: m.forgetCount, stillShown: { true }) }
-        await Task.yield()
+        for _ in 0..<100 where !mark.reached { await Task.yield() }
+        #expect(mark.reached)
         allow.allowed = false
         gate.complete(())
         await #expect(throws: VaultFailure.self) { try await task.value }
@@ -100,6 +118,7 @@ extension AgentApprovalsFlowTests {
         #expect(await recorded { _, _ in ways(rec) })
         #expect(await !recorded { _, _ in ways(other) }, "another path, or another fingerprint")
         #expect(await !recorded { _, _ in ways(rec, foreign: true) })
+        #expect(await !manager(read: { _, _ in ways(rec) }).programRecorded(agentID: "A", itemID: "i2", program: "/usr/bin/git", sha256: sha), "another item")
         #expect(await !recorded { _, _ in throw VaultFailure(.network) })
     }
 
@@ -199,12 +218,13 @@ extension AgentApprovalsFlowTests {
             #expect(ops.calls.isEmpty, Comment(rawValue: change))
         }
         // Unchanged: sent once the session is open.
-        let gate = TestDeferred<Void>()
-        let m = manager(gate: gate)
+        let gate = TestDeferred<Void>(), mark = GateMark()
+        let m = manager(gate: gate, atGate: mark)
         m.onEvent(event(held("h1", use)))
         let shown = try request(m, "h1")
         let task = Task { try await m.approveDeviceRequest(shown, generation: m.forgetCount, stillShown: { true }) }
-        await Task.yield()
+        for _ in 0..<100 where !mark.reached { await Task.yield() }
+        #expect(mark.reached)
         gate.complete(())
         _ = try await task.value
         #expect(ops.calls == ["approvalDecide:h1:true"])
