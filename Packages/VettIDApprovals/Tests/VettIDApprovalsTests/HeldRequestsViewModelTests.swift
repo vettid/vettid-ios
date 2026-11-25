@@ -418,6 +418,18 @@ import VettIDDataTesting
         #expect(plain.state.canApprove() && fake.cwdReads == reads)
     }
 
+    /// The rule holds only for the agent and the item it was read for.
+    @Test func aCwdRuleReadForAnotherAgentOrItemIsNotTheRunsRule() async {
+        fake.listed = [Self.held(.itemRun(Self.run(cwd: "/home/me")))]
+        let m = ApprovalDetailViewModel(key: Self.key, approvals: fake, connections: connections, vault: items, cwdWaits: Self.quick)
+        for _ in 0..<200 where m.state.cwdAllowed == nil { try? await Task.sleep(for: .milliseconds(10)) }
+        #expect(m.state.canApprove() && m.state.cwdReadFor == CwdReadFor(agentID: "A", itemID: "i1"))
+        for other in [CwdReadFor(agentID: "B", itemID: "i1"), CwdReadFor(agentID: "A", itemID: "i2")] {
+            m.local.cwdReadFor = other
+            #expect(m.state.heldShow == .other && !m.state.canApprove(), "\(other)")
+        }
+    }
+
     @Test func aRunListedAfterTheScreenOpenedReadsItsRuleThen() async {
         let m = await model()
         #expect(m.state.approval == nil)

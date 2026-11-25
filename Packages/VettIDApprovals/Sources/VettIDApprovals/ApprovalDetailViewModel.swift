@@ -141,9 +141,10 @@ public struct ApprovalDetailState: Equatable, Sendable, CustomStringConvertible,
     /// How a decision on a request an agent holds ended: said, with OK, before the screen closes.
     public var outcome: DeviceOutcome?
 
-    /// AA8 "Fail closed": whether the item's settings, read for the run's own agent and item, allow its `cwd` (it has no
-    /// `member_folder`); nil until that read answers. A run with a `cwd` is Deny only until it is true.
+    /// AA8 "Fail closed": whether the item's settings, read for [cwdReadFor] (the run's own agent and item), allow its `cwd` (it
+    /// has no `member_folder`); nil until that read answers. A run with a `cwd` is Deny only until it is true for its own.
     public var cwdAllowed: Bool?
+    public var cwdReadFor: CwdReadFor?
 
     public init(key: String) { self.key = key }
 
@@ -226,8 +227,7 @@ public final class ApprovalDetailViewModel {
     /// The item list's ``ItemsRepository/cleared`` when it was last seen read: a later read does not turn a request's item back
     /// into "Loading…" or switch Approve off, unless the list was dropped (a lock) since. A failed read is not a read.
     @ObservationIgnored private var itemsReadAt: Int?
-    /// The cwd rule's read was started (once per screen), and the wait after each failed read: there are as many reads as waits
-    /// (AA8). Tests shorten them.
+    /// The cwd rule's read was started (once per screen), and the wait after each failed read (as many reads as waits; AA8).
     @ObservationIgnored var cwdRead = false
     @ObservationIgnored let cwdWaits: [Duration]
     /// The screen's own state (``state`` adds what the repositories hold); the document's part is kept by

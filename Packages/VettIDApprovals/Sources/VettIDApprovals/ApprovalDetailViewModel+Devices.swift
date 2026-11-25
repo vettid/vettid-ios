@@ -65,6 +65,7 @@ extension ApprovalDetailViewModel {
         work.launch { [weak self] in
             for wait in waits {
                 if let ok = await repo.runCwdRule(agentID: agent, itemID: run.itemID) {
+                    self?.local.cwdReadFor = CwdReadFor(agentID: agent, itemID: run.itemID)
                     self?.local.cwdAllowed = ok
                     return
                 }
@@ -162,7 +163,19 @@ extension ApprovalDetailState {
         guard case .device(let d)? = approval, DeviceAsks.isHeld(d) else { return nil }
         let shown = DeviceAsks.show(d, items: heldItems, read: itemsRead)
         // A run's `cwd` without `member_folder` is shown only once the item's settings allow it (AA8).
-        if case .run(let r, _, _) = shown, r.hasCwd, cwdAllowed != true { return .other }
+        if case .run(let r, _, _) = shown, r.hasCwd,
+           cwdAllowed != true || cwdReadFor?.matches(agentID: d.deviceID ?? "", itemID: r.itemID) != true { return .other }
         return shown
+    }
+}
+
+/// The agent and the item a run's cwd rule was read for (AA8 "Fail closed").
+public struct CwdReadFor: Equatable, Sendable {
+    public var agentID: String
+    public var itemID: String
+
+    /// Whether it was read for [agentID] and [itemID], as bytes.
+    public func matches(agentID: String, itemID: String) -> Bool {
+        self.agentID.sameBytes(agentID) && self.itemID.sameBytes(itemID)
     }
 }
