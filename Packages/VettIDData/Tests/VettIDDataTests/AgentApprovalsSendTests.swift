@@ -78,7 +78,7 @@ extension AgentApprovalsFlowTests {
         let m = manager(read: { a, i in try Self.settings(folders: !allow.allowed, agent: a, item: i) }, gate: gate)
         m.onEvent(event(held("h1", withCwd)))
         let shown = try request(m, "h1")
-        let task = Task { try await m.approveDeviceRequest(shown) }
+        let task = Task { try await m.approveDeviceRequest(shown, generation: m.forgetCount, stillShown: { true }) }
         await Task.yield()
         allow.allowed = false
         gate.complete(())
@@ -166,7 +166,7 @@ extension AgentApprovalsFlowTests {
     @Test func aSessionRequestIsNotApprovedHere() async throws {
         let m = manager()
         m.onEvent(VaultMessage(inner: Inner(id: Ulid.new(), type: "device.session.pending", ts: now, body: Array(#"{"request_id":"s1","device_id":"A","role":"agent","name":"Bot","seconds":900,"exp":"\#(exp)"}"#.utf8))))
-        await #expect(throws: VaultFailure.self) { try await m.approveDeviceRequest(DeviceRequest(type: "device.session.pending", id: "s1", receivedAt: now)) }
+        await #expect(throws: VaultFailure.self) { try await m.approveDeviceRequest(DeviceRequest(type: "device.session.pending", id: "s1", receivedAt: now), generation: m.forgetCount, stillShown: { true }) }
         #expect(ops.calls.isEmpty)
     }
 
@@ -179,7 +179,7 @@ extension AgentApprovalsFlowTests {
             let m = manager(gate: gate, atGate: mark)
             m.onEvent(event(held("h1", use)))
             let shown = try request(m, "h1")
-            let task = Task { try await m.approveDeviceRequest(shown) }
+            let task = Task { try await m.approveDeviceRequest(shown, generation: m.forgetCount, stillShown: { true }) }
             // The approval waits at the gate, past every check made before the session opens.
             for _ in 0..<100 where !mark.reached { await Task.yield() }
             #expect(mark.reached, Comment(rawValue: change))
@@ -193,7 +193,8 @@ extension AgentApprovalsFlowTests {
                 _ = try await task.value
                 Issue.record("\(change): sent")
             } catch let f as VaultFailure {
-                #expect(f.kind == .notSupported, Comment(rawValue: change))
+                // Another request in its place is one that changed; one replaced is no longer waiting.
+                #expect(f.kind == (change == "differs" ? .requestChanged : .notFound), Comment(rawValue: change))
             }
             #expect(ops.calls.isEmpty, Comment(rawValue: change))
         }
@@ -202,14 +203,15 @@ extension AgentApprovalsFlowTests {
         let m = manager(gate: gate)
         m.onEvent(event(held("h1", use)))
         let shown = try request(m, "h1")
-        let task = Task { try await m.approveDeviceRequest(shown) }
+        let task = Task { try await m.approveDeviceRequest(shown, generation: m.forgetCount, stillShown: { true }) }
         await Task.yield()
         gate.complete(())
         _ = try await task.value
         #expect(ops.calls == ["approvalDecide:h1:true"])
     }
 
-    /// Only the request the member was shown: another `exp`, name, item or time of arrival is not approved.
+    /// Only the request the member was shown: another `exp`, name or item is not approved; another time of arrival (the same
+    /// `approval.pending` delivered again) is the same request.
     @Test func onlyTheRequestThatWasShownIsApproved() async throws {
         let m = manager()
         m.onEvent(event(held("h1", use)))
@@ -222,16 +224,20 @@ extension AgentApprovalsFlowTests {
         other.held = .itemUse(itemID: "i1", fieldID: "f2", data: [0, 1, 2])
         var came = shown
         came.receivedAt = shown.receivedAt.addingTimeInterval(5)
-        for stale in [later, renamed, other, came] {
+        for stale in [later, renamed, other] {
             do {
-                _ = try await m.approveDeviceRequest(stale)
+                _ = try await m.approveDeviceRequest(stale, generation: m.forgetCount, stillShown: { true })
                 Issue.record("approved a request that was not shown")
             } catch let f as VaultFailure {
-                #expect(f.kind == .notSupported)
+                #expect(f.kind == .requestChanged)
             }
         }
+        // Nor one shown before a lock, nor one whose screen no longer shows it as it did.
+        for (generation, still) in [(m.forgetCount + 1, true), (m.forgetCount, false)] {
+            await #expect(throws: VaultFailure.self) { try await m.approveDeviceRequest(shown, generation: generation, stillShown: { still }) }
+        }
         #expect(ops.calls.isEmpty)
-        _ = try await m.approveDeviceRequest(shown)
+        _ = try await m.approveDeviceRequest(came, generation: m.forgetCount, stillShown: { true })
         #expect(ops.calls == ["approvalDecide:h1:true"])
     }
 
@@ -250,7 +256,7 @@ extension AgentApprovalsFlowTests {
                 let m = manager(gate: gate, atGate: mark)
                 m.onEvent(event(held("h1", body, top: top)))
                 let shown = try request(m, "h1")
-                let task = Task { try await m.approveDeviceRequest(shown) }
+                let task = Task { try await m.approveDeviceRequest(shown, generation: m.forgetCount, stillShown: { true }) }
                 for _ in 0..<100 where !mark.reached { await Task.yield() }
                 #expect(mark.reached, Comment(rawValue: "\(name) \(change)"))
                 if change == "differs" {
@@ -264,7 +270,7 @@ extension AgentApprovalsFlowTests {
                     _ = try await task.value
                     Issue.record("\(name) \(change): sent")
                 } catch let f as VaultFailure {
-                    #expect(f.kind == .notSupported, Comment(rawValue: "\(name) \(change)"))
+                    #expect(f.kind == (change == "differs" ? .requestChanged : .notFound), Comment(rawValue: "\(name) \(change)"))
                 }
                 #expect(ops.calls.isEmpty, Comment(rawValue: "\(name) \(change)"))
             }
@@ -286,7 +292,7 @@ extension AgentApprovalsFlowTests {
             proxy.held = .itemProxy(p)
         }
         for stale in [run, proxy] {
-            await #expect(throws: VaultFailure.self) { try await m.approveDeviceRequest(stale) }
+            await #expect(throws: VaultFailure.self) { try await m.approveDeviceRequest(stale, generation: m.forgetCount, stillShown: { true }) }
         }
         #expect(ops.calls.isEmpty)
     }

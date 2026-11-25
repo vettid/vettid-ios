@@ -40,16 +40,17 @@ import VettIDDataTesting
     func manager(
         cache: [ItemSummary] = cache, cwd: @escaping @MainActor (String, String) async -> Bool = { _, _ in false },
         read: (@MainActor (String, String) async throws -> ItemWaysRead?)? = nil, gate: TestDeferred<Void>? = nil,
-        atGate: GateMark? = nil
+        atGate: GateMark? = nil, clock: TestClock? = nil
     ) -> ApprovalsManager {
         let ops = ops, connOps = connOps, now = now
         let c = ConnectionsManager(ops: { connOps }, now: { now })
-        // [gate]: opening the vault's session takes a while (`memberApi` opens one), and `decide` awaits it.
+        // [gate]: opening the vault's session takes a while (`memberApi` opens one), and `decide` awaits it. [atGate]'s cache,
+        // when set, is the item list from then on; [clock], when set, is the time.
         return ApprovalsManager(
             connections: c, ops: {
                 if let gate { atGate?.reached = true; try await gate.value() }
                 return ops
-            }, now: { now }, itemCache: { cache },
+            }, now: { clock?.date ?? now }, itemCache: { atGate?.cache ?? cache },
             itemWaysRead: read ?? { agent, item in try Self.settings(folders: !(await cwd(agent, item)), agent: agent, item: item) }
         )
     }
@@ -84,7 +85,7 @@ import VettIDDataTesting
     /// Approves what the list shows for [id], or, for one it does not show, a bare request of that id (what a screen kept).
     func approve(_ m: ApprovalsManager, _ id: String) async throws -> DeviceDecision {
         let shown = (try? request(m, id)) ?? DeviceRequest(type: "approval.pending", id: id, receivedAt: now)
-        return try await m.approveDeviceRequest(shown)
+        return try await m.approveDeviceRequest(shown, generation: m.forgetCount, stillShown: { true })
     }
 
     func keys(_ m: ApprovalsManager) -> [String] { m.approvals.map(\.key).sorted() }
@@ -385,4 +386,6 @@ import VettIDDataTesting
 /// Set when an approval reaches the test's gate, that is, when `decide` awaits the vault's session.
 @MainActor final class GateMark {
     var reached = false
+    /// The item list from now on, when set.
+    var cache: [ItemSummary]?
 }

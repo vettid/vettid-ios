@@ -220,6 +220,15 @@ public struct DeviceRequest: Equatable, Sendable {
             && a.deviceID.sameBytes(b.deviceID) && a.held == b.held && a.replaces.sameBytes(b.replaces)
     }
 
+    /// Whether [other] is this request as the member reads it: every member ``==`` compares, as bytes, except ``receivedAt``,
+    /// which is this phone's stamp and changes when the vault delivers the same `approval.pending` again (VAULT-MESSAGING
+    /// §6.8). The check of an approval against the request its screen showed.
+    public func sameContent(as other: DeviceRequest) -> Bool {
+        var o = other
+        o.receivedAt = receivedAt
+        return self == o
+    }
+
     /// Whether [other] asks the same as this one, as the AA8 check of a `pending.list` entry against the event kept for the same
     /// `approval_id` needs it: what it asks, its role, type, name, device and `replaces`, as bytes. (The times are not compared:
     /// the list does not say when the event was received.)

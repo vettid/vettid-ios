@@ -42,17 +42,17 @@ public enum AgentApprovals {
     /// The members that change what approving means: on an `item.use` or a `catalog` none of them may appear (AA8).
     private static let meaningful = ["flags", "previous_sha256", "previous_path", "replaces", "proxy", "folders"]
 
-    /// An `item.use`'s or a `catalog`'s envelope, read strictly (so no duplicate member): none of the members that change what
-    /// approving means. Another unknown member is ignored, as §6.8 step 1 says for these types.
+    /// An `item.use`'s or a `catalog`'s envelope, read strictly (so no duplicate member): named (``named(_:)``), and none of the
+    /// members that change what approving means. Another unknown member is ignored, as §6.8 step 1 says for these types.
     static func plainShown(_ p: JsonObject) -> Bool {
-        guard case .object? = p["body"] else { return false }
+        guard named(p), case .object? = p["body"] else { return false }
         return !meaningful.contains { p.has($0) }
     }
 
-    /// An `item.get`'s envelope: known members only, no `proxy` or `replaces`, and `flags` at most `history`. The body's
-    /// members are not judged.
+    /// An `item.get`'s envelope: named (``named(_:)``), known members only, no `proxy` or `replaces`, and `flags` at most
+    /// `history`. The body's members are not judged.
     static func getShown(_ p: JsonObject) -> Bool {
-        guard case .object? = p["body"], let flags = flags(p) else { return false }
+        guard named(p), case .object? = p["body"], let flags = flags(p) else { return false }
         return envelope(p, allowProxy: false, allowReplaces: false) && flags.allSatisfy { $0 == "history" } && noRunMembers(p)
     }
 
@@ -132,9 +132,11 @@ public enum AgentApprovals {
         ))
     }
 
-    /// A run or a proxy names its device and itself and has a time to end: a non-empty string `device_id` and `name`, and an `exp`
+    /// Every agent op names its device and itself and has a time to end: a non-empty string `device_id` and `name`, and an `exp`
     /// that reads as a time. The screen says who asks and for how long it waits, and the approval expires at `exp`; without
-    /// them it would show "an agent" that never expires, so it is deny only (AA8 "Fail closed").
+    /// them it would show "an agent" that never expires, so it is deny only: for a run and a proxy as AA8 "Fail closed" says;
+    /// for a use, a reveal and a catalog (chosen; not in the spec, and accepted by the owner: stricter than vettid-android,
+    /// which does not check it).
     private static func named(_ p: JsonObject) -> Bool {
         guard let device = str(p, "device_id"), !device.isEmpty, let name = str(p, "name"), !name.isEmpty else { return false }
         return ApprovalParser.instant(str(p, "exp")) != nil

@@ -2623,6 +2623,17 @@
         }
       }
     },
+    "approvals_held_items_unread_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your items could not be read, so this phone can't say what the request is about. Until they are read, you can only deny it."
+          }
+        }
+      }
+    },
     "approvals_held_approved": {
       "extractionState": "manual",
       "localizations": {

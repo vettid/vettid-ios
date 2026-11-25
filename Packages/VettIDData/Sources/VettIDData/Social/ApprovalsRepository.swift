@@ -116,12 +116,17 @@ public protocol ApprovalsRepository: ConnectionRequestsRepository {
 
     /// Declines a desktop's or agent's request (§6.8), by its ``PendingApproval/key``.
     func declineDeviceRequest(_ key: String) async throws
-    /// Approves the request [shown] an agent holds for approval (`approval.decide{approve: true}`, §6.8): only if the request listed
-    /// now is that one, byte for byte, and only what the app shows in full (AA5, AA8): ``FailureKind/notSupported``, nothing sent, for anything else, for an
-    /// item or field the item list cannot name, and for a run whose `cwd` the item's settings, read now, do not allow;
-    /// ``FailureKind/notFound`` for one that is gone. The vault's `result` is the answer; a request referred again
-    /// (`referred`) leaves, the new one comes as a new approval.
-    func approveDeviceRequest(_ shown: DeviceRequest) async throws -> DeviceDecision
+    /// Approves the request [shown] an agent holds for approval (`approval.decide{approve: true}`, §6.8): only if the request
+    /// listed now is that one, byte for byte (its time of arrival aside), the approvals were not dropped since [generation] (the
+    /// ``forgetCount`` when the screen showed it), and [stillShown] says the screen still shows what it showed; judged again just
+    /// before the send. Only what the app shows in full (AA5, AA8), and a run with a `cwd` only when the item's settings, read
+    /// once the session is open, allow it. Nothing is sent otherwise: ``FailureKind/requestChanged`` for a request, or an item
+    /// list, that changed since it was shown; ``FailureKind/notSupported`` for what this version does not approve (an op it
+    /// cannot show, a run whose `cwd` the settings do not allow); ``FailureKind/notFound`` for one that is gone. The vault's
+    /// `result` is the answer; a request referred again (`referred`) leaves, the new one comes as a new approval.
+    func approveDeviceRequest(
+        _ shown: DeviceRequest, generation: Int, stillShown: @escaping @MainActor () -> Bool
+    ) async throws -> DeviceDecision
     /// AA8 "Fail closed": whether a run of [itemID] with a `cwd` and no `member_folder` may be approved for [agentID], from the
     /// item's settings read now: only when they carry `run` without `folders`. nil: the read failed (a retry may answer).
     func runCwdRule(agentID: String, itemID: String) async -> Bool?

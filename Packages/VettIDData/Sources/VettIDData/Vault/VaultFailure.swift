@@ -145,6 +145,9 @@ public enum FailureKind: Hashable, Sendable, CaseIterable {
     /// (VAULT-MESSAGING 0.43.0 §11.10.9) The vault's instance (or a transfer bundle) carries a time scale this build does
     /// not accept (a production build and any value other than 1): treated as malformed, nothing was sent.
     case timeScale
+    /// (chosen; not in the spec) An approval this phone refused to send, with nothing sent: the request, or what the screen
+    /// showed of it, changed between the moment it was shown and the tap (VAULT-MESSAGING §6.8). The member reads it again.
+    case requestChanged
 
     // Vault error codes the app did not map (IOS-PLAN §4.4; ANDROID-PLAN 0.1.57, 0.1.58).
 
@@ -173,8 +176,8 @@ public enum FailureKind: Hashable, Sendable, CaseIterable {
             .ownerCheckRequired, .rejected, .signerRefused, .clock, .noVault, .localState, .eraseFailed, .deviceSecret,
             .transferIncomplete, .moveNotFinished, .busy, .retry, .counterUnavailable, .storedMismatch, .weakPassword, .hardwareKeys,
             .appleUnreachable, .phoneLocked, .unconfirmedChanges, .responseTooLarge, .changeUnresolved, .changeChecking,
-            .changeCheckingPassword, .credentialUnsettled, .pinUncertain, .renewUnconfirmed, .timeScale, .credentialRequired,
-            .notHolder, .vaultCode(VaultFailures.unknownCode), .other,
+            .changeCheckingPassword, .credentialUnsettled, .pinUncertain, .renewUnconfirmed, .timeScale, .requestChanged,
+            .credentialRequired, .notHolder, .vaultCode(VaultFailures.unknownCode), .other,
         ]
     }
 }

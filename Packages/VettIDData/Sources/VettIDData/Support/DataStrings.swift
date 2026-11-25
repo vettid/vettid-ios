@@ -466,3 +466,14 @@ enum DataStrings {
     /// An integer with the locale's digit grouping (Android's `%,d`).
     static func grouped(_ n: Int64) -> String { n.formatted(.number.grouping(.automatic)) }
 }
+
+// The approvals' own failure (``FailureKind/requestChanged``).
+extension DataStrings {
+    static var failureRequestChanged: String {
+        String(
+            localized: "data_failure_request_changed",
+            defaultValue: "This request changed while you were reading it. Read it again before you answer.",
+            bundle: .module
+        )
+    }
+}

@@ -27,6 +27,7 @@ public extension FailureKind {
         case .credentialFrozen: DataStrings.failureFrozen
         case .rotationRequired: DataStrings.failureRotationRequired
         case .notSupported: DataStrings.failureNotSupported
+        case .requestChanged: DataStrings.failureRequestChanged
         case .noResponse: DataStrings.failureNoResponse
         case .vaultExists: DataStrings.failureVaultExists
         case .attestation: DataStrings.failureAttestation
@@ -135,6 +136,7 @@ public extension FailureKind {
         case .credentialFrozen: "data_failure_frozen"
         case .rotationRequired: "data_failure_rotation_required"
         case .notSupported: "data_failure_not_supported"
+        case .requestChanged: "data_failure_request_changed"
         case .noResponse: "data_failure_no_response"
         case .vaultExists: "data_failure_vault_exists"
         case .attestation: "data_failure_attestation"

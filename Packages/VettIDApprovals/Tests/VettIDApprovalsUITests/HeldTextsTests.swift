@@ -37,6 +37,12 @@ import Testing
         #expect(ApprovalTexts.title(a, held: .other) == "\(bot) asks to approve a request" && ApprovalTexts.title(a, held: .desktop) == "\(bot) asks to approve a request")
         #expect(ApprovalTexts.body(a, name: nil, held: .desktop) == "Desktop requests can't be shown in this version of VettID, so you can only deny them.")
         #expect(ApprovalTexts.body(a, name: nil, held: .other) == "This version of VettID can't show this request, so you can only deny it.")
+        // The item list could not be read: neither "an item you no longer have" nor "Loading…".
+        #expect(ApprovalTexts.title(a, held: .itemsUnread) == ApprovalTexts.title(a, held: .other))
+        // A run or a proxy whose item a failed read cannot name: no item in its title, its own body.
+        #expect(ApprovalTexts.title(a, held: .laterUnread) == ApprovalTexts.title(a, held: .other) && !ApprovalTexts.title(a, held: .laterUnread).contains("no longer have"))
+        #expect(ApprovalTexts.body(a, name: nil, held: .laterUnread) == "Update VettID to see the details. Until then you can only deny it.")
+        #expect(ApprovalTexts.body(a, name: nil, held: .itemsUnread) == "Your items could not be read, so this phone can't say what the request is about. Until they are read, you can only deny it.")
     }
 
     @Test func aRequestWithoutANameIsNamedByItsKind() {
@@ -61,7 +67,7 @@ import Testing
         let who = "Bot"
         func say(_ o: DeviceOutcome) -> String { ApprovalTexts.outcome(o, who: who) }
         #expect(say(.denied) == "Denied" && say(.noLongerWaiting) == "This request is no longer waiting.")
-        #expect(say(.approved(result: "ok")) == "Approved" && say(.approved(result: "not_found")) == "This request is no longer waiting.")
+        #expect(say(.approved(result: "ok")) == "Approved" && say(.approved(result: "not_found")) == "Approved, but your vault answered: \(iso("not_found")).", "a result, not the error")
         #expect(say(.approved(result: nil)) == "Your vault didn't say whether it was done.")
         #expect(say(.approved(result: "forbidden")) == "Approved, but Bot no longer has a permission that covers it, or is paused, so nothing was done.")
         #expect(say(.approved(result: "session_required")) == "Approved, but Bot's access ended first, so nothing was done." && say(.approved(result: "denied")) == say(.approved(result: "session_required")))

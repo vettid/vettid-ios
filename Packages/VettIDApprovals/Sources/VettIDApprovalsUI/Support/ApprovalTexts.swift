@@ -133,7 +133,8 @@ enum ApprovalTexts {
             return ApprovalsStrings.heldLaterTitle(
                 who, item.map { AccountNames.isolate($0) } ?? (loading ? ApprovalsStrings.loading : ApprovalsStrings.heldNoItem)
             )
-        case .desktop, .other: return ApprovalsStrings.heldOtherTitle(who)
+        // What it is about cannot be named (the item list could not be read): said without an item.
+        case .desktop, .other, .itemsUnread, .laterUnread: return ApprovalsStrings.heldOtherTitle(who)
         }
     }
 
@@ -145,7 +146,8 @@ enum ApprovalTexts {
         case .get, .run, .proxy: nil
         case .catalog: ApprovalsStrings.heldCatalogBody
         case .noItem(_, let loading): loading ? ApprovalsStrings.loading : ApprovalsStrings.heldNoItemBody
-        case .later: ApprovalsStrings.heldLaterBody
+        case .later, .laterUnread: ApprovalsStrings.heldLaterBody
+        case .itemsUnread: ApprovalsStrings.heldItemsUnreadBody
         case .desktop: ApprovalsStrings.heldDesktopBody
         case .other: ApprovalsStrings.heldOtherBody
         }
@@ -190,7 +192,8 @@ enum ApprovalTexts {
         // The vault did not say whether it was done: not "Approved".
         case nil: ApprovalsStrings.heldNoResult
         case "ok": ApprovalsStrings.heldApproved
-        case "not_found": ApprovalsStrings.noLongerWaiting
+        // `{result: "not_found"}` is an answer like the others ("Approved, but your vault answered: not_found."); only the error
+        // `not_found` is "no longer waiting" (AA5 "Answers to `approval.decide`"). A run's and a proxy's have their own (AA8).
         case "forbidden": ApprovalsStrings.heldForbidden(who)
         case "session_required", "denied": ApprovalsStrings.heldSessionEnded(who)
         case "way_not_allowed": ApprovalsStrings.heldWayNotAllowed

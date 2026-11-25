@@ -12,6 +12,8 @@ public enum DataView: Equatable, Sendable {
     public static let maxBlanks = 8
     /// The most lines shown as text.
     public static let maxLines = 8
+    /// The most bytes shown at all: `item.use`'s own bound on `data` (VAULT-MESSAGING §10.11, ``HeldApprovals/maxData``).
+    public static let maxBytes = HeldApprovals.maxData
 
     private static let brailleBlank: UInt32 = 0x2800
 
@@ -20,8 +22,10 @@ public enum DataView: Equatable, Sendable {
     /// width characters); a Default_Ignorable code point (soft hyphen, the Hangul fillers, variation selectors, the combining
     /// grapheme joiner, tag characters); an unassigned, private-use or surrogate code point; the braille blank U+2800; a run of
     /// more than ``maxBlanks`` blank characters; a line or paragraph separator; a run of more than ``maxMarks`` combining marks
-    /// on one base; more than ``maxLines`` lines.
-    public static func of(_ data: [UInt8]) -> DataView {
+    /// on one base; more than ``maxLines`` lines. Nil for more than ``maxBytes`` bytes: never shown, as no `item.use` carries
+    /// them, so the request is not approved.
+    public static func of(_ data: [UInt8]) -> DataView? {
+        guard data.count <= maxBytes else { return nil }
         // Strictly valid UTF-8, and nothing dropped on the way (a byte order mark): the round trip is the check.
         guard let text = String(bytes: data, encoding: .utf8), text.utf8.elementsEqual(data), printable(text) else {
             return .hex(hex(data))

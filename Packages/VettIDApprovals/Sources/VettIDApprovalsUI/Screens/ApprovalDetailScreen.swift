@@ -36,6 +36,8 @@ public struct DecisionActions {
     public var onForgetSecrets: @MainActor () -> Void = {}
     /// An approval's document (VAULT-MESSAGING 0.89.0 §10.4): its fetch again after a failure, and its end on screen.
     public var onRetryDocument: @MainActor () -> Void = {}
+    /// The item list could not be read: read it again (``ApprovalDetailState/offersItemsRetry``).
+    public var onRetryItems: @MainActor () -> Void = {}
     /// The whole of the document of that hash, in that generation, has been on screen.
     public var onDocumentShownWhole: @MainActor (String, Int) -> Void = { _, _ in }
 
@@ -323,6 +325,10 @@ struct DecisionContent: View {
                     onRetry: actions.onRetryDocument, onSeenWhole: actions.onDocumentShownWhole
                 )
                 .equatable()
+            }
+            if state.offersItemsRetry {
+                NoticeAction(label: ApprovalsStrings.retry, identifier: "items_retry") { actions.onRetryItems() }
+                    .padding(.top, Spacing.m)
             }
             if state.needs == .password, !state.onlyDeny {
                 SecretField(

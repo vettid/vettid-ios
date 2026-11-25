@@ -135,23 +135,15 @@ public struct ApprovalDetailState: Equatable, Sendable, CustomStringConvertible,
     public var endRequest: PendingApproval?
     /// The member's items with their fields' labels, to name what an agent's request is about (AA5, AA8); the Vault list.
     public var heldItems: [ItemSummary] = []
-    /// The item list has been read at least once (loaded or failed): until then a request's item is "Loading…".
-    public var itemsLoaded = true
+    /// How far the item list has been read: until it is, a request's item is "Loading…" (or, after a failed read, not
+    /// named), and Approve is off.
+    public var itemsRead: ItemsRead = .read
     /// How a decision on a request an agent holds ended: said, with OK, before the screen closes.
     public var outcome: DeviceOutcome?
 
     /// AA8 "Fail closed": whether the item's settings, read for the run's own agent and item, allow its `cwd` (it has no
     /// `member_folder`); nil until that read answers. A run with a `cwd` is Deny only until it is true.
     public var cwdAllowed: Bool?
-
-    /// What a request an agent holds for approval shows and allows, from the item list; nil for any other request.
-    public var heldShow: HeldShow? {
-        guard case .device(let d)? = approval, DeviceAsks.isHeld(d) else { return nil }
-        let shown = DeviceAsks.show(d, items: heldItems, loaded: itemsLoaded)
-        // A run's `cwd` without `member_folder` is shown only once the item's settings allow it (AA8).
-        if case .run(let r, _, _) = shown, r.hasCwd, cwdAllowed != true { return .other }
-        return shown
-    }
 
     public init(key: String) { self.key = key }
 
@@ -196,7 +188,8 @@ public struct ApprovalDetailState: Equatable, Sendable, CustomStringConvertible,
         return switch approval {
         case nil: false
         // An agent's held request: only what is shown in full, once the item list says what it is about (AA5, AA8).
-        case .device?: itemsLoaded && heldShow?.approvable == true
+        // A catalog names no item: approved without the list (``HeldApprovals/nameable(_:_:)`` holds for it whatever the list).
+        case .device?: heldShow?.approvable == true && (itemsRead == .read || heldShow == .catalog)
         case .grant?: !grantIndexes.isEmpty
         // 0.10.3: only once the safety code is known, and only once per member.
         case .connection(.incoming(let r))?: r.state == .pending
@@ -227,12 +220,12 @@ public struct ApprovalDetailState: Equatable, Sendable, CustomStringConvertible,
 public final class ApprovalDetailViewModel {
     @ObservationIgnored let repo: any ApprovalsRepository
     @ObservationIgnored private let connections: (any ConnectionsRepository)?
-    @ObservationIgnored private let vault: (any ItemsRepository)?
+    @ObservationIgnored let vault: (any ItemsRepository)?
     @ObservationIgnored let work = Work()
     @ObservationIgnored private let follows = TaskBag()
-    /// Whether the item list was ever read (loaded or failed): a later read does not turn a request's item back into
-    /// "Loading…" or switch Approve off.
-    @ObservationIgnored private var itemsSettled = false
+    /// The item list's ``ItemsRepository/cleared`` when it was last seen read: a later read does not turn a request's item back
+    /// into "Loading…" or switch Approve off, unless the list was dropped (a lock) since. A failed read is not a read.
+    @ObservationIgnored private var itemsReadAt: Int?
     /// The cwd rule's read was started (once per screen), and the wait after each failed read: there are as many reads as waits
     /// (AA8). Tests shorten them.
     @ObservationIgnored var cwdRead = false
@@ -267,12 +260,17 @@ public final class ApprovalDetailViewModel {
         forgetCountAtOpen = approvals.forgetCount
         self.connections = connections
         self.vault = vault
-        vault?.readIfNotLoaded()
+        // Read when it has not been, and again when the last read failed: nothing else on these screens retries it.
+        if vault?.load == .failed { vault?.refreshQuietly() } else { vault?.readIfNotLoaded() }
         local = ApprovalDetailState(key: key)
         local.approval = approvals.approvals.first { $0.key == key }
         local.items = items.sorted { $0.name.lowercased() < $1.name.lowercased() }
         follows.add(follow(self, read: { m in m.repo.approvals.first { $0.key == m.local.key } }, apply: { m, a in
-            if let a { m.local.approval = a }
+            if let a {
+                m.local.approval = a
+                // Held again after a lock dropped the item list with it: the list is read again too.
+                m.vault?.readIfNotLoaded()
+            }
             m.loadDocument()
             // A session request held only after the screen opened (from the feed, before the list answered) is followed
             // from when it arrives.
@@ -305,8 +303,7 @@ public final class ApprovalDetailViewModel {
         if let vault {
             s.items = Self.answers(vault.items)
             s.heldItems = vault.items
-            if vault.load == .loaded || vault.load == .failed { itemsSettled = true }
-            s.itemsLoaded = itemsSettled
+            s.itemsRead = ItemsRead.of(vault.load, cleared: vault.cleared, readAt: &itemsReadAt)
         }
         let now = repo.approvals.first { $0.key == local.key }
         s.approval = now ?? local.approval
@@ -477,11 +474,15 @@ public final class ApprovalDetailViewModel {
 
     /// [shown]: for a share decision, the item ids the screen showed when the member tapped. Only those are decided, so a
     /// `share.pending` batch that lands just before the tap is not included or declined unseen (VAULT-MESSAGING §10.12).
-    /// Mirrors vettid-android `ApprovalDetailViewModel.approve`.
-    public func approve(shown: [String]? = nil) { // swiftlint:disable:this cyclomatic_complexity
+    /// [held]: for a request an agent holds, what the screen showed when the member tapped (``shownHeld()`` at its render);
+    /// without it nothing is approved. Mirrors vettid-android `ApprovalDetailViewModel.approve`.
+    public func approve(shown: [String]? = nil, held: ShownHeld? = nil) { // swiftlint:disable:this cyclomatic_complexity
         let s = state
         guard let a = s.approval, s.canApprove() else { return }
-        if case .device(let d) = a { return approveHeld(d) }
+        if case .device = a {
+            guard let held else { return }
+            return approveHeld(held)
+        }
         let (repo, pw) = (repo, s.password)
         decide { [weak self] in
             switch a {

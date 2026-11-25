@@ -190,30 +190,53 @@ extension ApprovalsManager {
         }
     }
 
-    public func approveDeviceRequest(_ shown: DeviceRequest) async throws -> DeviceDecision {
-        // Looked up as the list shows it (a replaced, expired or differing approval already read as it should), never through the
-        // kept events; and only the request the member was shown, as bytes (its `exp`, names and read, a request that left and
-        // came back included).
+    public func approveDeviceRequest(
+        _ shown: DeviceRequest, generation: Int, stillShown: @escaping @MainActor () -> Bool
+    ) async throws -> DeviceDecision {
+        // Looked up as the list shows it (a replaced or expired approval is gone, a differing one is deny only), never through the
+        // kept events. Only the request the member was shown: every member compared as bytes (its `exp`, names, device and what
+        // it asks) but not its time of arrival, so the same `approval.pending` delivered again is the same request; no lock since
+        // the screen showed it ([generation]); and the screen still showing it as it did ([stillShown]).
         let key = PendingApproval.device(shown).key
         guard shown.type == Self.approvalType, case .device(let d)? = pending(key) else { throw VaultFailure(.notFound) }
-        guard d == shown else { throw VaultFailure(.notSupported) }
-        guard let held = d.held, held.approvable, HeldApprovals.nameable(held, itemCache()) else { throw VaultFailure(.notSupported) }
+        guard generation == forgetCount, d.sameContent(as: shown), stillShown() else { throw VaultFailure(.requestChanged) }
+        try checkApprovable(d)
         var result: String?
-        try await decide(key) { o in
-            // A run with a `cwd` and no `member_folder` only when the item's settings, read now for the request's own agent and
-            // item, carry `run` without `folders` (AA8): read here, after `ops()` and before the last check, which has no `await`
-            // between it and the send.
-            if case .itemRun(let run) = held, run.hasCwd, await self.runCwdRule(agentID: d.deviceID ?? "", itemID: run.itemID) != true {
-                throw VaultFailure(.notSupported)
+        var goneAtSend = false
+        do {
+            try await decide(key) { o in
+                // A run with a `cwd` and no `member_folder` only when the item's settings, read now for the request's own agent and
+                // item, carry `run` without `folders` (AA8): read here, after `ops()` and before the last check, which has no
+                // `await` between it and the send.
+                if case .itemRun(let run)? = d.held, run.hasCwd,
+                   await self.runCwdRule(agentID: d.deviceID ?? "", itemID: run.itemID) != true {
+                    throw VaultFailure(.notSupported)
+                }
+                // `ops()` and that read may have waited, and an event, a list read, a lock or the item list may have changed the
+                // approval since the checks: judged again here, with no `await` between this and the send.
+                guard case .device(let now)? = self.pending(key) else {
+                    goneAtSend = true
+                    throw VaultFailure(.requestChanged)
+                }
+                guard generation == self.forgetCount, now.sameContent(as: shown), !self.mismatched.contains(key),
+                      !self.replaced.contains(key), let held = now.held, held.approvable,
+                      HeldApprovals.nameable(held, self.itemCache()), stillShown() else { throw VaultFailure(.requestChanged) }
+                result = try await o.approvalDecide(d.id, approve: true)
             }
-            // `ops()` may have waited (a session is opened), and an event or a list read may have changed the approval since the
-            // checks: judged again here, with no `await` between this and the send.
-            guard case .device(let now)? = self.pending(key), now == shown, !self.mismatched.contains(key),
-                  !self.replaced.contains(key), let held = now.held, held.approvable,
-                  HeldApprovals.nameable(held, self.itemCache()) else { throw VaultFailure(.notSupported) }
-            result = try await o.approvalDecide(d.id, approve: true)
+        } catch let f as VaultFailure where goneAtSend && f.kind == .requestChanged {
+            // Expired, or dropped by a lock, while the session opened: no longer waiting here. Thrown past `decide`, which would
+            // count a `not_found` as the vault's own and forget the approval.
+            throw VaultFailure(.notFound)
         }
         return DeviceDecision(result: result)
+    }
+
+    /// Only what is read in full and whose item and field the item list names. Else nothing sent: ``FailureKind/notSupported``
+    /// for what this version does not approve, ``FailureKind/requestChanged`` for an item or field the list no longer names. A
+    /// run's `cwd` rule is read in the decision, after the session opens (``approveDeviceRequest(_:generation:stillShown:)``).
+    private func checkApprovable(_ d: DeviceRequest) throws {
+        guard let held = d.held, held.approvable else { throw VaultFailure(.notSupported) }
+        guard HeldApprovals.nameable(held, itemCache()) else { throw VaultFailure(.requestChanged) }
     }
 
     public func runCwdRule(agentID: String, itemID: String) async -> Bool? {
