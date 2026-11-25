@@ -148,6 +148,15 @@ import VettIDDataTesting
         #expect(vault.transferEnd == nil && vault.calls.contains("acknowledgeTransferEnd"))
     }
 
+    /// The follower's first value (an end already noted when the screen opened) is skipped, whatever it is.
+    @Test(arguments: [TransferEnd.timedOut, .declined, .stopped])
+    func anEndNotedBeforeTheScreenOpenedIsTheWelcomeScreens(_ end: TransferEnd) async {
+        vault.transferEnd = end
+        let vm = transferIn()
+        await vm.settle()
+        #expect(vm.state.step == .intro && vault.transferEnd == end && !vault.calls.contains("acknowledgeTransferEnd"))
+    }
+
     /// An end already noted when the screen opened is the welcome screen's; and one while the member's own scan runs is not
     /// shown over it.
     @Test func anEarlierEndOrOneDuringAScanIsNotShown() async throws {

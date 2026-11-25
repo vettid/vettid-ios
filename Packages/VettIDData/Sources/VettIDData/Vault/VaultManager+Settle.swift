@@ -329,6 +329,8 @@ extension VaultManager {
     public var abandonClosed: Bool {
         if moveFlags.book.settling != nil { return true }
         guard let started = record.value.transferStartedMs else { return false }
+        // A start adopted for a pin whose own start was lost counts as past minute 10 (owner decision).
+        if record.value.transferStartAdoptedMs == started { return true }
         return config.now().timeIntervalSince1970 >= Double(started) / 1000 + Self.vaultApprovalWindow
     }
 
@@ -343,11 +345,16 @@ extension VaultManager {
     /// abandon, the process ending) tells nothing.
     public func waitForTransferInBackground() { waitForTransferInBackground(quiet: false) }
 
+    /// The pause before a background wait that failed before its deadline is started again, in seconds (chosen; not in the
+    /// spec).
+    nonisolated static let waitRetryPause: Int64 = 5
+
     /// ``waitForTransferInBackground()``; [quiet]: its end sets no ``transferEnd`` notice.
     func waitForTransferInBackground(quiet: Bool) {
         guard moveFlags.book.transferWaiter == nil, record.value.transferStartedMs != nil else { return }
         moveFlags.book.transferWaiter = Task { @MainActor [weak self] in
             var end: TransferEnd?
+            var failed = false
             do {
                 _ = try await self?.awaitTransferInWaiting()
             } catch let f as VaultFailure where f.code == Self.codeTransferDeadline {
@@ -358,8 +365,16 @@ extension VaultManager {
                 end = .declined
             } catch is PairingRejected {
                 end = .declined
-            } catch {}
+            } catch {
+                failed = true
+            }
             guard let self, !Task.isCancelled else { return }
+            // A wait that failed before its deadline with the transfer kept is started again by the read below: not at once
+            // (a failure that repeats would spin), and with this waiter still set meanwhile, so that nothing else starts one.
+            if failed, record.value.transferStartedMs != nil {
+                try? await config.transferWaitRetrySleep(.seconds(Self.waitRetryPause))
+                guard !Task.isCancelled else { return }
+            }
             moveFlags.book.transferWaiter = nil
             if let end, !quiet { transferEnd = end }
             try? await refresh()

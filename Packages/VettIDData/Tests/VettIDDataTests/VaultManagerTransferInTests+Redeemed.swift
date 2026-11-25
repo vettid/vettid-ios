@@ -53,6 +53,10 @@ extension VaultManagerTransferInTests {
         let error = await vaultFailure { try await m.enroll(pin: pin) { _ in } }
         #expect(error?.code == VaultManager.codeTransferWaiting, "\(String(describing: error))")
         #expect(service.enrolls.count == enrolls)
+        // Adopted as the phase adopts it: an unknown start (no abandon), waited for.
+        #expect(await eventually { m.record.value.transferStartedMs != nil }, "a start written")
+        #expect(m.record.value.transferStartAdoptedMs == m.record.value.transferStartedMs && m.abandonClosed)
+        #expect(m.moveFlags.book.transferWaiter != nil)
     }
 
     /// A stored start that nothing pinned refuses the enrollment only until the background's wait clears it.

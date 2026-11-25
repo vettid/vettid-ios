@@ -146,17 +146,15 @@ extension VaultManager {
         guard pinned || started else { return nil }
         // Not while a scan is writing its own start (``transferIn(code:)``): it waits for its transfer itself.
         if moveFlags.book.startingIn == 0 {
-            // Pinned with no start stored (an older race wiped it): a start written now, so the transfer's deadline and its
-            // settlement window apply. Never dropped outright: the old phone may already have approved it.
-            // (Its code isn't known, so a re-scan of it counts as a new code; and its abandon window counts from now.)
-            if pinned, !started {
-                _ = try? record.update(since: record.generation) {
-                    $0.transferIn = true
-                    $0.transferStartedMs = nowMs
-                }
+            // Pinned with no start stored (an older race wiped it): adopted as the phase adopts it (an unknown start: no
+            // abandon, the full deadline and the window; dropped at once when its handshake was never answered).
+            // (Its code isn't known, so a re-scan of it counts as a new code.)
+            if pinned, !started, let held = [d, session?.device].compactMap({ $0 }).first(where: transferWaitsHere) {
+                Task { @MainActor [weak self] in await self?.adoptPinWithoutStart(held) }
+            } else {
+                // A leftover start that nothing pinned: the member already left it, so its end says nothing ("timed out").
+                waitForTransferInBackground(quiet: !pinned)
             }
-            // A leftover start that nothing pinned: the member already left it, so its end says nothing ("timed out").
-            waitForTransferInBackground(quiet: !pinned)
         }
         return VaultFailure(.enrollmentStarted, code: Self.codeTransferWaiting)
     }

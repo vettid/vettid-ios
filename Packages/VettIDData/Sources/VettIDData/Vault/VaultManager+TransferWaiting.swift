@@ -31,10 +31,10 @@ extension VaultManager {
 
     /// (§11.14.10 rule 5) A transfer pinned on [d] with no start stored (an older race wiped it), and no scan writing its
     /// own. Its handshake never answered (no comparison code saved, none awaited here): nothing can complete it, so it is
-    /// dropped now, as a start's resume drops one. Otherwise its real start is unknown and may be more than 10 minutes ago:
-    /// the start stored is one deadline back from now (``writeUnknownStart()``), so that no abandon is offered and only the
-    /// settlement's window is waited for. Never dropped outright then: the old phone may already have approved it. True when
-    /// it was adopted (or dropped).
+    /// dropped now, as a start's resume drops one. Otherwise its real start is unknown, and counts as past the vault's minute
+    /// 10 (owner decision): no abandon is offered, and the full deadline from now, then the settlement's window, is waited
+    /// for before it is dropped, since the vault may still approve a recent one (``writeUnknownStart()``). Never dropped
+    /// outright then. True when it was adopted (or dropped).
     @discardableResult
     func adoptPinWithoutStart(_ d: VaultDevice) async -> Bool {
         guard moveFlags.book.startingIn == 0, record.value.transferStartedMs == nil, transferWaitsHere(d) else { return false }
@@ -44,14 +44,14 @@ extension VaultManager {
         return true
     }
 
-    /// A start for a transfer whose own start is unknown: its deadline now (``pairingWindow`` back), so that the abandon is
-    /// closed at once (past the vault's 10 minutes, ``abandonClosed``) and only the settlement's window runs (chosen; not in
-    /// the spec, which keeps the start: none is known here).
+    /// A start for a transfer whose own start is unknown: now, marked as adopted (``LocalAccount/transferStartAdoptedMs``),
+    /// so that the abandon is closed from the start (``abandonClosed``) while the deadline is the full 11 minutes.
     func writeUnknownStart() {
-        let started = nowMs - Int64(Self.pairingWindow * 1000)
+        let started = nowMs
         _ = try? record.update(since: record.generation) {
             $0.transferIn = true
             $0.transferStartedMs = started
+            $0.transferStartAdoptedMs = started
         }
     }
 

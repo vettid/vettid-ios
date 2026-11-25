@@ -56,10 +56,10 @@ extension VaultManagerTransferInTests {
     }
 
     /// The device pinned to a transfer's vault with no start stored (a redeem racing a scan wipes it), its handshake
-    /// answered, after a restart: the move's phase; its real start is unknown, so the start written is one deadline back
-    /// (no abandon offered, §11.14.10 rule 5) and only the settlement's window is waited for, after which the phone goes back
-    /// to its new vault (never stuck on the move).
-    @Test func aPinWithoutItsStartWaitsOnlyForTheSettlement() async throws {
+    /// answered, after a restart: the move's phase. Its real start is unknown and counts as past the vault's minute 10
+    /// (owner decision): no abandon is offered, yet nothing is dropped before the full 11 minutes from now (the vault may
+    /// still approve a recent one) and the settlement's window; then the phone goes back to its new vault.
+    @Test func aPinWithoutItsStartOffersNoCancelAndWaitsTheFullDeadline() async throws {
         defer { phone.close() }
         _ = try await m.redeemSetupCode(.secret(service.secret))
         _ = try await scanned()
@@ -68,15 +68,20 @@ extension VaultManagerTransferInTests {
         try await m.refresh()
         #expect(m.phase == .setup(.transferWaiting), "\(m.phase)")
         let started = try #require(m.record.value.transferStartedMs, "a start written for the pin")
-        #expect(abs(m.nowMs - Int64(VaultManager.pairingWindow * 1000) - started) < 5_000, "one deadline back")
+        #expect(abs(m.nowMs - started) < 5_000 && m.record.value.transferStartAdoptedMs == started, "now, marked adopted")
         #expect(m.abandonClosed, "no abandon offered")
         let refused = await vaultFailure { try await m.abandonTransferIn() }
         #expect(refused?.code == VaultManager.codeTransferWaiting && deviceHoldsVault, "not dropped")
         #expect(m.moveFlags.book.transferWaiter != nil, "waited for in the background")
-        phone.deadlinePauses.holding = false
+        #expect(await deadlineWaiting())
+        #expect(phone.deadlinePauses.lengths.first.map { $0 > 650 } == true, "the full 11 minutes: \(phone.deadlinePauses.lengths)")
+        phone.clockAhead = 600
+        #expect(m.abandonClosed && deviceHoldsVault, "nothing dropped at minute 10")
+        phone.clockAhead = 661
+        phone.deadlinePauses.release()
         #expect(await eventually(within: .seconds(60)) { m.phase == .setup(.newVault) }, "\(m.phase)")
         #expect(!deviceHoldsVault && m.record.value.transferStartedMs == nil)
-        #expect(phone.deadlinePauses.lengths.allSatisfy { $0 <= 30 }, "no new 11 minutes: \(phone.deadlinePauses.lengths)")
+        #expect(!m.abandonClosed, "a later scan's start is not the adopted one")
     }
 
     /// ... and one whose handshake was never answered (no comparison code saved, none awaited: nothing can complete it) is
@@ -131,6 +136,45 @@ extension VaultManagerTransferInTests {
         try await m.refresh()
         #expect(m.phase == .setup(.transferWaiting), "\(m.phase)")
         #expect(m.moveFlags.book.transferWaiter != nil, "waited for again")
+    }
+
+    /// Not while the screen's own wait is under way (``MoveBook/screenWaits``): it takes the background's place itself.
+    @Test func noBackgroundWaitStartsWhileTheScreensRuns() async throws {
+        defer { phone.close() }
+        _ = try await scanned()
+        try await phone.restart()
+        try await m.refresh()
+        #expect(await deadlineWaiting())
+        m.moveFlags.book.transferWaiter?.cancel()
+        m.moveFlags.book.transferWaiter = nil
+        #expect(await eventually { m.moveFlags.book.waitingIn == 0 }, "the cancelled wait ended")
+        m.moveFlags.book.screenWaits += 1
+        try await m.refresh()
+        #expect(m.phase == .setup(.transferWaiting) && m.moveFlags.book.transferWaiter == nil)
+        m.moveFlags.book.screenWaits -= 1
+    }
+
+    /// A background wait that fails before its deadline is started again only after a pause, its waiter kept meanwhile
+    /// (a failure that repeats does not spin).
+    @Test func aFailedBackgroundWaitIsStartedAgainAfterAPause() async throws {
+        defer { phone.close() }
+        _ = try await scanned()
+        try await phone.restart()
+        try await m.refresh()
+        #expect(await deadlineWaiting())
+        phone.waitRetryPauses.holding = true
+        phone.deadlinePauses.failing = true
+        phone.deadlinePauses.release()
+        #expect(await eventually { phone.waitRetryPauses.lengths == [Double(VaultManager.waitRetryPause)] }, "the pause asked")
+        let asked = phone.deadlinePauses.lengths.count
+        try await m.refresh()
+        try await Task.sleep(for: .milliseconds(200))
+        #expect(phone.deadlinePauses.lengths.count == asked, "no new wait during the pause")
+        #expect(m.moveFlags.book.transferWaiter != nil && deviceHoldsVault, "kept meanwhile, nothing dropped")
+        phone.deadlinePauses.failing = false
+        phone.waitRetryPauses.release()
+        #expect(await eventually { phone.deadlinePauses.lengths.count > asked }, "started again")
+        #expect(m.moveFlags.book.transferWaiter != nil)
     }
 
     /// Enrolled (a vault id) or recovering is never the move's phase, whatever is pinned.
