@@ -109,16 +109,16 @@ extension VaultManagerTransferInTests {
         #expect(m.record.value.transferStartAdoptedMs == nil && !m.abandonClosed)
     }
 
-    /// A scan whose own transfer is dropped (no `hs.resp` within 60 s) ends a background wait left from before, so that it
-    /// never ends later as a move the member did not see.
+    /// A scan whose own transfer is dropped (no `hs.resp` within 60 s) ends a background wait started while it waited (the
+    /// screen handing its wait over as the onboarding went), so that it never ends later as a move the member did not see.
     @Test func aScansOwnDropEndsALeftoverBackgroundWait() async throws {
         defer { phone.close() }
-        let leftover = Task<Void, Never> { try? await Task.sleep(for: .seconds(600)) }
-        defer { leftover.cancel() }
-        m.moveFlags.book.transferWaiter = leftover
         service.transferIgnoresInit = true
         let scan = Task { try await m.transferIn(code: try code()) }
         #expect(await eventually { phone.transferPauses.lengths == [60] })
+        let leftover = Task<Void, Never> { try? await Task.sleep(for: .seconds(600)) }
+        defer { leftover.cancel() }
+        m.moveFlags.book.transferWaiter = leftover
         phone.transferPauses.release()
         _ = try? await scan.value
         #expect(leftover.isCancelled && m.moveFlags.book.transferWaiter == nil)
