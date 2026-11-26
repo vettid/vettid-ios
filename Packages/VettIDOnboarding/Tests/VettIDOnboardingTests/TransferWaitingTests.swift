@@ -1,0 +1,200 @@
+import Foundation
+import Testing
+import VettIDCrypto
+import VettIDData
+import VettIDDataTesting
+@testable import VettIDOnboarding
+
+/// A transfer to this phone that is not finished (``SetupStage/transferWaiting``): onboarding opens the transfer screen,
+/// and the screen takes the transfer up as it opens. Mirrors vettid-android `OnboardingViewModel`'s `TRANSFER_WAITING`
+/// route and `TransferInViewModel`'s `init`.
+@MainActor
+@Suite struct TransferWaitingTests {
+    let vault = FakeVaultRepository()
+    let clock = VirtualTime()
+
+    func onboarding() -> OnboardingViewModel { OnboardingViewModel(account: vault, vault: vault, inbox: SetupLinkInbox()) }
+    func transferIn() -> TransferInViewModel { TransferInViewModel(move: vault, vault: vault, now: clock.now, sleep: clock.sleep) }
+
+    /// A transfer code valid for ten more minutes at the virtual time.
+    func qr() throws -> String {
+        let q = InviteQr(
+            kind: .app, relay: "https://relay.vettid.test", claimID: "abcdefghijklmnopqrstuvwxyz",
+            hash: [UInt8](repeating: 1, count: 32), key: [UInt8](repeating: 2, count: 32),
+            exp: UInt64(clock.now().timeIntervalSince1970) + 600
+        )
+        return try #require(String(bytes: try q.marshal(), encoding: .utf8))
+    }
+
+    /// At a start with a transfer waiting, with or without a redeemed code: the move screen, never the account's
+    /// confirmation or the PIN.
+    @Test func aWaitingTransferAtTheStartOpensTheMoveScreen() async {
+        vault.phase = .setup(.transferWaiting)
+        let vm = onboarding()
+        await vm.settle()
+        #expect(vm.state.step == .transferIn)
+    }
+
+    /// The phase turning to it later moves any step to the move screen; once the transfer ended, the move screen stays (it
+    /// shows its own end), as a recovery's does.
+    @Test(arguments: [AppPhase.signedOut, .setup(.newVault)])
+    func aWaitingTransferLaterOpensTheMoveScreenAndItStays(_ before: AppPhase) async {
+        vault.phase = before
+        let vm = onboarding()
+        await vm.settle()
+        #expect(vm.state.step == (before == .signedOut ? .welcome : .confirmAccount))
+        vault.phase = .setup(.transferWaiting)
+        await vm.settle()
+        #expect(vm.state.step == .transferIn)
+        vault.phase = before
+        await vm.settle()
+        #expect(vm.state.step == .transferIn, "the move screen shows how it ended")
+    }
+
+    /// The screen opens on the waiting transfer: its code, counted from its stored start, and the approval completes it.
+    @Test func theScreenOpensOnTheWaitingTransfer() async throws {
+        let started = clock.now().addingTimeInterval(-30)
+        vault.waitingTransfer = .waiting(sas: "553190", startedAt: started)
+        let vm = transferIn()
+        await clock.runCurrent()
+        #expect(await eventually { vm.state.step == .compare }, "\(vm.state.step)")
+        #expect(vm.state.sas == "553190" && vm.state.secondsLeft == 630 && vm.state.deadline == started.addingTimeInterval(660))
+        #expect(vault.calls.contains("awaitTransferIn"))
+        vault.transferApproval.complete()
+        await clock.advance(seconds: 2)
+        #expect(vm.state.step == .done && vm.state.sas == nil)
+    }
+
+    /// Past the vault's 10 minutes: the settlement's check, no Cancel.
+    @Test func theScreenOpensOnTheSettlement() async throws {
+        vault.waitingTransfer = .waiting(sas: "553190", startedAt: clock.now().addingTimeInterval(-640))
+        vault.abandonClosed = true
+        let vm = transferIn()
+        await clock.runCurrent()
+        #expect(await eventually { vm.state.step == .compare && vm.state.checking && vm.state.closing })
+        vault.transferApproval.fail(VaultFailure(.noResponse, code: VaultManager.codeTransferDeadline))
+        await vm.settle()
+        #expect(vm.state.step == .timedOut)
+    }
+
+    /// A move that stopped on this phone before the member was told: "The move stopped on this phone", once; shown, the
+    /// repository's notice of it is acknowledged (not told again on the welcome screen).
+    @Test func aStoppedMoveIsToldOnce() async throws {
+        vault.waitingTransfer = .stopped
+        vault.transferEnd = .stopped // as the repository sets it with the drop
+        let vm = transferIn()
+        #expect(await eventually { vm.state.step == .stopped }, "\(vm.state.step)")
+        #expect(!vault.calls.contains("awaitTransferIn"))
+        #expect(vault.transferEnd == nil && vault.calls.contains("acknowledgeTransferEnd"))
+        let again = transferIn()
+        await again.settle()
+        #expect(again.state.step == .intro)
+    }
+
+    /// Nothing waiting: the screen starts afresh.
+    @Test func nothingWaitingStartsAfresh() async {
+        let vm = transferIn()
+        await vm.settle()
+        #expect(vm.state.step == .intro && !vault.calls.contains("awaitTransferIn"))
+    }
+
+    /// A stop the screen cannot show (the member left the start first) is not acknowledged: the welcome screen tells it.
+    @Test func aStopTheScreenCannotShowStaysTheRepositorysNotice() async throws {
+        vault.waitingTransfer = .stopped
+        vault.transferEnd = .stopped
+        let vm = transferIn()
+        vm.scan()
+        await vm.settle()
+        #expect(vm.state.step == .scan && vault.transferEnd == .stopped && !vault.calls.contains("acknowledgeTransferEnd"))
+    }
+
+    /// A take-up that failed: the background waits for the transfer again, and the screen starts afresh.
+    @Test func aFailedTakeUpHandsTheWaitBack() async throws {
+        vault.waitingTransferFailure = VaultFailure(.network)
+        let vm = transferIn()
+        await vm.settle()
+        #expect(vm.state.step == .intro && vault.calls.contains("waitForTransferInBackground"))
+    }
+
+    /// A take-up that failed while the member's own scan began: the scan's transfer is the screen's; nothing is handed back.
+    @Test func aFailedTakeUpDuringTheMembersScanHandsNothingBack() async throws {
+        let hs = TestDeferred<String>()
+        vault.transferHsResp = hs
+        vault.waitingTransferFailure = VaultFailure(.network)
+        vault.waitingTransferHold = TestDeferred<Void>()
+        let vm = transferIn()
+        vm.scan()
+        vm.scanned(try qr())
+        vault.waitingTransferHold?.complete(())
+        await vm.settle()
+        #expect(vm.state.step == .connecting && !vault.calls.contains("waitForTransferInBackground"), "\(vault.calls)")
+        hs.fail(VaultFailure(.network))
+    }
+
+    /// While the member's own scan runs the wait is not handed back (it would start a second waiter).
+    @Test func noHandBackWhileTheMembersScanRuns() async throws {
+        vault.waitingTransfer = .waiting(sas: "553190", startedAt: clock.now())
+        let vm = transferIn()
+        vm.scan()
+        vm.scanned(try qr())
+        await vm.settle()
+        #expect(vm.state.step != .intro && !vault.calls.contains("waitForTransferInBackground"), "\(vault.calls)")
+    }
+
+    /// The model gone before the answer came: the waiting transfer is left to the background's wait.
+    @Test func aModelGoneBeforeTheAnswerHandsTheWaitBack() async throws {
+        vault.waitingTransfer = .waiting(sas: "553190", startedAt: clock.now())
+        var vm: TransferInViewModel? = transferIn()
+        #expect(vm != nil)
+        vm = nil
+        #expect(await eventually { vault.calls.contains("waitForTransferInBackground") }, "\(vault.calls)")
+        #expect(!vault.calls.contains("awaitTransferIn"))
+    }
+
+    /// (§11.14.10 rule 5) Nothing taken up: the background's wait ending while the screen is at its start is shown here,
+    /// as the screen's own end (and not again on the welcome screen).
+    @Test(arguments: [(TransferEnd.timedOut, TransferInStep.timedOut), (.declined, .rejected), (.stopped, .stopped)])
+    func theBackgroundsEndIsShownOnTheScreen(_ end: TransferEnd, _ step: TransferInStep) async throws {
+        let vm = transferIn()
+        await vm.settle()
+        #expect(vm.state.step == .intro)
+        vault.transferEnd = end
+        #expect(await eventually { vm.state.step == step }, "\(vm.state.step)")
+        #expect(vault.transferEnd == nil && vault.calls.contains("acknowledgeTransferEnd"))
+    }
+
+    /// The follower's first value (an end already noted when the screen opened) is skipped, whatever it is.
+    @Test(arguments: [TransferEnd.timedOut, .declined, .stopped])
+    func anEndNotedBeforeTheScreenOpenedIsTheWelcomeScreens(_ end: TransferEnd) async {
+        vault.transferEnd = end
+        let vm = transferIn()
+        await vm.settle()
+        #expect(vm.state.step == .intro && vault.transferEnd == end && !vault.calls.contains("acknowledgeTransferEnd"))
+    }
+
+    /// An end already noted when the screen opened is the welcome screen's; and one while the member's own scan runs is not
+    /// shown over it.
+    @Test func anEarlierEndOrOneDuringAScanIsNotShown() async throws {
+        vault.transferEnd = .timedOut
+        let vm = transferIn()
+        await vm.settle()
+        #expect(vm.state.step == .intro && vault.transferEnd == .timedOut)
+        vault.transferEnd = nil
+        vm.scan()
+        vm.scanned(try qr())
+        await vm.settle()
+        vault.transferEnd = .declined
+        await vm.settle()
+        #expect(vm.state.step != .rejected && vault.transferEnd == .declined)
+    }
+
+    /// A scan begun before the answer came is the member's: the waiting transfer is handed back to the background.
+    @Test func aScanBegunMeanwhileHandsTheWaitBack() async throws {
+        vault.waitingTransfer = .waiting(sas: "553190", startedAt: clock.now())
+        let vm = transferIn()
+        vm.scan()
+        await vm.settle()
+        #expect(vm.state.step == .scan && !vault.calls.contains("awaitTransferIn"))
+        #expect(vault.calls.contains("waitForTransferInBackground"))
+    }
+}

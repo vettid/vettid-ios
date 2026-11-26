@@ -218,6 +218,17 @@ public extension FailureKind {
     static func enrollmentStartedText(after: Date) -> String {
         DataStrings.failureEnrollmentStartedAfter(after.formatted(date: .abbreviated, time: .shortened))
     }
+
+    /// (iPhone only, no Android text; chosen; not in the spec) ``enrollmentStarted`` refused with
+    /// ``VaultManager/codeTransferWaiting``: a move to this phone is still under way, not an enrollment's unknown outcome.
+    static var transferWaitingText: String { DataStrings.failureTransferWaiting }
+
+    /// The text of this failure with its [code]: a refusal while a move to this phone is under way says so
+    /// (``transferWaitingText``); any other is ``message(timeScale:)``.
+    func message(code: String?, timeScale: UInt64) -> String {
+        if self == .enrollmentStarted, code == VaultManager.codeTransferWaiting { return Self.transferWaitingText }
+        return message(timeScale: timeScale)
+    }
 }
 
 /// A limit's member-facing text: [key] formatted with [args] (counts, or kilobytes for a size; at most two). Mirrors

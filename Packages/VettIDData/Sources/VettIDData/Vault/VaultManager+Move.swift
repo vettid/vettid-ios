@@ -27,7 +27,7 @@ extension VaultManager: MoveRepository {
         // the notice below, the window's and the deadline's refusals, the code's expiry, the claim fetch and any drop.
         if let sas = try await sameCodeMove(code) { return sas }
         // Not while a setup code's redeem is under way: it forgets the stored device and keys (``MoveFlags``' `redeeming`).
-        if moveFlags.book.redeeming > 0 { throw VaultFailure(.enrollmentStarted, code: Self.codeTransferWaiting) }
+        if moveFlags.book.redeeming > 0 { throw VaultFailure(.enrollmentStarted, code: Self.codeRedeemUnderWay) }
         // A new move: the notice of how the last one ended goes, whatever this one does.
         transferEnd = nil
         // A refresh while this runs resumes nothing: the start may be written before its handshake is saved, and a start
@@ -66,7 +66,7 @@ extension VaultManager: MoveRepository {
             let codeID = InviteLinks.transferCodeID(code)
             try record.update(since: rec) {
                 $0.transferIn = true
-                $0.transferStartedMs = started
+                ($0.transferStartedMs, $0.transferStartAdoptedMs) = (started, nil)
                 $0.transferCode = codeID
                 // The start alone says that a transfer is under way (``userGuidUsable``): nothing of an earlier one stays.
                 ($0.movedIn, $0.setupComplete, $0.finishMovePending) = (false, false, false)
@@ -86,7 +86,7 @@ extension VaultManager: MoveRepository {
                 }
             } catch {
                 // The device dropped the key it attested (``VaultDevice/startTransfer``); the epoch-1 record goes too.
-                await dropTransfer(d)
+                await dropScanTransfer(d)
                 throw error
             }
             let (capabilities, scale) = (path.value.capabilities, path.value.timeScale)
@@ -100,11 +100,11 @@ extension VaultManager: MoveRepository {
                 sas = try await sasWithinLimit(d)
             } catch let notCompleted as PairingNotCompleted {
                 // The relay refused the fin for good: the code is spent, nothing is kept (as for a rejection).
-                await dropTransfer(d)
+                await dropScanTransfer(d)
                 throw notCompleted
             }
             guard let sas else {
-                await dropTransfer(d)
+                await dropScanTransfer(d)
                 throw VaultFailure(.noResponse, code: MoveCodes.hsUnanswered)
             }
             return sas
@@ -153,8 +153,9 @@ extension VaultManager: MoveRepository {
     /// that ended, or a `device.paired` without a valid `user_guid` (§6.7.1), is ``codeTransferSessionEnded``; a paired one whose
     /// record lost it, the unlock's `no_user_guid`. A fin refused
     /// for good (``PairingNotCompleted``) before the deadline drops the transfer too. Any other failure before the deadline
-    /// is rethrown and the transfer kept. True once completed, always with the member's `user_guid`.
-    public func awaitTransferIn() async throws -> Bool {
+    /// is rethrown and the transfer kept. True once completed, always with the member's `user_guid`. The screen's wait is
+    /// ``awaitTransferIn()``; the background's calls this.
+    func awaitTransferInWaiting() async throws -> Bool {
         do {
             return try await awaitTransferInOnce()
         } catch {
@@ -168,6 +169,8 @@ extension VaultManager: MoveRepository {
                record.value.transferStartedMs != nil, let d = session?.device, d.deviceID == nil {
                 waitForTransferInBackground()
             }
+            // The phase follows a transfer the screen's wait ended (the background's reads it again itself).
+            if !(error is CancellationError) { await rereadAfterTransferIn() }
             throw error
         }
     }
@@ -343,17 +346,12 @@ extension VaultManager: MoveRepository {
         // The pending epoch-1 record is this phone's secret now: it stays until the first unlock confirms it.
         _ = try? record.update(since: record.generation) {
             $0.transferStartedMs = nil
+            $0.transferStartAdoptedMs = nil
             $0.transferEpochID = nil
             $0.transferCode = nil
         }
         try? await d.transferCompleted()
         phase = .setup(.finishing)
-    }
-
-    /// The new phone's deadline: 11 minutes after it started the `hs.init` (``LocalAccount/transferStartedMs``); nil without
-    /// a transfer waiting.
-    var transferDeadline: Date? {
-        record.value.transferStartedMs.map { Date(timeIntervalSince1970: Double($0) / 1000 + Self.pairingWindow) }
     }
 
     /// The code of the refusal of an enrollment (or another vault's code) while a move to this phone is under way, in the
@@ -363,10 +361,10 @@ extension VaultManager: MoveRepository {
     /// Once per process, at the start (before anything else is decided about this phone; §11.14.10 rule 5): a transfer whose
     /// `device.paired` arrived is completed whatever its age; one still waiting is waited for in the background
     /// (``waitForTransferInBackground()``): before its deadline until it, past it for the settlement window (rule 5,
-    /// VAULT-MESSAGING 0.85.2), and then applied or dropped. Meanwhile the welcome screen is shown and no enrollment can
-    /// start (the vault is pinned, ``startOverRefusal(_:)``); a new code can be scanned before the end of the vault's 10
-    /// minutes, not from then on (``abandonClosed``). Waiting before the deadline is (chosen; not in the spec): Android
-    /// shows the welcome screen and does not wait.
+    /// VAULT-MESSAGING 0.85.2), and then applied or dropped. Meanwhile the transfer screen is shown (``SetupStage/transferWaiting``;
+    /// its wait takes the background's place, ``transferInWaiting()``) and no enrollment can start (the vault is pinned,
+    /// ``startOverRefusal(_:)``); a new code can be scanned before the vault's 10 minutes end, not after (``abandonClosed``).
+    /// The background's wait until the screen takes over is (chosen; not in the spec): vettid-android's screen alone waits.
     @discardableResult
     func resumeTransferIn(_ s: VaultSession) async -> TransferSettled? {
         guard moveFlags.book.startingIn == 0, !moveFlags.book.transferResumed else { return nil }
@@ -380,9 +378,9 @@ extension VaultManager: MoveRepository {
             return nil
         }
         if d.deviceID == nil, d.droppedWithoutUserGuid {
-            // (§6.7.1) The device dropped a malformed `device.paired` before the process ended, and nobody was told: the
-            // background's wait says so ("The move stopped on this phone") and drops the transfer.
-            waitForTransferInBackground()
+            // (§6.7.1) A malformed `device.paired` dropped before the process ended, nobody told: the transfer screen says so
+            // and drops the transfer (``SetupStage/transferWaiting``, ``transferInWaiting()``; vettid-android `StoppedMove`),
+            // not the background, whose end only the welcome screen tells (never shown after a redeemed code).
             return nil
         }
         if d.deviceID == nil, !d.holdsTransferSas, !d.awaitsPairingResp {
@@ -441,6 +439,7 @@ extension VaultManager: MoveRepository {
             } else {
                 await dropTransfer(s.device)
             }
+            await rereadAfterTransferIn()
         }
     }
 
@@ -481,6 +480,7 @@ extension VaultManager: MoveRepository {
         }
         _ = try? record.update(since: record.generation) {
             $0.transferStartedMs = nil
+            $0.transferStartAdoptedMs = nil
             $0.transferEpochID = nil
             $0.transferCode = nil
         }

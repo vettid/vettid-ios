@@ -53,6 +53,10 @@ extension VaultManagerTransferInTests {
         let error = await vaultFailure { try await m.enroll(pin: pin) { _ in } }
         #expect(error?.code == VaultManager.codeTransferWaiting, "\(String(describing: error))")
         #expect(service.enrolls.count == enrolls)
+        // Adopted as the phase adopts it: an unknown start (no abandon), waited for.
+        #expect(await eventually { m.record.value.transferStartedMs != nil }, "a start written")
+        #expect(m.record.value.transferStartAdoptedMs == m.record.value.transferStartedMs && m.abandonClosed)
+        #expect(m.moveFlags.book.transferWaiter != nil)
     }
 
     /// A stored start that nothing pinned refuses the enrollment only until the background's wait clears it.
@@ -141,15 +145,16 @@ extension VaultManagerTransferInTests {
         #expect(m.moveFlags.book.transferWaiter == nil && m.transferEnd == nil, "nothing waited for")
     }
 
-    /// The scan side: a scan while a redeem awaits the member API is refused (`transfer_waiting`), before it writes a
-    /// start or makes a device; the redeem then goes through.
+    /// The scan side: a scan while a redeem awaits the member API is refused (`redeem_under_way`: no move is under way, so
+    /// the general text), before it writes a start or makes a device; the redeem then goes through.
     @Test func aScanWhileARedeemIsUnderWayIsRefused() async throws {
         defer { phone.close() }
         service.holdRedeems()
         let redeeming = Task { try await m.redeemSetupCode(.secret(service.secret)) }
         #expect(await eventually { service.heldRedeems > 0 })
         let error = await vaultFailure { _ = try await m.transferIn(code: try code()) }
-        #expect(error?.code == VaultManager.codeTransferWaiting, "\(String(describing: error))")
+        #expect(error?.kind == .enrollmentStarted && error?.code == VaultManager.codeRedeemUnderWay, "\(String(describing: error))")
+        #expect(error.map { $0.kind.message(code: $0.code, timeScale: 1) } == FailureKind.enrollmentStarted.message)
         #expect(m.record.value.transferStartedMs == nil && m.session?.device.hasVault != true)
         service.releaseRedeems()
         _ = try await redeeming.value
@@ -206,8 +211,8 @@ extension VaultManagerTransferInTests {
         #expect(m.transferWaitingRefusal(earlier)?.code == VaultManager.codeTransferWaiting)
     }
 
-    /// Pinned with no start stored (an older race wiped it): the refusal writes a start now, so the transfer's deadline
-    /// and settlement window apply, and waits for it; the transfer isn't dropped.
+    /// Pinned with no start stored (an older race wiped it): the refusal adopts it (a start written now, so the transfer's
+    /// deadline and settlement window apply) and waits for it; the transfer isn't dropped.
     @Test func aPinnedTransferWithoutItsStartGetsOneAndIsWaitedFor() async throws {
         defer { phone.close() }
         _ = try await m.redeemSetupCode(.secret(service.secret))
@@ -218,7 +223,8 @@ extension VaultManagerTransferInTests {
         }
         let before = m.nowMs
         _ = await vaultFailure { try await m.enroll(pin: pin) { _ in } }
-        #expect((m.record.value.transferStartedMs ?? 0) >= before, "a start written now")
+        // Adopted in a task of its own (the refusal itself is immediate).
+        #expect(await eventually { (m.record.value.transferStartedMs ?? 0) >= before }, "a start written now")
         #expect(m.record.value.transferIn, "with the transfer's flag")
         #expect(m.moveFlags.book.transferWaiter != nil, "waited for")
         #expect(m.session?.device.hasVault == true, "not dropped")

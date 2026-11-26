@@ -25,6 +25,11 @@ public final class TransferInViewModel: TransferInActions {
     @ObservationIgnored private let work = Work()
     @ObservationIgnored private var waiter: Task<Void, Never>?
     @ObservationIgnored private var ticker: Task<Void, Never>?
+    /// The take-up of a transfer not finished as the screen opens (``resume()``).
+    @ObservationIgnored private var resumer: Task<Void, Never>?
+    /// Follows the end of a transfer waited for in the background (``TransferEndNotice/transferEnd``), from after the start.
+    @ObservationIgnored private var ends: Task<Void, Never>?
+    @ObservationIgnored private var followsEnds = false
 
     public init(
         move: any MoveRepository,
@@ -36,12 +41,67 @@ public final class TransferInViewModel: TransferInActions {
         self.vault = vault
         self.now = now
         self.sleep = sleep
+        resume()
+        ends = follow(self, read: { $0.vault.transferEnd }, apply: { $0.backgroundEnded($1) })
+        followsEnds = true
     }
 
     deinit {
         work.cancelAll()
+        resumer?.cancel()
+        ends?.cancel()
         waiter?.cancel()
         ticker?.cancel()
+    }
+
+    /// A transfer to this phone that is not finished (a restart, or the screen left): its code again, waiting, or the
+    /// settlement's check, counted from its stored start; or "The move stopped on this phone" once. Only while the screen is
+    /// still at its start: a scan begun meanwhile is the member's. A wait not taken up (the screen went, or the member left
+    /// the start without a scan of their own running), and a take-up that failed, leave the transfer to the background's
+    /// wait, started again if it is not running. A stop the screen cannot show stays the repository's notice
+    /// (``TransferEndNotice/transferEnd``). Mirrors vettid-android `TransferInViewModel`'s `init`.
+    private func resume() {
+        resumer = Task { @MainActor [weak self, move, vault] in
+            let found: TransferInWaiting?
+            do {
+                found = try await move.transferInWaiting()
+            } catch {
+                // The take-up failed: the background waits for the transfer again (nothing if it still does), unless the
+                // member's own scan began meanwhile (its transfer is the screen's).
+                if self?.waiter == nil { move.waitForTransferInBackground() }
+                return
+            }
+            guard let found else { return }
+            guard !Task.isCancelled, let vm = self, vm.state.step == .intro, vm.waiter == nil else {
+                // Never while the member's own scan runs: its transfer is waited for by the screen.
+                if case .waiting = found, self?.waiter == nil { move.waitForTransferInBackground() }
+                return
+            }
+            switch found {
+            case .stopped:
+                vm.state.step = .stopped
+                // Told here: not again on the welcome screen.
+                vault.acknowledgeTransferEnd()
+            case .waiting(let sas, let startedAt):
+                vm.waiter = Task { @MainActor [weak vm, move, vault] in
+                    await Self.awaitApproval(Weak(vm), move, vault, sas: sas, deadline: startedAt.addingTimeInterval(Self.window))
+                }
+            }
+        }
+    }
+
+    /// (§11.14.10 rule 5) The background's wait for a transfer this screen did not take up ended without completing, while
+    /// the screen is at its start: its end here, as the screen's own wait shows it (vettid-android's screen waits itself),
+    /// and not again on the welcome screen. An end already noted when the screen opened is the welcome screen's.
+    private func backgroundEnded(_ end: TransferEnd?) {
+        guard followsEnds, let end, state.step == .intro, waiter == nil else { return }
+        state.sas = nil
+        state.step = switch end {
+        case .timedOut: .timedOut
+        case .declined: .rejected
+        case .stopped: .stopped
+        }
+        vault.acknowledgeTransferEnd()
     }
 
     public func scan() {
@@ -276,9 +336,11 @@ public final class TransferInViewModel: TransferInActions {
         let left = max(Int64(deadline.timeIntervalSince(now()).rounded(.down)), 0)
         state.secondsLeft = left
         // From the end of the vault's 10 minutes the old phone can no longer approve: the code goes, and the screen checks
-        // (as vettid-android does). The repository decides the moment, as for Back (``closesNow``): both agree to the second.
+        // (as vettid-android does). The repository decides both moments, as for Back (``closesNow``): both agree to the
+        // second. A start adopted with its real start unknown closes the abandon at once, yet its code is still compared
+        // until the old phone can no longer approve (§11.14.10 rule 5).
         state.closing = move.abandonClosed
-        state.checking = state.closing
+        state.checking = move.transferChecking
         return left > 0
     }
 
@@ -286,6 +348,15 @@ public final class TransferInViewModel: TransferInActions {
     /// No abandon now (§11.14.10 rule 5), as the repository decides it (``TransferInBackground/abandonClosed``): the
     /// ticker's ``TransferInState/closing`` only hides the button.
     public var closesNow: Bool { state.step == .compare && move.abandonClosed }
+
+    /// The screen hands its wait to the background (``TransferInScreen/leave``): its own wait stops first, so that the two
+    /// never wait at once; nothing is abandoned.
+    public func handOver() {
+        resumer?.cancel()
+        waiter?.cancel()
+        waiter = nil
+        ticker?.cancel()
+    }
 
     public func cancel() {
         // No abandon from the end of the vault's 10 minutes (§11.14.10 rule 5): the button is gone then.

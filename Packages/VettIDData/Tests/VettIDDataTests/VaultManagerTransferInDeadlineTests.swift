@@ -171,16 +171,16 @@ extension VaultManagerTransferInTests {
             + "waiter \(m.moveFlags.book.transferWaiter != nil), deadline pauses \(phone.deadlinePauses.lengths.count)"
     }
 
-    /// M3: a start before the deadline waits for the rest of it in the background (the welcome screen stays; enrollment is
-    /// refused meanwhile), and the approval then completes the transfer. The killed process's collects take nothing
-    /// (``TestVaultPhone/restart()``), so the approval is the new process's.
+    /// M3: a start before the deadline waits for the rest of it in the background (the transfer screen opens again,
+    /// ``SetupStage/transferWaiting``; enrollment is refused meanwhile), and the approval then completes the transfer. The
+    /// killed process's collects take nothing (``TestVaultPhone/restart()``), so the approval is the new process's.
     @Test func aStartBeforeTheDeadlineKeepsWaiting() async throws {
         defer { phone.close() }
         _ = try await scanned()
         service.leasesCollected = 1 // the relay's lease (RELAY-PROTOCOL §6.3)
         try await phone.restart()
         try await m.refresh()
-        #expect(m.phase == .signedOut && m.moveFlags.book.transferWaiter != nil)
+        #expect(m.phase == .setup(.transferWaiting) && m.moveFlags.book.transferWaiter != nil)
         #expect(await vaultFailure { _ = try await m.redeemSetupCode(.secret(service.secret)) } != nil)
         // The approval comes once the background wait is under way (parked for the deadline).
         #expect(await deadlineWaiting())

@@ -57,6 +57,10 @@ struct LocalAccount: Codable, Equatable, Sendable {
     /// fetched. A scan of the same code while the transfer is open changes nothing (``VaultManager/transferIn(code:)``).
     /// Removed with ``transferStartedMs``.
     var transferCode: TransferCodeID?
+    /// (§11.14.10 rule 5; owner decision) The ``transferStartedMs`` written for a pinned transfer whose own start was lost
+    /// (``VaultManager/adoptPinWithoutStart(_:)``): while it is the stored start, that start counts as past the vault's
+    /// minute 10, so no abandon is offered. A start written by a scan, or none, is never equal to it.
+    var transferStartAdoptedMs: Int64?
     /// This phone registered for a recovery (VAULT-MESSAGING §11.11.3): the vault bound its App Attest key at the register
     /// (IOS-PLAN §6.2), and the recovery that follows is this phone's way to the vault until the member leaves onboarding.
     var recoveryRegistered = false
@@ -129,6 +133,7 @@ struct LocalAccount: Codable, Equatable, Sendable {
         case transferStartedMs = "transfer_started_ms"
         case transferEpochID = "transfer_epoch_id"
         case transferCode = "transfer_code"
+        case transferStartAdoptedMs = "transfer_start_adopted_ms"
         case recoveryRegistered = "recovery_registered"
         case setupComplete = "setup_complete"
         case capabilities
@@ -173,6 +178,7 @@ struct LocalAccount: Codable, Equatable, Sendable {
         transferStartedMs = try c.decodeIfPresent(Int64.self, forKey: .transferStartedMs)
         transferEpochID = try c.decodeIfPresent(String.self, forKey: .transferEpochID)
         transferCode = try c.decodeIfPresent(TransferCodeID.self, forKey: .transferCode)
+        transferStartAdoptedMs = try c.decodeIfPresent(Int64.self, forKey: .transferStartAdoptedMs)
         recoveryRegistered = try c.decodeIfPresent(Bool.self, forKey: .recoveryRegistered) ?? false
         setupComplete = try c.decodeIfPresent(Bool.self, forKey: .setupComplete) ?? false
         capabilities = try c.decodeIfPresent([String].self, forKey: .capabilities) ?? []

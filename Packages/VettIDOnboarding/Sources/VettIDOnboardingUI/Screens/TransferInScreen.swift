@@ -116,7 +116,7 @@ public struct TransferInContent: View {
         ) {
             VStack(alignment: .leading, spacing: Spacing.l) {
                 NoticeCard(.info, title: MoveStrings.recoverNeedTitle, message: MoveStrings.transferInNeedBody)
-                MoveFailure(kind: state.error, timeScale: timeScale)
+                MoveFailure(kind: state.error, code: state.errorCode, timeScale: timeScale)
             }
         }
         .accessibilityElement(children: .contain)
@@ -131,7 +131,7 @@ public struct TransferInContent: View {
             VStack(alignment: .leading, spacing: Spacing.l) {
                 ScannerBox(onText: actions.scanned, onTypeInstead: actions.paste, camera: camera, typeLabel: MoveStrings.transferInPaste)
                 InputProblem(kind: state.inputProblem)
-                MoveFailure(kind: state.error, timeScale: timeScale)
+                MoveFailure(kind: state.error, code: state.errorCode, timeScale: timeScale)
             }
         }
         .accessibilityElement(children: .contain)
@@ -156,7 +156,7 @@ public struct TransferInContent: View {
                 }
                 .accessibilityIdentifier("transfer_code")
                 InputProblem(kind: state.inputProblem)
-                MoveFailure(kind: state.error, timeScale: timeScale)
+                MoveFailure(kind: state.error, code: state.errorCode, timeScale: timeScale)
             }
         }
         .accessibilityElement(children: .contain)
@@ -195,16 +195,23 @@ public struct TransferInContent: View {
     }
 }
 
-/// A failure as a notice: the vault's own text, or "Your vault did not answer…" when it did not answer.
-private struct MoveFailure: View {
+/// A failure as a notice: the vault's own text, or "Your vault did not answer…" when it did not answer; a new code refused
+/// while the last move cannot be abandoned ([code] ``VaultManager/codeTransferWaiting``) says that a move is under way.
+struct MoveFailure: View {
     let kind: FailureKind?
+    let code: String?
     let timeScale: UInt64
+
+    /// The notice's text for [kind] with its [code].
+    static func message(_ kind: FailureKind, code: String?, timeScale: UInt64) -> String {
+        kind == .noResponse ? MoveStrings.transferInNoAnswer : kind.message(code: code, timeScale: timeScale)
+    }
 
     var body: some View {
         if let kind {
             NoticeCard(
-                .urgent, title: MoveStrings.recoverFailedTitle,
-                message: kind == .noResponse ? MoveStrings.transferInNoAnswer : kind.message(timeScale: timeScale), announce: .assertive
+                .urgent, title: MoveStrings.recoverFailedTitle, message: Self.message(kind, code: code, timeScale: timeScale),
+                announce: .assertive
             )
             .accessibilityIdentifier("error")
         }
@@ -291,6 +298,8 @@ public struct MovedScreen: View {
 public struct TransferInRoute: View {
     private let move: any MoveRepository
     private let vault: any VaultRepository
+    /// The phase the screen is left in (``leave(_:move:movedIn:phase:)``); none: the onboarding's.
+    private let account: (any AccountRepository)?
     private let onLeave: @MainActor () -> Void
     private let onRecover: @MainActor () -> Void
     private let camera: AnyView?
@@ -298,19 +307,21 @@ public struct TransferInRoute: View {
     @State private var model: TransferInViewModel?
 
     public init(
-        move: any MoveRepository, vault: any VaultRepository, onLeave: @escaping @MainActor () -> Void,
-        onRecover: @escaping @MainActor () -> Void = {}, camera: AnyView? = nil
+        move: any MoveRepository, vault: any VaultRepository, account: any AccountRepository,
+        onLeave: @escaping @MainActor () -> Void, onRecover: @escaping @MainActor () -> Void = {}, camera: AnyView? = nil
     ) {
-        self.init(move: move, vault: vault, onLeave: onLeave, onRecover: onRecover, camera: camera, model: nil)
+        self.init(move: move, vault: vault, account: account, onLeave: onLeave, onRecover: onRecover, camera: camera, model: nil)
     }
 
     /// TEST ONLY: [model] is the route's own from the start (a transfer already under way).
     init(
-        move: any MoveRepository, vault: any VaultRepository, onLeave: @escaping @MainActor () -> Void,
-        onRecover: @escaping @MainActor () -> Void = {}, camera: AnyView?, model: TransferInViewModel?
+        move: any MoveRepository, vault: any VaultRepository, account: (any AccountRepository)? = nil,
+        onLeave: @escaping @MainActor () -> Void, onRecover: @escaping @MainActor () -> Void = {}, camera: AnyView?,
+        model: TransferInViewModel?
     ) {
         self.move = move
         self.vault = vault
+        self.account = account
         self.onLeave = onLeave
         self.onRecover = onRecover
         self.camera = camera
@@ -323,7 +334,7 @@ public struct TransferInRoute: View {
             finishPane: AnyView(FinishMoveRoute(vault: vault) { model?.finish() }), onRecover: onRecover
         )
         .onAppear { if model == nil { model = TransferInViewModel(move: move, vault: vault) } }
-        .onDisappear { Self.leave(model, move: move, movedIn: vault.movedIn) }
+        .onDisappear { Self.leave(model, move: move, movedIn: vault.movedIn, phase: account?.phase ?? .signedOut) }
         // The pasted code is also forgotten when the app leaves the foreground and when the iPhone locks (IOS-PLAN §6.3;
         // chosen; vettid-android has no such rule).
         .onChange(of: scenePhase) { _, now in if now == .background { model?.setInput("") } }
@@ -334,13 +345,19 @@ public struct TransferInRoute: View {
 
     /// The screen goes: a transfer under way is cancelled, and the pasted code is forgotten. Not when the transfer completed
     /// ([movedIn]): the approval can replace this screen with the move's last screen before the model shows it, and then
-    /// nothing is dropped.
-    static func leave(_ model: TransferInViewModel?, move: any MoveRepository, movedIn: Bool) {
+    /// nothing is dropped. Nor when the vault's [phase] took the onboarding away (a read that could not reach the vault, a
+    /// lock): the member did not leave, so a transfer whose start is stored is waited for in the background instead, and
+    /// its screen comes back with the phase (``SetupStage/transferWaiting``).
+    static func leave(_ model: TransferInViewModel?, move: any MoveRepository, movedIn: Bool, phase: AppPhase) {
         guard let model else { return }
         model.setInput("")
         // From the end of the vault's 10 minutes the transfer is not abandoned (§11.14.10 rule 5): the manager waits for it
-        // in the background, and how it ended is told on the welcome screen.
-        if model.closesNow, !movedIn {
+        // in the background, and how it ended is told on the welcome screen. The same when the screen went with the
+        // onboarding (chosen; not in the spec): only the member's own leaving abandons. Not while a scan is connecting:
+        // its handshake is dropped as when the member leaves (IOS-PLAN 0.1.83).
+        let tookAway = !onboards(phase) && move.transferStartedAt != nil && model.state.step != .connecting
+        if !movedIn, model.closesNow || tookAway {
+            model.handOver()
             move.waitForTransferInBackground()
             return
         }
@@ -353,5 +370,13 @@ public struct TransferInRoute: View {
 
     /// The steps in which leaving cancels the transfer (the handshake is under way); after the approval nothing is cancelled.
     static func cancels(_ step: TransferInStep) -> Bool { step == .connecting || step == .compare }
+
+    /// Whether [phase] shows the onboarding, where this screen is (the app's root shows another flow otherwise).
+    static func onboards(_ phase: AppPhase) -> Bool {
+        switch phase {
+        case .signedOut, .setup: true
+        default: false
+        }
+    }
 }
 #endif

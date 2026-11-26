@@ -22,6 +22,22 @@ import VettIDUI
         #expect(ErrorNotice.message(.network, at, timeScale: 1) == FailureKind.network.message)
     }
 
+    /// iPhone only: a setup code, an enrollment or a start-over refused while a move to this phone is under way says that,
+    /// not "This phone may already have set up your vault".
+    @Test func aRefusalWhileAMoveWaitsSaysSo() {
+        let text = ErrorNotice.message(.enrollmentStarted, nil, code: VaultManager.codeTransferWaiting, timeScale: 1)
+        #expect(text == FailureKind.transferWaitingText && text.contains("still under way"))
+        #expect(text != FailureKind.enrollmentStarted.message)
+        #expect(ErrorNotice.message(.enrollmentStarted, nil, code: VaultManager.codeEnrollmentStarted, timeScale: 1)
+            == FailureKind.enrollmentStarted.message)
+        // The transfer screen's notice too (a new code refused while the last move cannot be abandoned); a scan refused
+        // during a redeem (no move under way) keeps the general text.
+        #expect(MoveFailure.message(.enrollmentStarted, code: VaultManager.codeTransferWaiting, timeScale: 1) == text)
+        #expect(MoveFailure.message(.enrollmentStarted, code: VaultManager.codeRedeemUnderWay, timeScale: 1)
+            == FailureKind.enrollmentStarted.message)
+        #expect(MoveFailure.message(.noResponse, code: VaultManager.codeTransferWaiting, timeScale: 1) == MoveStrings.transferInNoAnswer)
+    }
+
     /// Every key of the package's `Localizable.xcstrings` resolves, in the built bundle, to its own non-empty text.
     @Test func everyStringResolves() throws {
         let url = URL(fileURLWithPath: #filePath)

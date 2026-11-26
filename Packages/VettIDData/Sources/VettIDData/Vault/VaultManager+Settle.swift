@@ -329,6 +329,18 @@ extension VaultManager {
     public var abandonClosed: Bool {
         if moveFlags.book.settling != nil { return true }
         guard let started = record.value.transferStartedMs else { return false }
+        // A start adopted for a pin whose own start was lost counts as past minute 10 (owner decision).
+        if record.value.transferStartAdoptedMs == started { return true }
+        return config.now().timeIntervalSince1970 >= Double(started) / 1000 + Self.vaultApprovalWindow
+    }
+
+    /// Whether the old phone can no longer approve the transfer waiting (§11.14.10 rule 5: "until the 11 minutes: the
+    /// comparison code"): from the end of the vault's 10 minutes after the stored start, and while the window runs. A start
+    /// adopted with its real start unknown closes the abandon at once (``abandonClosed``), not the comparison: the vault may
+    /// still accept the old phone's approval.
+    public var transferChecking: Bool {
+        if moveFlags.book.settling != nil { return true }
+        guard let started = record.value.transferStartedMs else { return false }
         return config.now().timeIntervalSince1970 >= Double(started) / 1000 + Self.vaultApprovalWindow
     }
 
@@ -343,13 +355,29 @@ extension VaultManager {
     /// abandon, the process ending) tells nothing.
     public func waitForTransferInBackground() { waitForTransferInBackground(quiet: false) }
 
+    /// The pause before a background wait that failed before its deadline is started again, in seconds (chosen; not in the
+    /// spec).
+    nonisolated static let waitRetryPause: Int64 = 5
+
+    /// The screen's own wait is under way (it is going, or failed): the background's starts once it has ended, so that the
+    /// two never wait at once (``awaitTransferIn()``). A wait asked for with its notice keeps it. True when deferred. Not
+    /// while the settlement runs: the screen's wait joined it, which its cancellation does not end, and the background's
+    /// joins it too (no second wait for the `device.paired`), so that a drop or a rejection is told.
+    private func deferredBehindScreen(quiet: Bool) -> Bool {
+        guard moveFlags.book.screenWaits > 0, moveFlags.book.settling == nil else { return false }
+        moveFlags.book.backgroundAfterScreen = quiet && moveFlags.book.backgroundAfterScreen != false
+        return true
+    }
+
     /// ``waitForTransferInBackground()``; [quiet]: its end sets no ``transferEnd`` notice.
     func waitForTransferInBackground(quiet: Bool) {
-        guard moveFlags.book.transferWaiter == nil, record.value.transferStartedMs != nil else { return }
+        guard moveFlags.book.transferWaiter == nil, record.value.transferStartedMs != nil, !deferredBehindScreen(quiet: quiet)
+        else { return }
         moveFlags.book.transferWaiter = Task { @MainActor [weak self] in
             var end: TransferEnd?
+            var failed = false
             do {
-                _ = try await self?.awaitTransferIn()
+                _ = try await self?.awaitTransferInWaiting()
             } catch let f as VaultFailure where f.code == Self.codeTransferDeadline {
                 end = .timedOut
             } catch let f as VaultFailure where f.code == Self.codeTransferSessionEnded {
@@ -358,8 +386,16 @@ extension VaultManager {
                 end = .declined
             } catch is PairingRejected {
                 end = .declined
-            } catch {}
+            } catch {
+                failed = true
+            }
             guard let self, !Task.isCancelled else { return }
+            // A wait that failed before its deadline with the transfer kept is started again by the read below: not at once
+            // (a failure that repeats would spin), and with this waiter still set meanwhile, so that nothing else starts one.
+            if failed, record.value.transferStartedMs != nil {
+                try? await config.transferWaitRetrySleep(.seconds(Self.waitRetryPause))
+                guard !Task.isCancelled else { return }
+            }
             moveFlags.book.transferWaiter = nil
             if let end, !quiet { transferEnd = end }
             try? await refresh()

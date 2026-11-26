@@ -1,0 +1,149 @@
+import Foundation
+import VettIDVault
+
+// A transfer to this phone that is not finished, as the phase and the transfer screen see it (VAULT-MESSAGING §6.7.1,
+// §11.14.10 rule 5): ``SetupStage/transferWaiting`` opens the transfer screen again, which takes the transfer up
+// (``transferInWaiting()``). Mirrors vettid-android `TransferInResume.decide`, `StoppedMove.tells` and
+// `transferInWaiting`. Nothing here sends anything.
+extension VaultManager {
+    /// The code of a scan refused while a setup code's redeem is under way (no move is under way then; the general text).
+    public nonisolated static let codeRedeemUnderWay = "redeem_under_way"
+
+    /// Whether a transfer to this phone is not finished on [d]: unpaired and pinned to a vault whose id it does not know yet
+    /// (only a transfer pins so: an enrollment's `vault.enrolled` pins the vault with its id), as vettid-android's pending
+    /// transfer is the device's. A stored start that nothing pins is no transfer here: it is cleared at the start's resume,
+    /// or refuses an enrollment until its background wait clears it (``transferWaitingRefusal(_:)``).
+    func transferWaitsHere(_ d: VaultDevice) -> Bool {
+        d.deviceID == nil && d.vaultID == nil && d.hasVault
+    }
+
+    /// The phase's own step for a transfer waiting on [d] (``transferWaitsHere(_:)``): one pinned with no start stored is
+    /// adopted (``adoptPinWithoutStart(_:)``), and one that nothing waits for is waited for in the background; never one that
+    /// stopped on this phone untold (the transfer screen tells it first, ``transferInWaiting()``).
+    func watchWaitingTransfer(_ d: VaultDevice) async {
+        if await adoptPinWithoutStart(d) { return }
+        guard !d.droppedWithoutUserGuid else { return }
+        let book = moveFlags.book
+        guard book.transferWaiter == nil, book.settling == nil, book.waitingIn == 0, book.startingIn == 0, book.screenWaits == 0
+        else { return }
+        waitForTransferInBackground()
+    }
+
+    /// (§11.14.10 rule 5) A transfer pinned on [d] with no start stored (an older race wiped it), and no scan writing its
+    /// own. Its handshake never answered (no comparison code saved, none awaited here): nothing can complete it, so it is
+    /// dropped now, as a start's resume drops one. Otherwise its real start is unknown, and counts as past the vault's minute
+    /// 10 (owner decision): no abandon is offered, and the full deadline from now, then the settlement's window, is waited
+    /// for before it is dropped, since the vault may still approve a recent one (``writeUnknownStart()``). Never dropped
+    /// outright then. True when it was adopted (or dropped).
+    @discardableResult
+    func adoptPinWithoutStart(_ d: VaultDevice) async -> Bool {
+        guard moveFlags.book.startingIn == 0, record.value.transferStartedMs == nil, transferWaitsHere(d) else { return false }
+        // One that stopped on this phone is the transfer screen's to tell first (``transferInWaiting()``).
+        guard !d.droppedWithoutUserGuid else { return true }
+        if !d.holdsTransferSas, !d.awaitsPairingResp, await dropTransfer(d) { return true }
+        writeUnknownStart()
+        waitForTransferInBackground()
+        return true
+    }
+
+    /// A start for a transfer known to be dead (it stopped on this phone, and its drop could not be saved): one deadline
+    /// back, with no adopted mark, so that only the settlement's window runs before it is dropped again, and new codes are
+    /// refused only as long as that.
+    func writeDeadStart() {
+        let started = nowMs - Int64(Self.pairingWindow * 1000)
+        _ = try? record.update(since: record.generation) {
+            $0.transferIn = true
+            $0.transferStartedMs = started
+            $0.transferStartAdoptedMs = nil
+        }
+    }
+
+    /// A start for a transfer whose own start is unknown: now, marked as adopted (``LocalAccount/transferStartAdoptedMs``),
+    /// so that the abandon is closed from the start (``abandonClosed``) while the deadline is the full 11 minutes.
+    func writeUnknownStart() {
+        let started = nowMs
+        _ = try? record.update(since: record.generation) {
+            $0.transferIn = true
+            $0.transferStartedMs = started
+            $0.transferStartAdoptedMs = started
+        }
+    }
+
+    /// The screen's wait for the transfer to this phone (``MoveRepository/awaitTransferIn()``): it takes the background's
+    /// place as it begins (one waiter takes the `device.paired`; a settlement under way is joined, with its collects and its
+    /// outcome). Should it fail with the transfer kept, the background's starts again.
+    public func awaitTransferIn() async throws -> Bool {
+        // A screen's wait cancelled before it began (the screen handed it over) takes nothing from the background's.
+        try Task.checkCancellation()
+        moveFlags.book.screenWaits += 1
+        defer {
+            moveFlags.book.screenWaits -= 1
+            startBackgroundAfterScreen()
+        }
+        moveFlags.book.transferWaiter?.cancel()
+        moveFlags.book.transferWaiter = nil
+        return try await awaitTransferInWaiting()
+    }
+
+    /// The background's wait asked for while the screen's ran (``waitForTransferInBackground(quiet:)``), started once the
+    /// last of them ended: only for a transfer still waiting (its start stored, the phone not paired).
+    private func startBackgroundAfterScreen() {
+        guard moveFlags.book.screenWaits == 0, let quiet = moveFlags.book.backgroundAfterScreen else { return }
+        moveFlags.book.backgroundAfterScreen = nil
+        guard !halted, !record.closed, session?.device.deviceID == nil else { return }
+        waitForTransferInBackground(quiet: quiet)
+    }
+
+    /// The transfer the screen takes up as it opens, while the phase says one waits. A comparison code shown (saved with
+    /// the handshake, so also after a restart): ``TransferInWaiting/waiting(sas:startedAt:)``; the background's wait goes on
+    /// until the screen's begins (``awaitTransferIn()``), so that nothing is left unwatched in between. One that stopped on
+    /// this phone untold: ``TransferInWaiting/stopped``, once per process, with the notice (``transferEnd``) standing until
+    /// the screen has shown it; the transfer is dropped then, and a drop that cannot be saved is left to the background's
+    /// wait. Nil otherwise; nothing is fetched or sent.
+    public func transferInWaiting() async throws -> TransferInWaiting? {
+        // Only while the phase says so: no session is opened for a phone with nothing set up.
+        guard phase == .setup(.transferWaiting), !halted, !record.closed else { return nil }
+        return try await guarded {
+            let d = try await openSession().device
+            guard transferWaitsHere(d) else { return nil }
+            if d.droppedWithoutUserGuid {
+                guard !moveFlags.book.stopTold else { return nil }
+                moveFlags.book.stopTold = true
+                moveFlags.book.transferWaiter?.cancel()
+                moveFlags.book.transferWaiter = nil
+                transferEnd = .stopped
+                if await !dropTransfer(d) {
+                    if record.value.transferStartedMs == nil { writeDeadStart() }
+                    waitForTransferInBackground(quiet: true)
+                }
+                await rereadAfterTransferIn()
+                return .stopped
+            }
+            guard let sas = d.transferSas, let started = transferStartedAt else { return nil }
+            return .waiting(sas: sas, startedAt: started)
+        }
+    }
+
+    /// The phase read again once the transfer screen's own transfer ended (abandoned, dropped, rejected, stopped), while the
+    /// phase still says it waits: a phone left with a redeemed code goes back to its new vault, one without to the welcome
+    /// screen. The background's wait reads it again itself (``waitForTransferInBackground()``).
+    func rereadAfterTransferIn() async {
+        guard phase == .setup(.transferWaiting), !halted, !record.closed else { return }
+        try? await refresh()
+    }
+
+    /// A drop of this scan's own transfer (its start failed, its fin was refused for good, or no `hs.resp` came): a
+    /// background wait left from before (a screen that went with the onboarding) goes first, so that it never ends later
+    /// as a move the member did not see (``TransferEnd/timedOut``).
+    func dropScanTransfer(_ d: VaultDevice) async {
+        moveFlags.book.transferWaiter?.cancel()
+        moveFlags.book.transferWaiter = nil
+        await dropTransfer(d)
+    }
+
+    /// The new phone's deadline: 11 minutes after it started the `hs.init` (``LocalAccount/transferStartedMs``); nil without
+    /// a transfer waiting.
+    var transferDeadline: Date? {
+        record.value.transferStartedMs.map { Date(timeIntervalSince1970: Double($0) / 1000 + Self.pairingWindow) }
+    }
+}

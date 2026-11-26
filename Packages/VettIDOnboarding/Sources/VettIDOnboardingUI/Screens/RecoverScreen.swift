@@ -131,7 +131,7 @@ public struct RecoverContent: View {
         ) {
             if let kind = state.error {
                 NoticeCard(
-                    .urgent, title: MoveStrings.recoverFailedTitle, message: kind.message(timeScale: timeScale),
+                    .urgent, title: MoveStrings.recoverFailedTitle, message: kind.message(code: state.errorCode, timeScale: timeScale),
                     announce: .assertive
                 )
                     .accessibilityIdentifier("error")

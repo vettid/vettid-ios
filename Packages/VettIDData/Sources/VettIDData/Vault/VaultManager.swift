@@ -644,6 +644,15 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
             if d.recovering { return .setup(.recovering) }
             // Enrolled, the first handshake (or the credential) not finished.
             if d.vaultID != nil { return .setup(.needsCredential) }
+            // (§6.7.1, §11.14.10 rule 5) A transfer to this phone that is not finished: the device pinned to a vault whose
+            // id it does not know yet (a transfer's pin), with or without a redeemed code. It waits for the old phone, is
+            // being settled, or stopped on this phone untold (``VaultDevice/droppedWithoutUserGuid``, still pinned): the
+            // transfer screen again, never the new vault's steps that would only be refused. Something waits for it
+            // (``watchWaitingTransfer(_:)``), which may also drop one that can never complete.
+            if transferWaitsHere(d) {
+                await watchWaitingTransfer(d)
+                if transferWaitsHere(d) { return .setup(.transferWaiting) }
+            }
             // A redeemed code: enroll. The enrollment itself answers vault_exists for a vault this phone does not hold.
             return current.userGuid.isEmpty ? .signedOut : .setup(.newVault)
         }

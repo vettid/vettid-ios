@@ -271,6 +271,8 @@ public final class TestVaultPhone {
     public let heartbeatPauses = { let p = TestPauses(); p.holding = false; return p }()
     /// The pauses of a window kept alive in the background (15 s): 10 ms, unless a test holds them.
     public let backgroundPauses = { let p = TestPauses(); p.holding = false; return p }()
+    /// The pause before a failed background wait for a transfer to this phone is started again: 10 ms, unless a test holds it.
+    public let waitRetryPauses = { let p = TestPauses(); p.holding = false; p.shortMs = 10; return p }()
     var waitsForOldCollects = true
     public internal(set) var process = 0
     /// Whether a change's wait lasts until the test releases it (``changeWaits``).
@@ -325,7 +327,7 @@ public final class TestVaultPhone {
             requestTimeout: requestTimeout, pauses: changePauses, changeWaits: changeWaits, deletion: deletionPauses,
             transfer: transferPauses, keep: keepPauses, keptEnd: keptEndPauses, deadline: deadlinePauses,
             collect: collectPauses, window: windowPauses, heartbeat: heartbeatPauses, background: backgroundPauses,
-            lockStatusWait: lockStatusWait, saveFailure: deviceSaveFails,
+            waitRetry: waitRetryPauses, lockStatusWait: lockStatusWait, saveFailure: deviceSaveFails,
             phoneWriteFailure: phoneSecretsWriteFails
         )
         var config = try Self.configured(
@@ -369,7 +371,7 @@ public final class TestVaultPhone {
             requestTimeout: requestTimeout, pauses: changePauses, changeWaits: changeWaits, deletion: deletionPauses,
             transfer: transferPauses, keep: keepPauses, keptEnd: keptEndPauses, deadline: deadlinePauses,
             collect: collectPauses, window: windowPauses, heartbeat: heartbeatPauses, background: backgroundPauses,
-            lockStatusWait: lockStatusWait, saveFailure: deviceSaveFails,
+            waitRetry: waitRetryPauses, lockStatusWait: lockStatusWait, saveFailure: deviceSaveFails,
             phoneWriteFailure: phoneSecretsWriteFails
         )
     }
@@ -378,6 +380,7 @@ public final class TestVaultPhone {
     private struct Waits {
         let requestTimeout: TimeInterval
         let pauses, changeWaits, deletion, transfer, keep, keptEnd, deadline, collect, window, heartbeat, background: TestPauses
+        let waitRetry: TestPauses
         let lockStatusWait: TimeInterval
         let saveFailure: SaveSwitch
         let phoneWriteFailure: SaveSwitch
@@ -423,6 +426,8 @@ public final class TestVaultPhone {
         c.transferCollectSleep = { d in try await collect.sleep(Double(d.components.seconds) + Double(d.components.attoseconds) / 1e18) }
         c.transferWindowSleep = { d in if window.holding { try await window.sleep((d / .seconds(1)).rounded()) } }
         c.transferRetrySleep = { _ in try await Task.sleep(for: .milliseconds(10)) }
+        let waitRetry = waits.waitRetry
+        c.transferWaitRetrySleep = { d in try await waitRetry.sleep(Double(d.components.seconds)) }
         c.transferHeartbeatSleep = Self.heartbeatSleep(waits.heartbeat)
         c.transferBackgroundSleep = Self.heldSleep(waits.background)
         c.uptime = { uptime.monotonic }
@@ -472,57 +477,6 @@ public final class TestVaultPhone {
             environment: "test",
             now: { clock.now }
         )
-    }
-}
-
-/// TEST ONLY. Pauses a test releases: each ``sleep(_:)`` records its length and waits for ``release()`` (or its task's
-/// cancellation).
-public final class TestPauses: @unchecked Sendable {
-    private let lock = NSLock()
-    private var asked: [TimeInterval] = []
-    private var waiting: [UUID: CheckedContinuation<Void, Never>] = [:]
-
-    private var hold = true
-
-    /// The lengths asked for, in order.
-    public var lengths: [TimeInterval] { lock.withLock { asked } }
-
-    /// False: a pause lasts five seconds instead of waiting for ``release()`` (its length is recorded all the same).
-    public var holding: Bool {
-        get { lock.withLock { hold } }
-        set { lock.withLock { hold = newValue } }
-    }
-
-    func sleep(_ s: TimeInterval) async throws {
-        if !holding {
-            lock.withLock { asked.append(s) }
-            try await Task.sleep(nanoseconds: 5_000_000_000)
-            return
-        }
-        let id = UUID()
-        await withTaskCancellationHandler {
-            await withCheckedContinuation { (c: CheckedContinuation<Void, Never>) in
-                let cancelled: Bool = lock.withLock {
-                    asked.append(s)
-                    if Task.isCancelled { return true }
-                    waiting[id] = c
-                    return false
-                }
-                if cancelled { c.resume() }
-            }
-        } onCancel: {
-            lock.withLock { waiting.removeValue(forKey: id) }?.resume()
-        }
-        try Task.checkCancellation()
-    }
-
-    /// Ends the pauses waiting now.
-    public func release() {
-        let ws: [CheckedContinuation<Void, Never>] = lock.withLock {
-            defer { waiting.removeAll() }
-            return Array(waiting.values)
-        }
-        for w in ws { w.resume() }
     }
 }
 

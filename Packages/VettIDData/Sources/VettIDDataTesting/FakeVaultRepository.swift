@@ -142,11 +142,30 @@ public final class FakeVaultRepository: CustomStringConvertible {
     public var transferStartedAt: Date?
     /// ``TransferInBackground/abandonClosed``.
     public var abandonClosed = false
+    /// ``TransferInBackground/transferChecking``, when it differs from ``abandonClosed`` (an adopted start).
+    public var checksTransfer: Bool?
+    public var transferChecking: Bool { checksTransfer ?? abandonClosed }
     /// The codes ``TransferInBackground/isOpenTransferCode(_:)`` says are the open transfer's.
     public var openTransferCodes: Set<String> = []
     /// When set, ``transferIn(code:)`` starts a new transfer: the stored start becomes this.
     public var transferInStartsAt: Date?
     public func isOpenTransferCode(_ text: String) -> Bool { openTransferCodes.contains(text) }
+    /// What ``TransferInBackground/transferInWaiting()`` answers (a transfer not finished, as a restart finds it); a
+    /// ``TransferInWaiting/stopped`` is answered once.
+    public var waitingTransfer: TransferInWaiting?
+    /// Set: ``transferInWaiting()`` fails with it, once.
+    public var waitingTransferFailure: VaultFailure?
+    /// Set: ``transferInWaiting()`` answers only once it completes.
+    public var waitingTransferHold: TestDeferred<Void>?
+    public func transferInWaiting() async throws -> TransferInWaiting? {
+        if let hold = waitingTransferHold { try await hold.value() }
+        if let f = waitingTransferFailure {
+            waitingTransferFailure = nil
+            throw f
+        }
+        defer { if waitingTransfer == .stopped { waitingTransfer = nil } }
+        return waitingTransfer
+    }
     /// (VAULT-MESSAGING §11.14.9 "A lost answer") Where the decision of a lost change stands, set by a test.
     public var changeCheck: ChangeCheck?
     /// Which PIN the unlock asks for; ``UnlockAttempt/newPinNeeded`` moves it to ``UnlockPinStep/new``.

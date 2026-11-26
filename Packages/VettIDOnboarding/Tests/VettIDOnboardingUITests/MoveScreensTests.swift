@@ -168,6 +168,23 @@ import VettIDUI
         }
     }
 
+    /// The screen going reads the account's phase as it goes: taken away with the onboarding (a read that could not reach
+    /// the vault), its transfer is left to the background; gone from a setup phase (the member left), it is abandoned.
+    @Test(arguments: [(AppPhase.unreachable(.network), false), (AppPhase.setup(.transferWaiting), true)])
+    func theRouteReadsThePhaseItIsLeftIn(phase: AppPhase, abandons: Bool) async throws {
+        let vault = FakeVaultRepository(.setup(.transferWaiting))
+        let clock = VirtualTime()
+        var window: UIWindow? = try await handshakeWindow(vault, clock, account: vault)
+        vault.transferStartedAt = clock.now()
+        vault.phase = phase
+        window?.rootViewController = nil
+        window?.isHidden = true
+        window = nil
+        let abandoned = await eventually { vault.calls.contains("abandonTransferIn") }
+        #expect(abandoned == abandons, "\(phase)")
+        #expect(vault.calls.contains("waitForTransferInBackground") == !abandons, "\(phase)")
+    }
+
     /// (§11.14.10 rule 5) Leaving the screen from the end of the vault's 10 minutes abandons nothing: the manager waits for
     /// the transfer in the background.
     @Test func leavingLateHandsTheWaitToTheBackground() async throws {
@@ -180,19 +197,75 @@ import VettIDUI
         vault.abandonClosed = true
         await clock.advance(seconds: 610)
         #expect(model.state.closing)
-        TransferInRoute.leave(model, move: vault, movedIn: false)
+        TransferInRoute.leave(model, move: vault, movedIn: false, phase: vault.phase)
         for _ in 0..<50 { await Task.yield() }
         #expect(vault.calls.contains("waitForTransferInBackground") && !vault.calls.contains("abandonTransferIn"))
+        // The screen's own wait stopped as it handed over: an approval now is the background's, not this model's.
+        vault.transferApproval.complete(())
+        for _ in 0..<50 { await Task.yield() }
+        #expect(model.state.step == .compare, "\(model.state.step)")
     }
 
-    private func handshakeWindow(_ vault: FakeVaultRepository, _ clock: VirtualTime) async throws -> UIWindow {
+    /// The screen taken away with the onboarding during the vault's 10 minutes (a read that could not reach the vault, a lock):
+    /// the member did not leave, so the transfer is not abandoned; the manager waits for it in the background. The member's own
+    /// leaving (a setup phase) still abandons it, and so does one with no start stored.
+    @Test(arguments: [
+        (AppPhase.unreachable(.network), true, false),
+        (AppPhase.locked, true, false),
+        (AppPhase.setup(.transferWaiting), true, true),
+        (AppPhase.signedOut, true, true),
+        (AppPhase.unreachable(.network), false, true),
+    ])
+    func leavingWithTheOnboardingHandsTheWaitToTheBackground(phase: AppPhase, started: Bool, abandons: Bool) async throws {
+        let vault = FakeVaultRepository(.setup(.transferWaiting))
+        let clock = VirtualTime()
+        let model = TransferInViewModel(move: vault, vault: vault, now: clock.now, sleep: clock.sleep)
+        model.scan()
+        model.scanned(try qr(clock))
+        await clock.runCurrent()
+        #expect(await eventually { model.state.step == .compare })
+        vault.transferStartedAt = started ? clock.now() : nil
+        #expect(!model.closesNow, "inside the 10 minutes")
+        TransferInRoute.leave(model, move: vault, movedIn: false, phase: phase)
+        let abandoned = await eventually { vault.calls.contains("abandonTransferIn") }
+        #expect(abandoned == abandons, "\(phase)")
+        #expect(vault.calls.contains("waitForTransferInBackground") == !abandons, "\(phase)")
+    }
+
+    /// ... but not while a scan is connecting: its handshake is dropped as when the member leaves (IOS-PLAN 0.1.83).
+    @Test func aScanConnectingIsDroppedWhenTheOnboardingGoes() async throws {
+        let vault = FakeVaultRepository(.setup(.transferWaiting))
+        let clock = VirtualTime()
+        let hs = TestDeferred<String>()
+        vault.transferHsResp = hs
+        let model = TransferInViewModel(move: vault, vault: vault, now: clock.now, sleep: clock.sleep)
+        model.scan()
+        model.scanned(try qr(clock))
+        #expect(await eventually { model.state.step == .connecting && vault.calls.contains("transferIn") })
+        vault.transferStartedAt = clock.now()
+        TransferInRoute.leave(model, move: vault, movedIn: false, phase: .unreachable(.network))
+        #expect(await eventually { vault.calls.contains("abandonTransferIn") })
+        #expect(!vault.calls.contains("waitForTransferInBackground"))
+        hs.fail(CancellationError())
+    }
+
+    @Test func onlyTheOnboardingsPhasesShowTheScreen() {
+        #expect(TransferInRoute.onboards(.signedOut) && TransferInRoute.onboards(.setup(.transferWaiting)))
+        for phase in [AppPhase.starting, .locked, .unlocked, .deleting, .unreachable(.network)] {
+            #expect(!TransferInRoute.onboards(phase), "\(phase)")
+        }
+    }
+
+    private func handshakeWindow(
+        _ vault: FakeVaultRepository, _ clock: VirtualTime, account: (any AccountRepository)? = nil
+    ) async throws -> UIWindow {
         let model = TransferInViewModel(move: vault, vault: vault, now: clock.now, sleep: clock.sleep)
         model.scan()
         model.scanned(try qr(clock))
         await clock.runCurrent()
         // The handshake runs in a child task on the cooperative pool, which `runCurrent` doesn't wait for.
         #expect(await eventually { model.state.step == .compare })
-        return host(TransferInRoute(move: vault, vault: vault, onLeave: {}, camera: nil, model: model))
+        return host(TransferInRoute(move: vault, vault: vault, account: account, onLeave: {}, camera: nil, model: model))
     }
 
     /// The check shows "You can leave the app…" the whole time, not only once Back was pressed (as vettid-android does).
