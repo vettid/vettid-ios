@@ -202,9 +202,11 @@ extension VaultManagerTransferInTests {
         try await m.refresh()
         #expect(await deadlineWaiting())
         // The approval waits at the relay for the settlement's collect (the collector is not running), which is held out
-        // with it.
+        // with it. Only the settlement's long poll takes it: a request of the stopped collector that reaches the relay late
+        // on a loaded machine finds nothing (in the app, the relay's lease would bring back what it took).
         await suspendCollector()
         let gate = FakeHTTPServer.Gate()
+        service.holdsCollectAnswersOfWait = Int(VaultManager.windowPoll)
         service.holdsCollectAnswers = gate
         // The window stays open until the test ends it: a loaded machine does not end it before the held collect answers.
         phone.windowPauses.holding = true
