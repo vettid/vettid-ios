@@ -46,6 +46,10 @@ public protocol TransferInBackground: AnyObject {
     var transferStartedAt: Date? { get }
     /// No abandon (nor a new code) now: from the end of the vault's 10 minutes, and while the settlement window runs.
     var abandonClosed: Bool { get }
+    /// The old phone can no longer approve: from the end of the vault's 10 minutes, and while the settlement window runs.
+    /// The screen then shows its check in place of the comparison code. Not for a start adopted with its real start
+    /// unknown: its code is still compared, although no abandon is offered (``abandonClosed``).
+    var transferChecking: Bool { get }
 
     func waitForTransferInBackground()
     /// (VAULT-MESSAGING 0.88.4 §11.14.10 rule 5) Whether [text] is the open transfer's own code, whatever its expiry: the
@@ -60,6 +64,7 @@ public protocol TransferInBackground: AnyObject {
 public extension TransferInBackground {
     var transferStartedAt: Date? { nil }
     var abandonClosed: Bool { false }
+    var transferChecking: Bool { abandonClosed }
     func waitForTransferInBackground() {}
     func isOpenTransferCode(_ text: String) -> Bool { false }
     func transferInWaiting() async throws -> TransferInWaiting? { nil }

@@ -67,6 +67,7 @@ extension VaultManager: MoveRepository {
             try record.update(since: rec) {
                 $0.transferIn = true
                 $0.transferStartedMs = started
+                $0.transferStartAdoptedMs = nil
                 $0.transferCode = codeID
                 // The start alone says that a transfer is under way (``userGuidUsable``): nothing of an earlier one stays.
                 ($0.movedIn, $0.setupComplete, $0.finishMovePending) = (false, false, false)
@@ -86,7 +87,7 @@ extension VaultManager: MoveRepository {
                 }
             } catch {
                 // The device dropped the key it attested (``VaultDevice/startTransfer``); the epoch-1 record goes too.
-                await dropTransfer(d)
+                await dropScanTransfer(d)
                 throw error
             }
             let (capabilities, scale) = (path.value.capabilities, path.value.timeScale)
@@ -100,15 +101,24 @@ extension VaultManager: MoveRepository {
                 sas = try await sasWithinLimit(d)
             } catch let notCompleted as PairingNotCompleted {
                 // The relay refused the fin for good: the code is spent, nothing is kept (as for a rejection).
-                await dropTransfer(d)
+                await dropScanTransfer(d)
                 throw notCompleted
             }
             guard let sas else {
-                await dropTransfer(d)
+                await dropScanTransfer(d)
                 throw VaultFailure(.noResponse, code: MoveCodes.hsUnanswered)
             }
             return sas
         }
+    }
+
+    /// A drop of this scan's own transfer (its start failed, its fin was refused for good, or no `hs.resp` came): a
+    /// background wait left from before (a screen that went with the onboarding) goes first, so that it never ends later
+    /// as a move the member did not see (``TransferEnd/timedOut``).
+    private func dropScanTransfer(_ d: VaultDevice) async {
+        moveFlags.book.transferWaiter?.cancel()
+        moveFlags.book.transferWaiter = nil
+        await dropTransfer(d)
     }
 
     /// A new code is refused while the last transfer cannot be abandoned (§11.14.10 rule 5); it is then waited for, if
@@ -346,6 +356,7 @@ extension VaultManager: MoveRepository {
         // The pending epoch-1 record is this phone's secret now: it stays until the first unlock confirms it.
         _ = try? record.update(since: record.generation) {
             $0.transferStartedMs = nil
+            $0.transferStartAdoptedMs = nil
             $0.transferEpochID = nil
             $0.transferCode = nil
         }
@@ -485,6 +496,7 @@ extension VaultManager: MoveRepository {
         }
         _ = try? record.update(since: record.generation) {
             $0.transferStartedMs = nil
+            $0.transferStartAdoptedMs = nil
             $0.transferEpochID = nil
             $0.transferCode = nil
         }

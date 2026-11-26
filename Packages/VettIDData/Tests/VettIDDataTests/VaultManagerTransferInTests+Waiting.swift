@@ -70,6 +70,7 @@ extension VaultManagerTransferInTests {
         let started = try #require(m.record.value.transferStartedMs, "a start written for the pin")
         #expect(abs(m.nowMs - started) < 5_000 && m.record.value.transferStartAdoptedMs == started, "now, marked adopted")
         #expect(m.abandonClosed, "no abandon offered")
+        #expect(!m.transferChecking, "the comparison goes on: the vault may still accept the old phone's approval")
         let refused = await vaultFailure { try await m.abandonTransferIn() }
         #expect(refused?.code == VaultManager.codeTransferWaiting && deviceHoldsVault, "not dropped")
         #expect(m.moveFlags.book.transferWaiter != nil, "waited for in the background")
@@ -77,11 +78,51 @@ extension VaultManagerTransferInTests {
         #expect(phone.deadlinePauses.lengths.first.map { $0 > 650 } == true, "the full 11 minutes: \(phone.deadlinePauses.lengths)")
         phone.clockAhead = 600
         #expect(m.abandonClosed && deviceHoldsVault, "nothing dropped at minute 10")
+        #expect(m.transferChecking, "from the adopted start's minute 10, the check")
         phone.clockAhead = 661
         phone.deadlinePauses.release()
         #expect(await eventually(within: .seconds(60)) { m.phase == .setup(.newVault) }, "\(m.phase)")
         #expect(!deviceHoldsVault && m.record.value.transferStartedMs == nil)
-        #expect(!m.abandonClosed, "a later scan's start is not the adopted one")
+        #expect(m.record.value.transferStartAdoptedMs == nil, "the adopted mark goes with the start")
+    }
+
+    /// The adopted mark is stored with the start: after another restart the abandon stays closed.
+    @Test func anAdoptedStartStaysAdoptedAfterARestart() async throws {
+        defer { phone.close() }
+        _ = try await m.redeemSetupCode(.secret(service.secret))
+        _ = try await scanned()
+        try m.record.update(since: m.record.generation) { $0.transferStartedMs = nil }
+        try await phone.restart()
+        try await m.refresh()
+        let started = try #require(m.record.value.transferStartAdoptedMs)
+        try await phone.restart()
+        try await m.refresh()
+        #expect(m.record.value.transferStartedMs == started && m.record.value.transferStartAdoptedMs == started)
+        #expect(m.abandonClosed && !m.transferChecking)
+    }
+
+    /// A new scan's start drops any adopted mark.
+    @Test func aScansStartIsNeverAdopted() async throws {
+        defer { phone.close() }
+        try m.record.update(since: m.record.generation) { $0.transferStartAdoptedMs = 42 }
+        _ = try await scanned()
+        #expect(m.record.value.transferStartAdoptedMs == nil && !m.abandonClosed)
+    }
+
+    /// A scan whose own transfer is dropped (no `hs.resp` within 60 s) ends a background wait left from before, so that it
+    /// never ends later as a move the member did not see.
+    @Test func aScansOwnDropEndsALeftoverBackgroundWait() async throws {
+        defer { phone.close() }
+        let leftover = Task<Void, Never> { try? await Task.sleep(for: .seconds(600)) }
+        defer { leftover.cancel() }
+        m.moveFlags.book.transferWaiter = leftover
+        service.transferIgnoresInit = true
+        let scan = Task { try await m.transferIn(code: try code()) }
+        #expect(await eventually { phone.transferPauses.lengths == [60] })
+        phone.transferPauses.release()
+        _ = try? await scan.value
+        #expect(leftover.isCancelled && m.moveFlags.book.transferWaiter == nil)
+        #expect(!deviceHoldsVault && m.record.value.transferStartedMs == nil)
     }
 
     /// ... and one whose handshake was never answered (no comparison code saved, none awaited: nothing can complete it) is
@@ -152,6 +193,24 @@ extension VaultManagerTransferInTests {
         try await m.refresh()
         #expect(m.phase == .setup(.transferWaiting) && m.moveFlags.book.transferWaiter == nil)
         m.moveFlags.book.screenWaits -= 1
+    }
+
+    /// A background wait asked for while the screen's runs (the screen going) starts only once the screen's has ended: the
+    /// two never wait at once.
+    @Test func aBackgroundWaitAskedForDuringTheScreensStartsAfterIt() async throws {
+        defer { phone.close() }
+        _ = try await scanned()
+        try await phone.restart()
+        try await m.refresh()
+        #expect(try await m.transferInWaiting() != nil)
+        let screen = Task { try await m.awaitTransferIn() }
+        #expect(await eventually { m.moveFlags.book.screenWaits == 1 && m.moveFlags.book.transferWaiter == nil })
+        m.waitForTransferInBackground()
+        #expect(m.moveFlags.book.transferWaiter == nil, "not while the screen's wait runs")
+        screen.cancel()
+        _ = try? await screen.value
+        #expect(await eventually { m.moveFlags.book.transferWaiter != nil }, "started once the screen's ended")
+        #expect(m.moveFlags.book.screenWaits == 0 && m.moveFlags.book.backgroundAfterScreen == nil)
     }
 
     /// A background wait that fails before its deadline is started again only after a pause, its waiter kept meanwhile

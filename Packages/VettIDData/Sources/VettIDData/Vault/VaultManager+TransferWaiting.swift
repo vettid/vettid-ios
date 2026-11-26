@@ -21,8 +21,8 @@ extension VaultManager {
     /// adopted (``adoptPinWithoutStart(_:)``), and one that nothing waits for is waited for in the background; never one that
     /// stopped on this phone untold (the transfer screen tells it first, ``transferInWaiting()``).
     func watchWaitingTransfer(_ d: VaultDevice) async {
-        guard !d.droppedWithoutUserGuid else { return }
         if await adoptPinWithoutStart(d) { return }
+        guard !d.droppedWithoutUserGuid else { return }
         let book = moveFlags.book
         guard book.transferWaiter == nil, book.settling == nil, book.waitingIn == 0, book.startingIn == 0, book.screenWaits == 0
         else { return }
@@ -38,6 +38,8 @@ extension VaultManager {
     @discardableResult
     func adoptPinWithoutStart(_ d: VaultDevice) async -> Bool {
         guard moveFlags.book.startingIn == 0, record.value.transferStartedMs == nil, transferWaitsHere(d) else { return false }
+        // One that stopped on this phone is the transfer screen's to tell first (``transferInWaiting()``).
+        guard !d.droppedWithoutUserGuid else { return true }
         if !d.holdsTransferSas, !d.awaitsPairingResp, await dropTransfer(d) { return true }
         writeUnknownStart()
         waitForTransferInBackground()
@@ -46,6 +48,18 @@ extension VaultManager {
 
     /// A start for a transfer whose own start is unknown: now, marked as adopted (``LocalAccount/transferStartAdoptedMs``),
     /// so that the abandon is closed from the start (``abandonClosed``) while the deadline is the full 11 minutes.
+    /// A start for a transfer known to be dead (it stopped on this phone, and its drop could not be saved): one deadline
+    /// back, with no adopted mark, so that only the settlement's window runs before it is dropped again, and new codes are
+    /// refused only as long as that.
+    func writeDeadStart() {
+        let started = nowMs - Int64(Self.pairingWindow * 1000)
+        _ = try? record.update(since: record.generation) {
+            $0.transferIn = true
+            $0.transferStartedMs = started
+            $0.transferStartAdoptedMs = nil
+        }
+    }
+
     func writeUnknownStart() {
         let started = nowMs
         _ = try? record.update(since: record.generation) {
@@ -60,10 +74,22 @@ extension VaultManager {
     /// outcome). Should it fail with the transfer kept, the background's starts again.
     public func awaitTransferIn() async throws -> Bool {
         moveFlags.book.screenWaits += 1
-        defer { moveFlags.book.screenWaits -= 1 }
+        defer {
+            moveFlags.book.screenWaits -= 1
+            startBackgroundAfterScreen()
+        }
         moveFlags.book.transferWaiter?.cancel()
         moveFlags.book.transferWaiter = nil
         return try await awaitTransferInWaiting()
+    }
+
+    /// The background's wait asked for while the screen's ran (``waitForTransferInBackground(quiet:)``), started once the
+    /// last of them ended: only for a transfer still waiting (its start stored, the phone not paired).
+    private func startBackgroundAfterScreen() {
+        guard moveFlags.book.screenWaits == 0, let quiet = moveFlags.book.backgroundAfterScreen else { return }
+        moveFlags.book.backgroundAfterScreen = nil
+        guard !halted, !record.closed, session?.device.deviceID == nil else { return }
+        waitForTransferInBackground(quiet: quiet)
     }
 
     /// The transfer the screen takes up as it opens, while the phase says one waits. A comparison code shown (saved with
@@ -85,7 +111,7 @@ extension VaultManager {
                 moveFlags.book.transferWaiter = nil
                 transferEnd = .stopped
                 if await !dropTransfer(d) {
-                    if record.value.transferStartedMs == nil { writeUnknownStart() }
+                    if record.value.transferStartedMs == nil { writeDeadStart() }
                     waitForTransferInBackground(quiet: true)
                 }
                 await rereadAfterTransferIn()

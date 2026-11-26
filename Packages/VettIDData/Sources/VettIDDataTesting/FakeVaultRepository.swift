@@ -142,6 +142,9 @@ public final class FakeVaultRepository: CustomStringConvertible {
     public var transferStartedAt: Date?
     /// ``TransferInBackground/abandonClosed``.
     public var abandonClosed = false
+    /// ``TransferInBackground/transferChecking``, when it differs from ``abandonClosed`` (an adopted start).
+    public var checksTransfer: Bool?
+    public var transferChecking: Bool { checksTransfer ?? abandonClosed }
     /// The codes ``TransferInBackground/isOpenTransferCode(_:)`` says are the open transfer's.
     public var openTransferCodes: Set<String> = []
     /// When set, ``transferIn(code:)`` starts a new transfer: the stored start becomes this.
@@ -152,7 +155,10 @@ public final class FakeVaultRepository: CustomStringConvertible {
     public var waitingTransfer: TransferInWaiting?
     /// Set: ``transferInWaiting()`` fails with it, once.
     public var waitingTransferFailure: VaultFailure?
+    /// Set: ``transferInWaiting()`` answers only once it completes.
+    public var waitingTransferHold: TestDeferred<Void>?
     public func transferInWaiting() async throws -> TransferInWaiting? {
+        if let hold = waitingTransferHold { try await hold.value() }
         if let f = waitingTransferFailure {
             waitingTransferFailure = nil
             throw f

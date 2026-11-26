@@ -334,6 +334,16 @@ extension VaultManager {
         return config.now().timeIntervalSince1970 >= Double(started) / 1000 + Self.vaultApprovalWindow
     }
 
+    /// Whether the old phone can no longer approve the transfer waiting (§11.14.10 rule 5: "until the 11 minutes: the
+    /// comparison code"): from the end of the vault's 10 minutes after the stored start, and while the window runs. A start
+    /// adopted with its real start unknown closes the abandon at once (``abandonClosed``), not the comparison: the vault may
+    /// still accept the old phone's approval.
+    public var transferChecking: Bool {
+        if moveFlags.book.settling != nil { return true }
+        guard let started = record.value.transferStartedMs else { return false }
+        return config.now().timeIntervalSince1970 >= Double(started) / 1000 + Self.vaultApprovalWindow
+    }
+
     /// The stored start of the transfer to this phone (its `hs.init`): the screen counts from it.
     public var transferStartedAt: Date? {
         record.value.transferStartedMs.map { Date(timeIntervalSince1970: Double($0) / 1000) }
@@ -352,6 +362,12 @@ extension VaultManager {
     /// ``waitForTransferInBackground()``; [quiet]: its end sets no ``transferEnd`` notice.
     func waitForTransferInBackground(quiet: Bool) {
         guard moveFlags.book.transferWaiter == nil, record.value.transferStartedMs != nil else { return }
+        // The screen's own wait is under way (it is going, or failed): the background's starts once it has ended, so that
+        // the two never wait at once (``awaitTransferIn()``). A wait asked for with its notice keeps it.
+        if moveFlags.book.screenWaits > 0 {
+            moveFlags.book.backgroundAfterScreen = quiet && moveFlags.book.backgroundAfterScreen != false
+            return
+        }
         moveFlags.book.transferWaiter = Task { @MainActor [weak self] in
             var end: TransferEnd?
             var failed = false

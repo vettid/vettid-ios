@@ -120,8 +120,33 @@ extension VaultManagerTransferInTests {
         try await m.refresh()
         #expect(m.phase == .setup(.transferWaiting), "\(m.phase)")
         #expect(m.record.value.transferStartedMs == nil && m.moveFlags.book.transferWaiter == nil)
+        // An enrollment refused meanwhile adopts nothing either: the screen tells it first.
+        let d = try #require(m.session?.device)
+        #expect(m.transferWaitingRefusal(d)?.code == VaultManager.codeTransferWaiting)
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(m.record.value.transferStartedMs == nil && m.moveFlags.book.transferWaiter == nil)
         #expect(try await m.transferInWaiting() == .stopped)
         #expect(m.phase == .setup(.newVault), "\(m.phase)")
+    }
+
+    /// The same with the drop's save failing: the start written for the background's drop is one deadline back with no
+    /// adopted mark (the transfer is known dead), so new codes are refused only for the settlement's window.
+    @Test func anUntoldStopWithoutItsStartWhoseDropFailsIsDroppedSoon() async throws {
+        defer { phone.close() }
+        _ = try await m.redeemSetupCode(.secret(service.secret))
+        service.transferWithoutUserGuid = true
+        _ = try await m.transferIn(code: try code())
+        service.approveTransferIn()
+        #expect(await eventually { m.session?.device.droppedWithoutUserGuid == true })
+        try m.record.update(since: m.record.generation) { $0.transferStartedMs = nil }
+        try await phone.restart()
+        try await m.refresh()
+        phone.deviceSaveFails.on = true
+        #expect(try await m.transferInWaiting() == .stopped)
+        let started = try #require(m.record.value.transferStartedMs)
+        #expect(abs(m.nowMs - Int64(VaultManager.pairingWindow * 1000) - started) < 5_000, "one deadline back")
+        #expect(m.record.value.transferStartAdoptedMs == nil && m.moveFlags.book.transferWaiter != nil)
+        phone.deviceSaveFails.on = false
     }
 
     /// A transfer scanned after a setup code was redeemed, then abandoned: the redeemed code is kept (no new code needed),

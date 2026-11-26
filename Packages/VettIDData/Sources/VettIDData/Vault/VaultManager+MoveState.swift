@@ -60,6 +60,9 @@ final class MoveBook {
     /// (§6.7.1) This process told the member that the move stopped on this phone (``VaultManager/transferInWaiting()``):
     /// not told again, even when its drop could not be saved.
     var stopTold = false
+    /// A background wait asked for while the screen's ran (its `quiet`), started when that ends
+    /// (``VaultManager/waitForTransferInBackground(quiet:)``).
+    var backgroundAfterScreen: Bool?
     /// The ``VaultManager/awaitTransferIn()`` calls under way (the screen's, the background's).
     var waitingIn = 0
     /// The ``VaultManager/transferIn(code:)`` calls under way: a start's resume waits for none to run (its start may be

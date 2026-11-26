@@ -149,7 +149,7 @@ extension VaultManager {
             // Pinned with no start stored (an older race wiped it): adopted as the phase adopts it (an unknown start: no
             // abandon, the full deadline and the window; dropped at once when its handshake was never answered).
             // (Its code isn't known, so a re-scan of it counts as a new code.)
-            if pinned, !started, let held = [d, session?.device].compactMap({ $0 }).first(where: transferWaitsHere) {
+            if pinned, !started, let held = [session?.device, d].compactMap({ $0 }).first(where: transferWaitsHere) {
                 Task { @MainActor [weak self] in await self?.adoptPinWithoutStart(held) }
             } else {
                 // A leftover start that nothing pinned: the member already left it, so its end says nothing ("timed out").
@@ -361,6 +361,7 @@ extension VaultManager {
                 $0.setupComplete = true
                 $0.movedIn = false
                 $0.transferStartedMs = nil
+                $0.transferStartAdoptedMs = nil
                 $0.transferEpochID = nil
                 $0.transferCode = nil
             }
