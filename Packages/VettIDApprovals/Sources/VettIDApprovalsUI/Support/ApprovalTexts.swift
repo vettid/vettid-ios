@@ -129,6 +129,9 @@ enum ApprovalTexts {
         case .noItem(let use, let loading):
             let item = loading ? ApprovalsStrings.loading : ApprovalsStrings.heldNoItem
             return use ? ApprovalsStrings.heldUseTitle(who, item) : ApprovalsStrings.heldGetTitle(who, item)
+        case .desktopConnection(let remove, let target, _):
+            let named = desktopTarget(target)
+            return remove ? ApprovalsStrings.desktopRemoveTitle(who, named) : ApprovalsStrings.desktopBlockTitle(who, named)
         // What it is about cannot be named (the item list could not be read): said without an item.
         case .desktop, .other, .itemsUnread: return ApprovalsStrings.heldOtherTitle(who)
         }
@@ -143,9 +146,19 @@ enum ApprovalTexts {
         case .catalog: ApprovalsStrings.heldCatalogBody
         case .noItem(_, let loading): loading ? ApprovalsStrings.loading : ApprovalsStrings.heldNoItemBody
         case .itemsUnread: ApprovalsStrings.heldItemsUnreadBody
+        case .desktopConnection(let remove, let target, _):
+            remove ? ApprovalsStrings.desktopRemoveBody(desktopTarget(target)) : ApprovalsStrings.desktopBlockBody(desktopTarget(target))
         case .desktop: ApprovalsStrings.heldDesktopBody
         case .other: ApprovalsStrings.heldOtherBody
         }
+    }
+
+    /// The connection a desktop's block or removal names, isolated, with (ANDROID-PLAN 0.1.146) "(connected <date>)" after it
+    /// when a namesake is listed: the day in [zone], in the medium date format with its year (`.abbreviated`, "Nov 26, 2026").
+    static func desktopTarget(_ t: DesktopTargets.Shown, zone: TimeZone = .current) -> String {
+        let name = AccountNames.isolate(t.name)
+        guard let on = t.connectedOn else { return name }
+        return ApprovalsStrings.desktopNamesake(name, on.formatted(Date.FormatStyle(date: .abbreviated, time: .omitted, timeZone: zone)))
     }
 
     /// The kind of device: Agent, Desktop, else Device.

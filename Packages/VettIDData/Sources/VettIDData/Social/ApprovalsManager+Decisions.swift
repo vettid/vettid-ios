@@ -229,7 +229,8 @@ extension ApprovalsManager {
                 }
                 guard generation == self.forgetCount, now.sameContent(as: shown), !self.mismatched.contains(key),
                       !self.replaced.contains(key), let held = now.held, held.approvable,
-                      HeldApprovals.nameable(held, self.itemCache()), stillShown() else { throw VaultFailure(.requestChanged) }
+                      HeldApprovals.nameable(held, self.itemCache()), DesktopTargets.resolved(now, self.connections.connections),
+                      stillShown() else { throw VaultFailure(.requestChanged) }
                 if let cwdUnread { throw cwdUnread }
                 guard cwdAllowed else { throw VaultFailure(.notSupported) }
                 result = try await o.approvalDecide(d.id, approve: true)
@@ -242,12 +243,15 @@ extension ApprovalsManager {
         return DeviceDecision(result: result)
     }
 
-    /// Only what is read in full and whose item and field the item list names. Else nothing sent: ``FailureKind/notSupported``
+    /// Only what is read in full and whose item and field the item list names (a desktop's block or removal: whose connection
+    /// the connection list names). Else nothing sent: ``FailureKind/notSupported``
     /// for what this version does not approve, ``FailureKind/requestChanged`` for an item or field the list no longer names. A
     /// run's `cwd` rule is read in the decision, after the session opens (``approveDeviceRequest(_:generation:stillShown:)``).
     private func checkApprovable(_ d: DeviceRequest) throws {
         guard let held = d.held, held.approvable else { throw VaultFailure(.notSupported) }
         guard HeldApprovals.nameable(held, itemCache()) else { throw VaultFailure(.requestChanged) }
+        // (ANDROID-PLAN 0.1.145) A desktop's block or removal only of a connection the list names now, not only as it was shown.
+        guard DesktopTargets.resolved(d, connections.connections) else { throw VaultFailure(.requestChanged) }
     }
 
     /// A failed read of a run's cwd rule as the screen says it: the read's own failure ("could not reach…", "did not answer…",

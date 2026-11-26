@@ -383,6 +383,21 @@ struct ShareFacts: View {
     }
 }
 
+/// A service a desktop's block or removal names (ANDROID-PLAN 0.1.145): its name (with any "(connected <date>)") and the label
+/// "Service" after it, read together.
+struct DesktopServiceLine: View {
+    let target: DesktopTargets.Shown
+
+    var body: some View {
+        HStack(spacing: Spacing.s) {
+            Text(ApprovalTexts.desktopTarget(target)).vettIDFont(.bodyMedium)
+            ServiceLabel()
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("desktop_service")
+    }
+}
+
 /// An agent's held request on its screen (AA5): how long it waits, the kind of device (so that an agent calling itself "Work
 /// desktop" still shows "Agent"), and what it asks: for `item.use` the data the result is computed over, in a box with its label
 /// and length so that the agent's text cannot pass for one of the app's own lines; for a reveal the fields and, always, that
@@ -395,6 +410,11 @@ struct HeldFacts: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
+            // A service named in the title carries the label beside its name (IOS-PLAN §4.13), first under the title, before
+            // the "Desktop" kind word, so that it cannot be read as the desktop's (ANDROID-PLAN 0.1.145).
+            if case .desktopConnection(_, let target, _) = show, target.service {
+                DesktopServiceLine(target: target).padding(.bottom, Spacing.m)
+            }
             if let waiting = ApprovalTexts.waitingText(request.exp, now: now) {
                 Text(waiting).vettIDFont(.bodyMedium).padding(.bottom, Spacing.m).accessibilityIdentifier("device_waiting")
             }
@@ -402,9 +422,27 @@ struct HeldFacts: View {
             switch show {
             case .use(_, _, let data, let bytes): useData(data, bytes: bytes).padding(.top, Spacing.m)
             case .get(_, let fields): reveal(fields).padding(.top, Spacing.m)
+            case .desktopConnection(_, _, let note?): desktopNote(note).padding(.top, Spacing.m)
             default: EmptyView()
             }
         }
+    }
+
+    /// A block's note: the desktop's own words, labeled with its name (ANDROID-PLAN 0.1.146) and in their own box apart from the
+    /// body (0.1.145), so that they cannot pass for the app's; cleaned with their lines kept, each line isolated.
+    private func desktopNote(_ note: String) -> some View {
+        VStack(alignment: .leading, spacing: Spacing.xs) {
+            Text(ApprovalsStrings.desktopNoteFrom(ApprovalTexts.deviceSentenceStart(.device(request))))
+                .vettIDFont(.labelLarge).accessibilityIdentifier("desktop_note_label")
+            Text(AccountNames.isolateLines(note))
+                .vettIDFont(.bodyLarge)
+                .padding(Spacing.m)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .overlay(RoundedRectangle(cornerRadius: VettIDShape.small).stroke(colors.outline))
+                .accessibilityIdentifier("desktop_note")
+        }
+        // One element: the label and the note are read together, as the desktop's.
+        .accessibilityElement(children: .combine)
     }
 
     private func useData(_ data: DataView, bytes: Int) -> some View {

@@ -35,7 +35,7 @@ extension ApprovalDetailViewModel {
             guard let self else { return false }
             let s = state
             guard case .device(let now)? = s.approval else { return false }
-            return now.sameContent(as: d) && (s.itemsRead == .read || shown.show == .catalog) && s.heldShow == shown.show
+            return now.sameContent(as: d) && (s.itemsRead == .read || shown.show.namesNoItem) && s.heldShow == shown.show
         }
         decideHeld(key: PendingApproval.device(d).key, generation: shown.generation) { [weak self, repo] _ in
             let r = try await repo.approveDeviceRequest(d, generation: shown.generation, stillShown: still).result
@@ -182,7 +182,7 @@ extension ApprovalDetailState {
     /// What a request an agent holds for approval shows and allows, from the item list; nil for any other request.
     public var heldShow: HeldShow? {
         guard case .device(let d)? = approval, DeviceAsks.isHeld(d) else { return nil }
-        return DeviceAsks.show(d, items: heldItems, read: itemsRead)
+        return DeviceAsks.show(d, items: heldItems, read: itemsRead, connections: heldConnections)
     }
 
     /// Where a run's `cwd` (without `member_folder`) stands (AA8 "Fail closed"): nil when it has none, or once the item's

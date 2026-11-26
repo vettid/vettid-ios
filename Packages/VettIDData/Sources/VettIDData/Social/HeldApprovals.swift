@@ -21,13 +21,17 @@ public enum HeldApproval: Equatable, Sendable, CustomStringConvertible, CustomDe
     case itemProxy(ItemProxy)
     /// A desktop's step-up request (decision 9): deny only.
     case desktopStepUp
+    /// (ANDROID-PLAN 0.1.145) A desktop's held `block.add{connection_id, note?}` or `connection.remove{connection_id}`, read
+    /// strictly ("The desktop block and removal rows fail closed"). Approvable only once its connection is named from the
+    /// connection list (``DesktopTargets``); else shown as the deny-only desktop row.
+    case desktopConnection(DesktopConnection)
     /// Any other type or op, or a body that does not read: deny only.
     case unshown
 
     /// Whether the request can be approved here: only what the app shows in full (a run and a proxy on AA8's screens).
     public var approvable: Bool {
         switch self {
-        case .itemUse, .itemGet, .catalog, .itemRun, .itemProxy: true
+        case .itemUse, .itemGet, .catalog, .itemRun, .itemProxy, .desktopConnection: true
         default: false
         }
     }
@@ -40,6 +44,7 @@ public enum HeldApproval: Equatable, Sendable, CustomStringConvertible, CustomDe
         case .itemRun: "ItemRun"
         case .itemProxy: "ItemProxy"
         case .desktopStepUp: "DesktopStepUp"
+        case .desktopConnection: "DesktopConnection"
         case .unshown: "Unshown"
         }
     }
@@ -56,6 +61,7 @@ public enum HeldApproval: Equatable, Sendable, CustomStringConvertible, CustomDe
         case (.catalog, .catalog), (.desktopStepUp, .desktopStepUp), (.unshown, .unshown): true
         case let (.itemRun(x), .itemRun(y)): x == y
         case let (.itemProxy(x), .itemProxy(y)): x == y
+        case let (.desktopConnection(x), .desktopConnection(y)): x == y
         default: false
         }
     }
@@ -150,6 +156,28 @@ public struct ItemProxy: Equatable, Sendable, CustomStringConvertible, CustomDeb
     }
 }
 
+/// A desktop's held block ([remove] false) or removal ([remove] true) of the connection [connectionID] (ANDROID-PLAN 0.1.145).
+/// [note]: a block's note as the desktop sent it (at most 256 bytes), nil without one. Never printed: the desktop chose it.
+public struct DesktopConnection: Equatable, Sendable, CustomStringConvertible, CustomDebugStringConvertible {
+    public var remove: Bool
+    public var connectionID: String
+    public var note: String?
+
+    public init(remove: Bool, connectionID: String, note: String? = nil) {
+        self.remove = remove
+        self.connectionID = connectionID
+        self.note = note
+    }
+
+    public var description: String { "DesktopConnection(remove: \(remove))" }
+    public var debugDescription: String { description }
+
+    /// Every string compared as bytes (see ``HeldApproval/==(_:_:)``).
+    public static func == (a: DesktopConnection, b: DesktopConnection) -> Bool {
+        a.remove == b.remove && a.connectionID.sameBytes(b.connectionID) && a.note.sameBytes(b.note)
+    }
+}
+
 /// How a run gets the secret (`body.how`).
 public enum SecretHow: String, Sendable, CaseIterable {
     case env, stdin, file
@@ -182,7 +210,7 @@ public enum HeldApprovals {
     /// member this version does not know; an `item.use` and a `catalog` ignore an unknown member, but not one that changes
     /// what approving means.
     public static func of(role: String?, type: String?, body: JsonObject?, pending: JsonObject?) -> HeldApproval {
-        if role == "desktop" { return .desktopStepUp }
+        if role == "desktop" { return desktop(type, pending) }
         guard role == "agent", type == "agent.request", let body else { return .unshown }
         return agentRequest(body, pending)
     }
@@ -204,6 +232,8 @@ public enum HeldApprovals {
         case .itemRun(let r)?: return has(r.itemID, r.fieldID)
         case .itemProxy(let p)?: return has(p.itemID, p.fieldID)
         case .catalog?: return true
+        // Names no item: its connection is named from the connection list instead (``DesktopTargets``).
+        case .desktopConnection?: return true
         default: return false
         }
     }
@@ -220,6 +250,40 @@ public enum HeldApprovals {
         case "item.proxy": return AgentApprovals.proxy(pending)
         default: return .unshown
         }
+    }
+
+    /// A block's `note`: at most 256 bytes (VAULT-MESSAGING §10.4).
+    public static let maxBlockNote = 256
+
+    /// A desktop's held removal's and block's body members (VAULT-MESSAGING §10.4).
+    private static let desktopRemove: Set<[UInt8]> = [Array("connection_id".utf8)]
+    private static let desktopBlock: Set<[UInt8]> = [Array("connection_id".utf8), Array("note".utf8)]
+
+    /// A desktop's `block.add` or `connection.remove` of a connection as ANDROID-PLAN 0.1.145 reads it ("fail closed"), or
+    /// ``HeldApproval/desktopStepUp``: the strict envelope names the device and the desktop and carries none of an agent's
+    /// members (``AgentApprovals/plainShown(_:)``), with a name that is not empty once cleaned, says the same role and type, and its body holds only `connection_id`, a
+    /// non-empty string, and for a block an optional `note`, a string of at most 256 bytes.
+    private static func desktop(_ type: String?, _ pending: JsonObject?) -> HeldApproval {
+        // The desktop's name as the rows show it, cleaned: one of only spaces or invisible characters would show "A desktop"
+        // with Approve offered (vettid-android's `named`).
+        guard let p = pending, !p.has(ApprovalParser.lenientMarker), AgentApprovals.plainShown(p),
+              AccountNames.cleaned(VaultJSON.string(p, "name")) != nil, VaultJSON.string(p, "role") == "desktop", let type, VaultJSON.string(p, "type").sameBytes(type),
+              case .object(let body)? = p["body"] else { return .desktopStepUp }
+        let remove: Bool
+        switch type {
+        case "connection.remove": remove = true
+        case "block.add": remove = false
+        default: return .desktopStepUp
+        }
+        let allowed = remove ? desktopRemove : desktopBlock
+        guard body.members.allSatisfy({ allowed.contains(Array($0.name.utf8)) }),
+              let id = VaultJSON.string(body, "connection_id"), !id.isEmpty else { return .desktopStepUp }
+        var note: String?
+        if body.has("note") {
+            guard let n = VaultJSON.string(body, "note"), n.utf8.count <= maxBlockNote else { return .desktopStepUp }
+            note = n
+        }
+        return .desktopConnection(DesktopConnection(remove: remove, connectionID: id, note: note))
     }
 
     private static func itemUse(_ b: JsonObject) -> HeldApproval {

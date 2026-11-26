@@ -2590,6 +2590,72 @@
         }
       }
     },
+    "approvals_desktop_block_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ wants to block %2$@"
+          }
+        }
+      }
+    },
+    "approvals_desktop_block_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Blocking ends your connection with %@. They can't connect with you again until you unblock them."
+          }
+        }
+      }
+    },
+    "approvals_desktop_remove_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ wants to remove %2$@"
+          }
+        }
+      }
+    },
+    "approvals_desktop_remove_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Removing ends your connection with %@."
+          }
+        }
+      }
+    },
+    "approvals_desktop_note_from": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Note from %@:"
+          }
+        }
+      }
+    },
+    "approvals_desktop_namesake": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ (connected %2$@)"
+          }
+        }
+      }
+    },
     "approvals_held_other_body": {
       "extractionState": "manual",
       "localizations": {

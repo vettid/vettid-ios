@@ -35,7 +35,7 @@ public struct ApprovalsState: Equatable, Sendable, CustomStringConvertible, Cust
     /// What the request [a] an agent holds for approval shows (its row's title), nil for any other.
     public func heldShow(_ a: PendingApproval) -> HeldShow? {
         guard case .device(let d) = a, DeviceAsks.isHeld(d) else { return nil }
-        return DeviceAsks.show(d, items: items, read: itemsRead)
+        return DeviceAsks.show(d, items: items, read: itemsRead, connections: Array(connections.values))
     }
 
     /// The rows: one per approval, a connection's asks within 10 minutes as one batch (§10.4.1).
