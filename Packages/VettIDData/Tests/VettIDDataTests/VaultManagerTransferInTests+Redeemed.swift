@@ -211,8 +211,8 @@ extension VaultManagerTransferInTests {
         #expect(m.transferWaitingRefusal(earlier)?.code == VaultManager.codeTransferWaiting)
     }
 
-    /// Pinned with no start stored (an older race wiped it): the refusal writes a start now, so the transfer's deadline
-    /// and settlement window apply, and waits for it; the transfer isn't dropped.
+    /// Pinned with no start stored (an older race wiped it): the refusal adopts it (a start written now, so the transfer's
+    /// deadline and settlement window apply) and waits for it; the transfer isn't dropped.
     @Test func aPinnedTransferWithoutItsStartGetsOneAndIsWaitedFor() async throws {
         defer { phone.close() }
         _ = try await m.redeemSetupCode(.secret(service.secret))
@@ -223,7 +223,8 @@ extension VaultManagerTransferInTests {
         }
         let before = m.nowMs
         _ = await vaultFailure { try await m.enroll(pin: pin) { _ in } }
-        #expect((m.record.value.transferStartedMs ?? 0) >= before, "a start written now")
+        // Adopted in a task of its own (the refusal itself is immediate).
+        #expect(await eventually { (m.record.value.transferStartedMs ?? 0) >= before }, "a start written now")
         #expect(m.record.value.transferIn, "with the transfer's flag")
         #expect(m.moveFlags.book.transferWaiter != nil, "waited for")
         #expect(m.session?.device.hasVault == true, "not dropped")

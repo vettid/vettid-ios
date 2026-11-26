@@ -206,6 +206,9 @@ extension VaultManagerTransferInTests {
         await suspendCollector()
         let gate = FakeHTTPServer.Gate()
         service.holdsCollectAnswers = gate
+        // The window stays open until the test ends it: a loaded machine does not end it before the held collect answers.
+        phone.windowPauses.holding = true
+        defer { phone.windowPauses.holding = false; phone.windowPauses.release() }
         service.approveTransferIn()
         phone.clockAhead = 661
         phone.deadlinePauses.release()
