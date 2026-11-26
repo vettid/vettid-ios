@@ -219,7 +219,9 @@ extension VaultManagerTransferInTests {
         #expect(m.moveFlags.book.settling != nil, "the settlement still runs")
         service.holdsCollectAnswers = nil
         gate.open()
-        // The collect answered: the window may end now.
+        // The held collect brings the approval, applied while the window is still open (a loaded machine would otherwise
+        // end the window before the answer is handled).
+        #expect(await eventually { m.session?.device.deviceID != nil }, "the approval applied")
         phone.windowPauses.holding = false
         phone.windowPauses.release()
         phone.deadlinePauses.holding = false
