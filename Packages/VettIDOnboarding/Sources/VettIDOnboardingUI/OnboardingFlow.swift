@@ -59,7 +59,7 @@ public extension OnboardingRoutes {
                 )
             },
             transferIn: { onLeave, onRecover in
-                AnyView(TransferInRoute(move: move, vault: vault, onLeave: onLeave, onRecover: onRecover))
+                AnyView(TransferInRoute(move: move, vault: vault, account: account, onLeave: onLeave, onRecover: onRecover))
             },
             movedIn: { state, finish in AnyView(MovedInScreen(state: state, vault: vault, finish: finish)) }
         )

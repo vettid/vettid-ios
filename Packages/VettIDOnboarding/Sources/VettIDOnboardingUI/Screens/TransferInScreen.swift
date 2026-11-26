@@ -298,6 +298,8 @@ public struct MovedScreen: View {
 public struct TransferInRoute: View {
     private let move: any MoveRepository
     private let vault: any VaultRepository
+    /// The phase the screen is left in (``leave(_:move:movedIn:phase:)``); none: the onboarding's.
+    private let account: (any AccountRepository)?
     private let onLeave: @MainActor () -> Void
     private let onRecover: @MainActor () -> Void
     private let camera: AnyView?
@@ -305,19 +307,21 @@ public struct TransferInRoute: View {
     @State private var model: TransferInViewModel?
 
     public init(
-        move: any MoveRepository, vault: any VaultRepository, onLeave: @escaping @MainActor () -> Void,
-        onRecover: @escaping @MainActor () -> Void = {}, camera: AnyView? = nil
+        move: any MoveRepository, vault: any VaultRepository, account: any AccountRepository,
+        onLeave: @escaping @MainActor () -> Void, onRecover: @escaping @MainActor () -> Void = {}, camera: AnyView? = nil
     ) {
-        self.init(move: move, vault: vault, onLeave: onLeave, onRecover: onRecover, camera: camera, model: nil)
+        self.init(move: move, vault: vault, account: account, onLeave: onLeave, onRecover: onRecover, camera: camera, model: nil)
     }
 
     /// TEST ONLY: [model] is the route's own from the start (a transfer already under way).
     init(
-        move: any MoveRepository, vault: any VaultRepository, onLeave: @escaping @MainActor () -> Void,
-        onRecover: @escaping @MainActor () -> Void = {}, camera: AnyView?, model: TransferInViewModel?
+        move: any MoveRepository, vault: any VaultRepository, account: (any AccountRepository)? = nil,
+        onLeave: @escaping @MainActor () -> Void, onRecover: @escaping @MainActor () -> Void = {}, camera: AnyView?,
+        model: TransferInViewModel?
     ) {
         self.move = move
         self.vault = vault
+        self.account = account
         self.onLeave = onLeave
         self.onRecover = onRecover
         self.camera = camera
@@ -330,7 +334,7 @@ public struct TransferInRoute: View {
             finishPane: AnyView(FinishMoveRoute(vault: vault) { model?.finish() }), onRecover: onRecover
         )
         .onAppear { if model == nil { model = TransferInViewModel(move: move, vault: vault) } }
-        .onDisappear { Self.leave(model, move: move, movedIn: vault.movedIn, phase: vault.phase) }
+        .onDisappear { Self.leave(model, move: move, movedIn: vault.movedIn, phase: account?.phase ?? .signedOut) }
         // The pasted code is also forgotten when the app leaves the foreground and when the iPhone locks (IOS-PLAN §6.3;
         // chosen; vettid-android has no such rule).
         .onChange(of: scenePhase) { _, now in if now == .background { model?.setInput("") } }
