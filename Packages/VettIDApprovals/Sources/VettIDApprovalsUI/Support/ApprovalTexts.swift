@@ -146,8 +146,8 @@ enum ApprovalTexts {
         case .catalog: ApprovalsStrings.heldCatalogBody
         case .noItem(_, let loading): loading ? ApprovalsStrings.loading : ApprovalsStrings.heldNoItemBody
         case .itemsUnread: ApprovalsStrings.heldItemsUnreadBody
-        case .desktopConnection(let remove, let target, _):
-            remove ? ApprovalsStrings.desktopRemoveBody(desktopTarget(target)) : ApprovalsStrings.desktopBlockBody(desktopTarget(target))
+        case .desktopConnection(true, let target, _): ApprovalsStrings.desktopRemoveBody(desktopTarget(target))
+        case .desktopConnection(false, let target, _): ApprovalsStrings.desktopBlockBody(desktopTarget(target))
         case .desktop: ApprovalsStrings.heldDesktopBody
         case .other: ApprovalsStrings.heldOtherBody
         }

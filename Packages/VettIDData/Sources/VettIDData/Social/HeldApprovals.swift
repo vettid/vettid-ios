@@ -267,7 +267,8 @@ public enum HeldApprovals {
         // The desktop's name as the rows show it, cleaned: one of only spaces or invisible characters would show "A desktop"
         // with Approve offered (vettid-android's `named`).
         guard let p = pending, !p.has(ApprovalParser.lenientMarker), AgentApprovals.plainShown(p),
-              AccountNames.cleaned(VaultJSON.string(p, "name")) != nil, VaultJSON.string(p, "role") == "desktop", let type, VaultJSON.string(p, "type").sameBytes(type),
+              AccountNames.cleaned(VaultJSON.string(p, "name")) != nil, VaultJSON.string(p, "role") == "desktop",
+              let type, VaultJSON.string(p, "type").sameBytes(type),
               case .object(let body)? = p["body"] else { return .desktopStepUp }
         let remove: Bool
         switch type {
