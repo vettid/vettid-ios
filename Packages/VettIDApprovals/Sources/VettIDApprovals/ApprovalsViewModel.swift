@@ -25,6 +25,8 @@ public struct ApprovalsState: Equatable, Sendable, CustomStringConvertible, Cust
     public var busy = false
     /// The connections by id, for the names a request's row shows.
     public var connections: [String: ConnectionInfo] = [:]
+    /// The connection list as it is, which names a desktop's held block or removal as its screen does (ANDROID-PLAN 0.1.145).
+    public var connectionList: [ConnectionInfo] = []
     /// The member's items with their fields' labels, to name what an agent's request is about (AA5, AA8).
     public var items: [ItemSummary] = []
     /// How far the item list has been read: until it is, a request's item is "Loading…" (or, after a failed read, not named).
@@ -35,7 +37,7 @@ public struct ApprovalsState: Equatable, Sendable, CustomStringConvertible, Cust
     /// What the request [a] an agent holds for approval shows (its row's title), nil for any other.
     public func heldShow(_ a: PendingApproval) -> HeldShow? {
         guard case .device(let d) = a, DeviceAsks.isHeld(d) else { return nil }
-        return DeviceAsks.show(d, items: items, read: itemsRead, connections: Array(connections.values))
+        return DeviceAsks.show(d, items: items, read: itemsRead, connections: connectionList)
     }
 
     /// The rows: one per approval, a connection's asks within 10 minutes as one batch (§10.4.1).
@@ -119,6 +121,7 @@ public final class ApprovalsViewModel {
         let all = connections.connections
         s.paused = all.filter { $0.asks?.paused == true }
         s.connections = Dictionary(all.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        s.connectionList = all
         if let vault {
             s.items = vault.items
             s.itemsRead = ItemsRead.of(vault.load, cleared: vault.cleared, readAt: &itemsReadAt)

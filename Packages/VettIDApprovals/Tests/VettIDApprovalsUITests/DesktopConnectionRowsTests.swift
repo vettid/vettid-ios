@@ -54,7 +54,8 @@ import UIKit
         #expect(ApprovalTexts.body(a, name: nil, held: blocking) == "Blocking ends your connection with \(ana). They can't connect with you again until you unblock them.")
         #expect(ApprovalTexts.title(a, held: removing) == "\(who) wants to remove \(ana)")
         #expect(ApprovalTexts.body(a, name: nil, held: removing) == "Removing ends your connection with \(ana).")
-        #expect(ApprovalsStrings.desktopNoteFrom(who) == "Note from \(who):")
+        #expect(ApprovalTexts.desktopNoteLabel(request(block())) == "Note from \(who):", "the desktop's name isolated")
+        #expect(ApprovalTexts.desktopNoteLabel(request(block(), name: "\u{202E}Evil")) == "Note from \(iso("Evil")):")
     }
 
     @Test func aNamesakeIsFollowedByTheDayItWasConnected() {
@@ -114,12 +115,41 @@ import UIKit
         }
         var list = ApprovalsState()
         list.connections = Dictionary(uniqueKeysWithValues: cs.map { ($0.id, $0) })
+        list.connectionList = cs
         list.approvals = [.device(request(remove("c2")))]
         let shown = list.heldShow(list.approvals[0])
         #expect(shown == .desktopConnection(remove: true, target: DesktopTargets.Shown(name: "Acme Bank", service: true), note: nil))
         let row = ApprovalRow(approval: list.approvals[0], name: nil, held: shown, onOpen: { _ in })
         let plain = ApprovalRow(approval: list.approvals[0], name: nil, held: .desktop, onOpen: { _ in })
         #expect(height(row) > height(plain), "a service's row carries its line")
+    }
+
+    @Test func aServicesNamesakeDateComesBeforeItsLabel() {
+        let utc = TimeZone(identifier: "UTC")!
+        let t = DesktopTargets.Shown(name: "Acme Bank", service: true, connectedOn: day)
+        let date = day.formatted(Date.FormatStyle(date: .abbreviated, time: .omitted, timeZone: utc))
+        // The line is the name with its date, then the label (``DesktopServiceLine``).
+        #expect(ApprovalTexts.desktopTarget(t, zone: utc) == "\(iso("Acme Bank")) (connected \(date))")
+        let cs = [person("c1", "Acme", "Bank", at: day, service: true), person("c2", "Acme", "Bank", at: day.addingTimeInterval(-86_400 * 40))]
+        #expect(state(remove(), cs).heldShow == .desktopConnection(remove: true, target: t, note: nil))
+    }
+
+    @Test func eachRowOnAStaleAndAServiceConnection() {
+        for c in [person("c1", "Ana", "Lee", state: .stale), person("c1", "Acme", "Bank", service: true)] {
+            for h in [block(note: "n"), remove()] {
+                #expect(state(h, [c]).canApprove(), "\(c.state) \(c.isService)")
+            }
+        }
+    }
+
+    @Test func theListAndTheScreenReadTheSameConnectionList() {
+        // A malformed list with the same id twice: the row names it as the screen does.
+        let cs = [person("c1", "Ana", "Lee", state: .blocked), person("c1", "Ana", "Lee")]
+        var list = ApprovalsState()
+        list.connections = Dictionary(cs.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        list.connectionList = cs
+        list.approvals = [.device(request(block()))]
+        #expect(list.heldShow(list.approvals[0]) == state(block(), cs).heldShow)
     }
 
     @Test func theAnswersReadAsTheVaultsOwn() {

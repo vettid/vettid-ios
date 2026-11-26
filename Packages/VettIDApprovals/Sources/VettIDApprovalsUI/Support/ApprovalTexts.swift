@@ -153,6 +153,10 @@ enum ApprovalTexts {
         }
     }
 
+    /// The label above a desktop's note (ANDROID-PLAN 0.1.146): "Note from <name>:", the desktop's name isolated (else "A
+    /// desktop").
+    static func desktopNoteLabel(_ d: DeviceRequest) -> String { ApprovalsStrings.desktopNoteFrom(deviceSentenceStart(.device(d))) }
+
     /// The connection a desktop's block or removal names, isolated, with (ANDROID-PLAN 0.1.146) "(connected <date>)" after it
     /// when a namesake is listed: the day in [zone], in the medium date format with its year (`.abbreviated`, "Nov 26, 2026").
     static func desktopTarget(_ t: DesktopTargets.Shown, zone: TimeZone = .current) -> String {

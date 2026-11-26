@@ -432,7 +432,7 @@ struct HeldFacts: View {
     /// body (0.1.145), so that they cannot pass for the app's; cleaned with their lines kept, each line isolated.
     private func desktopNote(_ note: String) -> some View {
         VStack(alignment: .leading, spacing: Spacing.xs) {
-            Text(ApprovalsStrings.desktopNoteFrom(ApprovalTexts.deviceSentenceStart(.device(request))))
+            Text(ApprovalTexts.desktopNoteLabel(request))
                 .vettIDFont(.labelLarge).accessibilityIdentifier("desktop_note_label")
             Text(AccountNames.isolateLines(note))
                 .vettIDFont(.bodyLarge)

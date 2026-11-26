@@ -30,6 +30,22 @@ extension HeldRequestsViewModelTests {
         #expect(m.state.heldShow == .desktop && !m.state.canApprove(), "gone from the list: deny only")
     }
 
+    /// It names no item: approved while the item list is unread or its read failed.
+    @Test func aDesktopsBlockIsApprovedWithoutTheItemList() async throws {
+        for load in [ListLoad.loading, .failed] {
+            fake.calls = []
+            connections.connections = [ana()]
+            fake.listed = [Self.desktop(Self.block)]
+            let empty = FakeItems()
+            let m = await model(empty)
+            empty.load = load
+            #expect(m.state.itemsRead != .read && m.state.canApprove(), "\(load)")
+            m.approve(held: m.shownHeld())
+            await m.settle()
+            #expect(fake.calls == ["approveDeviceRequest:\(Self.key)"] && m.state.outcome == .approved(result: "ok"), "\(load)")
+        }
+    }
+
     /// The connection renamed, or a namesake added, between the render and the tap: nothing is approved.
     @Test func aConnectionRenamedOrANamesakeAddedSinceTheRenderIsNotApproved() async throws {
         let day = Date(timeIntervalSince1970: 1_790_000_000)
