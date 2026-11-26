@@ -60,12 +60,33 @@ extension HeldRequestsViewModelTests {
             await m.settle()
             #expect(fake.calls == ["approveDeviceRequest:changed:\(Self.key)"] && m.state.error == .requestChanged, Comment(rawValue: change))
         }
+        // A namesake gone between the render and the tap: the date it showed no longer names it as shown.
+        fake.calls = []
+        connections.connections = [ana(at: day), ana("c2", at: day.addingTimeInterval(-86_400 * 30))]
+        fake.listed = [Self.desktop(Self.block)]
+        let lost = await model()
+        let dated = try #require(lost.shownHeld())
+        connections.connections = [ana(at: day)]
+        lost.approve(held: dated)
+        await lost.settle()
+        #expect(fake.calls == ["approveDeviceRequest:changed:\(Self.key)"], "a namesake lost")
         connections.connections = [ana()]
         let m = await model()
         fake.calls = []
         m.approve(held: m.shownHeld())
         await m.settle()
         #expect(fake.calls == ["approveDeviceRequest:\(Self.key)"] && m.state.outcome == .approved(result: "ok"))
+        #expect(fake.lastDeviceApproval?.target == DesktopTargets.Shown(name: "Ana Lee", service: false), "the connection as shown goes with it")
+    }
+
+    /// The list names a desktop's request from the connection list itself, as its screen does.
+    @Test func theListReadsTheConnectionList() async {
+        connections.connections = [ana()]
+        fake.listed = [Self.desktop(Self.block)]
+        let list = ApprovalsViewModel(approvals: fake, connections: connections)
+        await list.settle()
+        #expect(list.state.connectionList == connections.connections)
+        #expect(list.state.heldShow(list.state.approvals[0]) == .desktopConnection(remove: false, target: DesktopTargets.Shown(name: "Ana Lee", service: false), note: "spam"))
     }
 }
 // swiftlint:enable line_length

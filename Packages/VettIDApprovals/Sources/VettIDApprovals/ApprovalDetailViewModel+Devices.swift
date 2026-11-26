@@ -31,6 +31,8 @@ extension ApprovalDetailViewModel {
         case .run(_, let name, _), .proxy(_, let name, _): item = name
         default: item = nil
         }
+        // A desktop's block or removal: the connection as shown, judged again by the approvals at the send (ANDROID-PLAN 0.1.145).
+        let target = shown.show.desktopTarget
         let still: @MainActor () -> Bool = { [weak self] in
             guard let self else { return false }
             let s = state
@@ -38,7 +40,7 @@ extension ApprovalDetailViewModel {
             return now.sameContent(as: d) && (s.itemsRead == .read || shown.show.namesNoItem) && s.heldShow == shown.show
         }
         decideHeld(key: PendingApproval.device(d).key, generation: shown.generation) { [weak self, repo] _ in
-            let r = try await repo.approveDeviceRequest(d, generation: shown.generation, stillShown: still).result
+            let r = try await repo.approveDeviceRequest(d, generation: shown.generation, target: target, stillShown: still).result
             // Only a run or a proxy is referred again (§6.8 step 4): not done, the new approval is a new decision. For any other op
             // `referred` is a result like the rest (AA5's "Approved, but your vault answered: referred.").
             if r == "referred", way != nil { return .referred }

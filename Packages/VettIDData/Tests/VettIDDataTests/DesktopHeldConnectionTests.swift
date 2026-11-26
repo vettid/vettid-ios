@@ -44,6 +44,7 @@ import VettIDDataTesting
             #expect(try held(c[1], c[2], top: c[3]) == .desktopStepUp, Comment(rawValue: c[0]))
         }
         #expect(try held("block.add", #"{"connection_id":"c1"}"#, name: " \u{200B} ") == .desktopStepUp, "a blank name")
+        #expect(try held("block.add", #"{"connection_id":"c1"}"#, role: "Desktop") == .unshown, "the role as the vault wrote it")
         #expect(try held("block.add", #"{"connection_id":"c1"}"#, role: "agent") == .unshown, "not a desktop")
     }
 
@@ -54,6 +55,19 @@ import VettIDDataTesting
         let deny = try #require(ApprovalParser.denyOnly(lenient))
         #expect(HeldApprovals.of(role: "desktop", type: "block.add", body: VaultJSON.obj(deny, "body"), pending: deny) == .desktopStepUp)
         #expect(HeldApprovals.of(role: "desktop", type: "block.add", body: nil, pending: nil) == .desktopStepUp)
+    }
+
+    @Test func theEnvelopeNamesTheDeviceAndItsTime() throws {
+        func of(_ envelope: String) throws -> HeldApproval {
+            let o = try StrictJson.parseObject(Array(#"{"approval_id":"h1","role":"desktop","name":"W","type":"block.add","body":{"connection_id":"c1"}\#(envelope)}"#.utf8))
+            return HeldApprovals.of(role: "desktop", type: "block.add", body: nil, pending: o)
+        }
+        let exp = #","exp":"2026-11-02T12:05:00.000Z""#
+        #expect(try of(#","device_id":"D""# + exp) == .desktopConnection(DesktopConnection(remove: false, connectionID: "c1")))
+        for (name, env) in [("no device_id", exp), ("empty device_id", #","device_id":"""# + exp), ("blank device_id", #","device_id":" \u3000""# + exp),
+                            ("no exp", #","device_id":"D""#), ("unreadable exp", #","device_id":"D","exp":"soon""#)] {
+            #expect(try of(env) == .desktopStepUp, Comment(rawValue: name))
+        }
     }
 
     @Test func theTypeMustBeTheStrictReadingsOwn() throws {
@@ -110,6 +124,18 @@ import VettIDDataTesting
         #expect(shown([service("c1", "Acme", "Bank")]) == DesktopTargets.Shown(name: "Acme Bank", service: true))
     }
 
+    /// ANDROID-PLAN 0.1.145: a service without a First Last is named by its own name, and counted among namesakes.
+    @Test func aServiceWithoutFirstLastIsNamedByItsOwnName() {
+        var s = ConnectionInfo(id: "c1", name: " Acme\u{200B} Bank ", state: .active)
+        s.isService = true
+        #expect(shown([s]) == DesktopTargets.Shown(name: "Acme Bank", service: true))
+        var p = ConnectionInfo(id: "c1", name: "Acme Bank", state: .active)
+        p.isService = false
+        #expect(shown([p]) == nil, "a person's display name never names them")
+        s.createdAt = day
+        #expect(shown([s, service("c2", "Acme", "Bank", at: day.addingTimeInterval(-86_400 * 5))])?.connectedOn == day, "a namesake")
+    }
+
     @Test func anythingElseIsNotNamed() {
         #expect(shown([]) == nil, "not listed")
         #expect(shown([person("c2", "Ana", "Lee")]) == nil, "another id")
@@ -155,6 +181,14 @@ import VettIDDataTesting
         }
     }
 
+    @Test func theKeyFoldsAsVettidAndroidsDoes() {
+        #expect(DesktopTargets.key("Straße Lee") == DesktopTargets.key("STRASSE  lee"))
+        #expect(DesktopTargets.key("Weiß") == DesktopTargets.key("WEISS") && DesktopTargets.key("Weiß") == "weiss")
+        #expect(DesktopTargets.key("Ana\u{A0}\u{A0}Lee") == "ana lee" && DesktopTargets.key("Ana\u{3000}Lee") == "ana lee")
+        #expect(DesktopTargets.key("Le\u{301}e") == DesktopTargets.key("L\u{C9}E"))
+        #expect(DesktopTargets.key("L\u{131}ee") != DesktopTargets.key("Liee"), "a dotless i stays apart")
+    }
+
     @Test func namesakesTheDayCannotTellApartAreDenyOnly() {
         #expect(shown([person("c1", "Ana", "Lee", at: day), person("c2", "Ana", "Lee", at: day.addingTimeInterval(60))]) == nil, "the same day")
         #expect(shown([person("c1", "Ana", "Lee"), person("c2", "Ana", "Lee", at: day)]) == nil, "no created_at")
@@ -171,9 +205,17 @@ import VettIDDataTesting
     @Test func resolvedOnlyJudgesADesktopsBlockOrRemoval() {
         var d = DeviceRequest(type: "approval.pending", id: "h1", receivedAt: day)
         d.held = .catalog
-        #expect(DesktopTargets.resolved(d, []))
+        #expect(DesktopTargets.resolved(d, nil, []))
         d.held = .desktopConnection(DesktopConnection(remove: true, connectionID: "c1"))
-        #expect(!DesktopTargets.resolved(d, []) && DesktopTargets.resolved(d, [person("c1", "Ana", "Lee")]))
+        let ana = DesktopTargets.Shown(name: "Ana Lee", service: false)
+        #expect(!DesktopTargets.resolved(d, ana, []) && DesktopTargets.resolved(d, ana, [person("c1", "Ana", "Lee")], calendar: utc))
+        #expect(!DesktopTargets.resolved(d, nil, [person("c1", "Ana", "Lee")]), "not shown: not approved")
+        #expect(!DesktopTargets.resolved(d, ana, [person("c1", "Ana", "Lee-Park")]), "renamed")
+        let other = day.addingTimeInterval(-86_400 * 30)
+        let sakes = [person("c1", "Ana", "Lee", at: day), person("c2", "Ana", "Lee", at: other)]
+        #expect(!DesktopTargets.resolved(d, ana, sakes, calendar: utc), "a namesake since")
+        let dated = DesktopTargets.Shown(name: "Ana Lee", service: false, connectedOn: day)
+        #expect(DesktopTargets.resolved(d, dated, sakes, calendar: utc) && !DesktopTargets.resolved(d, dated, [sakes[0]], calendar: utc), "a namesake gone since")
     }
 }
 
@@ -192,33 +234,51 @@ extension AgentApprovalsFlowTests {
         }
     }
 
+    static let anaC1 = DesktopTargets.Shown(name: "Ana Lee c1", service: false)
+
+    func approve(_ m: ApprovalsManager, _ id: String, target: DesktopTargets.Shown?) async throws -> DeviceDecision {
+        try await m.approveDeviceRequest(try request(m, id), generation: m.forgetCount, target: target, stillShown: { true })
+    }
+
     @Test func aDesktopsBlockOrRemovalIsApprovedWhileItsConnectionIsNamed() async throws {
         let m = manager()
         named(m, "c1")
         m.onEvent(event(desktopHeld("h1", "block.add", #"{"connection_id":"c1","note":"spam"}"#)))
         m.onEvent(event(desktopHeld("h2", "connection.remove", #"{"connection_id":"c1"}"#)))
-        _ = try await approve(m, "h1")
-        _ = try await approve(m, "h2")
+        _ = try await approve(m, "h1", target: Self.anaC1)
+        _ = try await approve(m, "h2", target: Self.anaC1)
         #expect(ops.calls == ["approvalDecide:h1:true", "approvalDecide:h2:true"])
+    }
+
+    /// The data layer compares the connection as it was shown, whatever the caller's own check says.
+    @Test func aDesktopsBlockShownOtherwiseOrWithoutItsNameIsRefused() async throws {
+        let m = manager()
+        named(m, "c1")
+        m.onEvent(event(desktopHeld("h1", "block.add", #"{"connection_id":"c1"}"#)))
+        for target in [nil, DesktopTargets.Shown(name: "Ana Lee c2", service: false), DesktopTargets.Shown(name: "Ana Lee c1", service: true)] {
+            do { _ = try await approve(m, "h1", target: target); Issue.record("approved") } catch let f as VaultFailure { #expect(f.kind == .requestChanged) }
+        }
+        #expect(ops.calls.isEmpty)
     }
 
     @Test func aDesktopsBlockOfAConnectionNotNamedIsRefusedWithNothingSent() async throws {
         let m = manager()
         named(m, "c2")
         m.onEvent(event(desktopHeld("h1", "block.add", #"{"connection_id":"c1"}"#)))
-        do { _ = try await approve(m, "h1"); Issue.record("approved") } catch let f as VaultFailure { #expect(f.kind == .requestChanged) }
+        do { _ = try await approve(m, "h1", target: Self.anaC1); Issue.record("approved") } catch let f as VaultFailure { #expect(f.kind == .requestChanged) }
         #expect(ops.calls.isEmpty)
     }
 
-    @Test func aConnectionGoneWhileTheSessionOpensIsRefusedAtTheSend() async throws {
+    @Test func aConnectionRenamedWhileTheSessionOpensIsRefusedAtTheSend() async throws {
         let gate = TestDeferred<Void>()
         let mark = GateMark()
         let m = manager(gate: gate, atGate: mark)
         named(m, "c1")
         m.onEvent(event(desktopHeld("h1", "connection.remove", #"{"connection_id":"c1"}"#)))
-        let t = Task { try await approve(m, "h1") }
+        let t = Task { try await approve(m, "h1", target: Self.anaC1) }
         while !mark.reached { await Task.yield() }
-        m.connections.connections = []
+        // Renamed meanwhile: still listed, no longer named as shown.
+        m.connections.connections[0].lastName = "Park"
         gate.complete()
         await #expect(throws: VaultFailure.self) { _ = try await t.value }
         #expect(ops.calls.isEmpty)

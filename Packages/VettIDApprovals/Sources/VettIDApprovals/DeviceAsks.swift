@@ -44,6 +44,12 @@ public enum HeldShow: Equatable, Sendable, CustomStringConvertible {
         }
     }
 
+    /// A desktop's block or removal: its connection as shown; nil for anything else.
+    public var desktopTarget: DesktopTargets.Shown? {
+        if case .desktopConnection(_, let t, _) = self { return t }
+        return nil
+    }
+
     /// Never what the agent chose.
     public var description: String { "HeldShow" }
 }

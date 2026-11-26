@@ -431,10 +431,11 @@ struct HeldFacts: View {
     /// A block's note: the desktop's own words, labeled with its name (ANDROID-PLAN 0.1.146) and in their own box apart from the
     /// body (0.1.145), so that they cannot pass for the app's; cleaned with their lines kept, each line isolated.
     private func desktopNote(_ note: String) -> some View {
-        VStack(alignment: .leading, spacing: Spacing.xs) {
-            Text(ApprovalTexts.desktopNoteLabel(request))
+        let (label, box) = Self.desktopNoteParts(request, note)
+        return VStack(alignment: .leading, spacing: Spacing.xs) {
+            Text(label)
                 .vettIDFont(.labelLarge).accessibilityIdentifier("desktop_note_label")
-            Text(AccountNames.isolateLines(note))
+            Text(box)
                 .vettIDFont(.bodyLarge)
                 .padding(Spacing.m)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -443,6 +444,12 @@ struct HeldFacts: View {
         }
         // One element: the label and the note are read together, as the desktop's.
         .accessibilityElement(children: .combine)
+    }
+
+    /// A block's note as shown, in order: the label ("Note from <name>:", the desktop's name isolated), then the box's text (the
+    /// note as cleaned, each line isolated).
+    static func desktopNoteParts(_ request: DeviceRequest, _ note: String) -> (label: String, box: String) {
+        (ApprovalTexts.desktopNoteLabel(request), AccountNames.isolateLines(note))
     }
 
     private func useData(_ data: DataView, bytes: Int) -> some View {

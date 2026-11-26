@@ -191,7 +191,7 @@ extension ApprovalsManager {
     }
 
     public func approveDeviceRequest(
-        _ shown: DeviceRequest, generation: Int, stillShown: @escaping @MainActor () -> Bool
+        _ shown: DeviceRequest, generation: Int, target: DesktopTargets.Shown?, stillShown: @escaping @MainActor () -> Bool
     ) async throws -> DeviceDecision {
         // Looked up as the list shows it (a replaced or expired approval is gone, a differing one is deny only), never through the
         // kept events. Only the request the member was shown: every member compared as bytes (its `exp`, names, device and what
@@ -200,7 +200,7 @@ extension ApprovalsManager {
         let key = PendingApproval.device(shown).key
         guard shown.type == Self.approvalType, case .device(let d)? = pending(key) else { throw VaultFailure(.notFound) }
         guard generation == forgetCount, d.sameContent(as: shown), stillShown() else { throw VaultFailure(.requestChanged) }
-        try checkApprovable(d)
+        try checkApprovable(d, target)
         var result: String?
         var goneAtSend = false
         do {
@@ -229,7 +229,7 @@ extension ApprovalsManager {
                 }
                 guard generation == self.forgetCount, now.sameContent(as: shown), !self.mismatched.contains(key),
                       !self.replaced.contains(key), let held = now.held, held.approvable,
-                      HeldApprovals.nameable(held, self.itemCache()), DesktopTargets.resolved(now, self.connections.connections),
+                      HeldApprovals.nameable(held, self.itemCache()), DesktopTargets.resolved(now, target, self.connections.connections),
                       stillShown() else { throw VaultFailure(.requestChanged) }
                 if let cwdUnread { throw cwdUnread }
                 guard cwdAllowed else { throw VaultFailure(.notSupported) }
@@ -246,12 +246,12 @@ extension ApprovalsManager {
     /// Only what is read in full and whose item and field the item list names (a desktop's block or removal: whose connection
     /// the connection list names). Else nothing sent: ``FailureKind/notSupported``
     /// for what this version does not approve, ``FailureKind/requestChanged`` for an item or field the list no longer names. A
-    /// run's `cwd` rule is read in the decision, after the session opens (``approveDeviceRequest(_:generation:stillShown:)``).
-    private func checkApprovable(_ d: DeviceRequest) throws {
+    /// run's `cwd` rule is read in the decision, after the session opens (``approveDeviceRequest(_:generation:target:stillShown:)``).
+    private func checkApprovable(_ d: DeviceRequest, _ target: DesktopTargets.Shown?) throws {
         guard let held = d.held, held.approvable else { throw VaultFailure(.notSupported) }
         guard HeldApprovals.nameable(held, itemCache()) else { throw VaultFailure(.requestChanged) }
-        // (ANDROID-PLAN 0.1.145) A desktop's block or removal only of a connection the list names now, not only as it was shown.
-        guard DesktopTargets.resolved(d, connections.connections) else { throw VaultFailure(.requestChanged) }
+        // (ANDROID-PLAN 0.1.145) A desktop's block or removal only of a connection the list names now as it was shown.
+        guard DesktopTargets.resolved(d, target, connections.connections) else { throw VaultFailure(.requestChanged) }
     }
 
     /// A failed read of a run's cwd rule as the screen says it: the read's own failure ("could not reach…", "did not answer…",

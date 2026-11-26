@@ -31,9 +31,12 @@ public enum DesktopTargets {
         cs.first { $0.id.sameBytes(h.connectionID) && live($0) }.flatMap { name($0) == nil ? nil : $0 }
     }
 
-    /// The name a connection is shown by, cleaned (VAULT-MESSAGING §10.8): a person's "First Last", a service's name. Nil when it
-    /// has none, or none once cleaned ("Name not shared yet").
-    public static func name(_ c: ConnectionInfo) -> String? { AccountNames.cleaned(c.displayName) }
+    /// The name a connection is shown by, cleaned (VAULT-MESSAGING §10.8): a person's "First Last"; a service's "First Last" or
+    /// else its own name, as ANDROID-PLAN 0.1.145 and vettid-android's `displayName` have it. Nil when it has none, or none once
+    /// cleaned ("Name not shared yet").
+    public static func name(_ c: ConnectionInfo) -> String? {
+        AccountNames.cleaned(c.accountName) ?? (c.isService ? AccountNames.cleaned(c.name) : nil)
+    }
 
     /// How [h]'s connection is shown, or nil for the deny-only row: not listed as active or stale, no name, or (0.1.146) a
     /// namesake the date cannot tell apart (a `created_at` of either that is missing, or the same day in [calendar]'s time zone).
@@ -42,16 +45,21 @@ public enum DesktopTargets {
         let k = key(name)
         let namesakes = cs.filter { !$0.id.sameBytes(t.id) && live($0) && self.name($0).map(key) == k }
         if namesakes.isEmpty { return Shown(name: name, service: t.isService) }
+        // The day in the phone's calendar, as the row shows it; two that read as one day there are not told apart (fail closed).
         guard let on = t.createdAt.map({ day($0, calendar) }) else { return nil }
         let apart = namesakes.allSatisfy { o in o.createdAt.map { day($0, calendar) != on } ?? false }
         return apart ? Shown(name: name, service: t.isService, connectedOn: t.createdAt) : nil
     }
 
-    /// Whether [d] may be approved against [cs] as it is now: true for anything but a desktop's block or removal; for one, the
-    /// list still names its connection (``shown(_:_:calendar:)``). That it is named as the screen showed it is the screen's check.
-    public static func resolved(_ d: DeviceRequest, _ cs: [ConnectionInfo], calendar: Calendar = .current) -> Bool {
+    /// Whether [d] may be approved against [cs] as it is now: true for anything but a desktop's block or removal; for one, it was
+    /// shown naming its connection as [target], and [cs] still names it the same way (not gone, renamed, out of active and stale,
+    /// nor newly or no longer a namesake's).
+    public static func resolved(
+        _ d: DeviceRequest, _ target: Shown?, _ cs: [ConnectionInfo], calendar: Calendar = .current
+    ) -> Bool {
         guard case .desktopConnection(let h)? = d.held else { return true }
-        return shown(h, cs, calendar: calendar) != nil
+        guard let target, let now = shown(h, cs, calendar: calendar) else { return false }
+        return now == target
     }
 
     /// Two shown names are the same (0.1.146) when equal after cleaning (VAULT-MESSAGING §10.8 steps 1-3, one line), each run of
