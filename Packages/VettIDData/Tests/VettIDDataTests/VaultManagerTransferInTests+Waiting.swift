@@ -219,6 +219,9 @@ extension VaultManagerTransferInTests {
         #expect(m.moveFlags.book.settling != nil, "the settlement still runs")
         service.holdsCollectAnswers = nil
         gate.open()
+        // The collect answered: the window may end now.
+        phone.windowPauses.holding = false
+        phone.windowPauses.release()
         phone.deadlinePauses.holding = false
         phone.deadlinePauses.release()
         #expect(try await screen.value)
