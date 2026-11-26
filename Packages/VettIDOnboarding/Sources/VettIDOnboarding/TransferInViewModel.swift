@@ -66,8 +66,9 @@ public final class TransferInViewModel: TransferInActions {
             do {
                 found = try await move.transferInWaiting()
             } catch {
-                // The take-up failed: the background waits for the transfer again (nothing if it still does).
-                move.waitForTransferInBackground()
+                // The take-up failed: the background waits for the transfer again (nothing if it still does), unless the
+                // member's own scan began meanwhile (its transfer is the screen's).
+                if self?.waiter == nil { move.waitForTransferInBackground() }
                 return
             }
             guard let found else { return }
@@ -335,9 +336,11 @@ public final class TransferInViewModel: TransferInActions {
         let left = max(Int64(deadline.timeIntervalSince(now()).rounded(.down)), 0)
         state.secondsLeft = left
         // From the end of the vault's 10 minutes the old phone can no longer approve: the code goes, and the screen checks
-        // (as vettid-android does). The repository decides the moment, as for Back (``closesNow``): both agree to the second.
+        // (as vettid-android does). The repository decides both moments, as for Back (``closesNow``): both agree to the
+        // second. A start adopted with its real start unknown closes the abandon at once, yet its code is still compared
+        // until the old phone can no longer approve (§11.14.10 rule 5).
         state.closing = move.abandonClosed
-        state.checking = state.closing
+        state.checking = move.transferChecking
         return left > 0
     }
 
@@ -345,6 +348,15 @@ public final class TransferInViewModel: TransferInActions {
     /// No abandon now (§11.14.10 rule 5), as the repository decides it (``TransferInBackground/abandonClosed``): the
     /// ticker's ``TransferInState/closing`` only hides the button.
     public var closesNow: Bool { state.step == .compare && move.abandonClosed }
+
+    /// The screen hands its wait to the background (``TransferInScreen/leave``): its own wait stops first, so that the two
+    /// never wait at once; nothing is abandoned.
+    public func handOver() {
+        resumer?.cancel()
+        waiter?.cancel()
+        waiter = nil
+        ticker?.cancel()
+    }
 
     public func cancel() {
         // No abandon from the end of the vault's 10 minutes (§11.14.10 rule 5): the button is gone then.

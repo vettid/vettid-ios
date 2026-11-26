@@ -74,6 +74,25 @@ import VettIDDataTesting
         #expect(vm.state.step == .compare && !vault.calls.contains("abandonTransferIn"))
     }
 
+    /// A start adopted with its real start unknown (§11.14.10 rule 5): no Cancel from the start, yet the comparison code and
+    /// its countdown show until the old phone can no longer approve; then the check.
+    @Test func anAdoptedStartShowsTheCodeWithoutCancel() async throws {
+        let vm = model()
+        vm.scan()
+        vm.scanned(try qr())
+        await clock.runCurrent()
+        vault.abandonClosed = true
+        vault.checksTransfer = false
+        await clock.advance(seconds: 1)
+        #expect(vm.state.closing && !vm.state.checking && vm.state.sas != nil && vm.closesNow)
+        vm.cancel()
+        await vm.settle()
+        #expect(vm.state.step == .compare && vm.state.sas != nil && !vault.calls.contains("abandonTransferIn"))
+        vault.checksTransfer = true
+        await clock.advance(seconds: 1)
+        #expect(vm.state.closing && vm.state.checking)
+    }
+
     /// The repository decides, not the ticker's last second: no abandon even before the ticker shows it.
     @Test func noAbandonFromTheVaultsTenMinutesBeforeTheTickerTicks() async throws {
         let vm = model()

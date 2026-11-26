@@ -116,6 +116,21 @@ import VettIDDataTesting
         #expect(vm.state.step == .intro && vault.calls.contains("waitForTransferInBackground"))
     }
 
+    /// A take-up that failed while the member's own scan began: the scan's transfer is the screen's; nothing is handed back.
+    @Test func aFailedTakeUpDuringTheMembersScanHandsNothingBack() async throws {
+        let hs = TestDeferred<String>()
+        vault.transferHsResp = hs
+        vault.waitingTransferFailure = VaultFailure(.network)
+        vault.waitingTransferHold = TestDeferred<Void>()
+        let vm = transferIn()
+        vm.scan()
+        vm.scanned(try qr())
+        vault.waitingTransferHold?.complete(())
+        await vm.settle()
+        #expect(vm.state.step == .connecting && !vault.calls.contains("waitForTransferInBackground"), "\(vault.calls)")
+        hs.fail(VaultFailure(.network))
+    }
+
     /// While the member's own scan runs the wait is not handed back (it would start a second waiter).
     @Test func noHandBackWhileTheMembersScanRuns() async throws {
         vault.waitingTransfer = .waiting(sas: "553190", startedAt: clock.now())

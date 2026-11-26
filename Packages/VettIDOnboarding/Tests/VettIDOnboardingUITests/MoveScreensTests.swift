@@ -211,6 +211,23 @@ import VettIDUI
         #expect(vault.calls.contains("waitForTransferInBackground") == !abandons, "\(phase)")
     }
 
+    /// ... but not while a scan is connecting: its handshake is dropped as when the member leaves (IOS-PLAN 0.1.83).
+    @Test func aScanConnectingIsDroppedWhenTheOnboardingGoes() async throws {
+        let vault = FakeVaultRepository(.setup(.transferWaiting))
+        let clock = VirtualTime()
+        let hs = TestDeferred<String>()
+        vault.transferHsResp = hs
+        let model = TransferInViewModel(move: vault, vault: vault, now: clock.now, sleep: clock.sleep)
+        model.scan()
+        model.scanned(try qr(clock))
+        #expect(await eventually { model.state.step == .connecting && vault.calls.contains("transferIn") })
+        vault.transferStartedAt = clock.now()
+        TransferInRoute.leave(model, move: vault, movedIn: false, phase: .unreachable(.network))
+        #expect(await eventually { vault.calls.contains("abandonTransferIn") })
+        #expect(!vault.calls.contains("waitForTransferInBackground"))
+        hs.fail(CancellationError())
+    }
+
     @Test func onlyTheOnboardingsPhasesShowTheScreen() {
         #expect(TransferInRoute.onboards(.signedOut) && TransferInRoute.onboards(.setup(.transferWaiting)))
         for phase in [AppPhase.starting, .locked, .unlocked, .deleting, .unreachable(.network)] {

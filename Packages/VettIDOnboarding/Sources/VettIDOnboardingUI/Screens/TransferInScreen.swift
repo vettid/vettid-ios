@@ -353,8 +353,11 @@ public struct TransferInRoute: View {
         model.setInput("")
         // From the end of the vault's 10 minutes the transfer is not abandoned (§11.14.10 rule 5): the manager waits for it
         // in the background, and how it ended is told on the welcome screen. The same when the screen went with the
-        // onboarding (chosen; not in the spec): only the member's own leaving abandons.
-        if !movedIn, model.closesNow || (!onboards(phase) && move.transferStartedAt != nil) {
+        // onboarding (chosen; not in the spec): only the member's own leaving abandons. Not while a scan is connecting:
+        // its handshake is dropped as when the member leaves (IOS-PLAN 0.1.83).
+        let tookAway = !onboards(phase) && move.transferStartedAt != nil && model.state.step != .connecting
+        if !movedIn, model.closesNow || tookAway {
+            model.handOver()
             move.waitForTransferInBackground()
             return
         }
