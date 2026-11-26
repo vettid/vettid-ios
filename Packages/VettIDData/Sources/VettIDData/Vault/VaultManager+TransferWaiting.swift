@@ -129,4 +129,19 @@ extension VaultManager {
         guard phase == .setup(.transferWaiting), !halted, !record.closed else { return }
         try? await refresh()
     }
+
+    /// A drop of this scan's own transfer (its start failed, its fin was refused for good, or no `hs.resp` came): a
+    /// background wait left from before (a screen that went with the onboarding) goes first, so that it never ends later
+    /// as a move the member did not see (``TransferEnd/timedOut``).
+    func dropScanTransfer(_ d: VaultDevice) async {
+        moveFlags.book.transferWaiter?.cancel()
+        moveFlags.book.transferWaiter = nil
+        await dropTransfer(d)
+    }
+
+    /// The new phone's deadline: 11 minutes after it started the `hs.init` (``LocalAccount/transferStartedMs``); nil without
+    /// a transfer waiting.
+    var transferDeadline: Date? {
+        record.value.transferStartedMs.map { Date(timeIntervalSince1970: Double($0) / 1000 + Self.pairingWindow) }
+    }
 }

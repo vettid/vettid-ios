@@ -359,15 +359,18 @@ extension VaultManager {
     /// spec).
     nonisolated static let waitRetryPause: Int64 = 5
 
+    /// The screen's own wait is under way (it is going, or failed): the background's starts once it has ended, so that the
+    /// two never wait at once (``awaitTransferIn()``). A wait asked for with its notice keeps it. True when deferred.
+    private func deferredBehindScreen(quiet: Bool) -> Bool {
+        guard moveFlags.book.screenWaits > 0 else { return false }
+        moveFlags.book.backgroundAfterScreen = quiet && moveFlags.book.backgroundAfterScreen != false
+        return true
+    }
+
     /// ``waitForTransferInBackground()``; [quiet]: its end sets no ``transferEnd`` notice.
     func waitForTransferInBackground(quiet: Bool) {
-        guard moveFlags.book.transferWaiter == nil, record.value.transferStartedMs != nil else { return }
-        // The screen's own wait is under way (it is going, or failed): the background's starts once it has ended, so that
-        // the two never wait at once (``awaitTransferIn()``). A wait asked for with its notice keeps it.
-        if moveFlags.book.screenWaits > 0 {
-            moveFlags.book.backgroundAfterScreen = quiet && moveFlags.book.backgroundAfterScreen != false
-            return
-        }
+        guard moveFlags.book.transferWaiter == nil, record.value.transferStartedMs != nil, !deferredBehindScreen(quiet: quiet)
+        else { return }
         moveFlags.book.transferWaiter = Task { @MainActor [weak self] in
             var end: TransferEnd?
             var failed = false

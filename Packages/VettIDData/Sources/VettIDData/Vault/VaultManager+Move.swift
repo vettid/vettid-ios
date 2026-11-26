@@ -66,8 +66,7 @@ extension VaultManager: MoveRepository {
             let codeID = InviteLinks.transferCodeID(code)
             try record.update(since: rec) {
                 $0.transferIn = true
-                $0.transferStartedMs = started
-                $0.transferStartAdoptedMs = nil
+                ($0.transferStartedMs, $0.transferStartAdoptedMs) = (started, nil)
                 $0.transferCode = codeID
                 // The start alone says that a transfer is under way (``userGuidUsable``): nothing of an earlier one stays.
                 ($0.movedIn, $0.setupComplete, $0.finishMovePending) = (false, false, false)
@@ -110,15 +109,6 @@ extension VaultManager: MoveRepository {
             }
             return sas
         }
-    }
-
-    /// A drop of this scan's own transfer (its start failed, its fin was refused for good, or no `hs.resp` came): a
-    /// background wait left from before (a screen that went with the onboarding) goes first, so that it never ends later
-    /// as a move the member did not see (``TransferEnd/timedOut``).
-    private func dropScanTransfer(_ d: VaultDevice) async {
-        moveFlags.book.transferWaiter?.cancel()
-        moveFlags.book.transferWaiter = nil
-        await dropTransfer(d)
     }
 
     /// A new code is refused while the last transfer cannot be abandoned (§11.14.10 rule 5); it is then waited for, if
@@ -362,12 +352,6 @@ extension VaultManager: MoveRepository {
         }
         try? await d.transferCompleted()
         phase = .setup(.finishing)
-    }
-
-    /// The new phone's deadline: 11 minutes after it started the `hs.init` (``LocalAccount/transferStartedMs``); nil without
-    /// a transfer waiting.
-    var transferDeadline: Date? {
-        record.value.transferStartedMs.map { Date(timeIntervalSince1970: Double($0) / 1000 + Self.pairingWindow) }
     }
 
     /// The code of the refusal of an enrollment (or another vault's code) while a move to this phone is under way, in the
