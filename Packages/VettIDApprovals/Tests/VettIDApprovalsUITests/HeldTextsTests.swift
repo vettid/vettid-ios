@@ -31,12 +31,16 @@ import Testing
         #expect(ApprovalTexts.title(a, held: .noItem(use: false, loading: true)) == "\(bot) wants to see Loading…")
         #expect(ApprovalTexts.body(a, name: nil, held: .noItem(use: false, loading: false)) == "This phone can't find that item or field any more, so you can only deny the request.")
         #expect(ApprovalTexts.body(a, name: nil, held: .noItem(use: false, loading: true)) == "Loading…")
-        #expect(ApprovalTexts.title(a, held: .later(item: "GitHub", loading: false)) == "\(bot) wants to use \(iso("GitHub")) in a way this version of VettID can't show")
-        #expect(ApprovalTexts.title(a, held: .later(item: nil, loading: false)) == "\(bot) wants to use an item you no longer have in a way this version of VettID can't show")
-        #expect(ApprovalTexts.body(a, name: nil, held: .later(item: nil, loading: false)) == "Update VettID to see the details. Until then you can only deny it.")
         #expect(ApprovalTexts.title(a, held: .other) == "\(bot) asks to approve a request" && ApprovalTexts.title(a, held: .desktop) == "\(bot) asks to approve a request")
         #expect(ApprovalTexts.body(a, name: nil, held: .desktop) == "Desktop requests can't be shown in this version of VettID, so you can only deny them.")
         #expect(ApprovalTexts.body(a, name: nil, held: .other) == "This version of VettID can't show this request, so you can only deny it.")
+        // A run with a `cwd` waiting on its rule (chosen; not in the spec, for the owner's approval), and one whose settings carry
+        // folders.
+        #expect(ApprovalTexts.cwdLine(.checking) == "Checking where this may run…" && ApprovalTexts.cwdLine(.failed) == "This can't be shown yet. Try again.")
+        #expect(ApprovalTexts.cwdLine(.notAllowed) == "This version of VettID can't show this request, so you can only deny it.")
+        // The item list could not be read: neither "an item you no longer have" nor "Loading…".
+        #expect(ApprovalTexts.title(a, held: .itemsUnread) == ApprovalTexts.title(a, held: .other))
+        #expect(ApprovalTexts.body(a, name: nil, held: .itemsUnread) == "Your items could not be read, so this phone can't say what the request is about. Until they are read, you can only deny it.")
     }
 
     @Test func aRequestWithoutANameIsNamedByItsKind() {
@@ -61,7 +65,7 @@ import Testing
         let who = "Bot"
         func say(_ o: DeviceOutcome) -> String { ApprovalTexts.outcome(o, who: who) }
         #expect(say(.denied) == "Denied" && say(.noLongerWaiting) == "This request is no longer waiting.")
-        #expect(say(.approved(result: "ok")) == "Approved" && say(.approved(result: "not_found")) == "This request is no longer waiting.")
+        #expect(say(.approved(result: "ok")) == "Approved" && say(.approved(result: "not_found")) == "Approved, but your vault answered: \(iso("not_found")).", "a result, not the error")
         #expect(say(.approved(result: nil)) == "Your vault didn't say whether it was done.")
         #expect(say(.approved(result: "forbidden")) == "Approved, but Bot no longer has a permission that covers it, or is paused, so nothing was done.")
         #expect(say(.approved(result: "session_required")) == "Approved, but Bot's access ended first, so nothing was done." && say(.approved(result: "denied")) == say(.approved(result: "session_required")))

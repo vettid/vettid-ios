@@ -122,14 +122,15 @@ enum ApprovalTexts {
         case .use(let item, _, _, _): return ApprovalsStrings.heldUseTitle(who, AccountNames.isolate(item))
         case .get(let item, _): return ApprovalsStrings.heldGetTitle(who, AccountNames.isolate(item))
         case .catalog: return ApprovalsStrings.heldCatalogTitle(who)
+        case .run(_, let item, _): return ApprovalsStrings.runTitle(who, AccountNames.isolate(item))
+        case .proxy(let p, let item, _):
+            let host = ShownString.inline(p.host, empty: ApprovalsStrings.stringEmpty)
+            return ApprovalsStrings.proxyTitle(who, AccountNames.isolate(item), host, WayRows.length(p.seconds))
         case .noItem(let use, let loading):
             let item = loading ? ApprovalsStrings.loading : ApprovalsStrings.heldNoItem
             return use ? ApprovalsStrings.heldUseTitle(who, item) : ApprovalsStrings.heldGetTitle(who, item)
-        case .later(let item, let loading):
-            return ApprovalsStrings.heldLaterTitle(
-                who, item.map { AccountNames.isolate($0) } ?? (loading ? ApprovalsStrings.loading : ApprovalsStrings.heldNoItem)
-            )
-        case .desktop, .other: return ApprovalsStrings.heldOtherTitle(who)
+        // What it is about cannot be named (the item list could not be read): said without an item.
+        case .desktop, .other, .itemsUnread: return ApprovalsStrings.heldOtherTitle(who)
         }
     }
 
@@ -137,10 +138,11 @@ enum ApprovalTexts {
     static func heldBody(_ show: HeldShow) -> String? {
         switch show {
         case .use(_, let field, _, _): ApprovalsStrings.heldUseBody(AccountNames.isolate(field))
-        case .get: nil
+        // Shown on AA8's own screen.
+        case .get, .run, .proxy: nil
         case .catalog: ApprovalsStrings.heldCatalogBody
         case .noItem(_, let loading): loading ? ApprovalsStrings.loading : ApprovalsStrings.heldNoItemBody
-        case .later: ApprovalsStrings.heldLaterBody
+        case .itemsUnread: ApprovalsStrings.heldItemsUnreadBody
         case .desktop: ApprovalsStrings.heldDesktopBody
         case .other: ApprovalsStrings.heldOtherBody
         }
@@ -167,26 +169,62 @@ enum ApprovalTexts {
         [kindWord(d), waitingText(d.exp, now: now)].compactMap { $0 }.joined(separator: " · ")
     }
 
-    /// How a decision on a held request ended, as the screen says it (AA5 "Answers to `approval.decide`").
-    static func outcome(_ o: DeviceOutcome, who: String) -> String { // swiftlint:disable:this cyclomatic_complexity
+    /// Why a run with a `cwd` is Deny only for now (``CwdCheck``): its rule is being read, could not be read, or does not allow it
+    /// (the item's settings carry folders, which this version does not show: the line for what it cannot show).
+    static func cwdLine(_ check: CwdCheck) -> String? {
+        switch check {
+        case .checking: ApprovalsStrings.runCwdChecking
+        case .failed: ApprovalsStrings.runCwdUnchecked
+        case .notAllowed: ApprovalsStrings.heldOtherBody
+        }
+    }
+
+    /// How a decision on a held request ended, as the screen says it (AA5 "Answers to `approval.decide`", AA8 "Refused or expired").
+    static func outcome(_ o: DeviceOutcome, who: String) -> String {
         switch o {
         case .denied: return ApprovalsStrings.heldDenied
         case .noLongerWaiting: return ApprovalsStrings.noLongerWaiting
-        // Not "Approved": the new approval is a new entry (AA8 "Referred again"; its text comes with the run and proxy screens).
-        case .referred: return ApprovalsStrings.noLongerWaiting
-        case .approved(let result):
-            switch result {
-            // The vault did not say whether it was done: not "Approved".
-            case nil: return ApprovalsStrings.heldNoResult
-            case "ok": return ApprovalsStrings.heldApproved
-            case "not_found": return ApprovalsStrings.noLongerWaiting
-            case "forbidden": return ApprovalsStrings.heldForbidden(who)
-            case "session_required", "denied": return ApprovalsStrings.heldSessionEnded(who)
-            case "way_not_allowed": return ApprovalsStrings.heldWayNotAllowed
-            case let code?:
-                return ApprovalsStrings.heldOtherResult(AccountNames.isolateOrNull(AccountNames.cleanedCapped(code, max: 64)) ?? "?")
-            }
+        // Not "Approved": the new approval is a new decision, to be opened anew (AA8 "Referred again").
+        case .referred: return ApprovalsStrings.wayReferred
+        case .approved(let result, let way, _, _):
+            if let way { return wayResult(result, run: way == .run, who: who) }
+            return approved(result, who: who)
         }
+    }
+
+    private static func approved(_ result: String?, who: String) -> String {
+        switch result {
+        // The vault did not say whether it was done: not "Approved".
+        case nil: ApprovalsStrings.heldNoResult
+        case "ok": ApprovalsStrings.heldApproved
+        // `{result: "not_found"}` is an answer like the others ("Approved, but your vault answered: not_found."); only the error
+        // `not_found` is "no longer waiting" (AA5 "Answers to `approval.decide`"). A run's and a proxy's have their own (AA8).
+        case "forbidden": ApprovalsStrings.heldForbidden(who)
+        case "session_required", "denied": ApprovalsStrings.heldSessionEnded(who)
+        case "way_not_allowed": ApprovalsStrings.heldWayNotAllowed
+        case let code?: otherResult(code)
+        }
+    }
+
+    /// AA8 "Refused or expired": a run's or a proxy's answer; the codes AA5 has keep its texts.
+    private static func wayResult(_ result: String?, run: Bool, who: String) -> String {
+        switch result {
+        case nil: ApprovalsStrings.heldNoResult
+        case "ok": ApprovalsStrings.wayApproved
+        case "not_found": run ? ApprovalsStrings.runNotFound : ApprovalsStrings.proxyNotFound
+        case "forbidden": ApprovalsStrings.wayForbidden(who)
+        case "program_not_allowed": ApprovalsStrings.runProgramNotAllowed
+        case "env_not_allowed": ApprovalsStrings.runEnvNotAllowed
+        case "cwd_not_allowed": ApprovalsStrings.runCwdNotAllowed
+        case "session_required", "denied": ApprovalsStrings.heldSessionEnded(who)
+        case "way_not_allowed": ApprovalsStrings.heldWayNotAllowed
+        case let code?: otherResult(code)
+        }
+    }
+
+    /// "Approved, but your vault answered: <code>.", the code cleaned and cut.
+    private static func otherResult(_ code: String) -> String {
+        ApprovalsStrings.heldOtherResult(AccountNames.isolateOrNull(AccountNames.cleanedCapped(code, max: 64)) ?? "?")
     }
 
     /// A challenge's note on its screen: the connection's own words in full (lines kept, isolated, §10.4); without them,

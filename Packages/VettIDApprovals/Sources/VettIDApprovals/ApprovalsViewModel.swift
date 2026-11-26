@@ -27,15 +27,15 @@ public struct ApprovalsState: Equatable, Sendable, CustomStringConvertible, Cust
     public var connections: [String: ConnectionInfo] = [:]
     /// The member's items with their fields' labels, to name what an agent's request is about (AA5, AA8).
     public var items: [ItemSummary] = []
-    /// The item list has been read (loaded or failed): until then a request's item is "Loading…".
-    public var itemsLoaded = true
+    /// How far the item list has been read: until it is, a request's item is "Loading…" (or, after a failed read, not named).
+    public var itemsRead: ItemsRead = .read
 
     public init() {}
 
     /// What the request [a] an agent holds for approval shows (its row's title), nil for any other.
     public func heldShow(_ a: PendingApproval) -> HeldShow? {
         guard case .device(let d) = a, DeviceAsks.isHeld(d) else { return nil }
-        return DeviceAsks.show(d, items: items, loaded: itemsLoaded)
+        return DeviceAsks.show(d, items: items, read: itemsRead)
     }
 
     /// The rows: one per approval, a connection's asks within 10 minutes as one batch (§10.4.1).
@@ -80,7 +80,8 @@ public final class ApprovalsViewModel {
     @ObservationIgnored private let connections: any ConnectionsRepository
     @ObservationIgnored private let ownerChecks: (any OwnerCheckRepository)?
     @ObservationIgnored private let vault: (any ItemsRepository)?
-    @ObservationIgnored private var itemsSettled = false
+    /// The item list's ``ItemsRepository/cleared`` when it was last seen read (``ItemsRead/of(_:cleared:readAt:)``).
+    @ObservationIgnored private var itemsReadAt: Int?
     @ObservationIgnored private let work = Work()
     @ObservationIgnored private let follows = TaskBag()
     private var local = ApprovalsState()
@@ -120,8 +121,7 @@ public final class ApprovalsViewModel {
         s.connections = Dictionary(all.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
         if let vault {
             s.items = vault.items
-            if vault.load == .loaded || vault.load == .failed { itemsSettled = true }
-            s.itemsLoaded = itemsSettled
+            s.itemsRead = ItemsRead.of(vault.load, cleared: vault.cleared, readAt: &itemsReadAt)
         }
         return s
     }

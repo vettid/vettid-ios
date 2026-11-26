@@ -65,17 +65,16 @@ private func itemProxy(_ h: HeldApproval) throws -> ItemProxy {
         }
     }
 
-    @Test func theCatalogIsApprovableAndARunAndAProxyAreReadButNotApprovable() throws {
+    @Test func theCatalogARunAndAProxyAreApprovable() throws {
         #expect(try held(#"{"op":"catalog"}"#) == .catalog)
-        // Read in full, but deny only until their screens ship (the manager refuses them on its own too).
-        guard case .itemRun = try run(), case .itemProxy = try held(proxyBody, top: proxyNote) else { Issue.record("not read"); return }
-        #expect(try !run().approvable)
-        #expect(try !held(proxyBody, top: proxyNote).approvable)
+        #expect(try run().approvable)
+        #expect(try held(proxyBody, top: proxyNote).approvable)
         #expect(!HeldApproval.desktopStepUp.approvable && !HeldApproval.unshown.approvable)
     }
 
-    /// AA8 "Fail closed": a run or a proxy names its device and itself and has a time to end.
-    @Test func aRunOrAProxyWithoutANameDeviceOrExpIsDenyOnly() throws {
+    /// AA8 "Fail closed": every agent op (a run, a proxy, a use, a reveal, a catalog) names its device and itself and has a time
+    /// to end.
+    @Test func anAgentRequestWithoutANameDeviceOrExpIsDenyOnly() throws {
         func make(_ body: String, top: String, members: String) throws -> HeldApproval {
             let o = try StrictJson.parseObject(Array(#"{"approval_id":"h1","role":"agent","type":"agent.request","body":\#(body)\#(members)\#(top)}"#.utf8))
             return try #require(ApprovalParser.device("approval.pending", o, at: Date())?.held)
@@ -83,6 +82,10 @@ private func itemProxy(_ h: HeldApproval) throws -> ItemProxy {
         let ok = #","device_id":"A","name":"Bot","exp":"2026-11-02T12:05:00.000Z""#
         #expect(try make(runBody, top: "", members: ok) != .unshown)
         #expect(try make(proxyBody, top: proxyNote, members: ok) != .unshown)
+        let get = #"{"op":"item.get","item_id":"i1"}"#, catalog = #"{"op":"catalog"}"#
+        for (body, top) in [(use("AAEC"), ""), (get, ""), (catalog, "")] {
+            #expect(try make(body, top: top, members: ok).approvable, Comment(rawValue: body))
+        }
         let bad = [
             #","name":"Bot","exp":"2026-11-02T12:05:00.000Z""#,
             #","device_id":"","name":"Bot","exp":"2026-11-02T12:05:00.000Z""#,
@@ -98,9 +101,10 @@ private func itemProxy(_ h: HeldApproval) throws -> ItemProxy {
         for members in bad {
             #expect(try make(runBody, top: "", members: members) == .unshown, Comment(rawValue: "run \(members)"))
             #expect(try make(proxyBody, top: proxyNote, members: members) == .unshown, Comment(rawValue: "proxy \(members)"))
+            #expect(try make(use("AAEC"), top: "", members: members) == .unshown, Comment(rawValue: "use \(members)"))
+            #expect(try make(get, top: "", members: members) == .unshown, Comment(rawValue: "get \(members)"))
+            #expect(try make(catalog, top: "", members: members) == .unshown, Comment(rawValue: "catalog \(members)"))
         }
-        // A reveal, an item.use and a catalog keep reading without them: this rule is for a run and a proxy.
-        #expect(try make(use("AAEC"), top: "", members: #","name":"Bot""#) != .unshown)
     }
 
     @Test func anItemGetWithoutItsStrictEnvelopeIsDenyOnly() throws {

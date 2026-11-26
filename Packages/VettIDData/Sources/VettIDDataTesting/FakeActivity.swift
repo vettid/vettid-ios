@@ -233,14 +233,50 @@ public final class FakeApprovals: ApprovalsRepository {
         drop(key)
     }
 
-    /// What ``approveDeviceRequest(_:)`` answers (`approval.decide`'s `result`).
+    /// What ``approveDeviceRequest(_:generation:stillShown:)`` answers (`approval.decide`'s `result`).
     public var deviceResult: String? = "ok"
+    /// What the last approval was given: the request, the generation, and what its check said when it was called. As the
+    /// manager does, an approval whose generation is not ``forgetCount`` or whose check says no is refused
+    /// (``FailureKind/requestChanged``), and recorded among the calls as `approveDeviceRequest:changed:<key>`.
+    public var lastDeviceApproval: DeviceApprovalCall?
+    /// Runs while an approval is on its way, after its checks (a lock that comes meanwhile, say).
+    public var duringDeviceApproval: (@MainActor () -> Void)?
 
-    public func approveDeviceRequest(_ shown: DeviceRequest) async throws -> DeviceDecision {
+    public func approveDeviceRequest(
+        _ shown: DeviceRequest, generation: Int, stillShown: @escaping @MainActor () -> Bool
+    ) async throws -> DeviceDecision {
         let key = PendingApproval.device(shown).key
+        let still = stillShown()
+        lastDeviceApproval = DeviceApprovalCall(shown: shown, generation: generation, stillShown: still)
+        guard generation == forgetCount, still else {
+            calls.append("approveDeviceRequest:changed:\(key)")
+            throw VaultFailure(.requestChanged)
+        }
+        duringDeviceApproval?()
         try call("approveDeviceRequest", key)
         drop(key)
         return DeviceDecision(result: deviceResult)
+    }
+
+    /// What ``runCwdRule(agentID:itemID:)`` answers (nil: the read failed), and how many reads were asked.
+    public var cwdRule: Bool? = true
+    /// Answers to the next reads, in order, before ``cwdRule`` (a failed read then a good one, say).
+    public var cwdRuleQueue: [Bool?] = []
+    public private(set) var cwdReads = 0
+    /// What ``programRecorded(agentID:itemID:program:sha256:)`` answers.
+    public var recorded = false
+
+    public func runCwdRule(agentID: String, itemID: String) async -> Bool? {
+        cwdReads += 1
+        return cwdRuleQueue.isEmpty ? cwdRule : cwdRuleQueue.removeFirst()
+    }
+
+    /// When set, ``programRecorded(agentID:itemID:program:sha256:)`` waits for it before it answers.
+    public var pinHold: TestDeferred<Void>?
+
+    public func programRecorded(agentID: String, itemID: String, program: String, sha256: String) async -> Bool {
+        if let pinHold { _ = try? await pinHold.value() }
+        return recorded
     }
 
     /// The sessions' ends, by device; a test sets them and ``deviceSessionsKnown`` (or lets ``readDeviceSessions()`` set it).
@@ -307,4 +343,11 @@ public final class FakeApprovals: ApprovalsRepository {
     public func blockConnectionRequest(_ pendingID: String) async throws { try await connections.blockConnectionRequest(pendingID) }
     public func approveOutgoing(_ connectionID: String) async throws { try await connections.approveOutgoing(connectionID) }
     public func declineOutgoing(_ connectionID: String) async throws { try await connections.declineOutgoing(connectionID) }
+}
+
+/// TEST ONLY. What ``FakeApprovals/approveDeviceRequest(_:generation:stillShown:)`` was given; [stillShown] what its check said.
+public struct DeviceApprovalCall: Sendable {
+    public var shown: DeviceRequest
+    public var generation: Int
+    public var stillShown: Bool
 }
