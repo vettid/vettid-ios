@@ -330,7 +330,7 @@ public struct TransferInRoute: View {
             finishPane: AnyView(FinishMoveRoute(vault: vault) { model?.finish() }), onRecover: onRecover
         )
         .onAppear { if model == nil { model = TransferInViewModel(move: move, vault: vault) } }
-        .onDisappear { Self.leave(model, move: move, movedIn: vault.movedIn) }
+        .onDisappear { Self.leave(model, move: move, movedIn: vault.movedIn, phase: vault.phase) }
         // The pasted code is also forgotten when the app leaves the foreground and when the iPhone locks (IOS-PLAN §6.3;
         // chosen; vettid-android has no such rule).
         .onChange(of: scenePhase) { _, now in if now == .background { model?.setInput("") } }
@@ -341,13 +341,16 @@ public struct TransferInRoute: View {
 
     /// The screen goes: a transfer under way is cancelled, and the pasted code is forgotten. Not when the transfer completed
     /// ([movedIn]): the approval can replace this screen with the move's last screen before the model shows it, and then
-    /// nothing is dropped.
-    static func leave(_ model: TransferInViewModel?, move: any MoveRepository, movedIn: Bool) {
+    /// nothing is dropped. Nor when the vault's [phase] took the onboarding away (a read that could not reach the vault, a
+    /// lock): the member did not leave, so a transfer whose start is stored is waited for in the background instead, and
+    /// its screen comes back with the phase (``SetupStage/transferWaiting``).
+    static func leave(_ model: TransferInViewModel?, move: any MoveRepository, movedIn: Bool, phase: AppPhase) {
         guard let model else { return }
         model.setInput("")
         // From the end of the vault's 10 minutes the transfer is not abandoned (§11.14.10 rule 5): the manager waits for it
-        // in the background, and how it ended is told on the welcome screen.
-        if model.closesNow, !movedIn {
+        // in the background, and how it ended is told on the welcome screen. The same when the screen went with the
+        // onboarding (chosen; not in the spec): only the member's own leaving abandons.
+        if !movedIn, model.closesNow || (!onboards(phase) && move.transferStartedAt != nil) {
             move.waitForTransferInBackground()
             return
         }
@@ -360,5 +363,13 @@ public struct TransferInRoute: View {
 
     /// The steps in which leaving cancels the transfer (the handshake is under way); after the approval nothing is cancelled.
     static func cancels(_ step: TransferInStep) -> Bool { step == .connecting || step == .compare }
+
+    /// Whether [phase] shows the onboarding, where this screen is (the app's root shows another flow otherwise).
+    static func onboards(_ phase: AppPhase) -> Bool {
+        switch phase {
+        case .signedOut, .setup: true
+        default: false
+        }
+    }
 }
 #endif

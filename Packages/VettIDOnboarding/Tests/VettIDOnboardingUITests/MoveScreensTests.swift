@@ -180,9 +180,42 @@ import VettIDUI
         vault.abandonClosed = true
         await clock.advance(seconds: 610)
         #expect(model.state.closing)
-        TransferInRoute.leave(model, move: vault, movedIn: false)
+        TransferInRoute.leave(model, move: vault, movedIn: false, phase: vault.phase)
         for _ in 0..<50 { await Task.yield() }
         #expect(vault.calls.contains("waitForTransferInBackground") && !vault.calls.contains("abandonTransferIn"))
+    }
+
+    /// The screen taken away with the onboarding during the vault's 10 minutes (a read that could not reach the vault, a lock):
+    /// the member did not leave, so the transfer is not abandoned; the manager waits for it in the background. The member's own
+    /// leaving (a setup phase) still abandons it, and so does one with no start stored.
+    @Test(arguments: [
+        (AppPhase.unreachable(.network), true, false),
+        (AppPhase.locked, true, false),
+        (AppPhase.setup(.transferWaiting), true, true),
+        (AppPhase.signedOut, true, true),
+        (AppPhase.unreachable(.network), false, true),
+    ])
+    func leavingWithTheOnboardingHandsTheWaitToTheBackground(phase: AppPhase, started: Bool, abandons: Bool) async throws {
+        let vault = FakeVaultRepository(.setup(.transferWaiting))
+        let clock = VirtualTime()
+        let model = TransferInViewModel(move: vault, vault: vault, now: clock.now, sleep: clock.sleep)
+        model.scan()
+        model.scanned(try qr(clock))
+        await clock.runCurrent()
+        #expect(await eventually { model.state.step == .compare })
+        vault.transferStartedAt = started ? clock.now() : nil
+        #expect(!model.closesNow, "inside the 10 minutes")
+        TransferInRoute.leave(model, move: vault, movedIn: false, phase: phase)
+        let abandoned = await eventually { vault.calls.contains("abandonTransferIn") }
+        #expect(abandoned == abandons, "\(phase)")
+        #expect(vault.calls.contains("waitForTransferInBackground") == !abandons, "\(phase)")
+    }
+
+    @Test func onlyTheOnboardingsPhasesShowTheScreen() {
+        #expect(TransferInRoute.onboards(.signedOut) && TransferInRoute.onboards(.setup(.transferWaiting)))
+        for phase in [AppPhase.starting, .locked, .unlocked, .deleting, .unreachable(.network)] {
+            #expect(!TransferInRoute.onboards(phase), "\(phase)")
+        }
     }
 
     private func handshakeWindow(_ vault: FakeVaultRepository, _ clock: VirtualTime) async throws -> UIWindow {
