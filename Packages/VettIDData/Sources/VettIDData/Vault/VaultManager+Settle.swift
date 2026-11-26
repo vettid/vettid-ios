@@ -360,9 +360,11 @@ extension VaultManager {
     nonisolated static let waitRetryPause: Int64 = 5
 
     /// The screen's own wait is under way (it is going, or failed): the background's starts once it has ended, so that the
-    /// two never wait at once (``awaitTransferIn()``). A wait asked for with its notice keeps it. True when deferred.
+    /// two never wait at once (``awaitTransferIn()``). A wait asked for with its notice keeps it. True when deferred. Not
+    /// while the settlement runs: the screen's wait joined it, which its cancellation does not end, and the background's
+    /// joins it too (no second wait for the `device.paired`), so that a drop or a rejection is told.
     private func deferredBehindScreen(quiet: Bool) -> Bool {
-        guard moveFlags.book.screenWaits > 0 else { return false }
+        guard moveFlags.book.screenWaits > 0, moveFlags.book.settling == nil else { return false }
         moveFlags.book.backgroundAfterScreen = quiet && moveFlags.book.backgroundAfterScreen != false
         return true
     }

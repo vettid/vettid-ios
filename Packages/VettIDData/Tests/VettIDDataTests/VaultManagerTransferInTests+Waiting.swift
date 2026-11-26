@@ -109,17 +109,39 @@ extension VaultManagerTransferInTests {
         #expect(m.record.value.transferStartAdoptedMs == nil && !m.abandonClosed)
     }
 
-    /// A scan whose own transfer is dropped (no `hs.resp` within 60 s) ends a background wait started while it waited (the
-    /// screen handing its wait over as the onboarding went), so that it never ends later as a move the member did not see.
-    @Test func aScansOwnDropEndsALeftoverBackgroundWait() async throws {
+    /// How a scan's own transfer is dropped: its start failed (here cancelled at its claim), its `hs.fin` refused for good,
+    /// or no `hs.resp` within 60 s.
+    enum ScanDrop: CaseIterable { case startFailed, finRefused, unanswered }
+
+    /// A scan whose own transfer is dropped ends a background wait started while it ran (the screen handing its wait over
+    /// as the onboarding went), so that it never ends later as a move the member did not see.
+    @Test(arguments: ScanDrop.allCases)
+    func aScansOwnDropEndsALeftoverBackgroundWait(drop: ScanDrop) async throws {
         defer { phone.close() }
-        service.transferIgnoresInit = true
+        let gate = FakeHTTPServer.Gate()
+        switch drop {
+        case .startFailed, .finRefused: service.holdsClaim = gate
+        case .unanswered: service.transferIgnoresInit = true
+        }
+        if drop == .finRefused {
+            service.holdsTransferApproval = true
+            service.transferRevokesFin = true
+        }
         let scan = Task { try await m.transferIn(code: try code()) }
-        #expect(await eventually { phone.transferPauses.lengths == [60] })
+        if drop == .unanswered {
+            #expect(await eventually { phone.transferPauses.lengths == [60] })
+        } else {
+            #expect(await eventually { gate.waiting > 0 }, "held at the claim")
+        }
         let leftover = Task<Void, Never> { try? await Task.sleep(for: .seconds(600)) }
         defer { leftover.cancel() }
         m.moveFlags.book.transferWaiter = leftover
-        phone.transferPauses.release()
+        switch drop {
+        case .startFailed: scan.cancel()
+        case .finRefused: break
+        case .unanswered: phone.transferPauses.release()
+        }
+        gate.open()
         _ = try? await scan.value
         #expect(leftover.isCancelled && m.moveFlags.book.transferWaiter == nil)
         #expect(!deviceHoldsVault && m.record.value.transferStartedMs == nil)
@@ -139,6 +161,27 @@ extension VaultManagerTransferInTests {
         try await m.refresh()
         #expect(m.phase == .setup(.newVault), "\(m.phase)")
         #expect(!deviceHoldsVault && m.record.value.transferStartedMs == nil && m.moveFlags.book.transferWaiter == nil)
+    }
+
+    /// The enrollment's refusal handed an older device (here the one from before a restart, still pinned in memory) adopts
+    /// the current session's: that is the device that writes the stored state now, so its unanswered pin is the one dropped.
+    @Test func theRefusalAdoptsTheCurrentSessionsDevice() async throws {
+        defer { phone.close() }
+        _ = try await m.redeemSetupCode(.secret(service.secret))
+        service.transferIgnoresInit = true
+        let first = Task { try await m.transferIn(code: try code()) }
+        #expect(await eventually { phone.transferPauses.lengths == [60] })
+        let old = try #require(m.session?.device)
+        try m.record.update(since: m.record.generation) { $0.transferStartedMs = nil }
+        try await phone.restart()
+        first.cancel()
+        m.moveFlags.book.startingIn += 1
+        try await m.refresh()
+        m.moveFlags.book.startingIn -= 1
+        let current = try #require(m.session?.device)
+        #expect(current !== old && m.transferWaitsHere(old) && m.transferWaitsHere(current))
+        #expect(m.transferWaitingRefusal(old)?.code == VaultManager.codeTransferWaiting)
+        #expect(await eventually { !current.hasVault }, "the current session's unanswered pin dropped")
     }
 
     /// No start is adopted while a scan is writing its own (``MoveBook/startingIn``).
@@ -193,6 +236,36 @@ extension VaultManagerTransferInTests {
         try await m.refresh()
         #expect(m.phase == .setup(.transferWaiting) && m.moveFlags.book.transferWaiter == nil)
         m.moveFlags.book.screenWaits -= 1
+    }
+
+    /// A screen's wait cancelled before it began (the screen handed it over) takes nothing from the background's.
+    @Test func aCancelledScreenWaitLeavesTheBackgroundsAlone() async throws {
+        defer { phone.close() }
+        _ = try await scanned()
+        try await phone.restart()
+        try await m.refresh()
+        let background = try #require(m.moveFlags.book.transferWaiter)
+        let screen = Task { @MainActor in
+            withUnsafeCurrentTask { $0?.cancel() }
+            return try await m.awaitTransferIn()
+        }
+        await #expect(throws: CancellationError.self) { try await screen.value }
+        #expect(m.moveFlags.book.transferWaiter == background && !background.isCancelled)
+    }
+
+    /// ... except while the settlement runs: the screen's wait joined it (cancelling it does not end the settlement), and
+    /// the background's joins it too, so that its end is told when it is a drop or a rejection.
+    @Test func aBackgroundWaitAskedForDuringASettlementStartsAtOnce() async throws {
+        defer { phone.close() }
+        _ = try await scanned()
+        let settlement = Task<TransferSettled, Never> { .dropped }
+        m.moveFlags.book.screenWaits += 1
+        m.moveFlags.book.settling = settlement
+        m.waitForTransferInBackground()
+        #expect(m.moveFlags.book.transferWaiter != nil && m.moveFlags.book.backgroundAfterScreen == nil)
+        m.moveFlags.book.settling = nil
+        m.moveFlags.book.screenWaits -= 1
+        m.moveFlags.book.transferWaiter?.cancel()
     }
 
     /// A background wait asked for while the screen's runs (the screen going) starts only once the screen's has ended: the

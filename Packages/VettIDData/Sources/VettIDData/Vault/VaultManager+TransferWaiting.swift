@@ -46,8 +46,6 @@ extension VaultManager {
         return true
     }
 
-    /// A start for a transfer whose own start is unknown: now, marked as adopted (``LocalAccount/transferStartAdoptedMs``),
-    /// so that the abandon is closed from the start (``abandonClosed``) while the deadline is the full 11 minutes.
     /// A start for a transfer known to be dead (it stopped on this phone, and its drop could not be saved): one deadline
     /// back, with no adopted mark, so that only the settlement's window runs before it is dropped again, and new codes are
     /// refused only as long as that.
@@ -60,6 +58,8 @@ extension VaultManager {
         }
     }
 
+    /// A start for a transfer whose own start is unknown: now, marked as adopted (``LocalAccount/transferStartAdoptedMs``),
+    /// so that the abandon is closed from the start (``abandonClosed``) while the deadline is the full 11 minutes.
     func writeUnknownStart() {
         let started = nowMs
         _ = try? record.update(since: record.generation) {
@@ -73,6 +73,8 @@ extension VaultManager {
     /// place as it begins (one waiter takes the `device.paired`; a settlement under way is joined, with its collects and its
     /// outcome). Should it fail with the transfer kept, the background's starts again.
     public func awaitTransferIn() async throws -> Bool {
+        // A screen's wait cancelled before it began (the screen handed it over) takes nothing from the background's.
+        try Task.checkCancellation()
         moveFlags.book.screenWaits += 1
         defer {
             moveFlags.book.screenWaits -= 1
