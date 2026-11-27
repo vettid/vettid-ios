@@ -212,6 +212,56 @@ extension CallMachineTests {
         await runCurrent()
     }
 
+    /// (0.97.0 §10.10) A call that ends while its `call.start` is out unanswered is ended at once by the start's id, by
+    /// whatever path it ends: a hang-up, a lock, or its engine failing. Not only once the start returns (up to 30 s, the callee
+    /// ringing all the while if the answer was lost).
+    @Test func aCallEndedWhileItsStartIsOutIsEndedAtOnce() async throws {
+        let pending = "01JB2Z6V9K3M4N5P6Q7R8S9PND"
+        signalling.startCallId = pending
+        let m = machine()
+
+        signalling.holdStart()
+        m.call("conn-1")
+        await runCurrent()
+        m.hangUp()
+        await runCurrent()
+        #expect(signalling.sent.contains("end(\(pending), hangup)"), "a hang-up")
+        signalling.releaseStart()
+        await runCurrent()
+
+        signalling.sent.removeAll()
+        signalling.holdStart()
+        m.call("conn-1")
+        await runCurrent()
+        m.vaultLocking()
+        await runCurrent()
+        #expect(signalling.sent.contains("end(\(pending), hangup)"), "a lock")
+        signalling.releaseStart()
+        await runCurrent()
+
+        signalling.sent.removeAll()
+        signalling.holdStart()
+        m.call("conn-1")
+        await runCurrent()
+        engines.last.emit(.failed("test"))
+        await runCurrent()
+        #expect(signalling.sent.contains("end(\(pending), failed)"), "its engine failing: told as a failure")
+        signalling.releaseStart()
+        await runCurrent()
+    }
+
+    /// Once the start has returned, its own answer says what is to end: a refusal sends nothing more.
+    @Test func aRefusedStartSendsNoEndForItsId() async throws {
+        let pending = "01JB2Z6V9K3M4N5P6Q7R8S9PND"
+        signalling.startCallId = pending
+        signalling.startResult = { throw CallRefusedError(code: "busy") }
+        let m = machine()
+        m.call("conn-1")
+        await runCurrent()
+        #expect(try ended(m).reason == .ownVaultBusy)
+        #expect(!hasSent(signalling, "end("), "the vault refused it: there is no call")
+    }
+
     /// Other calls' ends: the oldest goes past the bound, and one delivered again counts as the newest.
     @Test func otherCallsEndsAreBoundedAndTheNewestKept() async throws {
         let m = machine()

@@ -68,7 +68,7 @@ extension VaultCallSignallingTests {
             if tries == 1 { throw badRequest() }
             return try outgoingCall($0, pinned: $1)
         }
-        let placed = try await s.start(connectionId: "conn-1", sdp: "v=0", suites: [s1], wanted: { true })
+        let placed = try await s.start(connectionId: "conn-1", sdp: "v=0", suites: [s1], wanted: { true }, placing: { _ in })
         #expect(placed.callId == callId)
         #expect(starts == ["start(conn-1, [1], ik 32)", "start(conn-1, [1], ik 32)"], "once more, in form 2 again")
         #expect(refreshes == 1, "the connections read again for the connection's key")
@@ -79,7 +79,7 @@ extension VaultCallSignallingTests {
         let s = await c2Signalling()
         gateway.startResult = { [unowned self] _, _ in throw badRequest() }
         do {
-            _ = try await s.start(connectionId: "conn-1", sdp: "v=0", suites: [s1], wanted: { true })
+            _ = try await s.start(connectionId: "conn-1", sdp: "v=0", suites: [s1], wanted: { true }, placing: { _ in })
             Issue.record("expected a refusal")
         } catch let e as CallRefusedError {
             #expect(e.code == "bad_request")
@@ -91,7 +91,7 @@ extension VaultCallSignallingTests {
         let s = await c2Signalling()
         gateway.startResult = { _, _ in throw VaultOpError(type: "error", code: "busy", detail: "", body: nil) }
         await #expect(throws: CallRefusedError.self) {
-            _ = try await s.start(connectionId: "conn-1", sdp: "v=0", suites: [s1], wanted: { true })
+            _ = try await s.start(connectionId: "conn-1", sdp: "v=0", suites: [s1], wanted: { true }, placing: { _ in })
         }
         #expect(starts.count == 1)
         #expect(refreshes == 0)
@@ -100,7 +100,7 @@ extension VaultCallSignallingTests {
         let s10 = await signalling()
         gateway.startResult = { [unowned self] _, _ in throw badRequest() }
         await #expect(throws: CallRefusedError.self) {
-            _ = try await s10.start(connectionId: "conn-1", sdp: "v=0", suites: [s1], wanted: { true })
+            _ = try await s10.start(connectionId: "conn-1", sdp: "v=0", suites: [s1], wanted: { true }, placing: { _ in })
         }
         #expect(starts == ["start(conn-1, [1])"], "a form 1 start is not placed again")
     }
@@ -117,7 +117,7 @@ extension VaultCallSignallingTests {
                 throw badRequest()
             }
             await #expect(throws: CallRefusedError.self) {
-                _ = try await s.start(connectionId: "conn-1", sdp: "v=0", suites: [s1], wanted: { wanted })
+                _ = try await s.start(connectionId: "conn-1", sdp: "v=0", suites: [s1], wanted: { wanted }, placing: { _ in })
             }
             #expect(starts.count == 1, "no second start (wanted lost \(after ? "during" : "before") the refresh)")
             #expect(refreshes == (after ? 1 : 0), "a call no longer wanted is not even refreshed for")
@@ -130,7 +130,7 @@ extension VaultCallSignallingTests {
         let s = await c2Signalling()
         gateway.startResult = { [unowned self] in try outgoingCall($0, pinned: $1) }
         var wanted = true
-        _ = try await s.start(connectionId: "conn-1", sdp: "v=0", suites: [s1], wanted: { wanted })
+        _ = try await s.start(connectionId: "conn-1", sdp: "v=0", suites: [s1], wanted: { wanted }, placing: { _ in })
         let mayResend = try #require(gateway.startMayResend)
         #expect(await mayResend())
         wanted = false
@@ -144,7 +144,7 @@ extension VaultCallSignallingTests {
         let s = await c2Signalling(key: { key })
         gateway.startResult = { [unowned self] _, _ in throw badRequest() }
         await #expect(throws: CallSecurityError.self) {
-            _ = try await s.start(connectionId: "conn-1", sdp: "v=0", suites: [s1], wanted: { true })
+            _ = try await s.start(connectionId: "conn-1", sdp: "v=0", suites: [s1], wanted: { true }, placing: { _ in })
         }
         #expect(starts.count == 1)
     }

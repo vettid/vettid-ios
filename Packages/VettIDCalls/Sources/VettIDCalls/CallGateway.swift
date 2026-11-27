@@ -13,11 +13,14 @@ package protocol CallGateway: AnyObject {
 
     // swiftlint:disable function_parameter_count
     /// [peerIk]: (C2) the connection's identity key, for a form 2 start with `keepalive`; nil for form 1 only. [mayResend]:
-    /// whether `call.start` may still be deposited again (the call still wanted).
+    /// whether `call.start` may still be deposited again (the call still wanted). [callId]: the call's id, from ``newCallId()``.
     func start(
-        connectionId: String, pinnedFingerprint: String, sdp: String, suites: [MediaSuite], peerIk: [UInt8]?,
+        connectionId: String, callId: String, pinnedFingerprint: String, sdp: String, suites: [MediaSuite], peerIk: [UInt8]?,
         mayResend: @escaping @Sendable () async -> Bool
     ) async throws -> OutgoingCall
+
+    /// A new `call_id` for a `call.start` (the vault's request ids: their order is the glare's, VAULT-MESSAGING §10.10).
+    func newCallId() throws -> String
     // swiftlint:enable function_parameter_count
 
     /// Verifies an offer against the connection's identity and this device's suites, or throws.
@@ -67,13 +70,16 @@ package final class VaultCallGateway: CallGateway {
 
     // swiftlint:disable:next function_parameter_count
     package func start(
-        connectionId: String, pinnedFingerprint: String, sdp: String, suites: [MediaSuite], peerIk: [UInt8]?,
+        connectionId: String, callId: String, pinnedFingerprint: String, sdp: String, suites: [MediaSuite], peerIk: [UInt8]?,
         mayResend: @escaping @Sendable () async -> Bool
     ) async throws -> OutgoingCall {
         try await api().callStart(
-            connectionId, pinnedFingerprint: pinnedFingerprint, sdp: sdp, suites: suites, peerIk: peerIk, mayResend: mayResend
+            connectionId, callId: callId, pinnedFingerprint: pinnedFingerprint, sdp: sdp, suites: suites, peerIk: peerIk,
+            mayResend: mayResend
         )
     }
+
+    package func newCallId() throws -> String { try api().device.newRequestID() }
 
     package func incoming(_ event: VaultMessage, pinnedFingerprint: String, suites: [MediaSuite]) async throws -> IncomingCall {
         try api().callIncoming(event, pinnedFingerprint: pinnedFingerprint, suites: suites)

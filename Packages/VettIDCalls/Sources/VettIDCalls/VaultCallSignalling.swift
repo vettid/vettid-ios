@@ -267,11 +267,12 @@ package final class VaultCallSignalling: CallSignalling {
     }
 
     package func start(connectionId: String, sdp: String, suites: [MediaSuite]) async throws -> PlacedCall {
-        try await start(connectionId: connectionId, sdp: sdp, suites: suites, wanted: { true })
+        try await start(connectionId: connectionId, sdp: sdp, suites: suites, wanted: { true }, placing: { _ in })
     }
 
     package func start(
-        connectionId: String, sdp: String, suites: [MediaSuite], wanted: @escaping @MainActor () -> Bool
+        connectionId: String, sdp: String, suites: [MediaSuite], wanted: @escaping @MainActor () -> Bool,
+        placing: @escaping @MainActor (String) -> Void
     ) async throws -> PlacedCall {
         starting += 1
         let call: OutgoingCall
@@ -286,7 +287,7 @@ package final class VaultCallSignalling: CallSignalling {
                 throw CallRefusedError(code: "not_found")
             }
             let mine: Int
-            (call, mine) = try await placeOnce(connectionId, fingerprint, sdp, suites, wanted)
+            (call, mine) = try await placeOnce(connectionId, fingerprint, sdp, suites, wanted, placing)
             let remembered = endedWhileStarting.first { $0.callId == call.callId }
             rememberedEnd = remembered?.end
             endedAlready = remembered != nil || mine <= lostForStartsUpTo
@@ -342,9 +343,9 @@ package final class VaultCallSignalling: CallSignalling {
     /// has refreshed both keys it names (this vault's, read again by the start; the connection's, from the vault's list read
     /// again): an `identity.rotate` during the first start. Only once, in form 2 again, and only while the call is still
     /// [wanted]; a second refusal ends the call as the first would have.
-    private func placeOnce(
+    private func placeOnce( // swiftlint:disable:this function_parameter_count
         _ connectionId: String, _ fingerprint: String, _ sdp: String, _ suites: [MediaSuite],
-        _ wanted: @escaping @MainActor () -> Bool
+        _ wanted: @escaping @MainActor () -> Bool, _ placing: @MainActor (String) -> Void
     ) async throws -> (OutgoingCall, Int) {
         // A hang-up or a lock meanwhile: `call.start` is not deposited again (0.97.0 §10.10 "Placing a call").
         let mayResend: @Sendable () async -> Bool = { await wanted() }
@@ -353,9 +354,13 @@ package final class VaultCallSignalling: CallSignalling {
         startsBegun += 1
         let first = startsBegun
         do {
+            // Hung up or locking before the call had its id: nothing is placed, so there is nothing to end.
+            guard wanted() else { throw CallNotWantedError() }
+            let callId = try gateway.newCallId()
+            placing(callId)
             let call = try await gateway.start(
-                connectionId: connectionId, pinnedFingerprint: fingerprint, sdp: sdp, suites: suites, peerIk: peerIk,
-                mayResend: mayResend
+                connectionId: connectionId, callId: callId, pinnedFingerprint: fingerprint, sdp: sdp, suites: suites,
+                peerIk: peerIk, mayResend: mayResend
             )
             return (call, first)
         } catch let e as VaultOpError where peerIk != nil && e.code == "bad_request" {
@@ -363,8 +368,11 @@ package final class VaultCallSignalling: CallSignalling {
             guard let (shown, again) = try await refreshed(connectionId, wanted) else { throw e }
             startsBegun += 1
             let mine = startsBegun
+            let callId = try gateway.newCallId()
+            placing(callId)
             let call = try await gateway.start(
-                connectionId: connectionId, pinnedFingerprint: shown, sdp: sdp, suites: suites, peerIk: again, mayResend: mayResend
+                connectionId: connectionId, callId: callId, pinnedFingerprint: shown, sdp: sdp, suites: suites, peerIk: again,
+                mayResend: mayResend
             )
             return (call, mine)
         }

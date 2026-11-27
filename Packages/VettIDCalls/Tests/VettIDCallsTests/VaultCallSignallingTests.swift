@@ -52,7 +52,7 @@ final class FakeGateway: CallGateway {
 
     // swiftlint:disable:next function_parameter_count
     func start(
-        connectionId: String, pinnedFingerprint: String, sdp: String, suites: [MediaSuite], peerIk: [UInt8]?,
+        connectionId: String, callId: String, pinnedFingerprint: String, sdp: String, suites: [MediaSuite], peerIk: [UInt8]?,
         mayResend: @escaping @Sendable () async -> Bool
     ) async throws -> OutgoingCall {
         startMayResend = mayResend
@@ -69,6 +69,16 @@ final class FakeGateway: CallGateway {
     func answer(_ call: IncomingCall, sdp: String, keepalive: Bool) async throws -> CallKeys {
         asked.append("answer(\(call.callId)\(keepalive ? ", keepalive" : ""))")
         return try #require(answerKeys)
+    }
+
+    /// The `call_id`s handed out for starts, in order.
+    var newCallIds: [String] = []
+
+    func newCallId() throws -> String {
+        // The first is the id the fakes' placed calls carry (``callId``), as a real start's call has its start's id.
+        let id = newCallIds.isEmpty ? callId : "start-\(newCallIds.count + 1)"
+        newCallIds.append(id)
+        return id
     }
 
     func keepalive(_ callId: String) async throws { asked.append("keepalive(\(callId))") }

@@ -42,6 +42,9 @@ final class CallSession {
     let tappedAtMs: Int64
     var engine: (any MediaEngine)?
     var callId: String?
+    /// The `call_id` of this outgoing call's `call.start` while it is out and the call has no id yet (``callId``): told by the
+    /// signalling just before each start goes (a re-place has its own).
+    var startingCallId: String?
     var phase: CallPhase = .starting
     var offer: CallOffer?
     var muted = false

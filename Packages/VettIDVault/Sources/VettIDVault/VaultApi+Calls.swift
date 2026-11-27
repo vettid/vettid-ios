@@ -182,7 +182,8 @@ extension VaultApi {
     /// 0.88.16 §10.10) and `keepalive: true`; a device passes it only when its vault is C2 (`call.list` `v: 2`). Nil: form 1
     /// only, as to an S10 vault. Rule 3 holds for both: form 1 is in every start, so suite 1 alone is offered.
     public func callStart(
-        _ connectionId: String, pinnedFingerprint: String, sdp: String, suites: [MediaSuite] = MediaSuite.default,
+        _ connectionId: String, callId: String? = nil, pinnedFingerprint: String, sdp: String,
+        suites: [MediaSuite] = MediaSuite.default,
         media: String = CallWire.mediaAudio,
         timeout: TimeInterval = CallLimits.startTimeout, peerIk: [UInt8]? = nil,
         resendAfter: [TimeInterval] = CallLimits.startResends, mayResend: (@Sendable () async -> Bool)? = nil
@@ -190,7 +191,8 @@ extension VaultApi {
         // The call is bound to the identity the member sees: no fingerprint, no call. Nothing is sent.
         guard !pinnedFingerprint.isEmpty else { throw CallMessageError("pinned fingerprint") }
         guard media == CallWire.mediaAudio || media == CallWire.mediaVideo else { throw CallMessageError("media") }
-        let callId = device.newRequestID()
+        // [callId]: made by the caller just before this, so that it can end the call while the start is unanswered.
+        let callId = callId ?? device.newRequestID()
         let offered = try checked("media suites") { try CallMedia.offerOf(MediaSuite.formOne(suites)) }
         let parties = try peerIk.map { ik in
             try checked("call parties") { try CallWire.Parties(caller: try device.vaultIdentityKey(), callee: ik) }
