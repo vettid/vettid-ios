@@ -16,6 +16,13 @@ public enum CallWire {
     public static let mediaSalt = "vettid-call-v1"
     public static let roleOffer = "offer"
     public static let roleAnswer = "answer"
+    /// (C2) Form 2's roles: the suites are signed with the share, and both members are named (VAULT-MESSAGING 0.88.16).
+    public static let roleOffer2 = "offer2"
+    public static let roleAnswer2 = "answer2"
+    /// (C2) The salt of `k_confirm`.
+    public static let labelConfirm = "vettid/vms/2/call-confirm"
+    /// (C2) `confirm`'s length.
+    public static let confirmSize = 32
     public static let mediaAudio = "audio"
     public static let mediaVideo = "video"
 
@@ -42,8 +49,105 @@ public enum CallWire {
     /// `k_call = HKDF-SHA-256(ikm = K, salt = "vettid-call-v1", info = call_id, L = 32)`; [k] is wiped in place
     /// (the caller's own buffer: a wipe of a copy would leave the key where it was).
     static func mediaKey(_ k: inout [UInt8], _ callId: String) throws -> [UInt8] {
+        try mediaKey(&k, info: Array(callId.utf8))
+    }
+
+    /// `k_call` with the given HKDF [info]: `call_id` in form 1, `call_id || caller_ik || callee_ik` in form 2; [k] is
+    /// wiped in place.
+    private static func mediaKey(_ k: inout [UInt8], info: [UInt8]) throws -> [UInt8] {
         defer { Bytes.wipe(&k) }
-        return try Hkdf.derive(ikm: k, salt: Array(mediaSalt.utf8), info: Array(callId.utf8), length: keySize)
+        return try Hkdf.derive(ikm: k, salt: Array(mediaSalt.utf8), info: info, length: keySize)
+    }
+
+    /// (C2, VAULT-MESSAGING 0.88.16) The two members of a call as form 2 names them: the calling and the called member's
+    /// vault identity keys (32 bytes each). They travel in no message. This device fills them in from its own records:
+    /// its own vault's key (the one its ICE configurations verify under) and the connection's key as its vault gives it
+    /// (`peer_ik`, checked against the connection, rule 6). The calling device fixes them when it places the call and
+    /// uses the same for the answer.
+    public struct Parties: Equatable, Sendable, CustomStringConvertible {
+        public let caller: [UInt8]
+        public let callee: [UInt8]
+
+        public init(caller: [UInt8], callee: [UInt8]) throws {
+            guard caller.count == Suite.ed25519PublicSize, callee.count == Suite.ed25519PublicSize else {
+                throw CryptoError.key("call parties")
+            }
+            self.caller = caller
+            self.callee = callee
+        }
+
+        public var description: String { "Parties" }
+    }
+
+    private static func partiesInfo(_ callId: String, _ p: Parties) -> [UInt8] { Array(callId.utf8) + p.caller + p.callee }
+
+    /// (C2) ``answer(ek:callId:)`` for a form 2 call: `k_call` names both members, `info = call_id || caller_ik ||
+    /// callee_ik`, so the two sides of a call that a third vault passes on derive different keys (the second lock).
+    public static func answer2(ek: [UInt8], callId: String, parties: Parties) throws -> Answered {
+        guard ek.count == Suite.ekSize else { throw CryptoError.key("call ek size") }
+        let sender = try HpkeSender.setup(KemPublicKey.parse(ek), info: callInfo(callId))
+        defer { sender.destroy() }
+        var k = try sender.export(labelCallKey, keySize)
+        return Answered(enc: sender.enc, kCall: try mediaKey(&k, info: partiesInfo(callId, parties)))
+    }
+
+    /// (C2) ``accept(offerKey:enc:callId:)`` for a form 2 call: the `k_call` of ``answer2(ek:callId:parties:)``, with
+    /// the parties fixed when the call was placed.
+    public static func accept2(offerKey: KemPrivateKey, enc: [UInt8], callId: String, parties: Parties) throws -> [UInt8] {
+        guard enc.count == Suite.encSize else { throw CryptoError.key("call enc size") }
+        let r = try HpkeRecipient.setup(enc: enc, key: offerKey, info: callInfo(callId))
+        defer { r.destroy() }
+        var k = try r.export(labelCallKey, keySize)
+        return try mediaKey(&k, info: partiesInfo(callId, parties))
+    }
+
+    /// (C2) `list(x)`: the numbers in decimal without leading zeros, joined by one space.
+    public static func suiteList(_ list: [Int]) -> String { list.map(String.init).joined(separator: " ") }
+
+    // The six inputs of `m2` as VAULT-MESSAGING §10.10 lists them.
+    // swiftlint:disable:next function_parameter_count
+    private static func m2(
+        _ role: String, _ callId: String, _ media: String, _ suites: String, _ parties: Parties, _ share: [UInt8]
+    ) -> [UInt8] {
+        Array(role.utf8) + [0] + Array(callId.utf8) + [0] + Array(media.utf8) + [0] + Array(suites.utf8) + [0]
+            + parties.caller + parties.callee + share
+    }
+
+    /// (C2) A form 2 offer's signed bytes:
+    /// `"offer2" || 0 || call_id || 0 || media || 0 || list(offered) || 0 || caller_ik || callee_ik || ek`.
+    public static func offerMessage2(callId: String, media: String, offered: [Int], parties: Parties, ek: [UInt8]) -> [UInt8] {
+        m2(roleOffer2, callId, media, suiteList(offered), parties, ek)
+    }
+
+    /// (C2) A form 2 answer's signed bytes: `"answer2" || 0 || call_id || 0 || "" || 0 || chosen || 0 || list(offered)
+    /// || 0 || caller_ik || callee_ik || enc`; [offered] is the caller's list as the answering device read it.
+    public static func answerMessage2(callId: String, chosen: Int, offered: [Int], parties: Parties, enc: [UInt8]) -> [UInt8] {
+        m2(roleAnswer2, callId, "", "\(chosen)\u{0}\(suiteList(offered))", parties, enc)
+    }
+
+    /// (C2) `k_confirm = HKDF-SHA-256(ikm = k_call, salt = "vettid/vms/2/call-confirm", info = call_id, L = 32)`.
+    public static func confirmKey(kCall: [UInt8], callId: String) throws -> [UInt8] {
+        guard kCall.count == keySize else { throw CryptoError.key("k_call size") }
+        guard !callId.isEmpty else { throw CryptoError.key("call id") }
+        return try Hkdf.derive(ikm: kCall, salt: Array(labelConfirm.utf8), info: Array(callId.utf8), length: keySize)
+    }
+
+    /// (C2) `confirm = HMAC-SHA-256(k_confirm, chosen || 0x00 || list(offered) || 0x00 || call_id || caller_ik ||
+    /// callee_ik)`, computed by the answering device.
+    public static func confirm(kConfirm: [UInt8], chosen: Int, offered: [Int], callId: String, parties: Parties) -> [UInt8] {
+        hmacSHA256(
+            key: kConfirm, Array("\(chosen)\u{0}\(suiteList(offered))\u{0}\(callId)".utf8), parties.caller, parties.callee
+        )
+    }
+
+    /// (C2) The calling device's check of `confirm`, in constant time, before it sets any key: the inputs of
+    /// ``confirm(kConfirm:chosen:offered:callId:parties:)`` and the `confirm` received.
+    public static func verifyConfirm( // swiftlint:disable:this function_parameter_count
+        kConfirm: [UInt8], chosen: Int, offered: [Int], callId: String, parties: Parties, confirm got: [UInt8]?
+    ) -> Bool {
+        guard let got, got.count == confirmSize else { return false }
+        let expected = confirm(kConfirm: kConfirm, chosen: chosen, offered: offered, callId: callId, parties: parties)
+        return Bytes.constantTimeEquals(expected, got)
     }
 
     /// What the answering device gets: [enc] for `call.answer` and [kCall], which stays on the device.
