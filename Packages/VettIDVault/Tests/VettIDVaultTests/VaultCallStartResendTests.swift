@@ -71,15 +71,23 @@ extension VaultDeviceTests {
     /// The times count from the first deposit: a resend the relay is slow to take does not delay the end of the wait.
     @Test func aSlowResendDoesNotDelayTheEndOfTheWait() async throws {
         let (d, v) = try await pairedDevice()
+        // Every deposit after the first is held until the end of the test: the resend never returns.
+        let gate = FakeHTTPServer.Gate()
+        relay.holdDepositsAfter = 1
+        relay.holdDeposits = gate
+        defer {
+            gate.open()
+            relay.holdDeposits = nil
+            relay.holdDepositsAfter = 0
+        }
         let began = ContinuousClock.now
         let waiting = Task { try await d.requestOnce("call.start", timeout: 1, resendAfter: [0.3]) }
         #expect(try v.open(try await relay.nextDeposit().payload).type == "call.start")
-        let gate = FakeHTTPServer.Gate()
-        relay.holdDeposits = gate
+        _ = try await relay.nextDeposit()
         await #expect(throws: VaultStateError.self) { _ = try await waiting.value }
-        #expect(began.duration(to: .now) < .milliseconds(1800), "ended at its time, not after the stalled resend")
-        gate.open()
-        relay.holdDeposits = nil
+        // Its 1 s wait, with room for a loaded runner; a resend awaited in the wait would wait out the relay client's tries
+        // (20 s each) for the held deposit.
+        #expect(began.duration(to: .now) < .seconds(10), "ended at its time, not after the stalled resend")
     }
 
     /// The times count from the first deposit's start: a first deposit the relay is slow to take does not lengthen the wait.
@@ -88,25 +96,35 @@ extension VaultDeviceTests {
         let gate = FakeHTTPServer.Gate()
         relay.holdDeposits = gate
         let began = ContinuousClock.now
-        let waiting = Task { try await d.requestOnce("call.start", timeout: 1) }
+        let waiting = Task { try await d.requestOnce("call.start", timeout: 4) }
         #expect(try v.open(try await relay.nextDeposit().payload).type == "call.start")
-        try await Task.sleep(for: .milliseconds(700))
+        // Held for the whole wait: counted from the deposit's start the wait ends as it returns (about 4 s); counted from
+        // its end it would last 4 s more. The bound lies between, with room for a loaded runner either way.
+        try await Task.sleep(for: .seconds(4))
         relay.holdDeposits = nil
         gate.open()
         await #expect(throws: VaultStateError.self) { _ = try await waiting.value }
-        #expect(began.duration(to: .now) < .milliseconds(1500), "1 s from the first deposit's start, not from its end")
+        #expect(began.duration(to: .now) < .seconds(6), "4 s from the first deposit's start, not from its end")
     }
 
     /// The lock gate held one resend and then opened again (the vault has taken the lock): no later resend goes.
     @Test func noResendAfterTheLockGateHeldOne() async throws {
         let (d, v) = try await pairedDevice()
         let api = VaultApi(device: d)
+        // Shut from the first deposit on (the relay's hook runs before the device is answered, so before any resend is
+        // asked about), and open again once it has held one: no wall-clock order between the test and the start.
+        let shut = Box(false), heldOne = Box(false)
+        relay.onDeposit = { shut.value = true }
+        defer { relay.onDeposit = nil }
+        d.setFlushGate {
+            guard shut.value, !heldOne.value else { return true }
+            heldOne.value = true
+            return false
+        }
         let starting = Task { try await api.callStart("conn-1", pinnedFingerprint: Self.callFp, sdp: Self.callSdp, timeout: 1.2, resendAfter: [0.3, 0.8]) }
         #expect(try v.open(try await relay.nextDeposit().payload).type == "call.start")
-        d.setFlushGate { false }
-        try await Task.sleep(for: .milliseconds(500))
-        d.setFlushGate { true }
         await #expect(throws: (any Error).self) { _ = try await starting.value }
+        #expect(heldOne.value, "the gate held the first resend")
         let next = try v.open(try await relay.nextDeposit(timeout: 2).payload)
         #expect(next.type == "call.end", "the hang-up, and no call.start after the gate opened again")
         #expect(await relay.noDeposit(within: 0.5))
@@ -116,15 +134,17 @@ extension VaultDeviceTests {
     @Test func noResendOnceTheCallIsNoLongerWanted() async throws {
         let (d, v) = try await pairedDevice()
         let api = VaultApi(device: d)
-        let wanted = OSAllocatedUnfairLock(initialState: true)
+        // No longer wanted from the first deposit on (the relay's hook runs before the device is answered).
+        let wanted = Box(true)
+        relay.onDeposit = { wanted.value = false }
+        defer { relay.onDeposit = nil }
         let starting = Task {
             try await api.callStart(
                 "conn-1", pinnedFingerprint: Self.callFp, sdp: Self.callSdp, timeout: 1, resendAfter: [0.3, 0.6],
-                mayResend: { wanted.withLock { $0 } }
+                mayResend: { wanted.value }
             )
         }
         #expect(try v.open(try await relay.nextDeposit().payload).type == "call.start")
-        wanted.withLock { $0 = false }
         await #expect(throws: (any Error).self) { _ = try await starting.value }
         #expect(try v.open(try await relay.nextDeposit(timeout: 2).payload).type == "call.end", "no second call.start")
         #expect(await relay.noDeposit(within: 0.5))
@@ -133,13 +153,14 @@ extension VaultDeviceTests {
     /// A resend still out when the answer comes (the relay client trying it again) is cancelled: it does not land later.
     @Test func aResendStillOutWhenTheAnswerComesIsCancelled() async throws {
         let (d, v) = try await pairedDevice()
-        let waiting = Task { try await d.requestOnce("call.start", timeout: 5, resendAfter: [0.2]) }
+        // The first deposit is taken; every one after it fails, so the resend's relay client tries it again and again.
+        relay.failDepositsAfter = 1
+        let waiting = Task { try await d.requestOnce("call.start", timeout: 20, resendAfter: [0.2]) }
         let first = try v.open(try await relay.nextDeposit().payload)
-        relay.failDeposits = .networkConnectionLost
-        try await Task.sleep(for: .milliseconds(400))
+        #expect(await eventually { self.relay.failedDeposits > 0 }, "the resend is out, being tried again")
         try await d.handle(try v.seal("call.start", "{}", re: first.id, status: Inner.statusOK))
         _ = try await waiting.value
-        relay.failDeposits = nil
+        relay.failDepositsAfter = nil
         #expect(await relay.noDeposit(within: 4), "the resend's later tries were cancelled with it")
     }
 
@@ -166,9 +187,13 @@ extension VaultDeviceTests {
     @Test func aResendIsHeldByTheLockGate() async throws {
         let (d, v) = try await pairedDevice()
         let api = VaultApi(device: d)
+        // Shut from the first deposit on (the relay's hook runs before the device is answered).
+        let shut = Box(false)
+        relay.onDeposit = { shut.value = true }
+        defer { relay.onDeposit = nil }
+        d.setFlushGate { !shut.value }
         let starting = Task { try await api.callStart("conn-1", pinnedFingerprint: Self.callFp, sdp: Self.callSdp, timeout: 1, resendAfter: [0.4]) }
         #expect(try v.open(try await relay.nextDeposit().payload).type == "call.start")
-        d.setFlushGate { false }
         await #expect(throws: (any Error).self) { _ = try await starting.value }
         d.setFlushGate { true }
         // Only the hang-up may follow (the lock gate lets it through, VaultRequestGateTests): no second call.start.
@@ -179,3 +204,14 @@ extension VaultDeviceTests {
 }
 
 // swiftlint:enable line_length
+
+extension VaultDeviceTests {
+    /// Waits (at most 10 s) until [condition] holds.
+    func eventually(_ condition: @escaping @Sendable () -> Bool) async -> Bool {
+        for _ in 0..<1000 {
+            if condition() { return true }
+            try? await Task.sleep(for: .milliseconds(10))
+        }
+        return condition()
+    }
+}

@@ -34,6 +34,23 @@ final class FakeRelay: @unchecked Sendable {
     /// Every deposit fails in transport with this code (no answer at all).
     var failDeposits: URLError.Code? { get { lock.withLock { transportFailure } } set { lock.withLock { transportFailure = newValue } } }
     private var transportFailure: URLError.Code?
+    /// Every deposit after the first [n] stored from now on fails in transport (a relay that stops taking them); nil: none.
+    var failDepositsAfter: Int? {
+        get { lock.withLock { failAfter.map { $0 - storedCount } } }
+        set { lock.withLock { failAfter = newValue.map { storedCount + $0 } } }
+    }
+    private var failAfter: Int?
+    /// Every deposit stored so far (``nextDeposit(timeout:)`` takes them from a queue; this only counts).
+    private var storedCount = 0
+    /// The deposits that failed in transport by ``failDepositsAfter``.
+    var failedDeposits: Int { lock.withLock { failed } }
+    private var failed = 0
+    /// ``holdDeposits`` holds only the deposits after the first [n] stored from now on (0: all).
+    var holdDepositsAfter: Int {
+        get { lock.withLock { max(holdAfter - storedCount, 0) } }
+        set { lock.withLock { holdAfter = storedCount + newValue } }
+    }
+    private var holdAfter = 0
     private var refuse: String?
     /// The token each stored deposit was made under, in order.
     var depositTokens: [String] { lock.withLock { tokens } }
@@ -84,12 +101,17 @@ final class FakeRelay: @unchecked Sendable {
             }
             if path.hasPrefix("/v1/mailbox/"), r.method == "POST" {
                 if let code = transportFailure { return .failure(code) }
+                if let n = failAfter, storedCount >= n {
+                    failed += 1
+                    return .failure(.networkConnectionLost)
+                }
                 let refusal = depositRefusal()
                 // A refusal the relay gave after it had stored the message (its answer to the first attempt was lost, and the
                 // retry was refused): the message is there, the depositor is told otherwise.
                 if let refusal, !recordsRefused { return heldRefusal(refusal) }
                 let payload = (try? StrictJson.parseObject(r.body).base64("payload")) ?? []
                 deposits.append((String(path.dropFirst("/v1/mailbox/".count)), payload))
+                storedCount += 1
                 tokens.append((r.headers["Authorization"] ?? r.headers["authorization"] ?? "").replacingOccurrences(of: "VettID-Deposit ", with: ""))
                 depositHook?()
                 let ws = depositWaiters
@@ -97,7 +119,7 @@ final class FakeRelay: @unchecked Sendable {
                 for w in ws { w.resume() }
                 if let refusal { return heldRefusal(refusal) }
                 let ok = FakeHTTPServer.Answer.json(201, #"{"msg_id":"\#(Ulid.new())"}"#)
-                if let gate = heldGate { return .held(gate, ok) } // (the lock is held: the stored properties)
+                if let gate = heldGate, storedCount > holdAfter { return .held(gate, ok) } // (the lock is held: the stored properties)
                 return ok
             }
             if path == "/v1/mailbox", r.method == "GET" {
