@@ -142,7 +142,24 @@ public struct IncomingCall: Sendable, CustomStringConvertible, CustomDebugString
     public let negotiated: CallMedia.Negotiated
     let ek: [UInt8]
     /// (C2) The members as this device names them when the offer carried form 2 (it then answers in form 2); else nil.
-    var parties: CallWire.Parties?
+    let parties: CallWire.Parties?
+
+    /// Made by ``VaultApi/callIncoming(_:pinnedFingerprint:suites:)`` once every check passed (and by tests, `@testable`).
+    init(
+        callId: String, connectionId: String, media: String, sdp: String, exp: Date, ringFor: TimeInterval,
+        ice: CallWire.IceConfig, negotiated: CallMedia.Negotiated, ek: [UInt8], parties: CallWire.Parties? = nil
+    ) {
+        self.callId = callId
+        self.connectionId = connectionId
+        self.media = media
+        self.sdp = sdp
+        self.exp = exp
+        self.ringFor = ringFor
+        self.ice = ice
+        self.negotiated = negotiated
+        self.ek = ek
+        self.parties = parties
+    }
 
     /// (C2) Whether this device answers in form 2.
     public var formTwo: Bool { parties != nil }

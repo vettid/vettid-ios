@@ -8,7 +8,11 @@ import VettIDCrypto
 /// (VAULT-MESSAGING §10.10 "Mixed releases", "Liveness"). Port of the C2 cases of vettid-android `CallsControllerTest`.
 extension CallsControllerTests {
     /// The probe's answer of a C2 vault: `v: 2` with the vault's `now`.
-    func c2(_ calls: [CallRecord] = []) -> () throws -> CallList { { CallList(calls: calls, skipped: 0, version: 2, now: at(0)) } }
+    func c2(_ calls: [CallRecord] = []) -> () throws -> CallList {
+        // The connection shown by its key's fingerprint, as one record gives both.
+        vault.identities["conn-1"] = vault.keys["conn-1"].flatMap { try? IkFingerprint.format($0) }
+        return { CallList(calls: calls, skipped: 0, version: 2, now: at(0)) }
+    }
 
     var keepalives: [String] { vault.gatewayFake.keepalives }
 
@@ -99,9 +103,11 @@ extension CallsControllerTests {
     @Test func aFormTwoOfferBringsKeepAlivesWhateverTheProbeSaid() async throws {
         let parties = try CallWire.Parties(caller: filled(32, 1), callee: filled(32, 2))
         vault.gatewayFake.incomingResult = { _ in
-            var call = try self.incoming()
-            call.parties = parties
-            return call
+            let c = try self.incoming()
+            return IncomingCall(
+                callId: c.callId, connectionId: c.connectionId, media: c.media, sdp: c.sdp, exp: c.exp, ringFor: c.ringFor,
+                ice: c.ice, negotiated: c.negotiated, ek: c.ek, parties: parties
+            )
         }
         vault.gatewayFake.answerKeys = CallKeys(suite: .aes128Gcm, send: filled(32, 5), receive: filled(32, 6))
         let c = controller(FakeMicrophone(.granted))
@@ -145,5 +151,75 @@ extension CallsControllerTests {
         _ = controller(FakeMicrophone(.granted))
         await unlock()
         #expect(vault.gatewayFake.ended.isEmpty)
+    }
+
+    /// A keep-alive that fails is not an end: the call goes on, and the next goes 30 s later.
+    @Test func aFailedKeepAliveKeepsTheCallAndTheNextGoesOnTime() async throws {
+        vault.gatewayFake.listResult = c2()
+        vault.gatewayFake.keepaliveFails = true
+        let c = controller(FakeMicrophone(.granted))
+        await unlock()
+        try await activeCall(c)
+        await settle()
+        #expect(keepalives.count == 1)
+        guard case .live(let l) = c.state, l.phase == .active else { throw WrongState(state: c.state) }
+        await clock.advance(by: 30_000)
+        await clock.runCurrent()
+        #expect(keepalives.count == 2)
+        guard case .live(let still) = c.state, still.phase == .active else { throw WrongState(state: c.state) }
+    }
+
+    /// `v: 2` without a readable `now`: no sweep at all, neither the C1 one by this phone's clock (it would end another
+    /// device's call) nor the C2 one (no vault clock to judge by).
+    @Test func aC2ListWithoutNowSweepsNothing() async {
+        vault.gatewayFake.listResult = {
+            CallList(calls: [
+                record("A", state: "active", startedAtMs: -3_600_000, device: "dev-other"),
+                record("B", direction: "out", state: "ringing", startedAtMs: -600_000, expMs: -555_000, device: "dev-me"),
+            ], skipped: 0, version: 2, now: nil)
+        }
+        let c = controller(FakeMicrophone(.granted))
+        await unlock()
+        #expect(vault.gatewayFake.ended.isEmpty)
+        #expect(c.diagnostics.staleEnded == 0)
+    }
+
+    /// The C2 sweep judges by the vault's `now`, never this phone's clock: here the vault is 10 minutes behind the phone.
+    @Test func theC2SweepUsesTheVaultsClockNotThePhones() async {
+        vault.gatewayFake.listResult = c2([
+            // Still ringing by the vault's clock (exp 10 s after its now), long past by the phone's.
+            record("B", direction: "out", state: "ringing", startedAtMs: -620_000, expMs: -590_000, device: "dev-me"),
+            // Past exp by the vault's clock.
+            record("C", direction: "out", state: "ringing", startedAtMs: -650_000, expMs: -605_000, device: "dev-me"),
+        ])
+        let list = vault.gatewayFake.listResult
+        vault.gatewayFake.listResult = {
+            let l = try list()
+            return CallList(calls: l.calls, skipped: 0, version: 2, now: at(-600_000))
+        }
+        _ = controller(FakeMicrophone(.granted))
+        await unlock()
+        #expect(vault.gatewayFake.ended == ["C timeout"])
+    }
+
+    /// A call that starts here while the C2 sweep is ending another stops the sweep: the calls after it are left alone.
+    @Test func aCallStartedDuringTheC2SweepStopsIt() async throws {
+        vault.gatewayFake.listResult = c2([
+            record("A", state: "active", startedAtMs: -60_000, device: "dev-me"),
+            record("B", state: "active", startedAtMs: -50_000, device: "dev-me"),
+        ])
+        let gate = Gate()
+        vault.gatewayFake.endGate = gate
+        vault.gatewayFake.startResult = { _, _ in try self.outgoing() }
+        let c = controller(FakeMicrophone(.granted))
+        vault.setUnlocked(true)
+        #expect(await eventually { vault.gatewayFake.asked.contains("end(A, failed)") })
+        c.call("conn-1")
+        await settle()
+        guard case .live = c.state else { throw WrongState(state: c.state) }
+        vault.gatewayFake.endGate = nil
+        gate.open()
+        await settle()
+        #expect(!vault.gatewayFake.asked.contains("end(B, failed)"), "B is left alone once a call is live")
     }
 }

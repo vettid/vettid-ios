@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+import VettIDCrypto
 @testable import VettIDCalls
 @testable import VettIDVault
 
@@ -7,7 +8,12 @@ import Testing
 /// `bad_request` is placed once more after both keys are refreshed (VAULT-MESSAGING §10.10 "Signed key-exchange shares").
 /// Port of the cases of vettid-android `VaultCallSignallingTest` for #448.
 extension VaultCallSignallingTests {
-    func c2Signalling(key: @escaping () -> [UInt8]? = { [UInt8](repeating: 7, count: 32) }) async -> VaultCallSignalling {
+    static let key7 = [UInt8](repeating: 7, count: 32)
+    static let key8 = [UInt8](repeating: 8, count: 32)
+
+    /// The connection shown by [shown]'s fingerprint, its key given by [key] (the same record unless a test changes one).
+    func c2Signalling(key: @escaping () -> [UInt8]? = { key7 }, shown: [UInt8] = key7) async -> VaultCallSignalling {
+        identities["conn-1"] = try? IkFingerprint.format(shown)
         let s = VaultCallSignalling(
             gateway: gateway, pinned: { [unowned self] in identities[$0] }, suites: [s1],
             refreshConnections: { [unowned self] in
@@ -37,11 +43,28 @@ extension VaultCallSignallingTests {
         #expect(starts.isEmpty, "nothing sent")
     }
 
+    /// The key and the fingerprint the call is pinned to are of one record: a key that is not the one shown places no call.
+    @Test func aKeyThatIsNotTheOneShownPlacesNoCall() async throws {
+        let s = await c2Signalling(key: { Self.key8 }, shown: Self.key7)
+        gateway.startResult = { [unowned self] in try outgoingCall($0, pinned: $1) }
+        await #expect(throws: CallSecurityError.self) { _ = try await s.start(connectionId: "conn-1", sdp: "v=0", suites: [s1]) }
+        #expect(starts.isEmpty, "nothing sent")
+    }
+
+    /// The connection's key rotated during the first start: the second start names the new key and is pinned to its new
+    /// fingerprint, both read again after the refresh.
     @Test func aFormTwoStartRefusedBadRequestIsPlacedOnceMoreWithTheKeysRefreshed() async throws {
-        let s = await c2Signalling()
+        var key = Self.key7
+        let s = await c2Signalling(key: { key })
+        onRefresh = { [unowned self] in
+            key = Self.key8
+            identities["conn-1"] = try? IkFingerprint.format(Self.key8)
+        }
         var tries = 0
+        var pinnedAt: [String] = []
         gateway.startResult = { [unowned self] in
             tries += 1
+            pinnedAt.append($1)
             if tries == 1 { throw badRequest() }
             return try outgoingCall($0, pinned: $1)
         }
@@ -49,6 +72,7 @@ extension VaultCallSignallingTests {
         #expect(placed.callId == callId)
         #expect(starts == ["start(conn-1, [1], ik 32)", "start(conn-1, [1], ik 32)"], "once more, in form 2 again")
         #expect(refreshes == 1, "the connections read again for the connection's key")
+        #expect(pinnedAt == [try IkFingerprint.format(Self.key7), try IkFingerprint.format(Self.key8)], "pinned to the new key")
     }
 
     @Test func aSecondRefusalEndsTheCallAsTheFirstWouldHave() async throws {
@@ -96,6 +120,8 @@ extension VaultCallSignallingTests {
                 _ = try await s.start(connectionId: "conn-1", sdp: "v=0", suites: [s1], wanted: { wanted })
             }
             #expect(starts.count == 1, "no second start (wanted lost \(after ? "during" : "before") the refresh)")
+            #expect(refreshes == (after ? 1 : 0), "a call no longer wanted is not even refreshed for")
+            refreshes = 0
         }
     }
 

@@ -323,11 +323,16 @@ package final class VaultCallSignalling: CallSignalling {
     }
 
     /// (C2) A device that knows its vault to be C2 starts in form 2 too, naming the connection's key; nil for an S10 vault.
-    /// Without that key no call is placed: form 1 alone would leave a relay by a shared connection undetected.
-    private func formTwoKey(_ connectionId: String) async throws -> [UInt8]? {
+    /// Without that key no call is placed: form 1 alone would leave a relay by a shared connection undetected. The key and the
+    /// fingerprint the call is pinned to ([shownAs]) are read apart, so they must be of one record: a key whose fingerprint is
+    /// not the one shown (the list changed in between) places no call.
+    private func formTwoKey(_ connectionId: String, shownAs fingerprint: String) async throws -> [UInt8]? {
         guard formTwo else { return nil }
         guard let k = await peerKey(connectionId) else {
             throw CallSecurityError("C2 vault without the connection's identity key: no call placed")
+        }
+        guard let f = try? IkFingerprint.format(k), Bytes.constantTimeEquals(Array(f.utf8), Array(fingerprint.utf8)) else {
+            throw CallSecurityError("the connection's key is not the one shown: no call placed")
         }
         return k
     }
@@ -340,7 +345,7 @@ package final class VaultCallSignalling: CallSignalling {
     private func placeOnce(
         _ connectionId: String, _ fingerprint: String, _ sdp: String, _ suites: [MediaSuite], _ wanted: @MainActor () -> Bool
     ) async throws -> (OutgoingCall, Int) {
-        let peerIk = try await formTwoKey(connectionId)
+        let peerIk = try await formTwoKey(connectionId, shownAs: fingerprint)
         // Numbered just before `call.start` goes: an end lost before this cannot be this call's.
         startsBegun += 1
         let first = startsBegun
@@ -350,27 +355,29 @@ package final class VaultCallSignalling: CallSignalling {
             )
             return (call, first)
         } catch let e as VaultOpError where peerIk != nil && e.code == "bad_request" {
-            guard let again = try await refreshedKey(connectionId, wanted) else { throw e }
+            // After an `identity.rotate` the connection is shown by its new key: both are read again, together.
+            guard let (shown, again) = try await refreshed(connectionId, wanted) else { throw e }
             startsBegun += 1
             let mine = startsBegun
             let call = try await gateway.start(
-                connectionId: connectionId, pinnedFingerprint: fingerprint, sdp: sdp, suites: suites, peerIk: again
+                connectionId: connectionId, pinnedFingerprint: shown, sdp: sdp, suites: suites, peerIk: again
             )
             return (call, mine)
         }
     }
 
-    /// The connection's key for the form 2 re-place, read after the connections are read again (at most ``refreshTimeout``);
-    /// nil when the call is no longer [wanted], before or after the refresh. Never nil for a key that is gone: then no call is
-    /// placed at all, and never one in form 1.
-    private func refreshedKey(_ connectionId: String, _ wanted: @MainActor () -> Bool) async throws -> [UInt8]? {
+    /// The connection's fingerprint and key for the form 2 re-place, read after the connections are read again (at most
+    /// ``refreshTimeout``); nil when the call is no longer [wanted], before or after the refresh. Never nil for a connection or
+    /// key that is gone: then no call is placed at all, and never one in form 1.
+    private func refreshed(_ connectionId: String, _ wanted: @MainActor () -> Bool) async throws -> (String, [UInt8])? {
         guard wanted() else { return nil }
         await within(Self.refreshTimeout, refreshConnections)
         guard wanted() else { return nil }
-        guard let k = await peerKey(connectionId) else {
+        guard let shown = await pinned(connectionId) else { throw CallSecurityError("the connection is gone: no call placed") }
+        guard let k = try await formTwoKey(connectionId, shownAs: shown) else {
             throw CallSecurityError("the connection's identity key is gone: no call placed")
         }
-        return k
+        return (shown, k)
     }
 
     @discardableResult

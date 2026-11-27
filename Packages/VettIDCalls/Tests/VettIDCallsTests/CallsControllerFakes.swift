@@ -57,7 +57,13 @@ final class ControllerGateway: CallGateway {
         return try #require(answerKeys)
     }
 
-    func keepalive(_ callId: String) async throws { keepalives.append(callId) }
+    /// Keep-alives that fail (the relay refuses them): each is still counted in ``keepalives``.
+    var keepaliveFails = false
+
+    func keepalive(_ callId: String) async throws {
+        keepalives.append(callId)
+        if keepaliveFails { throw StartFailure() }
+    }
 
     func accept(_ call: OutgoingCall, event: VaultMessage) async throws -> AcceptedCall { try acceptResult(call) }
 

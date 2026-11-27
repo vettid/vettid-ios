@@ -185,6 +185,33 @@ extension CallMachineTests {
         #expect(signalling.sent == sent, "no second call.ringing, nothing else")
     }
 
+    /// (VAULT-MESSAGING §10.10 "Signed key-exchange shares") A start is told its call is still wanted while it is the current
+    /// call, and no longer once the member hung up (or the vault locked): the form 2 re-place then places nothing more.
+    @Test func aStartIsToldWhetherItsCallIsStillWanted() async throws {
+        let m = machine()
+        signalling.holdStart()
+        m.call("conn-1")
+        await runCurrent()
+        let wanted = try #require(signalling.startWanted)
+        #expect(wanted(), "the current call")
+        m.hangUp()
+        await runCurrent()
+        #expect(!wanted(), "hung up while the start was out")
+        signalling.releaseStart()
+        await runCurrent()
+
+        signalling.holdStart()
+        m.call("conn-1")
+        await runCurrent()
+        let second = try #require(signalling.startWanted)
+        #expect(second())
+        m.vaultLocking()
+        await runCurrent()
+        #expect(!second(), "the vault locking")
+        signalling.releaseStart()
+        await runCurrent()
+    }
+
     /// Other calls' ends: the oldest goes past the bound, and one delivered again counts as the newest.
     @Test func otherCallsEndsAreBoundedAndTheNewestKept() async throws {
         let m = machine()
