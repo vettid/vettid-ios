@@ -29,8 +29,11 @@ public enum CallLimits {
     public static let maxOfferAhead: TimeInterval = 90
     /// `exp` of the ephemeral types (`call.ice`, `call.ringing`).
     public static let ephemeralTTL: TimeInterval = 30
-    /// How long the app waits for the answer to `call.start` before it gives the call up.
-    public static let startTimeout: TimeInterval = 15
+    /// How long the app waits for the answer to `call.start` before it gives the call up (VAULT-MESSAGING 0.97.0 §10.10
+    /// "Placing a call": 30 s after it first sent it).
+    public static let startTimeout: TimeInterval = 30
+    /// (0.97.0) When `call.start` is deposited again, with the same inner `id`, while no answer has come.
+    public static let startResends: [TimeInterval] = [10, 20]
     /// The most entries one `call.list` may ask for (the vault keeps the latest 200 calls).
     public static let maxListLimit = 200
     /// (C2) How often the call's device sends `call.keepalive`, and the `exp` it gives one ("Liveness").
@@ -167,8 +170,8 @@ extension VaultApi {
     /// media engine can do, those form 1 may offer (``MediaSuite/formOne(_:)``: suite 1) are added to it here, the
     /// preferred one first. This start carries a form 1 signature, so rule 3 of VAULT-MESSAGING §10.10 "Call forms"
     /// applies: no second suite while any `call.start` carries form 1. A fresh `call_id` and ephemeral KEM key, the share
-    /// signed with the device's identity key. Deposited once and awaited for [timeout]. Errors (``VaultOpError``): `busy`
-    /// (this vault is already in a call), `not_found`, `connection_unavailable`, `owner_check_required`, `exists`,
+    /// signed with the device's identity key. Deposited, again at [resendAfter], and awaited for [timeout]. Errors
+    /// (``VaultOpError``): `busy` (this vault is already in a call), `not_found`, `connection_unavailable`, `owner_check_required`, `exists`,
     /// `bad_request`, `internal`, and `unsupported_type` from a vault release without calls. When it fails in any other
     /// way after the request may have left (no answer in time, a lost response, an answer that does not verify), a
     /// durable `call.end{hangup}` for the same `call_id` follows, so that a call the vault did place does not ring on for
@@ -181,7 +184,8 @@ extension VaultApi {
     public func callStart(
         _ connectionId: String, pinnedFingerprint: String, sdp: String, suites: [MediaSuite] = MediaSuite.default,
         media: String = CallWire.mediaAudio,
-        timeout: TimeInterval = CallLimits.startTimeout, peerIk: [UInt8]? = nil
+        timeout: TimeInterval = CallLimits.startTimeout, peerIk: [UInt8]? = nil,
+        resendAfter: [TimeInterval] = CallLimits.startResends
     ) async throws -> OutgoingCall {
         // The call is bound to the identity the member sees: no fingerprint, no call. Nothing is sent.
         guard !pinnedFingerprint.isEmpty else { throw CallMessageError("pinned fingerprint") }
@@ -208,7 +212,10 @@ extension VaultApi {
             if let share2 {
                 body.raw("suites", JsonBuilder.array(offered.map(String.init))).base64("ek_sig2", share2).bool("keepalive", true)
             }
-            let o = VaultJSON.object(try await device.opOnce("call.start", body: body.bytes(), timeout: timeout))
+            // (0.97.0) Deposited again at 10 s and 20 s with the same `id`; the vault gives the live answer again, or once it
+            // no longer holds the call a cached copy marked `withheld: true` without the TURN entry, which is kept as the
+            // call all the same (it is not placed again: the callee sees one call).
+            let o = VaultJSON.object(try await device.opOnce("call.start", body: body.bytes(), timeout: timeout, resendAfter: resendAfter))
             guard try o.need("call_id") == callId else { throw CallMessageError("call.start answered for another call") }
             let exp = try checked("exp") { try Timestamps.parseMillis(try o.need("exp")) }
             return OutgoingCall(
