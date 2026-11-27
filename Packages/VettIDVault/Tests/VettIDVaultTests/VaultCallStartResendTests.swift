@@ -107,6 +107,22 @@ extension VaultDeviceTests {
         #expect(began.duration(to: .now) < .seconds(6), "4 s from the first deposit's start, not from its end")
     }
 
+    /// The answer came while the first deposit was still with the relay, which kept it past the whole wait: the answer is
+    /// used, though no time is left to wait for it.
+    @Test func anAnswerThatCameDuringASlowFirstDepositIsUsed() async throws {
+        let (d, v) = try await pairedDevice()
+        let gate = FakeHTTPServer.Gate()
+        relay.holdDeposits = gate
+        defer { relay.holdDeposits = nil }
+        let waiting = Task { try await d.requestOnce("call.start", timeout: 0.5) }
+        let first = try v.open(try await relay.nextDeposit().payload)
+        try await d.handle(try v.seal("call.start", #"{"ok":1}"#, re: first.id, status: Inner.statusOK))
+        try await Task.sleep(for: .seconds(1))
+        gate.open()
+        let answer = try await waiting.value
+        #expect(answer.inner.re == first.id, "answered, not given up")
+    }
+
     /// The lock gate held one resend and then opened again (the vault has taken the lock): no later resend goes.
     @Test func noResendAfterTheLockGateHeldOne() async throws {
         let (d, v) = try await pairedDevice()

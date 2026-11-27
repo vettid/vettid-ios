@@ -28,6 +28,15 @@ import Testing
         #expect(try await timersEnd(s))
     }
 
+    /// A value already there is returned even with no time left to wait (a `call.start` answer that came while its first
+    /// deposit outlasted the whole wait), and no timer is started for it.
+    @Test func aValueAlreadyThereIsReturnedAtZeroTimeLeft() async throws {
+        let s = OneShot<Int>()
+        s.complete(7)
+        #expect(await s.wait(timeout: 0) == 7)
+        #expect(s.liveTimerCount == 0)
+    }
+
     @Test func aWaitThatTimesOutReturnsNilAndLeavesNoTimer() async throws {
         let s = OneShot<Int>()
         #expect(await s.wait(timeout: 0.05) == nil)
