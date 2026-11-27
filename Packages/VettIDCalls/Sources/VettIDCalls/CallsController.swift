@@ -22,6 +22,13 @@ package protocol CallVault: AnyObject {
     /// The fingerprint of [connectionId]'s pinned identity key, as the connection's details show it; nil if unknown.
     func fingerprint(_ connectionId: String) async -> String?
 
+    /// (C2) [connectionId]'s pinned identity key itself (32 bytes), the key ``fingerprint(_:)`` is of; nil if unknown. A form 2
+    /// call names it (VAULT-MESSAGING 0.88.16).
+    func identityKey(_ connectionId: String) async -> [UInt8]?
+
+    /// (C2) This device's id in the vault (its own `device.list` entry): the stale sweep's own calls.
+    func deviceId() async -> String?
+
     /// The name the app shows for [connectionId]; nil if it has none.
     func name(_ connectionId: String) -> String?
 
@@ -39,6 +46,8 @@ package protocol CallVault: AnyObject {
 extension CallVault {
     package var updateShowing: Bool { false }
     package var ownerCheckShowing: Bool { false }
+    package func identityKey(_ connectionId: String) async -> [UInt8]? { nil }
+    package func deviceId() async -> String? { nil }
 }
 
 /// What is known beyond one call, for the diagnostics view and the phone tests: counts only, nothing else.
@@ -55,13 +64,16 @@ public struct CallsDiagnostics: Equatable, Sendable {
     public var listSkipped = 0
 }
 
-/// Calls in the app: the one ``CallMachine`` of the process and what goes on around a call (CALLS-PLAN 0.1.1 C1). Mirrors
-/// vettid-android `CallsController`, C1 form 1 only (so no keep-alives, no permissions, no form 2 sweep: see the notes).
+/// Calls in the app: the one ``CallMachine`` of the process and what goes on around a call (CALLS-PLAN C1, C2). Mirrors
+/// vettid-android `CallsController` (the call permissions are not here yet).
 ///
 /// - **Whether there are calls.** After every unlock the vault is asked for its call list: an answer means calls
-///   (``CallAvailability/ready``), `unsupported_type` means none (``CallAvailability/notInVault``).
+///   (``CallAvailability/ready``), `unsupported_type` means none (``CallAvailability/notInVault``). (C2) The same answer says
+///   whether the vault is C2 (`v: 2` with `now`, VAULT-MESSAGING §10.10 "Mixed releases"): form 2 and keep-alives then.
+/// - **Keep-alives** (C2, "Liveness"): `call.keepalive` once the call is active on this device, then every 30 s.
 /// - **Stale calls.** The vault of S10 has no timer and no liveness check: a call whose app died stays live there (and the vault
-///   busy) for up to 12 hours. With that same list, every call the vault still holds live while this app has none is ended.
+///   busy) for up to 12 hours. With that same list, every call the vault still holds live while this app has none is ended;
+///   against a C2 vault only this device's own, by `device_id`, `exp` and the vault's `now`.
 /// - **The microphone.** No call is placed or answered without the permission (``microphonePrompt``).
 /// - **Around a call.** The end of a call when the vault locks (``endCallBeforeLock()``) and after 12 hours.
 ///
@@ -76,6 +88,10 @@ package final class CallsController {
 
     /// Whether the vault's release has calls; nil until it has been asked since the last unlock.
     private var supported: Bool? { didSet { openFlag.supported = supported } }
+    /// (C2) Whether the vault is C2 (`call.list` `v: 2`), read again after each unlock: nothing is cached across one.
+    private var vaultC2: Bool { get { openFlag.vaultC2 } set { openFlag.vaultC2 = newValue } }
+    /// (C2) The keep-alives of the active call: one loop per call id.
+    @ObservationIgnored private var keepalive: (callId: String, task: Task<Void, Never>)?
     /// The gate's state: our own screen first, or Settings (nil when no screen is asked for).
     package private(set) var microphonePrompt: MicrophonePrompt?
     /// Calls ended at unlock because the vault still held them live.
@@ -143,6 +159,7 @@ package final class CallsController {
                 // Again after the wait: an unlock that completed meanwhile may have shown the update or the daily check.
                 return !vault.updateShowing && !vault.ownerCheckShowing
             },
+            peerKey: { await vault.identityKey($0) }, vaultIsC2: { flag.vaultC2 },
             clock: clock
         )
         let m = CallMachine(signalling: signalling, engines: engines, clock: clock, timings: timings, config: config)
@@ -178,6 +195,8 @@ package final class CallsController {
         longCall?.cancel()
         ringWatch?.cancel()
         microphoneAsk?.cancel()
+        keepalive?.task.cancel()
+        keepalive = nil
         machine.stop()
     }
 
@@ -313,6 +332,7 @@ package final class CallsController {
 
     private func locked() {
         supported = nil
+        vaultC2 = false
         listSkipped = 0
         microphonePrompt = nil
         microphoneAsk?.cancel()
@@ -373,9 +393,11 @@ package final class CallsController {
             do {
                 let list = try await vault.gateway.list(limit: Self.historyLimit)
                 guard !Task.isCancelled, generation == probeGeneration, openFlag.isOpen else { return }
+                // The level first: an offer that waited for `supported` is answered with keep-alives at once.
+                vaultC2 = list.formTwo
                 supported = true
                 listSkipped = list.skipped
-                await endStale(list.calls)
+                if list.formTwo { await endStaleC2(list) } else { await endStale(list.calls) }
                 return
             } catch is CancellationError {
                 return
@@ -420,6 +442,52 @@ package final class CallsController {
         }
     }
 
+    /// (C2, VAULT-MESSAGING §10.10 "Liveness") The calls of this device a C2 vault still holds live while this app has none,
+    /// by `device_id`, `exp` and the vault's `now`, never this phone's clock; other devices' calls are left alone. A live
+    /// active call of this device ends `failed`; its own outgoing call still ringing past `exp` ends `timeout`.
+    private func endStaleC2(_ list: CallList) async {
+        if isLive { return }
+        guard let me = await vault.deviceId(), let vaultNow = list.now else { return }
+        for r in list.calls {
+            guard let reason = Self.staleReasonC2(r, me: me, vaultNow: vaultNow) else { continue }
+            do {
+                try await vault.gateway.end(r.callId, reason: reason)
+                staleEnded += 1
+            } catch {
+                // Not ended: the next unlock tries again.
+            }
+            if Task.isCancelled || !openFlag.isOpen { return }
+        }
+    }
+
+    /// The end of [r] by the C2 rule, or nil when it is not this device's or not stale by the vault's [vaultNow].
+    package static func staleReasonC2(_ r: CallRecord, me: String, vaultNow: Date) -> String? {
+        guard r.deviceId == me else { return nil }
+        if r.state == "active" { return CallReason.failed }
+        let pastExp = r.exp.flatMap(CallHistoryRows.time).map { vaultNow >= $0 } ?? false
+        return r.state == "ringing" && r.direction == "out" && pastExp ? CallReason.timeout : nil
+    }
+
+    /// (C2, VAULT-MESSAGING §10.10 "Liveness") The call's device sends `call.keepalive` to its own vault as soon as the call is
+    /// active on it (``CallState/Live/answerThrough``: the callee once its `call.answer` is with its vault, the caller once it
+    /// took the answer; one sent before is answered `call.end{unavailable}`), then every 30 s until it ends. Only to a C2 vault
+    /// (an S10 vault answers an unknown type): one the probe found C2, or a call in form 2, which proves it for that call even
+    /// before the probe has answered.
+    private func keepAlive(_ live: CallState.Live?) {
+        let id = live.flatMap { l in (vaultC2 || l.formTwo) && l.answerThrough ? l.callId : nil }
+        if id == keepalive?.callId { return }
+        keepalive?.task.cancel()
+        keepalive = id.map { callId in
+            (callId, Task { [weak self, clock] in
+                while !Task.isCancelled {
+                    // One lost keep-alive is not an end: the next goes in 30 s, within the vault's 90 s.
+                    try? await self?.signalling.keepalive(callId: callId)
+                    do { try await clock.sleep(for: .seconds(CallLimits.keepaliveEvery)) } catch { return }
+                }
+            })
+        }
+    }
+
     // MARK: around a call
 
     /// The screen for an answer goes with its call: when the caller gives up (or another call rings), nothing is left to answer.
@@ -441,6 +509,7 @@ package final class CallsController {
     private func around(_ t: CallTransition) {
         dropStaleAnswerPrompt(t)
         watchRing(t)
+        if case .live(let l) = t.state { keepAlive(l) } else { keepAlive(nil) }
         guard case .live(let l) = t.state, l.phase == .active else {
             longCall?.cancel()
             longCall = nil
@@ -496,6 +565,8 @@ package final class CallsController {
         var isOpen = false
         /// Mirror of the controller's: whether the vault has calls (nil: not known).
         var supported: Bool?
+        /// (C2) Whether the vault is C2, as the last probe found it; false at a lock.
+        var vaultC2 = false
     }
 
     /// Whether the vault has calls, waiting up to ``unlockWait`` (the clock's, so virtual in the tests) for the vault to open and
