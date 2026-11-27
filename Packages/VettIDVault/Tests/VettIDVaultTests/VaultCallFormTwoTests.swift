@@ -59,7 +59,10 @@ extension VaultDeviceTests {
             var body = JsonBuilder().string("call_id", callId).string("sdp", sdp).base64("enc", a.enc)
             if let suite { body = body.raw("suite", suite) }
             if let offered { body = body.raw("offered", offered) }
-            body = body.base64("confirm", c ?? confirm)
+            // By default the confirm of what is signed: each bad answer below is consistent but for its one fault.
+            var kcB = try CallWire.confirmKey(kCall: a.kCall, callId: callId)
+            defer { Bytes.wipe(&kcB) }
+            body = body.base64("confirm", c ?? CallWire.confirm(kConfirm: kcB, chosen: signedChosen, offered: signedOffered, callId: callId, parties: signedParties ?? parties))
             return try by.vouched(body, m).build()
         }
         func take(_ body: String) async throws -> VaultMessage {
@@ -80,7 +83,7 @@ extension VaultDeviceTests {
             try answer(offered: "[]", signedOffered: []), // no suites
             try answer(suite: "1.0"), // not a plain integer
             try answer(signedParties: try CallWire.Parties(caller: v.ik.publicKey, callee: other.vault.publicKey)), // m2 names another callee
-            try answer(signedChosen: 2), // signed over another choice
+            try answer(confirm: confirm, signedChosen: 2), // signed over another choice than the one sent
             try answer(voucher: other), // vouched by a vault that is not the connection's
         ]
         for body in bad {
@@ -127,10 +130,11 @@ extension VaultDeviceTests {
             return try peer.vouched(JsonBuilder().string("call_id", call.callId).string("sdp", sdp).base64("enc", a.enc).raw("suite", "1").raw("offered", "[1]").base64("confirm", confirm), m).build()
         }
 
-        // Placed naming another connection's key: the pinned peer's answer, good in itself, names another callee.
+        // Placed naming another connection's key: the pinned peer answers over the parties the caller named, so every
+        // signature and confirm verifies; only its `peer_ik` is not the callee named at the offer.
         let (named, ek1) = try await place(peerIk: other.vault.publicKey)
         let asPeer = try CallWire.Parties(caller: v.ik.publicKey, callee: peer.vault.publicKey)
-        let ev1 = try await take(try form2Answer(named, ek1, asPeer))
+        let ev1 = try await take(try form2Answer(named, ek1, try CallWire.Parties(caller: v.ik.publicKey, callee: other.vault.publicKey)))
         #expect(throws: CallMessageError.self) { try api.callAccept(named, event: ev1) }
 
         // A form 1 offer gets a form 2 answer: refused.
@@ -143,6 +147,12 @@ extension VaultDeviceTests {
         let (formTwo, ek3) = try await place(peerIk: peer.vault.publicKey)
         let a = try CallWire.answer(ek: ek3, callId: formTwo.callId)
         let m = CallWire.shareMessage(role: "answer", callId: formTwo.callId, media: "", share: a.enc)
+        // A good form 1 answer with a stray member of form 2 is in no form: refused.
+        for stray in [#""suite":1"#, #""offered":[1]"#, #""confirm":"AAAA""#] {
+            let partial = try peer.vouched(JsonBuilder().string("call_id", formTwo.callId).string("sdp", CallMedia.sdpWithChoice(sdp, chosen: .aes128Gcm)).base64("enc", a.enc), m).build()
+            let ev = try await take(String(partial.dropLast()) + "," + stray + "}")
+            #expect(throws: CallMessageError.self, "\(stray)") { try api.callAccept(formTwo, event: ev) }
+        }
         let ev3 = try await take(try peer.vouched(JsonBuilder().string("call_id", formTwo.callId).string("sdp", CallMedia.sdpWithChoice(sdp, chosen: .aes128Gcm)).base64("enc", a.enc), m).build())
         let accepted = try api.callAccept(formTwo, event: ev3)
         let n = try CallMedia.Negotiated(chosen: .aes128Gcm, offered: [1])
