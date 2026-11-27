@@ -106,8 +106,10 @@ public struct ConnectionInfo: Equatable, Sendable, Identifiable {
     public var accountName: String? { AccountNames.full(firstName, lastName) }
 
     /// The title (§10.8): "First Last"; "" before the names arrived, for which the UI shows "Name not shared yet". Never
-    /// the display name alone, never an alias.
-    public var displayName: String { accountName ?? "" }
+    /// the display name alone for a person, never an alias. A service (`peer_kind`, VAULT-MESSAGING 0.69.0 §6.4) without
+    /// names falls back to its cleaned display name, as vettid-android's `displayName` does: every name of a service is
+    /// one the service gave.
+    public var displayName: String { accountName ?? (isService ? AccountNames.cleaned(name) ?? "" : "") }
 
     /// The peer's display name when it adds something to the title (non-empty and different), for secondary text.
     /// Cleaned of control and format characters, and compared cleaned (VAULT-MESSAGING §10.8; mirrors vettid-android #220);

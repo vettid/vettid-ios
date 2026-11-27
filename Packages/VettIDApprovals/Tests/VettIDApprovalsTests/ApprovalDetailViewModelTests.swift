@@ -147,6 +147,17 @@ import VettIDDataTesting
         #expect(m.state.notHeld && !m.state.gone && m.state.approval == nil)
     }
 
+    /// A sign-in request from a service without First Last names it by its own name (vettid-android's `displayName`).
+    @Test func aServicesSignInIsNamedByItsOwnName() async {
+        fake.listed = [Samples.auth()]
+        var service = Samples.connection("c1", first: nil)
+        service.name = "Example Bank"
+        service.isService = true
+        connections.connections = [service]
+        let m = await model("auth:a1")
+        #expect(m.state.connectionName == "Example Bank" && m.state.connectionIsService)
+    }
+
     @Test func authenticationTakesThePasswordAndClearsIt() async {
         fake.listed = [Samples.auth()]
         connections.connections = [Samples.connection("c1")]

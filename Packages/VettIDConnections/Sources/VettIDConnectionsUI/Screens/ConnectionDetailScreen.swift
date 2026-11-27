@@ -68,7 +68,7 @@ public struct ConnectionDetailScreen: View {
         self.actions = actions
     }
 
-    private var title: String {
+    var title: String {
         AccountNames.cleaned(state.connection?.displayName) ?? ConnectStrings.nameNotShared
     }
 

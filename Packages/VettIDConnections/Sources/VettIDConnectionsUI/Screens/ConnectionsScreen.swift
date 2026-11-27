@@ -133,12 +133,18 @@ struct ConnectionItem: View {
     let connection: ConnectionInfo
     let actions: ConnectionsActions
 
+    /// The row's title, cleaned: the connection's title (a service's own name without First Last), or "Name not shared yet".
+    static func name(_ c: ConnectionInfo) -> String { AccountNames.cleaned(c.displayName) ?? ConnectStrings.nameNotShared }
+
+    /// The same, bidi-isolated, for the row's accessibility label.
+    static func labelName(_ c: ConnectionInfo) -> String { AccountNames.isolateOrNull(c.displayName) ?? ConnectStrings.nameNotShared }
+
     var body: some View {
         let c = connection
         ProfilePhotoLoading(c.photo) { photo in
             ConnectionRow(
-                name: AccountNames.cleaned(c.displayName) ?? ConnectStrings.nameNotShared,
-                labelName: AccountNames.isolateOrNull(c.displayName) ?? ConnectStrings.nameNotShared,
+                name: Self.name(c),
+                labelName: Self.labelName(c),
                 favorite: c.favorite,
                 supporting: Self.supporting(c),
                 meta: c.lastActiveAt.map { ConnectTimes.short($0) },

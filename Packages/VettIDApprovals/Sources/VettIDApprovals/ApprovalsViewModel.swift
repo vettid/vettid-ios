@@ -46,8 +46,8 @@ public struct ApprovalsState: Equatable, Sendable, CustomStringConvertible, Cust
     /// Nothing to list at all (the empty state, or the failure).
     public var nothing: Bool { approvals.isEmpty && peerDeclines.isEmpty && paused.isEmpty }
 
-    /// A connection's "First Last", cleaned (VAULT-MESSAGING §10.8); nil without the connection, its names, or anything
-    /// visible in them.
+    /// A connection's title, cleaned (VAULT-MESSAGING §10.8): "First Last", or a service's own name without them; nil without
+    /// the connection, such a name, or anything visible in it.
     public func connectionName(_ id: String?) -> String? {
         guard let id else { return nil }
         return AccountNames.cleaned(connections[id]?.displayName)
