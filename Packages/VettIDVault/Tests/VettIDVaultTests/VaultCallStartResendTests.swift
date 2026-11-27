@@ -130,6 +130,19 @@ extension VaultDeviceTests {
         #expect(await relay.noDeposit(within: 0.5))
     }
 
+    /// A resend still out when the answer comes (the relay client trying it again) is cancelled: it does not land later.
+    @Test func aResendStillOutWhenTheAnswerComesIsCancelled() async throws {
+        let (d, v) = try await pairedDevice()
+        let waiting = Task { try await d.requestOnce("call.start", timeout: 5, resendAfter: [0.2]) }
+        let first = try v.open(try await relay.nextDeposit().payload)
+        relay.failDeposits = .networkConnectionLost
+        try await Task.sleep(for: .milliseconds(400))
+        try await d.handle(try v.seal("call.start", "{}", re: first.id, status: Inner.statusOK))
+        _ = try await waiting.value
+        relay.failDeposits = nil
+        #expect(await relay.noDeposit(within: 4), "the resend's later tries were cancelled with it")
+    }
+
     /// A withheld copy has no TURN credential: an entry that carries one anyway is not used.
     @Test func aWithheldCopysCredentialIsNotUsed() async throws {
         let (d, v) = try await pairedDevice()
