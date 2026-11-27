@@ -123,6 +123,40 @@ extension VaultDeviceTests {
         #expect(answer.inner.re == first.id, "answered, not given up")
     }
 
+    /// A first deposit the relay took only after a resend time had passed: that resend is skipped (the request has only just
+    /// reached the relay), and the later one goes at its time.
+    @Test func aResendTimePastWhenTheFirstDepositReturnsIsSkipped() async throws {
+        let (d, v) = try await pairedDevice()
+        let gate = FakeHTTPServer.Gate()
+        relay.holdDeposits = gate
+        let waiting = Task { try await d.requestOnce("call.start", timeout: 6, resendAfter: [0.3, 5]) }
+        let first = try v.open(try await relay.nextDeposit().payload)
+        try await Task.sleep(for: .seconds(1))
+        relay.holdDeposits = nil
+        gate.open()
+        #expect(await relay.noDeposit(within: 1.5), "the 0.3 s resend, past when the deposit returned, is skipped")
+        let again = try v.open(try await relay.nextDeposit(timeout: 5).payload)
+        #expect(again.id == first.id, "the 5 s one goes")
+        await #expect(throws: VaultStateError.self) { _ = try await waiting.value }
+    }
+
+    /// A first deposit that outlasted the whole wait: the answer that comes just after it returns is still used, within the
+    /// grace (``CallLimits/startAnswerGrace`` for `call.start`), not given up the moment the request landed.
+    @Test func anAnswerJustAfterAVerySlowFirstDepositIsUsed() async throws {
+        let (d, v) = try await pairedDevice()
+        let gate = FakeHTTPServer.Gate()
+        relay.holdDeposits = gate
+        let waiting = Task { try await d.requestOnce("call.start", timeout: 0.5, answerGrace: 3) }
+        let first = try v.open(try await relay.nextDeposit().payload)
+        try await Task.sleep(for: .seconds(1))
+        relay.holdDeposits = nil
+        gate.open()
+        try await Task.sleep(for: .milliseconds(500))
+        try await d.handle(try v.seal("call.start", #"{"ok":1}"#, re: first.id, status: Inner.statusOK))
+        #expect(try await waiting.value.inner.re == first.id)
+        #expect(CallLimits.startAnswerGrace == 5)
+    }
+
     /// The lock gate held one resend and then opened again (the vault has taken the lock): no later resend goes.
     @Test func noResendAfterTheLockGateHeldOne() async throws {
         let (d, v) = try await pairedDevice()

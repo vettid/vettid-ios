@@ -34,6 +34,10 @@ public enum CallLimits {
     public static let startTimeout: TimeInterval = 30
     /// (0.97.0) When `call.start` is deposited again, with the same inner `id`, while no answer has come.
     public static let startResends: [TimeInterval] = [10, 20]
+    /// The least wait for `call.start`'s answer after its first deposit returns, when the relay took it so slowly that the
+    /// 30 s were nearly or all gone: ringing the callee and hanging up at once would be a missed call for nothing. (Chosen;
+    /// not in the spec.)
+    public static let startAnswerGrace: TimeInterval = 5
     /// The most entries one `call.list` may ask for (the vault keeps the latest 200 calls).
     public static let maxListLimit = 200
     /// (C2) How often the call's device sends `call.keepalive`, and the `exp` it gives one ("Liveness").
@@ -218,7 +222,8 @@ extension VaultApi {
             // no longer holds the call a cached copy marked `withheld: true` without the TURN entry, which is kept as the
             // call all the same (it is not placed again: the callee sees one call). [mayResend]: the call still wanted.
             let o = VaultJSON.object(try await device.opOnce(
-                "call.start", body: body.bytes(), timeout: timeout, resendAfter: resendAfter, mayResend: mayResend
+                "call.start", body: body.bytes(), timeout: timeout, resendAfter: resendAfter, mayResend: mayResend,
+                answerGrace: CallLimits.startAnswerGrace
             ))
             guard try o.need("call_id") == callId else { throw CallMessageError("call.start answered for another call") }
             let exp = try checked("exp") { try Timestamps.parseMillis(try o.need("exp")) }
