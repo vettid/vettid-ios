@@ -16,7 +16,7 @@ public enum CallWire {
     public static let mediaSalt = "vettid-call-v1"
     public static let roleOffer = "offer"
     public static let roleAnswer = "answer"
-    /// (C2) Form 2's roles: the suites are signed with the share, and both members are named (VAULT-MESSAGING 0.88.16).
+    /// (C2) Form 2's roles: the suites are signed with the share, and both members are named (VAULT-MESSAGING 0.88.16 §10.10).
     public static let roleOffer2 = "offer2"
     public static let roleAnswer2 = "answer2"
     /// (C2) The salt of `k_confirm`.
@@ -59,7 +59,7 @@ public enum CallWire {
         return try Hkdf.derive(ikm: k, salt: Array(mediaSalt.utf8), info: info, length: keySize)
     }
 
-    /// (C2, VAULT-MESSAGING 0.88.16) The two members of a call as form 2 names them: the calling and the called member's
+    /// (C2, VAULT-MESSAGING 0.88.16 §10.10) The two members of a call as form 2 names them: the calling and the called member's
     /// vault identity keys (32 bytes each). They travel in no message. This device fills them in from its own records:
     /// its own vault's key (the one its ICE configurations verify under) and the connection's key as its vault gives it
     /// (`peer_ik`, checked against the connection, rule 6). The calling device fixes them when it places the call and

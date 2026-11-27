@@ -23,7 +23,7 @@ package protocol CallVault: AnyObject {
     func fingerprint(_ connectionId: String) async -> String?
 
     /// (C2) [connectionId]'s pinned identity key itself (32 bytes), the key ``fingerprint(_:)`` is of; nil if unknown. A form 2
-    /// call names it (VAULT-MESSAGING 0.88.16).
+    /// call names it (VAULT-MESSAGING 0.88.16 §10.10).
     func identityKey(_ connectionId: String) async -> [UInt8]?
 
     /// (C2) This device's id in the vault (its own `device.list` entry): the stale sweep's own calls.
@@ -449,6 +449,8 @@ package final class CallsController {
         if isLive { return }
         guard let me = await vault.deviceId(), let vaultNow = list.now else { return }
         for r in list.calls {
+            // A call that started here meanwhile is left alone, as by the C1 sweep's first look.
+            if isLive { return }
             guard let reason = Self.staleReasonC2(r, me: me, vaultNow: vaultNow) else { continue }
             do {
                 try await vault.gateway.end(r.callId, reason: reason)
@@ -481,7 +483,8 @@ package final class CallsController {
             (callId, Task { [weak self, clock] in
                 while !Task.isCancelled {
                     // One lost keep-alive is not an end: the next goes in 30 s, within the vault's 90 s.
-                    try? await self?.signalling.keepalive(callId: callId)
+                    guard let signalling = self?.signalling else { return }
+                    try? await signalling.keepalive(callId: callId)
                     do { try await clock.sleep(for: .seconds(CallLimits.keepaliveEvery)) } catch { return }
                 }
             })

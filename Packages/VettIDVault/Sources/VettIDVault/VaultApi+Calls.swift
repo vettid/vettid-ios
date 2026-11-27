@@ -176,7 +176,7 @@ extension VaultApi {
     ///
     /// (C2) With [peerIk], the connection's identity key as this device's vault gives it (`connection.get`), the start
     /// also carries form 2 (`suites` and `ek_sig2` over `m2`, naming this vault and the connection's, VAULT-MESSAGING
-    /// 0.88.16) and `keepalive: true`; a device passes it only when its vault is C2 (`call.list` `v: 2`). Nil: form 1
+    /// 0.88.16 §10.10) and `keepalive: true`; a device passes it only when its vault is C2 (`call.list` `v: 2`). Nil: form 1
     /// only, as to an S10 vault. Rule 3 holds for both: form 1 is in every start, so suite 1 alone is offered.
     public func callStart(
         _ connectionId: String, pinnedFingerprint: String, sdp: String, suites: [MediaSuite] = MediaSuite.default,

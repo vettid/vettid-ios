@@ -34,7 +34,7 @@ stop-and-report item, never a skip.
 - `calls.json` (VAULT-MESSAGING §10.10: the call key agreement, the shares of both roles, the vault-signed ICE
   configurations, glare, and (C2, 0.88.16) form 2 of the shares naming both members, form 2's `k_call` and the key
   confirmation; last commit touching it 74bb8c42fa0b37c03bb090087fb17dc3d21e2c0b, vettid-vault #226): copied
-  2026-11-27 from commit f92c070 (`main`), for calls C2 (`CallForm2VectorsTests.swift`); the same hash as
+  2026-11-27 from commit f92c0702621cbf91902ae661c64d25ae3acf2b83 (`main`), for calls C2 (`CallForm2VectorsTests.swift`); the same hash as
   vettid-android's copy. The C1 values are unchanged (only its `description` and the new members differ).
 - `connauth_document.json` (VAULT-MESSAGING 0.89.0 §10.4 "Approval documents"; last commit touching it
   9f23d2c0cb23eb6fae04263213544e578186ff57, vettid-vault #262): copied 2026-11-16 from that commit. `JcsTests.swift`

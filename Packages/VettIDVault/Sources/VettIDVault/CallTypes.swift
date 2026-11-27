@@ -82,7 +82,7 @@ public final class OutgoingCall: @unchecked Sendable, CustomStringConvertible, C
     private let offerKey: KemPrivateKey
     /// (C2) The call's two members as this device named them in its form 2 offer, fixed when it placed the call: the
     /// answer is checked, and `k_call` derived, with these (an answer naming another callee fails, VAULT-MESSAGING
-    /// 0.88.16). Nil for a form 1 call.
+    /// 0.88.16 §10.10). Nil for a form 1 call.
     let parties: CallWire.Parties?
 
     /// (C2) Whether the offer carried form 2.

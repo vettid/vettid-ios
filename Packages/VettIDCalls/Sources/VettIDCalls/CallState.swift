@@ -168,7 +168,7 @@ public struct CallTimings: Sendable {
     /// No address gathered after this long: the call ends ``CallEnd/noAddress``.
     public var gather: Duration
     /// No media this long after the answer: the call ends ``CallEnd/couldNotConnect``. 60 s (owner decision 2026-11-11,
-    /// VAULT-MESSAGING 0.88.16): a slow path (TURN, a network allowing only TCP 443) may take a while.
+    /// VAULT-MESSAGING 0.88.16 §10.10 "Key confirmation"): a slow path (TURN, a network allowing only TCP 443) may take a while.
     public var connect: Duration
     /// (C2) The answering device, its microphone held back, ends the call as not encrypted when no frame has decrypted this
     /// long after its connection is established (VAULT-MESSAGING "Key confirmation").

@@ -33,7 +33,7 @@ package final class VaultCallSignalling: CallSignalling {
     /// over the unlock screen.
     private let mayRing: @MainActor () async -> Bool
     /// (C2) The connection's identity key as this device's vault gives it (`connection.get`), for a form 2 start: the callee
-    /// this device names in `m2`, fixed for the call (VAULT-MESSAGING 0.88.16). Nil for no such connection.
+    /// this device names in `m2`, fixed for the call (VAULT-MESSAGING 0.88.16 §10.10). Nil for no such connection.
     private let peerKey: @MainActor (_ connectionId: String) async -> [UInt8]?
     /// (C2) Whether the vault is C2, as the `call.list` probe found it.
     private let vaultIsC2: @MainActor () -> Bool
@@ -279,12 +279,12 @@ package final class VaultCallSignalling: CallSignalling {
                 // A connection the app does not know: no call is placed.
                 throw CallRefusedError(code: "not_found")
             }
+            let peerIk = try await formTwoKey(connectionId)
             // Numbered just before `call.start` goes: an end lost before this cannot be this call's.
             startsBegun += 1
             let mine = startsBegun
             call = try await gateway.start(
-                connectionId: connectionId, pinnedFingerprint: fingerprint, sdp: sdp, suites: suites,
-                peerIk: try await formTwoKey(connectionId)
+                connectionId: connectionId, pinnedFingerprint: fingerprint, sdp: sdp, suites: suites, peerIk: peerIk
             )
             let remembered = endedWhileStarting.first { $0.callId == call.callId }
             rememberedEnd = remembered?.end
