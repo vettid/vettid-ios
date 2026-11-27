@@ -185,7 +185,7 @@ extension VaultApi {
         _ connectionId: String, pinnedFingerprint: String, sdp: String, suites: [MediaSuite] = MediaSuite.default,
         media: String = CallWire.mediaAudio,
         timeout: TimeInterval = CallLimits.startTimeout, peerIk: [UInt8]? = nil,
-        resendAfter: [TimeInterval] = CallLimits.startResends
+        resendAfter: [TimeInterval] = CallLimits.startResends, mayResend: (@Sendable () async -> Bool)? = nil
     ) async throws -> OutgoingCall {
         // The call is bound to the identity the member sees: no fingerprint, no call. Nothing is sent.
         guard !pinnedFingerprint.isEmpty else { throw CallMessageError("pinned fingerprint") }
@@ -214,12 +214,19 @@ extension VaultApi {
             }
             // (0.97.0) Deposited again at 10 s and 20 s with the same `id`; the vault gives the live answer again, or once it
             // no longer holds the call a cached copy marked `withheld: true` without the TURN entry, which is kept as the
-            // call all the same (it is not placed again: the callee sees one call).
-            let o = VaultJSON.object(try await device.opOnce("call.start", body: body.bytes(), timeout: timeout, resendAfter: resendAfter))
+            // call all the same (it is not placed again: the callee sees one call). [mayResend]: the call still wanted.
+            let o = VaultJSON.object(try await device.opOnce(
+                "call.start", body: body.bytes(), timeout: timeout, resendAfter: resendAfter, mayResend: mayResend
+            ))
             guard try o.need("call_id") == callId else { throw CallMessageError("call.start answered for another call") }
             let exp = try checked("exp") { try Timestamps.parseMillis(try o.need("exp")) }
+            var ice = try iceOf(o, callId)
+            if VaultJSON.bool(o, "withheld") == true {
+                // A withheld copy has no TURN credential (§10.10 "Servers and credentials"): an entry carrying one is not used.
+                ice = CallWire.IceConfig(callId: ice.callId, exp: ice.exp, servers: ice.servers.filter { $0.credential == nil })
+            }
             return OutgoingCall(
-                callId: callId, connectionId: connectionId, media: media, exp: exp, ice: try iceOf(o, callId), offered: offered,
+                callId: callId, connectionId: connectionId, media: media, exp: exp, ice: ice, offered: offered,
                 pinnedFingerprint: pinnedFingerprint, offerKey: key, parties: parties
             )
         } catch let e as VaultOpError {

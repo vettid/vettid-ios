@@ -125,6 +125,18 @@ extension VaultCallSignallingTests {
         }
     }
 
+    /// `call.start` is deposited again only while the call is still wanted (0.97.0 §10.10 "Placing a call").
+    @Test func aStartIsResentOnlyWhileItsCallIsStillWanted() async throws {
+        let s = await c2Signalling()
+        gateway.startResult = { [unowned self] in try outgoingCall($0, pinned: $1) }
+        var wanted = true
+        _ = try await s.start(connectionId: "conn-1", sdp: "v=0", suites: [s1], wanted: { wanted })
+        let mayResend = try #require(gateway.startMayResend)
+        #expect(await mayResend())
+        wanted = false
+        #expect(await !mayResend(), "hung up or locking: no resend")
+    }
+
     /// The connection's key gone after the refresh: no call at all, never one in form 1.
     @Test func aKeyGoneAfterTheRefreshPlacesNoCall() async throws {
         var key: [UInt8]? = [UInt8](repeating: 7, count: 32)

@@ -38,8 +38,10 @@ final class ControllerGateway: CallGateway {
     var answerKeepalives: [Bool] = []
     var keepalives: [String] = []
 
+    // swiftlint:disable:next function_parameter_count
     func start(
-        connectionId: String, pinnedFingerprint: String, sdp: String, suites: [MediaSuite], peerIk: [UInt8]?
+        connectionId: String, pinnedFingerprint: String, sdp: String, suites: [MediaSuite], peerIk: [UInt8]?,
+        mayResend: @escaping @Sendable () async -> Bool
     ) async throws -> OutgoingCall {
         startPeerIks.append(peerIk)
         asked.append("start(\(connectionId))")

@@ -1,4 +1,5 @@
 import Foundation
+import os
 import Testing
 import VettIDCrypto
 import VettIDRelay
@@ -79,6 +80,73 @@ extension VaultDeviceTests {
         #expect(began.duration(to: .now) < .milliseconds(1800), "ended at its time, not after the stalled resend")
         gate.open()
         relay.holdDeposits = nil
+    }
+
+    /// The times count from the first deposit's start: a first deposit the relay is slow to take does not lengthen the wait.
+    @Test func aSlowFirstDepositDoesNotLengthenTheWait() async throws {
+        let (d, v) = try await pairedDevice()
+        let gate = FakeHTTPServer.Gate()
+        relay.holdDeposits = gate
+        let began = ContinuousClock.now
+        let waiting = Task { try await d.requestOnce("call.start", timeout: 1) }
+        #expect(try v.open(try await relay.nextDeposit().payload).type == "call.start")
+        try await Task.sleep(for: .milliseconds(700))
+        relay.holdDeposits = nil
+        gate.open()
+        await #expect(throws: VaultStateError.self) { _ = try await waiting.value }
+        #expect(began.duration(to: .now) < .milliseconds(1500), "1 s from the first deposit's start, not from its end")
+    }
+
+    /// The lock gate held one resend and then opened again (the vault has taken the lock): no later resend goes.
+    @Test func noResendAfterTheLockGateHeldOne() async throws {
+        let (d, v) = try await pairedDevice()
+        let api = VaultApi(device: d)
+        let starting = Task { try await api.callStart("conn-1", pinnedFingerprint: Self.callFp, sdp: Self.callSdp, timeout: 1.2, resendAfter: [0.3, 0.8]) }
+        #expect(try v.open(try await relay.nextDeposit().payload).type == "call.start")
+        d.setFlushGate { false }
+        try await Task.sleep(for: .milliseconds(500))
+        d.setFlushGate { true }
+        await #expect(throws: (any Error).self) { _ = try await starting.value }
+        let next = try v.open(try await relay.nextDeposit(timeout: 2).payload)
+        #expect(next.type == "call.end", "the hang-up, and no call.start after the gate opened again")
+        #expect(await relay.noDeposit(within: 0.5))
+    }
+
+    /// The caller no longer wants the call (a hang-up, the vault locking): nothing is deposited again.
+    @Test func noResendOnceTheCallIsNoLongerWanted() async throws {
+        let (d, v) = try await pairedDevice()
+        let api = VaultApi(device: d)
+        let wanted = OSAllocatedUnfairLock(initialState: true)
+        let starting = Task {
+            try await api.callStart(
+                "conn-1", pinnedFingerprint: Self.callFp, sdp: Self.callSdp, timeout: 1, resendAfter: [0.3, 0.6],
+                mayResend: { wanted.withLock { $0 } }
+            )
+        }
+        #expect(try v.open(try await relay.nextDeposit().payload).type == "call.start")
+        wanted.withLock { $0 = false }
+        await #expect(throws: (any Error).self) { _ = try await starting.value }
+        #expect(try v.open(try await relay.nextDeposit(timeout: 2).payload).type == "call.end", "no second call.start")
+        #expect(await relay.noDeposit(within: 0.5))
+    }
+
+    /// A withheld copy has no TURN credential: an entry that carries one anyway is not used.
+    @Test func aWithheldCopysCredentialIsNotUsed() async throws {
+        let (d, v) = try await pairedDevice()
+        let api = VaultApi(device: d)
+        let starting = Task { try await api.callStart("conn-1", pinnedFingerprint: Self.callFp, sdp: Self.callSdp, timeout: 3, resendAfter: []) }
+        let first = try v.open(try await relay.nextDeposit().payload)
+        let callId = try StrictJson.parseObject(first.body).string("call_id")
+        let exp = try millis(Date().addingTimeInterval(45))
+        let servers = [
+            CallWire.IceServer(urls: ["stun:stun.example.org:3478"]),
+            CallWire.IceServer(urls: ["turns:turn.example.org:5349"], username: "u", credential: "c")
+        ]
+        let cfg = try CallWire.marshalIce(CallWire.IceConfig(callId: callId, exp: Date(timeIntervalSince1970: Date().addingTimeInterval(21_600).timeIntervalSince1970.rounded(.down)), servers: servers))
+        let copy = JsonBuilder().string("call_id", callId).string("exp", ts(exp)).base64("ice_config", cfg).base64("ice_sig", try v.ik.sign(label: CallWire.labelIce, cfg)).bool("withheld", true).build()
+        try await d.handle(try v.seal("call.start", copy, re: first.id, status: Inner.statusOK))
+        let call = try await starting.value
+        #expect(call.ice.servers.map(\.urls) == [["stun:stun.example.org:3478"]], "the entry with a credential dropped")
     }
 
     /// The lock gate shut after the first deposit: nothing is deposited again, and the wait goes on to its end.

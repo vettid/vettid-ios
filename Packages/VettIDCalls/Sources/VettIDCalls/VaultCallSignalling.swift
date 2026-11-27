@@ -343,15 +343,19 @@ package final class VaultCallSignalling: CallSignalling {
     /// again): an `identity.rotate` during the first start. Only once, in form 2 again, and only while the call is still
     /// [wanted]; a second refusal ends the call as the first would have.
     private func placeOnce(
-        _ connectionId: String, _ fingerprint: String, _ sdp: String, _ suites: [MediaSuite], _ wanted: @MainActor () -> Bool
+        _ connectionId: String, _ fingerprint: String, _ sdp: String, _ suites: [MediaSuite],
+        _ wanted: @escaping @MainActor () -> Bool
     ) async throws -> (OutgoingCall, Int) {
+        // A hang-up or a lock meanwhile: `call.start` is not deposited again (0.97.0 §10.10 "Placing a call").
+        let mayResend: @Sendable () async -> Bool = { await wanted() }
         let peerIk = try await formTwoKey(connectionId, shownAs: fingerprint)
         // Numbered just before `call.start` goes: an end lost before this cannot be this call's.
         startsBegun += 1
         let first = startsBegun
         do {
             let call = try await gateway.start(
-                connectionId: connectionId, pinnedFingerprint: fingerprint, sdp: sdp, suites: suites, peerIk: peerIk
+                connectionId: connectionId, pinnedFingerprint: fingerprint, sdp: sdp, suites: suites, peerIk: peerIk,
+                mayResend: mayResend
             )
             return (call, first)
         } catch let e as VaultOpError where peerIk != nil && e.code == "bad_request" {
@@ -360,7 +364,7 @@ package final class VaultCallSignalling: CallSignalling {
             startsBegun += 1
             let mine = startsBegun
             let call = try await gateway.start(
-                connectionId: connectionId, pinnedFingerprint: shown, sdp: sdp, suites: suites, peerIk: again
+                connectionId: connectionId, pinnedFingerprint: shown, sdp: sdp, suites: suites, peerIk: again, mayResend: mayResend
             )
             return (call, mine)
         }
