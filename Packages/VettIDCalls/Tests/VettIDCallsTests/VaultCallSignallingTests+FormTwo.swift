@@ -125,6 +125,21 @@ extension VaultCallSignallingTests {
         }
     }
 
+    /// Hung up or locking before the call had its id (while its connection was looked up): nothing is placed, and the id is
+    /// never handed out; each start that does go names its id first.
+    @Test func aCallNoLongerWantedBeforeItsIdIsNotPlaced() async throws {
+        let s = await c2Signalling()
+        gateway.startResult = { [unowned self] in try outgoingCall($0, pinned: $1) }
+        var named: [String] = []
+        await #expect(throws: CallNotWantedError.self) {
+            _ = try await s.start(connectionId: "conn-1", sdp: "v=0", suites: [s1], wanted: { false }, placing: { named.append($0) })
+        }
+        #expect(starts.isEmpty && named.isEmpty, "no call.start, no id")
+
+        _ = try await s.start(connectionId: "conn-1", sdp: "v=0", suites: [s1], wanted: { true }, placing: { named.append($0) })
+        #expect(named == gateway.newCallIds && named.count == 1, "the start's own id, told before it went")
+    }
+
     /// `call.start` is deposited again only while the call is still wanted (0.97.0 §10.10 "Placing a call").
     @Test func aStartIsResentOnlyWhileItsCallIsStillWanted() async throws {
         let s = await c2Signalling()
