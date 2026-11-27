@@ -78,7 +78,7 @@ public enum ConnectionParser {
         i.hasPhoto = p?.hasPhoto ?? false
         i.photo = p?.photo
         i.keyFingerprint = IkFingerprint.formatB64(c.ik)
-        i.identityKey = try? Base64s.decodeStd(c.ik, Suite.ed25519PublicSize)
+        i.identityKey = ik(c.ik)
         i.createdAt = instant(c.createdAt)
         i.lastActiveAt = instant(c.lastActiveAt)
         i.asks = c.asks.map {

@@ -27,6 +27,7 @@ import VettIDVault
         #expect(i.hasPhoto && i.photo == "AAAA")
         let fingerprint = try IkFingerprint.format(Self.ik)
         #expect(i.keyFingerprint == fingerprint)
+        #expect(i.identityKey == Self.ik, "the key itself, from the same record (a form 2 call names it)")
         #expect(i.createdAt == FakeDates.date("2026-10-01T10:00:00Z") && i.lastActiveAt == FakeDates.date("2026-10-04T11:59:00Z"))
         #expect(i.asks == AskState(muted: true, paused: true, pausedAt: FakeDates.date("2026-10-03T00:00:00Z"), cooldowns: 2))
         #expect(i.sharedItems == [SharedProfileItem(itemID: "i1", name: "Phone", fields: [.init("Mobile", "+1 555"), .init("Home", "1 Main St, Springfield")])])
@@ -35,7 +36,7 @@ import VettIDVault
     @Test func beforeTheFirstProfileTheTitleIsEmptyAndTheNameIsSecondary() throws {
         let c = try #require(Connection.of(try object(#"{"id":"c2","state":"stale","name":"Sam","ik":"bad"}"#)))
         let i = ConnectionParser.connection(c)
-        #expect(i.state == .stale && i.displayName == "" && i.secondaryName == "Sam" && i.keyFingerprint == nil && i.asks == nil)
+        #expect(i.state == .stale && i.displayName == "" && i.secondaryName == "Sam" && i.keyFingerprint == nil && i.identityKey == nil && i.asks == nil)
         #expect(Connection.of(try object(#"{"state":"active"}"#)) == nil)
         #expect(ConnectionState.of("blocked") == .blocked && ConnectionState.of("new-state") == .other)
     }
