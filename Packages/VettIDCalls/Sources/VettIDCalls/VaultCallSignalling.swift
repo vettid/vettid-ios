@@ -32,7 +32,15 @@ package final class VaultCallSignalling: CallSignalling {
     /// complete, so an offer can arrive in the moments before the app shows the open vault: it rings only once it does, never
     /// over the unlock screen.
     private let mayRing: @MainActor () async -> Bool
+    /// (C2) The connection's identity key as this device's vault gives it (`connection.get`), for a form 2 start: the callee
+    /// this device names in `m2`, fixed for the call (VAULT-MESSAGING 0.88.16 §10.10). Nil for no such connection.
+    private let peerKey: @MainActor (_ connectionId: String) async -> [UInt8]?
+    /// (C2) Whether the vault is C2, as the `call.list` probe found it.
+    private let vaultIsC2: @MainActor () -> Bool
     private let clock: any CallClock
+
+    /// (C2) Whether this device's vault is C2: form 2 starts, keep-alives.
+    package var formTwo: Bool { vaultIsC2() }
 
     private var placed: [(callId: String, call: OutgoingCall)] = []
     private var ringingCalls: [(callId: String, call: IncomingCall)] = []
@@ -74,8 +82,11 @@ package final class VaultCallSignalling: CallSignalling {
     package init(
         gateway: any CallGateway, pinned: @escaping @MainActor (String) async -> String?, suites: [MediaSuite],
         refreshConnections: @escaping @MainActor () async -> Void = {}, mayRing: @escaping @MainActor () async -> Bool = { true },
+        peerKey: @escaping @MainActor (String) async -> [UInt8]? = { _ in nil }, vaultIsC2: @escaping @MainActor () -> Bool = { false },
         clock: any CallClock = SystemCallClock()
     ) {
+        self.peerKey = peerKey
+        self.vaultIsC2 = vaultIsC2
         self.gateway = gateway
         self.pinned = pinned
         self.suites = suites
@@ -185,7 +196,7 @@ package final class VaultCallSignalling: CallSignalling {
         while ringingCalls.count > Self.maxKept { ringingCalls.removeFirst() }
         return .offer(CallOffer(
             callId: call.callId, connectionId: call.connectionId, sdp: call.sdp, exp: call.exp, ringFor: .rounded(seconds: call.ringFor),
-            servers: call.ice.servers, suite: call.negotiated.chosen
+            servers: call.ice.servers, suite: call.negotiated.chosen, formTwo: call.formTwo
         ))
     }
 
@@ -268,10 +279,13 @@ package final class VaultCallSignalling: CallSignalling {
                 // A connection the app does not know: no call is placed.
                 throw CallRefusedError(code: "not_found")
             }
+            let peerIk = try await formTwoKey(connectionId)
             // Numbered just before `call.start` goes: an end lost before this cannot be this call's.
             startsBegun += 1
             let mine = startsBegun
-            call = try await gateway.start(connectionId: connectionId, pinnedFingerprint: fingerprint, sdp: sdp, suites: suites)
+            call = try await gateway.start(
+                connectionId: connectionId, pinnedFingerprint: fingerprint, sdp: sdp, suites: suites, peerIk: peerIk
+            )
             let remembered = endedWhileStarting.first { $0.callId == call.callId }
             rememberedEnd = remembered?.end
             endedAlready = remembered != nil || mine <= lostForStartsUpTo
@@ -304,7 +318,17 @@ package final class VaultCallSignalling: CallSignalling {
         for h in held where h.callId == call.callId {
             if let a = await check(answer: h.message, callId: h.callId) { emitLate(a) }
         }
-        return PlacedCall(callId: call.callId, exp: call.exp, servers: call.ice.servers)
+        return PlacedCall(callId: call.callId, exp: call.exp, servers: call.ice.servers, formTwo: call.formTwo)
+    }
+
+    /// (C2) A device that knows its vault to be C2 starts in form 2 too, naming the connection's key; nil for an S10 vault.
+    /// Without that key no call is placed: form 1 alone would leave a relay by a shared connection undetected.
+    private func formTwoKey(_ connectionId: String) async throws -> [UInt8]? {
+        guard formTwo else { return nil }
+        guard let k = await peerKey(connectionId) else {
+            throw CallSecurityError("C2 vault without the connection's identity key: no call placed")
+        }
+        return k
     }
 
     @discardableResult
@@ -327,13 +351,16 @@ package final class VaultCallSignalling: CallSignalling {
         // The suite was fixed when the offer was checked; an engine that cannot do it must not answer.
         guard suites.contains(call.negotiated.chosen) else { throw CallSecurityError("the engine cannot do the negotiated suite") }
         do {
-            return try handOver(try await gateway.answer(call, sdp: sdp))
+            // An offer in form 2 proves the vault C2 for this call, whatever the probe has found yet.
+            return try handOver(try await gateway.answer(call, sdp: sdp, keepalive: formTwo || call.formTwo))
         } catch is CallMessageError {
             throw CallSecurityError("call.answer")
         }
     }
 
     package func ringing(callId: String) async throws { try await gateway.ringing(callId) }
+
+    package func keepalive(callId: String) async throws { try await gateway.keepalive(callId) }
 
     package func ice(callId: String, candidates: [CallCandidate]) async throws { try await gateway.ice(callId, candidates) }
 

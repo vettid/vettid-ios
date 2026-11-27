@@ -31,10 +31,11 @@ stop-and-report item, never a skip.
   trees, the ballot leaf, the rows and the results of a vote; last commit touching it
   be69f910f6432a5efd4515928e0df181d1183671): copied 2026-10-31 from commit a8a968e465ca2700d23d0f4ae6d93b2813a95b93
   (the merge of vettid-vault #174), for the first votes PR; the same hash as vettid-android's copy.
-- `calls.json` (VAULT-MESSAGING §10.10, CALLS-PLAN phase C1: the call key agreement, the shares of both roles, the
-  vault-signed ICE configurations; last commit touching it 079cde77a4792f15812c5908d0fa51d68ee2313f, vettid-vault
-  #67): copied 2026-11-10 from commit 4c8bab001d532676f8db5dacd40371d601b1f982 (`main`), for calls C1 part 1; the same
-  hash as vettid-android's copy.
+- `calls.json` (VAULT-MESSAGING §10.10: the call key agreement, the shares of both roles, the vault-signed ICE
+  configurations, glare, and (C2, 0.88.16) form 2 of the shares naming both members, form 2's `k_call` and the key
+  confirmation; last commit touching it 74bb8c42fa0b37c03bb090087fb17dc3d21e2c0b, vettid-vault #226): copied
+  2026-11-27 from commit f92c0702621cbf91902ae661c64d25ae3acf2b83 (`main`), for calls C2 (`CallForm2VectorsTests.swift`); the same hash as
+  vettid-android's copy. The C1 values are unchanged (only its `description` and the new members differ).
 - `connauth_document.json` (VAULT-MESSAGING 0.89.0 §10.4 "Approval documents"; last commit touching it
   9f23d2c0cb23eb6fae04263213544e578186ff57, vettid-vault #262): copied 2026-11-16 from that commit. `JcsTests.swift`
   checks its document's canonical form, hash and document-form signature; VettIDData's `ApprovalDocumentTests.swift`
@@ -50,7 +51,7 @@ above and the hashes below, and run `swift test --package-path Packages/VettIDCr
 3a21d9d6de082476eab7744ad971f31cb47806378c5abc34e07c7839c7ff34c5  altchan.json
 a8d86c76b9469f26526f8238d41bd07a6b74fcce3da6035879fc5910c5f36427  attachment.json
 a890582a80e24cea9e10523f01f2f0040924aa47cd66cd8c442c0a1577e284b3  blob.json
-94cb55fca6b63e5983474a7b9715acd4f4d9ce8930a1a801d09efb9e73d54d01  calls.json
+fe97dbdfcf870e1200f9292972aa5b5f78c3059c0167d883be9296f383e21c40  calls.json
 eb5cda1bae3eadc90116f0eb615290701482fff8b03483cd5c288324cef5b496  connauth_document.json
 3ab4f20eebb3ec621e97d3b03705c8b3851312e99e227d423e8f0e6066887360  envelope_sealed.json
 8cbf6324c294e6c99011bd3bd5f875fcd329cbe7be1e354b7be06f3c03044827  envelope_session.json

@@ -32,7 +32,16 @@ final class ControllerGateway: CallGateway {
 
     func events() -> AsyncStream<CallEvent> { stream }
 
-    func start(connectionId: String, pinnedFingerprint: String, sdp: String, suites: [MediaSuite]) async throws -> OutgoingCall {
+    /// (C2) The keys the starts named, in order (nil: a form 1 start).
+    var startPeerIks: [[UInt8]?] = []
+    /// (C2) The `keepalive` each answer said, and the keep-alives sent.
+    var answerKeepalives: [Bool] = []
+    var keepalives: [String] = []
+
+    func start(
+        connectionId: String, pinnedFingerprint: String, sdp: String, suites: [MediaSuite], peerIk: [UInt8]?
+    ) async throws -> OutgoingCall {
+        startPeerIks.append(peerIk)
         asked.append("start(\(connectionId))")
         await startGate?.wait()
         return try startResult(connectionId, pinnedFingerprint)
@@ -42,10 +51,13 @@ final class ControllerGateway: CallGateway {
         try incomingResult(event)
     }
 
-    func answer(_ call: IncomingCall, sdp: String) async throws -> CallKeys {
+    func answer(_ call: IncomingCall, sdp: String, keepalive: Bool) async throws -> CallKeys {
         asked.append("answer(\(call.callId))")
+        answerKeepalives.append(keepalive)
         return try #require(answerKeys)
     }
+
+    func keepalive(_ callId: String) async throws { keepalives.append(callId) }
 
     func accept(_ call: OutgoingCall, event: VaultMessage) async throws -> AcceptedCall { try acceptResult(call) }
 
@@ -75,6 +87,9 @@ final class FakeCallVault: CallVault {
     var updateShowing = false
     var ownerCheckShowing = false
     var identities = ["conn-1": "aaaa bbbb"]
+    /// (C2) The connections' identity keys, and this device's id in the vault.
+    var keys: [String: [UInt8]] = ["conn-1": [UInt8](repeating: 7, count: 32)]
+    var me: String? = "dev-me"
     var firstNames = ["conn-1": "Sam"]
     private(set) var unlocked = false
     private var watchers: [AsyncStream<Bool>.Continuation] = []
@@ -101,6 +116,10 @@ final class FakeCallVault: CallVault {
     func recheck() { for r in rechecking { r.yield() } }
 
     func fingerprint(_ connectionId: String) async -> String? { identities[connectionId] }
+
+    func identityKey(_ connectionId: String) async -> [UInt8]? { keys[connectionId] }
+
+    func deviceId() async -> String? { me }
 
     func name(_ connectionId: String) -> String? { firstNames[connectionId] }
 
@@ -130,11 +149,12 @@ final class FakeMicrophone: MicrophonePermission {
 
 func record(
     _ id: String = callId, connection: String = "conn-1", direction: String = "out", state: String = "ended", reason: String? = nil,
-    startedAtMs: Int64 = 0, answeredAtMs: Int64? = nil, endedAtMs: Int64? = nil
+    startedAtMs: Int64 = 0, answeredAtMs: Int64? = nil, endedAtMs: Int64? = nil, expMs: Int64? = nil, device: String? = nil
 ) -> CallRecord {
     CallRecord(
         callId: id, connectionId: connection, direction: direction, media: "audio", state: state, reason: reason,
         startedAt: Timestamps.formatMillis(at(startedAtMs)), answeredAt: answeredAtMs.map { Timestamps.formatMillis(at($0)) },
-        endedAt: endedAtMs.map { Timestamps.formatMillis(at($0)) }
+        endedAt: endedAtMs.map { Timestamps.formatMillis(at($0)) }, exp: expMs.map { Timestamps.formatMillis(at($0)) },
+        deviceId: device
     )
 }

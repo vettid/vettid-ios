@@ -84,6 +84,11 @@ package final class ManagerVault: CallsAppVault {
 
     package func fingerprint(_ connectionId: String) async -> String? { connection(connectionId)?.keyFingerprint }
 
+    /// The key the fingerprint is of, from the same record: a form 2 call names it.
+    package func identityKey(_ connectionId: String) async -> [UInt8]? { connection(connectionId)?.identityKey }
+
+    package func deviceId() async -> String? { try? manager.callApi().device.deviceID }
+
     package func name(_ connectionId: String) -> String? { connection(connectionId).flatMap(callName) }
 
     package func firstName(_ connectionId: String) -> String? { connection(connectionId).flatMap { AccountNames.cleaned($0.firstName) } }

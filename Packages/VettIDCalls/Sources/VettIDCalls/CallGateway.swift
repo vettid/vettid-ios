@@ -11,12 +11,19 @@ package protocol CallGateway: AnyObject {
     /// Every call event, in the vault's order; offers and answers unchecked.
     func events() -> AsyncStream<CallEvent>
 
-    func start(connectionId: String, pinnedFingerprint: String, sdp: String, suites: [MediaSuite]) async throws -> OutgoingCall
+    /// [peerIk]: (C2) the connection's identity key, for a form 2 start with `keepalive`; nil for form 1 only.
+    func start(
+        connectionId: String, pinnedFingerprint: String, sdp: String, suites: [MediaSuite], peerIk: [UInt8]?
+    ) async throws -> OutgoingCall
 
     /// Verifies an offer against the connection's identity and this device's suites, or throws.
     func incoming(_ event: VaultMessage, pinnedFingerprint: String, suites: [MediaSuite]) async throws -> IncomingCall
 
-    func answer(_ call: IncomingCall, sdp: String) async throws -> CallKeys
+    /// [keepalive]: (C2) the answer says this device sends `call.keepalive`.
+    func answer(_ call: IncomingCall, sdp: String, keepalive: Bool) async throws -> CallKeys
+
+    /// (C2) `call.keepalive` for the active call [callId].
+    func keepalive(_ callId: String) async throws
 
     /// Verifies an answer against the identity the call was placed to, or throws.
     func accept(_ call: OutgoingCall, event: VaultMessage) async throws -> AcceptedCall
@@ -54,15 +61,21 @@ package final class VaultCallGateway: CallGateway {
         }
     }
 
-    package func start(connectionId: String, pinnedFingerprint: String, sdp: String, suites: [MediaSuite]) async throws -> OutgoingCall {
-        try await api().callStart(connectionId, pinnedFingerprint: pinnedFingerprint, sdp: sdp, suites: suites)
+    package func start(
+        connectionId: String, pinnedFingerprint: String, sdp: String, suites: [MediaSuite], peerIk: [UInt8]?
+    ) async throws -> OutgoingCall {
+        try await api().callStart(connectionId, pinnedFingerprint: pinnedFingerprint, sdp: sdp, suites: suites, peerIk: peerIk)
     }
 
     package func incoming(_ event: VaultMessage, pinnedFingerprint: String, suites: [MediaSuite]) async throws -> IncomingCall {
         try api().callIncoming(event, pinnedFingerprint: pinnedFingerprint, suites: suites)
     }
 
-    package func answer(_ call: IncomingCall, sdp: String) async throws -> CallKeys { try await api().callAnswer(call, sdp: sdp) }
+    package func answer(_ call: IncomingCall, sdp: String, keepalive: Bool) async throws -> CallKeys {
+        try await api().callAnswer(call, sdp: sdp, keepalive: keepalive)
+    }
+
+    package func keepalive(_ callId: String) async throws { try await api().callKeepalive(callId) }
 
     package func accept(_ call: OutgoingCall, event: VaultMessage) async throws -> AcceptedCall {
         try api().callAccept(call, event: event)

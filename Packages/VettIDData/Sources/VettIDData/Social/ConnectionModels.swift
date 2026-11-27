@@ -86,6 +86,9 @@ public struct ConnectionInfo: Equatable, Sendable, Identifiable {
     public var photo: String?
     /// The fingerprint of the peer vault's pinned identity key (§10.8: 8 groups of 4 hex digits).
     public var keyFingerprint: String?
+    /// (C2) The pinned identity key itself (32 bytes), the one ``keyFingerprint`` is of, from the same record: a form 2 call
+    /// names it (VAULT-MESSAGING 0.88.16 §10.10). Not a secret.
+    public var identityKey: [UInt8]?
     public var createdAt: Date?
     public var lastActiveAt: Date?
     /// Whether the connection's asks are muted or paused (`<connection>.asks`, 0.23.0 §10.4.1); nil from an older vault.

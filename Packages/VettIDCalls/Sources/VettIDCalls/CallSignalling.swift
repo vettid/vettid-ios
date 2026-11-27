@@ -226,6 +226,6 @@ package protocol CallSignalling: AnyObject {
 extension CallSignalling {
     package func offerable(_ suites: [MediaSuite]) -> [MediaSuite] { MediaSuite.formOne(suites) }
     package func keepalive(callId: String) async throws {}
-    /// Always false in C1: ``VaultCallSignalling`` is form 1 only.
+    /// False for a signalling that knows no vault level (the tests' fakes); ``VaultCallSignalling`` has the probe's.
     package var formTwo: Bool { false }
 }

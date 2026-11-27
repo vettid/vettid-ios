@@ -48,8 +48,10 @@ final class FakeGateway: CallGateway {
 
     func events() -> AsyncStream<CallEvent> { stream }
 
-    func start(connectionId: String, pinnedFingerprint: String, sdp: String, suites: [MediaSuite]) async throws -> OutgoingCall {
-        asked.append("start(\(connectionId), \(suites.map(\.id)))")
+    func start(
+        connectionId: String, pinnedFingerprint: String, sdp: String, suites: [MediaSuite], peerIk: [UInt8]?
+    ) async throws -> OutgoingCall {
+        asked.append("start(\(connectionId), \(suites.map(\.id))\(peerIk.map { ", ik \($0.count)" } ?? ""))")
         if startGates.isEmpty { await startGate?.wait() } else { await startGates.removeFirst().wait() }
         return try startResult(connectionId, pinnedFingerprint)
     }
@@ -59,10 +61,12 @@ final class FakeGateway: CallGateway {
         return try incomingResult(event)
     }
 
-    func answer(_ call: IncomingCall, sdp: String) async throws -> CallKeys {
-        asked.append("answer(\(call.callId))")
+    func answer(_ call: IncomingCall, sdp: String, keepalive: Bool) async throws -> CallKeys {
+        asked.append("answer(\(call.callId)\(keepalive ? ", keepalive" : ""))")
         return try #require(answerKeys)
     }
+
+    func keepalive(_ callId: String) async throws { asked.append("keepalive(\(callId))") }
 
     func accept(_ call: OutgoingCall, event: VaultMessage) async throws -> AcceptedCall {
         asked.append("accept(\(call.callId), \(call.pinnedFingerprint))")
