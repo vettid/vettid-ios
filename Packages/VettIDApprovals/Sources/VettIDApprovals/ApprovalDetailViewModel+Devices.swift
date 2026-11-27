@@ -31,14 +31,16 @@ extension ApprovalDetailViewModel {
         case .run(_, let name, _), .proxy(_, let name, _): item = name
         default: item = nil
         }
+        // A desktop's block or removal: the connection as shown, judged again by the approvals at the send (ANDROID-PLAN 0.1.145).
+        let target = shown.show.desktopTarget
         let still: @MainActor () -> Bool = { [weak self] in
             guard let self else { return false }
             let s = state
             guard case .device(let now)? = s.approval else { return false }
-            return now.sameContent(as: d) && (s.itemsRead == .read || shown.show == .catalog) && s.heldShow == shown.show
+            return now.sameContent(as: d) && (s.itemsRead == .read || shown.show.namesNoItem) && s.heldShow == shown.show
         }
         decideHeld(key: PendingApproval.device(d).key, generation: shown.generation) { [weak self, repo] _ in
-            let r = try await repo.approveDeviceRequest(d, generation: shown.generation, stillShown: still).result
+            let r = try await repo.approveDeviceRequest(d, generation: shown.generation, target: target, stillShown: still).result
             // Only a run or a proxy is referred again (§6.8 step 4): not done, the new approval is a new decision. For any other op
             // `referred` is a result like the rest (AA5's "Approved, but your vault answered: referred.").
             if r == "referred", way != nil { return .referred }
@@ -182,7 +184,7 @@ extension ApprovalDetailState {
     /// What a request an agent holds for approval shows and allows, from the item list; nil for any other request.
     public var heldShow: HeldShow? {
         guard case .device(let d)? = approval, DeviceAsks.isHeld(d) else { return nil }
-        return DeviceAsks.show(d, items: heldItems, read: itemsRead)
+        return DeviceAsks.show(d, items: heldItems, read: itemsRead, connections: heldConnections)
     }
 
     /// Where a run's `cwd` (without `member_folder`) stands (AA8 "Fail closed"): nil when it has none, or once the item's

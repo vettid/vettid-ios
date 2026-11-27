@@ -124,8 +124,11 @@ public protocol ApprovalsRepository: ConnectionRequestsRepository {
     /// list, that changed since it was shown; ``FailureKind/notSupported`` for what this version does not approve (an op it
     /// cannot show, a run whose `cwd` the settings do not allow); ``FailureKind/notFound`` for one that is gone. The vault's
     /// `result` is the answer; a request referred again (`referred`) leaves, the new one comes as a new approval.
+    ///
+    /// [target]: for a desktop's held block or removal, its connection as the screen named it (ANDROID-PLAN 0.1.145, 0.1.146):
+    /// approved only while the connection list names it the same way, judged here as well as by [stillShown].
     func approveDeviceRequest(
-        _ shown: DeviceRequest, generation: Int, stillShown: @escaping @MainActor () -> Bool
+        _ shown: DeviceRequest, generation: Int, target: DesktopTargets.Shown?, stillShown: @escaping @MainActor () -> Bool
     ) async throws -> DeviceDecision
     /// AA8 "Fail closed": whether a run of [itemID] with a `cwd` and no `member_folder` may be approved for [agentID], from the
     /// item's settings read now: only when they carry `run` without `folders`. nil: the read failed (a retry may answer).
@@ -151,4 +154,13 @@ public protocol ApprovalsRepository: ConnectionRequestsRepository {
     func askDeviceSessions() -> DeviceSessionsAsk
     /// "Deny and end access now": `device.session.end{device_id}` alone; the device's asks leave with it.
     func endDeviceAccess(_ deviceID: String) async throws
+}
+
+extension ApprovalsRepository {
+    /// ``approveDeviceRequest(_:generation:target:stillShown:)`` for a request that names no connection.
+    public func approveDeviceRequest(
+        _ shown: DeviceRequest, generation: Int, stillShown: @escaping @MainActor () -> Bool
+    ) async throws -> DeviceDecision {
+        try await approveDeviceRequest(shown, generation: generation, target: nil, stillShown: stillShown)
+    }
 }

@@ -135,6 +135,8 @@ public struct ApprovalDetailState: Equatable, Sendable, CustomStringConvertible,
     public var endRequest: PendingApproval?
     /// The member's items with their fields' labels, to name what an agent's request is about (AA5, AA8); the Vault list.
     public var heldItems: [ItemSummary] = []
+    /// The connection list, which names a desktop's held block or removal (ANDROID-PLAN 0.1.145).
+    public var heldConnections: [ConnectionInfo] = []
     /// How far the item list has been read: until it is, a request's item is "Loading…" (or, after a failed read, not
     /// named), and Approve is off.
     public var itemsRead: ItemsRead = .read
@@ -172,9 +174,10 @@ public struct ApprovalDetailState: Equatable, Sendable, CustomStringConvertible,
         return switch approval {
         case nil: false
         // An agent's held request: only what is shown in full, once the item list says what it is about (AA5, AA8).
-        // A catalog names no item: approved without the list (``HeldApprovals/nameable(_:_:)`` holds for it whatever the list).
+        // A catalog, or a desktop's block or removal (named from the connection list), names no item: approved without the
+        // item list (``HeldApprovals/nameable(_:_:)`` holds for them whatever the list).
         // A run's `cwd` only once its rule allows it (``cwdCheck``).
-        case .device?: heldShow?.approvable == true && (itemsRead == .read || heldShow == .catalog) && cwdCheck == nil
+        case .device?: heldShow?.approvable == true && (itemsRead == .read || heldShow?.namesNoItem == true) && cwdCheck == nil
         case .grant?: !grantIndexes.isEmpty
         // 0.10.3: only once the safety code is known, and only once per member.
         case .connection(.incoming(let r))?: r.state == .pending
@@ -322,6 +325,7 @@ public final class ApprovalDetailViewModel {
             s.approval = now ?? local.approval
         }
         sessions(&s)
+        s.heldConnections = connections?.connections ?? []
         let connection = s.approval.flatMap(Self.connectionID).flatMap { id in connections?.connections.first { $0.id == id } }
         s.connectionName = AccountNames.cleaned(connection?.displayName)
         s.connectionKnown = connection != nil

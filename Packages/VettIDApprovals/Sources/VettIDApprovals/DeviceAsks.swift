@@ -20,15 +20,34 @@ public enum HeldShow: Equatable, Sendable, CustomStringConvertible {
     /// The item list could not be read, so what the request is about cannot be named, nor said to be gone: deny only until a
     /// read answers.
     case itemsUnread
+    /// (ANDROID-PLAN 0.1.145) A desktop's held block ([remove] false) or removal of a connection the list names: how it is
+    /// named ([target]: its name cleaned, whether it is a service, and (0.1.146) the day it was connected when a namesake is
+    /// listed), and a block's note cleaned with its lines kept (nil without one, or none once cleaned).
+    case desktopConnection(remove: Bool, target: DesktopTargets.Shown, note: String?)
     case desktop
     case other
 
     /// Whether Approve is offered.
     public var approvable: Bool {
         switch self {
-        case .use, .get, .catalog, .run, .proxy: true
+        case .use, .get, .catalog, .run, .proxy, .desktopConnection: true
         default: false
         }
+    }
+
+    /// Whether it names no item, so it is shown and approved whatever the item list (a catalog; a desktop's block or removal,
+    /// named from the connection list).
+    public var namesNoItem: Bool {
+        switch self {
+        case .catalog, .desktopConnection: true
+        default: false
+        }
+    }
+
+    /// A desktop's block or removal: its connection as shown; nil for anything else.
+    public var desktopTarget: DesktopTargets.Shown? {
+        if case .desktopConnection(_, let t, _) = self { return t }
+        return nil
     }
 
     /// Never what the agent chose.
@@ -68,7 +87,17 @@ public enum DeviceAsks {
     /// (what names an item and its fields), and a run or a proxy (which name one too, AA8), is ``HeldShow/itemsUnread``, so the
     /// screen says why Approve is off and offers Try again; a catalog names no item and needs no list
     /// (``ApprovalDetailState/canApprove(at:)``).
-    public static func show(_ d: DeviceRequest, items: [ItemSummary], read: ItemsRead = .read) -> HeldShow {
+    /// [connections]: the connection list, which names a desktop's block or removal (``DesktopTargets``); [calendar]: the day
+    /// a namesake's connection is told apart by.
+    public static func show(
+        _ d: DeviceRequest, items: [ItemSummary], read: ItemsRead = .read, connections: [ConnectionInfo] = [],
+        calendar: Calendar = .current
+    ) -> HeldShow {
+        if case .desktopConnection(let h)? = d.held {
+            // Unresolved (not listed as active or stale, no name, or a namesake the date cannot tell apart): the deny-only row.
+            guard let target = DesktopTargets.shown(h, connections, calendar: calendar) else { return .desktop }
+            return .desktopConnection(remove: h.remove, target: target, note: AccountNames.cleanedLines(h.note))
+        }
         let shown = showLoaded(d, items)
         switch (shown, read) {
         case (_, .read): return shown
@@ -113,7 +142,7 @@ public enum DeviceAsks {
         case .itemProxy(let p)?:
             guard case let (name, field)? = named(item(p.itemID), p.fieldID) else { return .noItem(use: true, loading: false) }
             return .proxy(p, item: name, field: field)
-        case .desktopStepUp?: return .desktop
+        case .desktopStepUp?, .desktopConnection?: return .desktop
         case .unshown?, nil: return .other
         }
     }

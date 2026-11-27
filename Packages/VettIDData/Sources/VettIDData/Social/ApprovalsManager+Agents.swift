@@ -18,7 +18,8 @@ extension ApprovalsManager {
     /// AA8: an approval a `pending.list` read showed otherwise than its event is deny only.
     func denyIfDiffering(_ a: PendingApproval) -> PendingApproval {
         guard case .device(var d) = a, mismatched.contains(a.key) else { return a }
-        d.held = .unshown
+        // A desktop's keeps the desktop deny-only row (ANDROID-PLAN 0.1.145 "fail closed"); any other is unshown.
+        d.held = d.role == "desktop" ? .desktopStepUp : .unshown
         return .device(d)
     }
 

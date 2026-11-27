@@ -138,7 +138,9 @@ public enum AgentApprovals {
     /// for a use, a reveal and a catalog (chosen; not in the spec, and accepted by the owner: stricter than vettid-android,
     /// which does not check it).
     private static func named(_ p: JsonObject) -> Bool {
-        guard let device = str(p, "device_id"), !device.isEmpty, let name = str(p, "name"), !name.isEmpty else { return false }
+        // Non-blank (AA8 0.1.139): an id of only White_Space names no device (vettid-android's `isNullOrBlank`).
+        guard let device = str(p, "device_id"), !device.unicodeScalars.allSatisfy(\.properties.isWhitespace),
+              let name = str(p, "name"), !name.isEmpty else { return false }
         return ApprovalParser.instant(str(p, "exp")) != nil
     }
 

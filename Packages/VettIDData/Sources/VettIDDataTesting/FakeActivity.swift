@@ -233,7 +233,7 @@ public final class FakeApprovals: ApprovalsRepository {
         drop(key)
     }
 
-    /// What ``approveDeviceRequest(_:generation:stillShown:)`` answers (`approval.decide`'s `result`).
+    /// What ``approveDeviceRequest(_:generation:target:stillShown:)`` answers (`approval.decide`'s `result`).
     public var deviceResult: String? = "ok"
     /// What the last approval was given: the request, the generation, and what its check said when it was called. As the
     /// manager does, an approval whose generation is not ``forgetCount`` or whose check says no is refused
@@ -243,11 +243,11 @@ public final class FakeApprovals: ApprovalsRepository {
     public var duringDeviceApproval: (@MainActor () -> Void)?
 
     public func approveDeviceRequest(
-        _ shown: DeviceRequest, generation: Int, stillShown: @escaping @MainActor () -> Bool
+        _ shown: DeviceRequest, generation: Int, target: DesktopTargets.Shown?, stillShown: @escaping @MainActor () -> Bool
     ) async throws -> DeviceDecision {
         let key = PendingApproval.device(shown).key
         let still = stillShown()
-        lastDeviceApproval = DeviceApprovalCall(shown: shown, generation: generation, stillShown: still)
+        lastDeviceApproval = DeviceApprovalCall(shown: shown, generation: generation, stillShown: still, target: target)
         guard generation == forgetCount, still else {
             calls.append("approveDeviceRequest:changed:\(key)")
             throw VaultFailure(.requestChanged)
@@ -345,9 +345,11 @@ public final class FakeApprovals: ApprovalsRepository {
     public func declineOutgoing(_ connectionID: String) async throws { try await connections.declineOutgoing(connectionID) }
 }
 
-/// TEST ONLY. What ``FakeApprovals/approveDeviceRequest(_:generation:stillShown:)`` was given; [stillShown] what its check said.
+/// TEST ONLY. What ``FakeApprovals/approveDeviceRequest(_:generation:target:stillShown:)`` was given; [stillShown] what its check said.
 public struct DeviceApprovalCall: Sendable {
     public var shown: DeviceRequest
     public var generation: Int
     public var stillShown: Bool
+    /// The connection a desktop's block or removal was shown naming.
+    public var target: DesktopTargets.Shown?
 }

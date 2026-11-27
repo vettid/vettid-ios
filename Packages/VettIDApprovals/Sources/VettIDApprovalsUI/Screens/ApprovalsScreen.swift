@@ -212,7 +212,11 @@ struct ApprovalRow: View {
             emphasized: approval.needsDecision,
             service: service,
             onTap: { onOpen(approval.key) }
-        )
+        ) {
+            // (ANDROID-PLAN 0.1.145) A desktop's block or removal of a service: the label beside the service's name, not the
+            // desktop's.
+            if case .desktopConnection(_, let target, _)? = held, target.service { DesktopServiceLine(target: target) }
+        }
         .accessibilityIdentifier("approval_\(approval.key)")
     }
 
