@@ -161,7 +161,10 @@ package final class CallMachine {
     package func ringStopped(seq: Int) { post(.ringOver(seq: seq)) }
 
     /// The vault is being locked: a live call ends.
-    package func vaultLocking() { post(.hangUp(.locked)) }
+    package func vaultLocking() {
+        session?.locking = true
+        post(.hangUp(.locked))
+    }
 
     package func setMuted(_ muted: Bool) { post(.mute(muted)) }
 

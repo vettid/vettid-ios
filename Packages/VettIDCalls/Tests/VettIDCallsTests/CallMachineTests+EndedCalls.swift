@@ -206,8 +206,8 @@ extension CallMachineTests {
         let second = try #require(signalling.startWanted)
         #expect(second())
         m.vaultLocking()
+        #expect(!second(), "the vault locking, before its hang-up is handled")
         await runCurrent()
-        #expect(!second(), "the vault locking")
         signalling.releaseStart()
         await runCurrent()
     }

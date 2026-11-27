@@ -29,7 +29,7 @@ extension CallMachine {
                 do {
                     // Still wanted while this call is the current one: a hang-up or a lock meanwhile places nothing more.
                     let placed = try await signalling.start(
-                        connectionId: connectionId, sdp: sdp, suites: offered, wanted: { [weak self] in self?.session === s }
+                        connectionId: connectionId, sdp: sdp, suites: offered, wanted: { [weak self] in self?.session === s && !s.locking }
                     )
                     post(.placed(seq: s.seq, placed, atMs: clock.elapsedMs()))
                 } catch let e as CallRefusedError {

@@ -21,15 +21,22 @@ extension VaultDevice {
         guard await requestMayGo(type) else { throw OutboxHeld() }
         _ = try await countingSend(type) { try await sendOnceUnlocked(id: id, type: type, body: body, exp: exp) }
         let total = timeout ?? cfg.requestTimeout(for: type)
-        var waited: TimeInterval = 0
-        for at in resendAfter.sorted() where at > waited && at < total {
-            if let inner = await d.wait(timeout: at - waited) { return VaultMessage(inner: countingAnswer(type, inner)) }
-            try Task.checkCancellation()
-            waited = at
-            // Held by the lock gate meanwhile: not deposited again, and the wait goes on to its end.
-            if await requestMayGo(type) { _ = try? await sendOnceUnlocked(id: id, type: type, body: body, exp: exp) }
+        // The times count from the first deposit, on a clock that cannot be set back: a slow resend delays neither the next
+        // one nor the end of the wait (each resend is deposited beside the wait, not in it).
+        let sent = ContinuousClock.now
+        func left(until at: TimeInterval) -> TimeInterval {
+            let elapsed = sent.duration(to: .now)
+            return max(0, at - Double(elapsed.components.seconds) - Double(elapsed.components.attoseconds) / 1e18)
         }
-        guard let inner = await d.wait(timeout: total - waited) else {
+        for at in resendAfter.sorted() where at > 0 && at < total {
+            if let inner = await d.wait(timeout: left(until: at)) { return VaultMessage(inner: countingAnswer(type, inner)) }
+            try Task.checkCancellation()
+            // Held by the lock gate meanwhile: not deposited again, and the wait goes on to its end.
+            if await requestMayGo(type) {
+                Task { _ = try? await self.sendOnceUnlocked(id: id, type: type, body: body, exp: exp) }
+            }
+        }
+        guard let inner = await d.wait(timeout: left(until: total)) else {
             try Task.checkCancellation()
             countingNoAnswer(type)
             throw VaultStateError(message: "\(type): no response")

@@ -67,6 +67,20 @@ extension VaultDeviceTests {
         #expect(await relay.noDeposit(within: 0.5), "kept: no hang-up, no new call.start")
     }
 
+    /// The times count from the first deposit: a resend the relay is slow to take does not delay the end of the wait.
+    @Test func aSlowResendDoesNotDelayTheEndOfTheWait() async throws {
+        let (d, v) = try await pairedDevice()
+        let began = ContinuousClock.now
+        let waiting = Task { try await d.requestOnce("call.start", timeout: 1, resendAfter: [0.3]) }
+        #expect(try v.open(try await relay.nextDeposit().payload).type == "call.start")
+        let gate = FakeHTTPServer.Gate()
+        relay.holdDeposits = gate
+        await #expect(throws: VaultStateError.self) { _ = try await waiting.value }
+        #expect(began.duration(to: .now) < .milliseconds(1800), "ended at its time, not after the stalled resend")
+        gate.open()
+        relay.holdDeposits = nil
+    }
+
     /// The lock gate shut after the first deposit: nothing is deposited again, and the wait goes on to its end.
     @Test func aResendIsHeldByTheLockGate() async throws {
         let (d, v) = try await pairedDevice()
@@ -77,8 +91,9 @@ extension VaultDeviceTests {
         await #expect(throws: (any Error).self) { _ = try await starting.value }
         d.setFlushGate { true }
         // Only the hang-up may follow (the lock gate lets it through, VaultRequestGateTests): no second call.start.
-        let next = try? v.open(try await relay.nextDeposit(timeout: 1).payload)
-        #expect(next.map { $0.type != "call.start" } ?? true)
+        let next = try v.open(try await relay.nextDeposit(timeout: 2).payload)
+        #expect(next.type == "call.end", "the hang-up, and no second call.start before it")
+        #expect(await relay.noDeposit(within: 0.5))
     }
 }
 
