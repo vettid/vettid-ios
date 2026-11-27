@@ -250,6 +250,33 @@ extension CallMachineTests {
         await runCurrent()
     }
 
+    /// The vault's own end for the call while its `call.start` is still out (the callee declined at once, say): the call ends
+    /// now, as the vault says, with nothing sent. A glare's end (naming its winner) still waits for the start's answer.
+    @Test func theVaultsEndForAPendingStartEndsTheCallAtOnce() async throws {
+        let pending = "01JB2Z6V9K3M4N5P6Q7R8S9PND"
+        signalling.startCallId = pending
+        let m = machine()
+        signalling.holdStart()
+        m.call("conn-1")
+        await runCurrent()
+        signalling.deliver(.end(callId: pending, reason: CallReason.decline))
+        await runCurrent()
+        #expect(try ended(m).reason == .declined)
+        #expect(!hasSent(signalling, "end("), "the vault ended it: nothing to send")
+        signalling.releaseStart()
+        await runCurrent()
+
+        signalling.sent.removeAll()
+        signalling.holdStart()
+        m.call("conn-1")
+        await runCurrent()
+        signalling.deliver(.end(callId: pending, reason: CallReason.busy, supersededBy: glareId))
+        await runCurrent()
+        #expect(try live(m).direction == .outgoing, "a glare's end waits for the start's answer")
+        signalling.releaseStart()
+        await runCurrent()
+    }
+
     /// Once the start has returned, its own answer says what is to end: a refusal sends nothing more.
     @Test func aRefusedStartSendsNoEndForItsId() async throws {
         let pending = "01JB2Z6V9K3M4N5P6Q7R8S9PND"

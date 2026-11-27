@@ -120,6 +120,18 @@ extension CallMachine {
         }
     }
 
+    /// (0.97.0 §10.10 "Placing a call") The vault's own end for the call whose `call.start` is still out, known by the id
+    /// the start named before it went: the call ends now, as the vault says, and nothing is sent for it. Not only once the
+    /// start returns. A glare's end (one naming its winner) is held for the start's answer as before (``CallSession/early``):
+    /// what it means depends on the offers held with it.
+    func endsPendingStart(_ s: CallSession, _ e: SignalEvent) -> Bool {
+        guard case .end(let id, let reason, let by) = e, by == nil, s.callId == nil, s.supersededBy == nil,
+              let starting = s.startingCallId, id == starting else { return false }
+        s.startingCallId = nil
+        finish(s, ended(s, reason), nil)
+        return true
+    }
+
     func rememberEndedOther(_ callId: String) {
         endedOthers.removeAll { $0 == callId }
         endedOthers.append(callId)
