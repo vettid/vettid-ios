@@ -146,14 +146,35 @@ extension VaultDeviceTests {
         let (d, v) = try await pairedDevice()
         let gate = FakeHTTPServer.Gate()
         relay.holdDeposits = gate
-        let waiting = Task { try await d.requestOnce("call.start", timeout: 0.5, answerGrace: 3) }
+        // The grace counts from the deposit's return (2 s in), not from the end of the 0.5 s wait: the answer comes 0.7 s
+        // after the return, past 0.5 + 1.2 s but within 2 + 1.2 s.
+        let waiting = Task { try await d.requestOnce("call.start", timeout: 0.5, answerGrace: 1.2) }
+        let first = try v.open(try await relay.nextDeposit().payload)
+        try await Task.sleep(for: .seconds(2))
+        relay.holdDeposits = nil
+        gate.open()
+        try await Task.sleep(for: .milliseconds(700))
+        try await d.handle(try v.seal("call.start", #"{"ok":1}"#, re: first.id, status: Inner.statusOK))
+        #expect(try await waiting.value.inner.re == first.id)
+    }
+
+    /// `call.start` waits with its grace: an answer 1 s after a first deposit that outlasted the whole wait places the call.
+    @Test func callStartWaitsWithItsGrace() async throws {
+        let (d, v) = try await pairedDevice()
+        let api = VaultApi(device: d)
+        let gate = FakeHTTPServer.Gate()
+        relay.holdDeposits = gate
+        let starting = Task { try await api.callStart("conn-1", pinnedFingerprint: Self.callFp, sdp: Self.callSdp, timeout: 0.5, resendAfter: []) }
         let first = try v.open(try await relay.nextDeposit().payload)
         try await Task.sleep(for: .seconds(1))
         relay.holdDeposits = nil
         gate.open()
-        try await Task.sleep(for: .milliseconds(500))
-        try await d.handle(try v.seal("call.start", #"{"ok":1}"#, re: first.id, status: Inner.statusOK))
-        #expect(try await waiting.value.inner.re == first.id)
+        try await Task.sleep(for: .seconds(1))
+        let callId = try StrictJson.parseObject(first.body).string("call_id")
+        let exp = try millis(Date().addingTimeInterval(45))
+        let answer = try iceBody(JsonBuilder().string("call_id", callId).string("exp", ts(exp)), v, callId).build()
+        try await d.handle(try v.seal("call.start", answer, re: first.id, status: Inner.statusOK))
+        #expect(try await starting.value.callId == callId)
         #expect(CallLimits.startAnswerGrace == 5)
     }
 
