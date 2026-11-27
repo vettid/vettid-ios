@@ -14,9 +14,10 @@ package protocol CallGateway: AnyObject {
     // swiftlint:disable function_parameter_count
     /// [peerIk]: (C2) the connection's identity key, for a form 2 start with `keepalive`; nil for form 1 only. [mayResend]:
     /// whether `call.start` may still be deposited again (the call still wanted). [callId]: the call's id, from ``newCallId()``.
+    /// [timeout]: how long to wait for its answer (nil: ``CallLimits/startTimeout``).
     func start(
         connectionId: String, callId: String, pinnedFingerprint: String, sdp: String, suites: [MediaSuite], peerIk: [UInt8]?,
-        mayResend: @escaping @Sendable () async -> Bool
+        timeout: TimeInterval?, mayResend: @escaping @Sendable () async -> Bool
     ) async throws -> OutgoingCall
 
     /// A new `call_id` for a `call.start` (the vault's request ids: their order is the glare's, VAULT-MESSAGING §10.10).
@@ -71,11 +72,11 @@ package final class VaultCallGateway: CallGateway {
     // swiftlint:disable:next function_parameter_count
     package func start(
         connectionId: String, callId: String, pinnedFingerprint: String, sdp: String, suites: [MediaSuite], peerIk: [UInt8]?,
-        mayResend: @escaping @Sendable () async -> Bool
+        timeout: TimeInterval?, mayResend: @escaping @Sendable () async -> Bool
     ) async throws -> OutgoingCall {
         try await api().callStart(
-            connectionId, callId: callId, pinnedFingerprint: pinnedFingerprint, sdp: sdp, suites: suites, peerIk: peerIk,
-            mayResend: mayResend
+            connectionId, callId: callId, pinnedFingerprint: pinnedFingerprint, sdp: sdp, suites: suites,
+            timeout: timeout ?? CallLimits.startTimeout, peerIk: peerIk, mayResend: mayResend
         )
     }
 

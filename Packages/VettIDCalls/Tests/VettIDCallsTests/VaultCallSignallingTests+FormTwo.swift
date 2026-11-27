@@ -168,6 +168,38 @@ extension VaultCallSignallingTests {
         #expect(starts.count == 1)
     }
 
+    /// One deadline for the tap: the re-place waits only for what is left of the first start's 30 s, and with nothing left
+    /// there is no re-place.
+    @Test func aReplaceHasOnlyWhatIsLeftOfTheFirstStartsWait() async throws {
+        for (refusedAt, replaced) in [(25_000 as Int64, true), (31_000, false)] {
+            gateway.asked.removeAll()
+            gateway.startTimeouts.removeAll()
+            let s = await c2Signalling()
+            let first = Gate()
+            gateway.startGates = [first]
+            var tries = 0
+            gateway.startResult = { [unowned self] in
+                tries += 1
+                if tries == 1 { throw badRequest() }
+                return try outgoingCall($0, pinned: $1)
+            }
+            let starting = Task { try await s.start(connectionId: "conn-1", sdp: "v=0", suites: [s1], wanted: { true }, placing: { _ in }) }
+            await clock.runCurrent()
+            await clock.advance(by: refusedAt)
+            first.open()
+            let result = await starting.result
+            if replaced {
+                #expect((try? result.get()) != nil)
+                #expect(gateway.startTimeouts.count == 2 && gateway.startTimeouts[0] == nil)
+                let left = try #require(gateway.startTimeouts.last ?? nil)
+                #expect(abs(left - 5) < 0.01, "30 s less the 25 s the first start took")
+            } else {
+                #expect(throws: CallRefusedError.self) { try result.get() }
+                #expect(starts.count == 1, "no time left: no re-place")
+            }
+        }
+    }
+
     /// The connection's key gone after the refresh: no call at all, never one in form 1.
     @Test func aKeyGoneAfterTheRefreshPlacesNoCall() async throws {
         var key: [UInt8]? = [UInt8](repeating: 7, count: 32)

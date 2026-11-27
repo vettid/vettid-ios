@@ -35,6 +35,8 @@ final class FakeGateway: CallGateway {
     var startGates: [Gate] = []
     /// The last start's [mayResend]: whether `call.start` may still be deposited again.
     var startMayResend: (@Sendable () async -> Bool)?
+    /// Each start's wait (nil: the default 30 s).
+    var startTimeouts: [TimeInterval?] = []
     var answerKeys: CallKeys?
     var acceptGate: Gate?
 
@@ -53,8 +55,9 @@ final class FakeGateway: CallGateway {
     // swiftlint:disable:next function_parameter_count
     func start(
         connectionId: String, callId: String, pinnedFingerprint: String, sdp: String, suites: [MediaSuite], peerIk: [UInt8]?,
-        mayResend: @escaping @Sendable () async -> Bool
+        timeout: TimeInterval?, mayResend: @escaping @Sendable () async -> Bool
     ) async throws -> OutgoingCall {
+        startTimeouts.append(timeout)
         startMayResend = mayResend
         asked.append("start(\(connectionId), \(suites.map(\.id))\(peerIk.map { ", ik \($0.count)" } ?? ""))")
         if startGates.isEmpty { await startGate?.wait() } else { await startGates.removeFirst().wait() }

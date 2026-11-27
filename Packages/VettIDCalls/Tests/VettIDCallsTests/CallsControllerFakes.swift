@@ -41,7 +41,7 @@ final class ControllerGateway: CallGateway {
     // swiftlint:disable:next function_parameter_count
     func start(
         connectionId: String, callId: String, pinnedFingerprint: String, sdp: String, suites: [MediaSuite], peerIk: [UInt8]?,
-        mayResend: @escaping @Sendable () async -> Bool
+        timeout: TimeInterval?, mayResend: @escaping @Sendable () async -> Bool
     ) async throws -> OutgoingCall {
         startPeerIks.append(peerIk)
         asked.append("start(\(connectionId))")

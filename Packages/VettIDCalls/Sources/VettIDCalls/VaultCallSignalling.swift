@@ -350,6 +350,8 @@ package final class VaultCallSignalling: CallSignalling {
         // A hang-up or a lock meanwhile: `call.start` is not deposited again (0.97.0 §10.10 "Placing a call").
         let mayResend: @Sendable () async -> Bool = { await wanted() }
         let peerIk = try await formTwoKey(connectionId, shownAs: fingerprint)
+        // One deadline for the tap: a re-place has only what is left of the first start's wait.
+        let began = clock.elapsedMs()
         // Numbered just before `call.start` goes: an end lost before this cannot be this call's.
         startsBegun += 1
         let first = startsBegun
@@ -360,19 +362,22 @@ package final class VaultCallSignalling: CallSignalling {
             placing(callId)
             let call = try await gateway.start(
                 connectionId: connectionId, callId: callId, pinnedFingerprint: fingerprint, sdp: sdp, suites: suites,
-                peerIk: peerIk, mayResend: mayResend
+                peerIk: peerIk, timeout: nil, mayResend: mayResend
             )
             return (call, first)
         } catch let e as VaultOpError where peerIk != nil && e.code == "bad_request" {
             // After an `identity.rotate` the connection is shown by its new key: both are read again, together.
             guard let (shown, again) = try await refreshed(connectionId, wanted) else { throw e }
+            // The first start's 30 s, less what it and the refresh took: none left, the call ends as the first refusal says.
+            let left = CallLimits.startTimeout - Double(clock.elapsedMs() - began) / 1000
+            guard left > 0 else { throw e }
             startsBegun += 1
             let mine = startsBegun
             let callId = try gateway.newCallId()
             placing(callId)
             let call = try await gateway.start(
                 connectionId: connectionId, callId: callId, pinnedFingerprint: shown, sdp: sdp, suites: suites, peerIk: again,
-                mayResend: mayResend
+                timeout: left, mayResend: mayResend
             )
             return (call, mine)
         }
