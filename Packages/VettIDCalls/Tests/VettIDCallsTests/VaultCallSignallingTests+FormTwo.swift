@@ -152,6 +152,22 @@ extension VaultCallSignallingTests {
         #expect(await !mayResend(), "hung up or locking: no resend")
     }
 
+    /// The connection itself gone after the refresh (removed meanwhile): no second start, and the call shows as unavailable,
+    /// as for a connection the app does not know, not as one that could not be encrypted.
+    @Test func aConnectionGoneAfterTheRefreshIsUnavailable() async throws {
+        onRefresh = { [unowned self] in identities["conn-1"] = nil }
+        let s = await c2Signalling()
+        gateway.startResult = { [unowned self] _, _ in throw badRequest() }
+        do {
+            _ = try await s.start(connectionId: "conn-1", sdp: "v=0", suites: [s1], wanted: { true }, placing: { _ in })
+            Issue.record("expected a refusal")
+        } catch let e as CallRefusedError {
+            #expect(e.code == "not_found")
+            #expect(CallMachine.refusal(e.code) == .unavailable)
+        }
+        #expect(starts.count == 1)
+    }
+
     /// The connection's key gone after the refresh: no call at all, never one in form 1.
     @Test func aKeyGoneAfterTheRefreshPlacesNoCall() async throws {
         var key: [UInt8]? = [UInt8](repeating: 7, count: 32)

@@ -385,7 +385,9 @@ package final class VaultCallSignalling: CallSignalling {
         guard wanted() else { return nil }
         await within(Self.refreshTimeout, refreshConnections)
         guard wanted() else { return nil }
-        guard let shown = await pinned(connectionId) else { throw CallSecurityError("the connection is gone: no call placed") }
+        // Gone meanwhile (removed, or ended by the other member): no call is placed, shown as for a connection the app does not
+        // know, as on the first start (`not_found`: unavailable), not as a call that could not be encrypted.
+        guard let shown = await pinned(connectionId) else { throw CallRefusedError(code: "not_found") }
         guard let k = try await formTwoKey(connectionId, shownAs: shown) else {
             throw CallSecurityError("the connection's identity key is gone: no call placed")
         }
