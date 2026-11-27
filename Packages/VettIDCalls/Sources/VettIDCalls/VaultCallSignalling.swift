@@ -267,6 +267,12 @@ package final class VaultCallSignalling: CallSignalling {
     }
 
     package func start(connectionId: String, sdp: String, suites: [MediaSuite]) async throws -> PlacedCall {
+        try await start(connectionId: connectionId, sdp: sdp, suites: suites, wanted: { true })
+    }
+
+    package func start(
+        connectionId: String, sdp: String, suites: [MediaSuite], wanted: @escaping @MainActor () -> Bool
+    ) async throws -> PlacedCall {
         starting += 1
         let call: OutgoingCall
         let endedAlready: Bool
@@ -279,13 +285,8 @@ package final class VaultCallSignalling: CallSignalling {
                 // A connection the app does not know: no call is placed.
                 throw CallRefusedError(code: "not_found")
             }
-            let peerIk = try await formTwoKey(connectionId)
-            // Numbered just before `call.start` goes: an end lost before this cannot be this call's.
-            startsBegun += 1
-            let mine = startsBegun
-            call = try await gateway.start(
-                connectionId: connectionId, pinnedFingerprint: fingerprint, sdp: sdp, suites: suites, peerIk: peerIk
-            )
+            let mine: Int
+            (call, mine) = try await placeOnce(connectionId, fingerprint, sdp, suites, wanted)
             let remembered = endedWhileStarting.first { $0.callId == call.callId }
             rememberedEnd = remembered?.end
             endedAlready = remembered != nil || mine <= lostForStartsUpTo
@@ -327,6 +328,47 @@ package final class VaultCallSignalling: CallSignalling {
         guard formTwo else { return nil }
         guard let k = await peerKey(connectionId) else {
             throw CallSecurityError("C2 vault without the connection's identity key: no call placed")
+        }
+        return k
+    }
+
+    /// The `call.start` of one tap, and the number of the start that placed it. (C2, VAULT-MESSAGING §10.10 "Signed
+    /// key-exchange shares") A form 2 start refused `bad_request` is placed once more, with a new `call_id`, after this device
+    /// has refreshed both keys it names (this vault's, read again by the start; the connection's, from the vault's list read
+    /// again): an `identity.rotate` during the first start. Only once, in form 2 again, and only while the call is still
+    /// [wanted]; a second refusal ends the call as the first would have.
+    private func placeOnce(
+        _ connectionId: String, _ fingerprint: String, _ sdp: String, _ suites: [MediaSuite], _ wanted: @MainActor () -> Bool
+    ) async throws -> (OutgoingCall, Int) {
+        let peerIk = try await formTwoKey(connectionId)
+        // Numbered just before `call.start` goes: an end lost before this cannot be this call's.
+        startsBegun += 1
+        let first = startsBegun
+        do {
+            let call = try await gateway.start(
+                connectionId: connectionId, pinnedFingerprint: fingerprint, sdp: sdp, suites: suites, peerIk: peerIk
+            )
+            return (call, first)
+        } catch let e as VaultOpError where peerIk != nil && e.code == "bad_request" {
+            guard let again = try await refreshedKey(connectionId, wanted) else { throw e }
+            startsBegun += 1
+            let mine = startsBegun
+            let call = try await gateway.start(
+                connectionId: connectionId, pinnedFingerprint: fingerprint, sdp: sdp, suites: suites, peerIk: again
+            )
+            return (call, mine)
+        }
+    }
+
+    /// The connection's key for the form 2 re-place, read after the connections are read again (at most ``refreshTimeout``);
+    /// nil when the call is no longer [wanted], before or after the refresh. Never nil for a key that is gone: then no call is
+    /// placed at all, and never one in form 1.
+    private func refreshedKey(_ connectionId: String, _ wanted: @MainActor () -> Bool) async throws -> [UInt8]? {
+        guard wanted() else { return nil }
+        await within(Self.refreshTimeout, refreshConnections)
+        guard wanted() else { return nil }
+        guard let k = await peerKey(connectionId) else {
+            throw CallSecurityError("the connection's identity key is gone: no call placed")
         }
         return k
     }

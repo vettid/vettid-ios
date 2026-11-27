@@ -169,6 +169,22 @@ extension CallMachineTests {
         #expect(signalling.sent.isEmpty)
     }
 
+    /// (VAULT-MESSAGING 0.97.0 §10.10 "A lost `call.offer`") An offer delivered again while it still rings here: the same
+    /// ringing call goes on, and nothing more is sent or rung.
+    @Test func anOfferDeliveredAgainWhileItRingsIsTheSameCall() async throws {
+        let m = machine()
+        signalling.deliver(offer(otherId))
+        await runCurrent()
+        guard case .live(let l) = m.state, l.phase == .incoming else { throw WrongState(state: m.state) }
+        let seq = m.session?.seq
+        let sent = signalling.sent
+        signalling.deliver(offer(otherId))
+        await runCurrent()
+        guard case .live(let again) = m.state, again.phase == .incoming, again.callId == otherId else { throw WrongState(state: m.state) }
+        #expect(m.session?.seq == seq, "the same session")
+        #expect(signalling.sent == sent, "no second call.ringing, nothing else")
+    }
+
     /// Other calls' ends: the oldest goes past the bound, and one delivered again counts as the newest.
     @Test func otherCallsEndsAreBoundedAndTheNewestKept() async throws {
         let m = machine()
