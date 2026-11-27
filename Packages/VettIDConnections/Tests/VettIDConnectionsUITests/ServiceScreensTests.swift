@@ -132,12 +132,14 @@ import VettIDUI
         let screen = ConnectionDetailScreen(state: state, actions: DetailActions())
         #expect(screen.title == "Example Bank")
         #expect(screen.pill(s).first?.label == "Add \u{2068}Example Bank\u{2069} to favorites")
+        #expect(ProfileCard.profileNameLabel(s) == "Name given by the service", "its only name, labelled as the service's")
 
         var person = s
         person.isService = false
         state.connection = person
         #expect(ConnectionItem.name(person) == "Name not shared yet" && ConnectionItem.labelName(person) == "Name not shared yet")
         #expect(ConnectionDetailScreen(state: state, actions: DetailActions()).title == "Name not shared yet")
+        #expect(ProfileCard.profileNameLabel(person) == "Display name")
 
         var named = s
         named.firstName = "Example"
@@ -145,6 +147,7 @@ import VettIDUI
         state.connection = named
         #expect(ConnectionItem.name(named) == "Example Savings")
         #expect(ConnectionDetailScreen(state: state, actions: DetailActions()).title == "Example Savings")
+        #expect(ProfileCard.profileNameLabel(named) == "Display name", "the service's label stands once, on its names")
     }
 
     /// A service's page: no message, no sharing cards, "What this service can ask" (with or without votes), and its
