@@ -99,8 +99,8 @@ extension VaultDeviceTests {
         #expect(await relay.noDeposit(within: 0.2))
     }
 
-    /// A single send the gate holds: the call's answer, ringing and ICE send nothing while a lock is pending.
-    @Test(arguments: ["call.answer", "call.ringing", "call.ice"])
+    /// A single send the gate holds: the call's answer, ringing, ICE and (C2) keep-alive send nothing while a lock is pending.
+    @Test(arguments: ["call.answer", "call.ringing", "call.ice", "call.keepalive"])
     func aCallsSingleSendIsHeld(type: String) async throws {
         let (d, _) = try await pairedDevice()
         d.setFlushGate { false }
