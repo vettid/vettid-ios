@@ -415,13 +415,10 @@ public struct AltChannelFlow: Sendable {
     }
 
     /// What the app must know before it asks for the PIN (§11.2 step 4, §11.10.6): the verified manifest and the release
-    /// the vault is routed to, compared with the release this device last unlocked into ([state]). [onStarting] hears each
-    /// `release_starting` while the routed release starts (§11.10.5).
-    public func preflight(
-        _ state: AltState, release: String? = nil, onStarting: (@Sendable (Int) -> Void)? = nil
-    ) async throws -> UnlockPreflight {
+    /// the vault is routed to, compared with the release this device last unlocked into ([state]).
+    public func preflight(_ state: AltState, release: String? = nil) async throws -> UnlockPreflight {
         let m = try await manifest(seen: state.manifestSerial, record: true)
-        let (_, v) = try await enclave(release: release, manifest: m, enroll: false, onStarting: onStarting)
+        let (_, v) = try await enclave(release: release, manifest: m, enroll: false)
         let e = try v.enclave()
         var p = UnlockPreflight.of(state, routed: e.release, manifest: m)
         // An older release than this phone has unlocked into gets no PIN (§11.10.6); the way back of an unconfirmed move

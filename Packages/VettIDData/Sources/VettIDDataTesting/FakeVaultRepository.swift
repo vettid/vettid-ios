@@ -25,9 +25,8 @@ public final class FakeVaultRepository: CustomStringConvertible {
     public var unlockResults: [UnlockAttempt] = []
     /// Awaited by an unlock before it answers (a long wait; a cancelled one throws).
     @ObservationIgnored public var unlockWait: (@Sendable () async throws -> Void)?
-    /// Awaited by the release check before it answers, given the check's `onStarting` (a release that starts; a long
-    /// wait; a cancelled one throws).
-    @ObservationIgnored public var preflightWait: (@Sendable ((@Sendable (Int) -> Void)?) async throws -> Void)?
+    /// Awaited by the release check before it answers (a long wait; a cancelled one throws).
+    @ObservationIgnored public var preflightWait: (@Sendable () async throws -> Void)?
     /// Awaited by an enrollment and by a recovery open before they answer (a long wait; a cancelled one throws).
     @ObservationIgnored public var enrollWait: (@Sendable () async throws -> Void)?
     @ObservationIgnored public var recoveryOpenWait: (@Sendable () async throws -> Void)?

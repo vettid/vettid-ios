@@ -180,8 +180,6 @@ final class FakeAltAPI: @unchecked Sendable {
     var slotCode: String?
     /// The manifest route answers this status instead of the manifest.
     var manifestStatus: Int?
-    /// The enclave route first answers this many `503 release_starting` (the routed release starts, §11.10.5).
-    var startingAnswers = 0
     weak var party: TestParty?
 
     init(_ enclaves: [FakeEnclave]) { self.enclaves = enclaves }
@@ -209,10 +207,6 @@ final class FakeAltAPI: @unchecked Sendable {
             guard let e = enclaves.first else { return .json(503, #"{"error":"vault_unavailable"}"#) }
             switch r.path {
             case "/api/vault/enclave":
-                if startingAnswers > 0 {
-                    startingAnswers -= 1
-                    return .json(503, #"{"error":"release_starting","retry_after":3}"#)
-                }
                 return .json(200, #"{"instance_id":"\#(e.instanceID)","release":"\#(FakeEnclave.pcr0)","descriptor":"\#(Base64s.encodeStd(e.descriptor))","attestation":"AA=="}"#)
             case "/api/vault/enroll", "/api/vault/unlock":
                 return sealed(r, e, enroll: r.path.hasSuffix("enroll"))
@@ -487,15 +481,6 @@ final class FakeAltAPI: @unchecked Sendable {
         #expect(pre.routed.number == 3 && pre.offer == nil && !pre.rollback && !pre.softwareUpdated && pre.manifestSerial == 7)
         p.state.releaseNumber = 4
         #expect(try await f.preflight(p.state).rollback)
-    }
-
-    /// The routed release starts: the check hears each `release_starting` (its watchdog sees progress), then answers.
-    @Test func preflightHearsAReleaseThatStarts() async throws {
-        let (api, p, f) = try setUp()
-        api.lock.withLock { api.startingAnswers = 2 }
-        let heard = Recorder<Int>()
-        let pre = try await f.preflight(p.state, onStarting: { heard.add($0) })
-        #expect(heard.all == [3, 3] && pre.routed.number == 3)
     }
 
     /// Never a PIN to an older release than the last one unlocked into (§11.10.6).

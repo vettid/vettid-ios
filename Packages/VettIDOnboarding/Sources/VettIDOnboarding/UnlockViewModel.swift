@@ -34,14 +34,15 @@ public final class UnlockViewModel: UnlockActions {
     @ObservationIgnored private var attemptGeneration = 0
     /// How long an unlock waits before the screen says the vault may be starting.
     @ObservationIgnored private let slowAfter: @Sendable () async throws -> Void
-    /// How long the release check may go with no sign of progress (its start, or a `release_starting` answer while the
-    /// routed release starts) before it is given up and "Try again" is offered: a read that never answers does not leave
-    /// "Checking your vault's software" on the screen with no keypad and no way on. (chosen; not in the spec)
-    @ObservationIgnored private let preflightStall: @Sendable () async throws -> Void
+    /// How long the release check may take before it is given up and "Try again" is offered: a read that never answers, or a
+    /// routed release that goes on starting, does not leave "Checking your vault's software" on the screen with no keypad
+    /// and no way on. Longer than one request's own timeout (the system's 60 s, with up to 8 s waiting for a network), so a
+    /// slow request ends with its own error first. (chosen; not in the spec)
+    @ObservationIgnored private let preflightDeadline: @Sendable () async throws -> Void
     /// The release check under way and its watchdog; a check of an earlier generation (superseded, or given up) changes
     /// nothing.
     @ObservationIgnored private var preflightTask: Task<Void, Never>?
-    @ObservationIgnored private var stallTimer: Task<Void, Never>?
+    @ObservationIgnored private var deadlineTimer: Task<Void, Never>?
     @ObservationIgnored private var preflightGeneration = 0
 
     public init(
@@ -53,12 +54,12 @@ public final class UnlockViewModel: UnlockActions {
         tick: @escaping @Sendable () async throws -> Void = { try await Task.sleep(for: .seconds(1)) },
         recheck: @escaping @Sendable () async throws -> Void = { try await Task.sleep(for: .seconds(15)) },
         slowAfter: @escaping @Sendable () async throws -> Void = { try await Task.sleep(for: .seconds(10)) },
-        preflightStall: @escaping @Sendable () async throws -> Void = {
-            try await Task.sleep(for: .seconds(UnlockViewModel.preflightStallSeconds))
+        preflightDeadline: @escaping @Sendable () async throws -> Void = {
+            try await Task.sleep(for: .seconds(UnlockViewModel.preflightDeadlineSeconds))
         }
     ) {
         self.slowAfter = slowAfter
-        self.preflightStall = preflightStall
+        self.preflightDeadline = preflightDeadline
         self.vault = vault
         self.account = account
         self.releaseNotes = releaseNotes
@@ -103,11 +104,11 @@ public final class UnlockViewModel: UnlockActions {
         }
     }
 
-    /// ``preflightStall``'s length in the app.
-    public nonisolated static let preflightStallSeconds: Double = 30
+    /// ``preflightDeadline``'s length in the app.
+    public nonisolated static let preflightDeadlineSeconds: Double = 90
 
     deinit {
-        stallTimer?.cancel()
+        deadlineTimer?.cancel()
         followers.cancelAll()
         countdowns.cancelAll()
         notesTask?.cancel()
@@ -170,23 +171,17 @@ public final class UnlockViewModel: UnlockActions {
         preflightGeneration += 1
         let generation = preflightGeneration
         preflightTask?.cancel()
-        armStall(generation)
+        startDeadline(generation)
         preflightTask = launch { [self] in
-            let onStarting: @Sendable (Int) -> Void = { [weak self] _ in
-                Task { @MainActor [weak self] in
-                    guard let self, generation == preflightGeneration else { return }
-                    armStall(generation)
-                }
-            }
             let result: Result<PreflightInfo, any Error>
             do {
-                result = .success(try await vault.preflight(onStarting: onStarting))
+                result = .success(try await vault.preflight())
             } catch {
                 result = .failure(error)
             }
             // Superseded by a new check, or given up by the watchdog: its answer changes nothing.
             guard generation == preflightGeneration else { return }
-            stallTimer?.cancel()
+            deadlineTimer?.cancel()
             // Whatever the check's answer: the erase is offered only once it is known whether recover-only wins.
             defer { state.keysGone = state.keysGone || state.noUserGuid }
             do {
@@ -212,16 +207,18 @@ public final class UnlockViewModel: UnlockActions {
         }
     }
 
-    /// (Re)starts the watchdog of the release check of [generation]: with no progress for ``preflightStall``, the check is
-    /// given up as one that did not answer ("Try again"), and its late answer changes nothing.
-    private func armStall(_ generation: Int) {
-        stallTimer?.cancel()
-        stallTimer = Task { [weak self, preflightStall] in
-            guard (try? await preflightStall()) != nil else { return }
+    /// Starts the watchdog of the release check of [generation]: unanswered after ``preflightDeadline``, the check is given up
+    /// as one that did not answer ("Try again"; a retry starts a new check, which waits again), and its late answer changes
+    /// nothing.
+    private func startDeadline(_ generation: Int) {
+        deadlineTimer?.cancel()
+        deadlineTimer = Task { [weak self, preflightDeadline] in
+            guard (try? await preflightDeadline()) != nil else { return }
             guard let self, generation == preflightGeneration, state.loading else { return }
             preflightGeneration += 1
             preflightTask?.cancel()
             state.loading = false
+            // As a check that did not answer (not mapped to a clock off: nothing answered to say so).
             state.preflightError = .noResponse
             state.approveOffer = false
             state.keysGone = state.keysGone || state.noUserGuid
