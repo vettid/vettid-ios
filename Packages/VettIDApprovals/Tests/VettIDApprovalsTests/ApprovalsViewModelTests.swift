@@ -139,6 +139,18 @@ import VettIDDataTesting
         #expect(m.state.connectionName("c1") == "Sam Lee" && m.state.connectionName("c2") == nil && m.state.connectionName(nil) == nil)
     }
 
+    /// A service without First Last is named by its own name on its sign-in requests; a person's display name is not.
+    @Test func aServiceWithoutFirstLastIsNamedByItsOwnName() async {
+        var service = Samples.connection("c1", first: nil)
+        service.name = "Example Bank"
+        service.isService = true
+        var person = Samples.connection("c2", first: nil)
+        person.name = "Countess"
+        connections.connections = [service, person]
+        let m = await model()
+        #expect(m.state.connectionName("c1") == "Example Bank" && m.state.connectionName("c2") == nil)
+    }
+
     /// 0.23.0 §10.4.1: a paused connection is listed with "Resume requests" and "Remove connection" (confirmed).
     @Test func aPausedConnectionIsResumedOrRemoved() async {
         connections.connections = [Samples.connection("c1", paused: true), Samples.connection("c2")]

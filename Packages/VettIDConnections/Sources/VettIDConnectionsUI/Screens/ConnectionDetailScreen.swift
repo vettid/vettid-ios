@@ -68,7 +68,7 @@ public struct ConnectionDetailScreen: View {
         self.actions = actions
     }
 
-    private var title: String {
+    var title: String {
         AccountNames.cleaned(state.connection?.displayName) ?? ConnectStrings.nameNotShared
     }
 
@@ -309,7 +309,7 @@ struct ProfileCard: View {
         let hasName = profileName != nil
         DetailCard {
             CardTitle(text: ConnectStrings.detailProfile)
-            if c.accountName == nil && !hasName && c.sharedItems.isEmpty {
+            if AccountNames.cleaned(c.accountName) == nil && !hasName && c.sharedItems.isEmpty {
                 Text(ConnectStrings.detailProfileNone).foregroundStyle(colors.onSurfaceVariant)
             }
             if let account = AccountNames.cleaned(c.accountName) {
@@ -318,7 +318,7 @@ struct ProfileCard: View {
                 if !c.isService { note(ConnectStrings.namesNote).padding(.bottom, Spacing.s) }
             }
             if hasName || !c.sharedItems.isEmpty {
-                if let profileName { InfoLine(label: ConnectStrings.detailProfileName, value: profileName) }
+                if let profileName { InfoLine(label: Self.profileNameLabel(c), value: profileName) }
                 if !c.sharedItems.isEmpty {
                     Text(ConnectStrings.detailSharedItems).vettIDFont(.labelLarge).padding(.top, Spacing.s)
                     ForEach(c.sharedItems, id: \.itemID) { item in
@@ -350,6 +350,12 @@ struct ProfileCard: View {
     /// The names' label: "VettID account name", or for a service "Name given by the service".
     static func accountNameLabel(_ c: ConnectionInfo) -> String {
         c.isService ? ServiceTexts.nameLabel : ConnectStrings.detailAccountName
+    }
+
+    /// The display name's label: "Name given by the service" for a service without First Last, whose only name it is (the
+    /// service's label stands once, on the names row, as on vettid-android); "Display name" otherwise.
+    static func profileNameLabel(_ c: ConnectionInfo) -> String {
+        c.isService && AccountNames.cleaned(c.accountName) == nil ? ServiceTexts.nameLabel : ConnectStrings.detailProfileName
     }
 }
 

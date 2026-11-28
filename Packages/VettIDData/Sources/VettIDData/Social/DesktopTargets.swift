@@ -31,12 +31,10 @@ public enum DesktopTargets {
         cs.first { $0.id.sameBytes(h.connectionID) && live($0) }.flatMap { name($0) == nil ? nil : $0 }
     }
 
-    /// The name a connection is shown by, cleaned (VAULT-MESSAGING §10.8): a person's "First Last"; a service's "First Last" or
-    /// else its own name, as ANDROID-PLAN 0.1.145 and vettid-android's `displayName` have it. Nil when it has none, or none once
+    /// The name a connection is shown by, cleaned (VAULT-MESSAGING §10.8): its ``ConnectionInfo/displayName``, a person's
+    /// "First Last", a service's "First Last" or else its own name (ANDROID-PLAN 0.1.145). Nil when it has none, or none once
     /// cleaned ("Name not shared yet").
-    public static func name(_ c: ConnectionInfo) -> String? {
-        AccountNames.cleaned(c.accountName) ?? (c.isService ? AccountNames.cleaned(c.name) : nil)
-    }
+    public static func name(_ c: ConnectionInfo) -> String? { AccountNames.cleaned(c.displayName) }
 
     /// How [h]'s connection is shown, or nil for the deny-only row: not listed as active or stale, no name, or (0.1.146) a
     /// namesake the date cannot tell apart (a `created_at` of either that is missing, or the same day in [calendar]'s time zone).

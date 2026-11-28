@@ -120,6 +120,36 @@ import VettIDUI
         }
     }
 
+    /// A service without First Last is shown by its own name in the Connections list and on its page, as on Android; a
+    /// person's display name never stands in for First Last, and a service's First Last wins over its name.
+    @Test func aServiceWithoutFirstLastIsShownByItsOwnName() {
+        var s = ConnectionInfo(id: "s1", name: "Example Bank", state: .active)
+        s.isService = true
+        #expect(ConnectionItem.name(s) == "Example Bank" && ConnectionItem.labelName(s) == "\u{2068}Example Bank\u{2069}")
+        var state = ConnectionDetailState(connectionID: s.id)
+        state.connection = s
+        state.loading = false
+        let screen = ConnectionDetailScreen(state: state, actions: DetailActions())
+        #expect(screen.title == "Example Bank")
+        #expect(screen.pill(s).first?.label == "Add \u{2068}Example Bank\u{2069} to favorites")
+        #expect(ProfileCard.profileNameLabel(s) == "Name given by the service", "its only name, labelled as the service's")
+
+        var person = s
+        person.isService = false
+        state.connection = person
+        #expect(ConnectionItem.name(person) == "Name not shared yet" && ConnectionItem.labelName(person) == "Name not shared yet")
+        #expect(ConnectionDetailScreen(state: state, actions: DetailActions()).title == "Name not shared yet")
+        #expect(ProfileCard.profileNameLabel(person) == "Display name")
+
+        var named = s
+        named.firstName = "Example"
+        named.lastName = "Savings"
+        state.connection = named
+        #expect(ConnectionItem.name(named) == "Example Savings")
+        #expect(ConnectionDetailScreen(state: state, actions: DetailActions()).title == "Example Savings")
+        #expect(ProfileCard.profileNameLabel(named) == "Display name", "the service's label stands once, on its names")
+    }
+
     /// A service's page: no message, no sharing cards, "What this service can ask" (with or without votes), and its
     /// names labelled as the service's; a person's page has all of them and no such card.
     @Test func aServicesPageHasNoPersonOnlyActions() {
