@@ -35,6 +35,9 @@ public struct VettIDColors: Hashable, Sendable {
     public let outlineVariant: ThemeColor
     public let error: ThemeColor
     public let onError: ThemeColor
+    /// The urgency fill (the approvals indicator's countdown, IOS-PLAN §4.12) and its content; Material 3's baseline.
+    public let errorContainer: ThemeColor
+    public let onErrorContainer: ThemeColor
 
     // VettID colours outside the Material roles.
 
@@ -90,6 +93,8 @@ public extension VettIDColors {
         outlineVariant: VettIDPalette.navy800,
         error: VettIDPalette.errorDark,
         onError: VettIDPalette.ink,
+        errorContainer: VettIDPalette.error30,
+        onErrorContainer: VettIDPalette.error90,
         tile: VettIDPalette.indigo,
         onTile: VettIDPalette.inkHigh,
         favoriteTile: VettIDPalette.teal,
@@ -133,6 +138,8 @@ public extension VettIDColors {
         outlineVariant: VettIDPalette.mist200,
         error: VettIDPalette.errorLight,
         onError: VettIDPalette.white,
+        errorContainer: VettIDPalette.error90,
+        onErrorContainer: VettIDPalette.error10,
         tile: VettIDPalette.indigo,
         onTile: VettIDPalette.white,
         favoriteTile: VettIDPalette.teal,

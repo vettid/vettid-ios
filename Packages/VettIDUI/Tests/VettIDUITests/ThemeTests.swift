@@ -55,6 +55,7 @@ struct ContrastTests {
         expectContrast("favoriteTile/background", c.favoriteTile, c.background, 3)
         expectContrast("onAvatar/avatar", c.onAvatar, c.avatar, 4.5)
         expectContrast("error/background", c.error, c.background, 4.5)
+        expectContrast("onErrorContainer/errorContainer", c.onErrorContainer, c.errorContainer, 4.5)
         // The outline is the only boundary of a text field, a chip and a secondary button (3:1, WCAG 1.4.11).
         for (name, bg) in surfaces + [("card", c.card), ("groupedBackground", c.groupedBackground)] {
             expectContrast("outline/\(name)", c.outline, bg, 3)

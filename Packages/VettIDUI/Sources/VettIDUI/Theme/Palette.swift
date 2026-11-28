@@ -50,4 +50,9 @@ public enum VettIDPalette {
     public static let warningDeep = ThemeColor(0x8A5A00)
     public static let errorDark = ThemeColor(0xFF6B6B) // --error
     public static let errorLight = ThemeColor(0xB3261E)
+    /// The Material 3 baseline error tones vettid-android takes by default for `errorContainer` and `onErrorContainer`
+    /// (its `Color.kt` sets neither): Error90, Error10 and Error30.
+    public static let error90 = ThemeColor(0xF9DEDC)
+    public static let error10 = ThemeColor(0x410E0B)
+    public static let error30 = ThemeColor(0x8C1D18)
 }

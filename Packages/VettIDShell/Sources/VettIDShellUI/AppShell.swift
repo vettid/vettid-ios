@@ -65,7 +65,7 @@ public struct AppShell: View {
     private let profiles: any ProfileRepository
     private let appLock: any AppLockSettings
     @Bindable var model: ShellModel
-    private let gate: OwnerCheckGate
+    let gate: OwnerCheckGate
     private let now: Date
     private let version: AppVersion
     private let installedFrom: InstalledFrom
@@ -101,6 +101,9 @@ public struct AppShell: View {
     /// The tags' colours while the vault is open (owner decision 2026-10-09): made with the shell, so nothing runs while
     /// the vault is locked.
     @State var tagColors: TagColorsKeeper?
+    /// The time the open approvals are judged at (``ApprovalsClock``).
+    @State var approvalsNow = Date()
+    @Environment(\.vettIDLocked) var appLocked
 
     /// [model]: where the member is, owned above the owner check's gate. [gate]: the owner check at [now] (the root re-reads
     /// it as time passes). [promptReason]: what the Face ID, Touch ID or passcode prompt says when the app lock is turned on.
@@ -271,10 +274,13 @@ public struct AppShell: View {
                     }
                     NavigationStack(path: $model.path) {
                         root
+                            .environment(\.vettIDApprovalsIndicator, rootIndicator(indicator))
                             .toolbar(.hidden, for: .navigationBar)
                             .systemBackGesture()
                             .navigationDestination(for: ShellRoute.self) { route in
-                                detail(route).toolbar(.hidden, for: .navigationBar)
+                                detail(route)
+                                    .environment(\.vettIDApprovalsIndicator, detailIndicator(route, indicator))
+                                    .toolbar(.hidden, for: .navigationBar)
                             }
                     }
                 }
@@ -311,6 +317,7 @@ public struct AppShell: View {
         }
         .environment(\.vettIDTagColors, tagColors?.colors ?? [:])
         .onAppear { startTagColors() }
+        .modifier(ApprovalsClock(points: approvalsChangeAt, now: $approvalsNow))
         .task(id: profiles.profile?.photo) {
             let decoded = await ProfilePhotos.decoded(profiles.profile?.photo)
             // A decode that began before the photo changed or was cleared does not show it after (IOS-PLAN §4.7).

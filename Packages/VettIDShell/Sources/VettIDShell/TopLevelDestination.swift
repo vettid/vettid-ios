@@ -146,3 +146,20 @@ public struct AppVersion: Equatable, Sendable {
         )
     }
 }
+
+/// Where the approvals indicator is not shown (ANDROID-PLAN §4 "The approvals indicator" 2; IOS-PLAN §4.12; vettid-android
+/// `INDICATOR_HIDDEN_ON`): Approvals itself (``TopLevelDestination/approvals``), a request's screen, the accept and scan
+/// screens of the connect flow, pairing, the photo viewer and the move out. The invite screen keeps it, as on Android.
+public enum ShellIndicator {
+    public static func hidden(_ route: ShellRoute) -> Bool {
+        switch route {
+        case .approval, .pair, .photo, .transferOut: true
+        case .connect(let d):
+            switch d {
+            case .accept, .scan: true
+            case .invite: false
+            }
+        default: false
+        }
+    }
+}

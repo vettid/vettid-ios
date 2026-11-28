@@ -532,6 +532,52 @@
           }
         }
       }
+    },
+    "approvals_indicator_description": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Approvals, %lld waiting"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Approvals, %lld waiting"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "approvals_indicator_description_urgent": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Approvals, %1$lld waiting. %2$@ expires in %3$@"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Approvals, %1$lld waiting. %2$@ expires in %3$@"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "version": "1.0"
