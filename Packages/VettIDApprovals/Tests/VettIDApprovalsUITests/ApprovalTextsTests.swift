@@ -163,6 +163,14 @@ import VettIDApprovals
         #expect(ApprovalTexts.peerDeclined(PeerDecline(requestID: "r", name: nil, outgoing: true, at: Date())) == "Someone declined your connection request")
         #expect(ApprovalTexts.peerDeclined(PeerDecline(requestID: "r", name: "Ada", outgoing: false, at: Date())) == "\u{2068}Ada\u{2069} declined the connection")
         #expect(ApprovalTexts.pausedTitle(ConnectionInfo(id: "c", name: "", state: .active)) == "A connection’s requests are paused")
+        // A service without First Last by its own name; a person's display name never stands in for First Last.
+        var service = ConnectionInfo(id: "c", name: "Example Bank", state: .active)
+        service.isService = true
+        #expect(ApprovalTexts.pausedTitle(service) == "\u{2068}Example Bank\u{2069}’s requests are paused")
+        #expect(ApprovalTexts.removeTitle(service) == "Remove \u{2068}Example Bank\u{2069}?")
+        let person = ConnectionInfo(id: "c", name: "Countess", state: .active)
+        #expect(ApprovalTexts.pausedTitle(person) == "A connection’s requests are paused")
+        #expect(ApprovalTexts.removeTitle(person) == ApprovalsStrings.removeTitle(ApprovalsStrings.aConnection))
         #expect(ApprovalTexts.batchTitle(asks: 2, name: nil) == "A connection asks for 2 things")
     }
 

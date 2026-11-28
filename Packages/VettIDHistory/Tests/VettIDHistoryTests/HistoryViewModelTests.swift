@@ -48,6 +48,24 @@ import VettIDVault
         #expect(connections.calls.contains("refresh"))
     }
 
+    /// A service without First Last is named by its own name in the connection filter and in what is searched on the phone;
+    /// a person's display name never stands in for First Last.
+    @Test func aServiceWithoutFirstLastIsNamedByItsOwnName() async {
+        var service = ConnectionInfo(id: "s1", name: "Example Bank", state: .active)
+        service.isService = true
+        connections.connections = [ConnectionInfo(id: "c1", name: "Countess", state: .active), service]
+        let log = FakeAuditLog()
+        log.script([Self.page([900])])
+        let m = await model(log, connectionID: nil)
+        #expect(m.state.connectionNames == ["c1": "", "s1": "Example Bank"])
+        let r = AuditRecord(Self.entry(900, "identity.rotate_conflict", conn: "s1"))
+        let title = HistoryText.title(r.kind, r.entry.ref, names: EntryNames(connection: "Example Bank"), isolate: false)
+        #expect(title.contains("Example Bank") && m.localText(r).contains(title), "the entry's title names the service")
+        let p = AuditRecord(Self.entry(900, "identity.rotate_conflict", conn: "c1"))
+        let unnamed = HistoryText.title(p.kind, p.entry.ref, names: EntryNames(), isolate: false)
+        #expect(m.localText(p).contains(unnamed), "a person's entry is titled as for a connection without names")
+    }
+
     @Test func aConnectionWithoutEntriesEndsEmptyNotSpinning() async {
         let log = FakeAuditLog()
         log.script([Self.page([])])

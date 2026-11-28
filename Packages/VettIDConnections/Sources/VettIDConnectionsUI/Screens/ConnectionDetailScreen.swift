@@ -50,7 +50,7 @@ public struct DetailActions {
 }
 
 /// A connection (ANDROID-PLAN §4, 0.1.10): titled "First Last" from the names on the peer's VettID account, the display
-/// name secondary; its asks (muted or paused first); the profile shared with you (the names labelled as the account's,
+/// name secondary; its asks (muted or paused first); the profile shared with you (the names labeled as the account's,
 /// never verified; the extras as self-asserted); sharing both ways, "You share with <First>" and "<First> shares with you"
 /// (two cards, active connections only); when it connected and was last active; and the vault key fingerprint,
 /// the lasting identity check. The safety code belongs to the moment of connecting and is not shown here; nor are the
@@ -298,7 +298,7 @@ struct InfoLine: View {
 }
 
 /// The profile shared with the member (VAULT-MESSAGING §10.8): the names on the peer's account (never verified), then
-/// the self-asserted extras (display name, shared items), each labelled so.
+/// the self-asserted extras (display name, shared items), each labeled so.
 struct ProfileCard: View {
     @Environment(\.vettIDColors) private var colors
     let connection: ConnectionInfo
@@ -309,7 +309,7 @@ struct ProfileCard: View {
         let hasName = profileName != nil
         DetailCard {
             CardTitle(text: ConnectStrings.detailProfile)
-            if AccountNames.cleaned(c.accountName) == nil && !hasName && c.sharedItems.isEmpty {
+            if Self.showsNone(c) {
                 Text(ConnectStrings.detailProfileNone).foregroundStyle(colors.onSurfaceVariant)
             }
             if let account = AccountNames.cleaned(c.accountName) {
@@ -350,6 +350,11 @@ struct ProfileCard: View {
     /// The names' label: "VettID account name", or for a service "Name given by the service".
     static func accountNameLabel(_ c: ConnectionInfo) -> String {
         c.isService ? ServiceTexts.nameLabel : ConnectStrings.detailAccountName
+    }
+
+    /// "No profile shared": nothing visible in the account names or the display name, and no shared items.
+    static func showsNone(_ c: ConnectionInfo) -> Bool {
+        AccountNames.cleaned(c.accountName) == nil && AccountNames.cleaned(c.name) == nil && c.sharedItems.isEmpty
     }
 
     /// The display name's label: "Name given by the service" for a service without First Last, whose only name it is (the

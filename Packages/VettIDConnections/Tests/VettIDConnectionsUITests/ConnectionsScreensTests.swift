@@ -33,6 +33,24 @@ import VettIDUI
         #expect(AsksCard.label(.allowAgain) == "Allow declined requests again")
     }
 
+    /// "No profile shared" only when nothing in it is visible: the account names and the display name cleaned, no items.
+    @Test func noProfileIsSaidOnlyWhenNothingIsVisible() {
+        var c = Self.connection("c1", first: nil)
+        #expect(ProfileCard.showsNone(c))
+        c.firstName = "\u{200B}"
+        c.lastName = " \u{202E}"
+        c.name = "\u{2069}"
+        #expect(ProfileCard.showsNone(c), "names with nothing visible in them")
+        c.name = "Countess"
+        #expect(!ProfileCard.showsNone(c))
+        c.name = ""
+        c.firstName = "Ada"
+        #expect(!ProfileCard.showsNone(c))
+        c.firstName = nil
+        c.sharedItems = [SharedProfileItem(itemID: "i1", name: "Email", fields: [])]
+        #expect(!ProfileCard.showsNone(c))
+    }
+
     /// "Connected" alone for an active connection without a display name; otherwise the state and the display name.
     @Test func aRowSaysTheStateAndTheDisplayName() {
         var c = Self.connection("c1")
