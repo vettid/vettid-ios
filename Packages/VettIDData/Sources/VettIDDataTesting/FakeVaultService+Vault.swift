@@ -82,6 +82,14 @@ extension FakeVaultService {
         gate?.open()
     }
 
+    /// The next [count] descriptor fetches answer `503 release_starting` (the routed release starts, §11.10.5).
+    public func enclaveStarting(_ count: Int) {
+        locked { enclaveRefusals += Array(repeating: (503, #"{"error":"release_starting","retry_after":1}"#), count: count) }
+    }
+
+    /// A refused descriptor fetch's answer.
+    static func answer(_ refusal: (status: Int, body: String)) -> FakeHTTPServer.Answer { .json(refusal.status, refusal.body) }
+
     /// Holds each answer of `GET /api/vault/enclave` (as it is when asked) until ``releaseEnclaveReads()``.
     public func holdEnclaveReads() { locked { enclaveGateValue = FakeHTTPServer.Gate() } }
 

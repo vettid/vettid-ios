@@ -1,4 +1,5 @@
 import Foundation
+import os
 import Testing
 @testable import VettIDData
 import VettIDDataTesting
@@ -54,6 +55,17 @@ func eventually(within: Duration = eventuallyDefault, _ condition: @MainActor ()
     }
 
     // MARK: - Lock and unlock
+
+    /// The release check before the PIN tells its caller of each `release_starting` while the routed release starts (the
+    /// unlock screen's deadline does not count that time), then answers.
+    @Test func theReleaseCheckHearsAReleaseThatStarts() async throws {
+        defer { phone.close() }
+        try await lockedVault()
+        service.enclaveStarting(2)
+        let heard = OSAllocatedUnfairLock(initialState: [Int]())
+        let p = try await m.preflight(onStarting: { s in heard.withLock { $0.append(s) } })
+        #expect(heard.withLock { $0 } == [1, 1] && p.routed.number == 3)
+    }
 
     /// The member's lock over the relay: the vault answers, so it is confirmed at once and never in doubt; the unlock
     /// after it carries the PIN and the phone's current secret, and the app opens.

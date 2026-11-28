@@ -82,10 +82,10 @@ extension VaultManager {
 
     /// The release check before the PIN (§11.10.6). IOS-PLAN ID8: an instance without `recovery_r` is refused here
     /// already ("This vault's release is too old for the iPhone app"), before any PIN is asked for.
-    public func preflight() async throws -> PreflightInfo {
+    public func preflight(onStarting: (@Sendable (Int) -> Void)?) async throws -> PreflightInfo {
         try await guarded {
             let s = try await openSession()
-            let p = try await s.alt.preflight(s.device.altState)
+            let p = try await s.alt.preflight(s.device.altState, onStarting: onStarting)
             try ReleasePath.requireR(p.capabilities)
             learnTimeScale(p.timeScale, since: record.generation)
             // IOS-PLAN §4.3 point 6: routed to the release an unconfirmed move left, not a rollback: the unlock waits for

@@ -30,7 +30,7 @@ import VettIDData
             calls.append("createCredential")
         }
         func finishSetup() async throws {}
-        func preflight() async throws -> PreflightInfo { throw VaultFailure(.other) }
+        func preflight(onStarting: (@Sendable (Int) -> Void)?) async throws -> PreflightInfo { throw VaultFailure(.other) }
         func unlock(pin: String, approve: ReleaseView?, cancelRecovery: Bool) async throws -> UnlockAttempt {
             calls.append("unlock(\(cancelRecovery))")
             return .success
