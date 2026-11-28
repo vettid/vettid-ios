@@ -36,7 +36,8 @@ extension CallMachine {
                             if self?.session === s {
                                 s.startingCallId = id
                             } else {
-                                // Ended in between (never so today: the start asks [wanted] just before): ended as well.
+                                // Ended in between (never so today: each start, the re-place's included, asks [wanted] just
+                                // before, with nothing awaited between): ended as well.
                                 self?.sendEnd(id, CallReason.hangup)
                             }
                         }

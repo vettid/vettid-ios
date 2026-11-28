@@ -371,6 +371,9 @@ package final class VaultCallSignalling: CallSignalling {
             // The first start's 30 s, less what it and the refresh took: none left, the call ends as the first refusal says.
             let left = CallLimits.startTimeout - Double(clock.elapsedMs() - began) / 1000
             guard left > 0 else { throw e }
+            // Hung up or locking while the connection's key was read again (after the last check of the refresh): no second
+            // `call.start`, as for the first.
+            guard wanted() else { throw CallNotWantedError() }
             startsBegun += 1
             let mine = startsBegun
             let callId = try gateway.newCallId()

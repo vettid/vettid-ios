@@ -200,6 +200,25 @@ extension VaultCallSignallingTests {
         }
     }
 
+    /// Hung up or locking while the connection's key is read again for the re-place (after the refresh's own checks): no
+    /// second `call.start`, and no id for one.
+    @Test func aCallNoLongerWantedWhileItsKeyIsReadAgainIsNotPlacedAgain() async throws {
+        var wanted = true
+        var reads = 0
+        let s = await c2Signalling(key: {
+            reads += 1
+            if reads == 2 { wanted = false }
+            return Self.key7
+        })
+        gateway.startResult = { [unowned self] _, _ in throw badRequest() }
+        var named: [String] = []
+        await #expect(throws: CallNotWantedError.self) {
+            _ = try await s.start(connectionId: "conn-1", sdp: "v=0", suites: [s1], wanted: { wanted }, placing: { named.append($0) })
+        }
+        #expect(starts.count == 1 && named.count == 1, "only the first start, and only its id")
+        #expect(refreshes == 1 && reads == 2)
+    }
+
     /// The connection's key gone after the refresh: no call at all, never one in form 1.
     @Test func aKeyGoneAfterTheRefreshPlacesNoCall() async throws {
         var key: [UInt8]? = [UInt8](repeating: 7, count: 32)
