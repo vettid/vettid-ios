@@ -138,7 +138,8 @@ import Testing
         try? await Task.sleep(nanoseconds: 50_000_000)
         waiter.cancel()
         #expect(await waiter.value == false)
-        #expect(Date().timeIntervalSince(started) < 5)
+        // At once, not at its 60 s give-up: half of that leaves room for a loaded runner (CI took 5.6 s once).
+        #expect(Date().timeIntervalSince(started) < 30)
         l.release()
         #expect(await l.acquire(within: 0, sleep: { _ in }) == true)
         l.release()
