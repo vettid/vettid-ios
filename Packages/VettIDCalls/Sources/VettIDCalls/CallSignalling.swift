@@ -204,6 +204,13 @@ package protocol CallSignalling: AnyObject {
     /// perhaps ended) before this returned, ``CallSecurityError``, or another error.
     func start(connectionId: String, sdp: String, suites: [MediaSuite]) async throws -> PlacedCall
 
+    /// ``start(connectionId:sdp:suites:)``, with [wanted]: whether the call is still wanted (not hung up, the vault not
+    /// closing). A start that may place the call a second time (``VaultCallSignalling``'s form 2 re-place) does so only while
+    /// it is.
+    func start(
+        connectionId: String, sdp: String, suites: [MediaSuite], wanted: @escaping @MainActor () -> Bool
+    ) async throws -> PlacedCall
+
     /// `call.answer` for a verified offer: returns the call's keys. Throws ``CallSecurityError`` or another error.
     func answer(callId: String, sdp: String, suites: [MediaSuite]) async throws -> MediaKeys
 
@@ -224,6 +231,12 @@ package protocol CallSignalling: AnyObject {
 }
 
 extension CallSignalling {
+    package func start(
+        connectionId: String, sdp: String, suites: [MediaSuite], wanted: @escaping @MainActor () -> Bool
+    ) async throws -> PlacedCall {
+        try await start(connectionId: connectionId, sdp: sdp, suites: suites)
+    }
+
     package func offerable(_ suites: [MediaSuite]) -> [MediaSuite] { MediaSuite.formOne(suites) }
     package func keepalive(callId: String) async throws {}
     /// False for a signalling that knows no vault level (the tests' fakes); ``VaultCallSignalling`` has the probe's.

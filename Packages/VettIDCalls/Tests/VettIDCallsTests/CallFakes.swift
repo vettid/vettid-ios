@@ -273,6 +273,16 @@ class FakeSignalling: CallSignalling {
         }
     }
 
+    /// What the last start was told about whether its call is still wanted (the form 2 re-place asks it).
+    var startWanted: (@MainActor () -> Bool)?
+
+    func start(
+        connectionId: String, sdp: String, suites: [MediaSuite], wanted: @escaping @MainActor () -> Bool
+    ) async throws -> PlacedCall {
+        startWanted = wanted
+        return try await start(connectionId: connectionId, sdp: sdp, suites: suites)
+    }
+
     func start(connectionId: String, sdp: String, suites: [MediaSuite]) async throws -> PlacedCall {
         sent.append("start(\(connectionId), \(suites.map(\.id)))")
         if let stream = startGateStream {

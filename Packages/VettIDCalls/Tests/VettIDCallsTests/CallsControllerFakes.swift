@@ -38,8 +38,10 @@ final class ControllerGateway: CallGateway {
     var answerKeepalives: [Bool] = []
     var keepalives: [String] = []
 
+    // swiftlint:disable:next function_parameter_count
     func start(
-        connectionId: String, pinnedFingerprint: String, sdp: String, suites: [MediaSuite], peerIk: [UInt8]?
+        connectionId: String, pinnedFingerprint: String, sdp: String, suites: [MediaSuite], peerIk: [UInt8]?,
+        mayResend: @escaping @Sendable () async -> Bool
     ) async throws -> OutgoingCall {
         startPeerIks.append(peerIk)
         asked.append("start(\(connectionId))")
@@ -57,7 +59,13 @@ final class ControllerGateway: CallGateway {
         return try #require(answerKeys)
     }
 
-    func keepalive(_ callId: String) async throws { keepalives.append(callId) }
+    /// Keep-alives that fail (the relay refuses them): each is still counted in ``keepalives``.
+    var keepaliveFails = false
+
+    func keepalive(_ callId: String) async throws {
+        keepalives.append(callId)
+        if keepaliveFails { throw StartFailure() }
+    }
 
     func accept(_ call: OutgoingCall, event: VaultMessage) async throws -> AcceptedCall { try acceptResult(call) }
 

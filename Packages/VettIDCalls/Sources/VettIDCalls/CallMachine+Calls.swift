@@ -27,7 +27,10 @@ extension CallMachine {
             // Not cancelled by a hang-up: once `call.start` may have left, its answer is needed to end the call.
             try await uncancellable { [self] in
                 do {
-                    let placed = try await signalling.start(connectionId: connectionId, sdp: sdp, suites: offered)
+                    // Still wanted while this call is the current one: a hang-up or a lock meanwhile places nothing more.
+                    let placed = try await signalling.start(
+                        connectionId: connectionId, sdp: sdp, suites: offered, wanted: { [weak self] in self?.session === s && !s.locking }
+                    )
                     post(.placed(seq: s.seq, placed, atMs: clock.elapsedMs()))
                 } catch let e as CallRefusedError {
                     post(.failed(seq: s.seq, Self.refusal(e.code)))

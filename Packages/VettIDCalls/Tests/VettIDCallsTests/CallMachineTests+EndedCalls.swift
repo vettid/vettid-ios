@@ -169,6 +169,49 @@ extension CallMachineTests {
         #expect(signalling.sent.isEmpty)
     }
 
+    /// (VAULT-MESSAGING 0.97.0 §10.10 "A lost `call.offer`") An offer delivered again while it still rings here: the same
+    /// ringing call goes on, and nothing more is sent or rung.
+    @Test func anOfferDeliveredAgainWhileItRingsIsTheSameCall() async throws {
+        let m = machine()
+        signalling.deliver(offer(otherId))
+        await runCurrent()
+        guard case .live(let l) = m.state, l.phase == .incoming else { throw WrongState(state: m.state) }
+        let seq = m.session?.seq
+        let sent = signalling.sent
+        signalling.deliver(offer(otherId))
+        await runCurrent()
+        guard case .live(let again) = m.state, again.phase == .incoming, again.callId == otherId else { throw WrongState(state: m.state) }
+        #expect(m.session?.seq == seq, "the same session")
+        #expect(signalling.sent == sent, "no second call.ringing, nothing else")
+    }
+
+    /// (VAULT-MESSAGING §10.10 "Signed key-exchange shares") A start is told its call is still wanted while it is the current
+    /// call, and no longer once the member hung up (or the vault locked): the form 2 re-place then places nothing more.
+    @Test func aStartIsToldWhetherItsCallIsStillWanted() async throws {
+        let m = machine()
+        signalling.holdStart()
+        m.call("conn-1")
+        await runCurrent()
+        let wanted = try #require(signalling.startWanted)
+        #expect(wanted(), "the current call")
+        m.hangUp()
+        await runCurrent()
+        #expect(!wanted(), "hung up while the start was out")
+        signalling.releaseStart()
+        await runCurrent()
+
+        signalling.holdStart()
+        m.call("conn-1")
+        await runCurrent()
+        let second = try #require(signalling.startWanted)
+        #expect(second())
+        m.vaultLocking()
+        #expect(!second(), "the vault locking, before its hang-up is handled")
+        await runCurrent()
+        signalling.releaseStart()
+        await runCurrent()
+    }
+
     /// Other calls' ends: the oldest goes past the bound, and one delivered again counts as the newest.
     @Test func otherCallsEndsAreBoundedAndTheNewestKept() async throws {
         let m = machine()

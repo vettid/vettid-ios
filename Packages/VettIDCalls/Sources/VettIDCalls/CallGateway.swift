@@ -11,10 +11,14 @@ package protocol CallGateway: AnyObject {
     /// Every call event, in the vault's order; offers and answers unchecked.
     func events() -> AsyncStream<CallEvent>
 
-    /// [peerIk]: (C2) the connection's identity key, for a form 2 start with `keepalive`; nil for form 1 only.
+    // swiftlint:disable function_parameter_count
+    /// [peerIk]: (C2) the connection's identity key, for a form 2 start with `keepalive`; nil for form 1 only. [mayResend]:
+    /// whether `call.start` may still be deposited again (the call still wanted).
     func start(
-        connectionId: String, pinnedFingerprint: String, sdp: String, suites: [MediaSuite], peerIk: [UInt8]?
+        connectionId: String, pinnedFingerprint: String, sdp: String, suites: [MediaSuite], peerIk: [UInt8]?,
+        mayResend: @escaping @Sendable () async -> Bool
     ) async throws -> OutgoingCall
+    // swiftlint:enable function_parameter_count
 
     /// Verifies an offer against the connection's identity and this device's suites, or throws.
     func incoming(_ event: VaultMessage, pinnedFingerprint: String, suites: [MediaSuite]) async throws -> IncomingCall
@@ -61,10 +65,14 @@ package final class VaultCallGateway: CallGateway {
         }
     }
 
+    // swiftlint:disable:next function_parameter_count
     package func start(
-        connectionId: String, pinnedFingerprint: String, sdp: String, suites: [MediaSuite], peerIk: [UInt8]?
+        connectionId: String, pinnedFingerprint: String, sdp: String, suites: [MediaSuite], peerIk: [UInt8]?,
+        mayResend: @escaping @Sendable () async -> Bool
     ) async throws -> OutgoingCall {
-        try await api().callStart(connectionId, pinnedFingerprint: pinnedFingerprint, sdp: sdp, suites: suites, peerIk: peerIk)
+        try await api().callStart(
+            connectionId, pinnedFingerprint: pinnedFingerprint, sdp: sdp, suites: suites, peerIk: peerIk, mayResend: mayResend
+        )
     }
 
     package func incoming(_ event: VaultMessage, pinnedFingerprint: String, suites: [MediaSuite]) async throws -> IncomingCall {

@@ -267,6 +267,12 @@ package final class VaultCallSignalling: CallSignalling {
     }
 
     package func start(connectionId: String, sdp: String, suites: [MediaSuite]) async throws -> PlacedCall {
+        try await start(connectionId: connectionId, sdp: sdp, suites: suites, wanted: { true })
+    }
+
+    package func start(
+        connectionId: String, sdp: String, suites: [MediaSuite], wanted: @escaping @MainActor () -> Bool
+    ) async throws -> PlacedCall {
         starting += 1
         let call: OutgoingCall
         let endedAlready: Bool
@@ -279,13 +285,8 @@ package final class VaultCallSignalling: CallSignalling {
                 // A connection the app does not know: no call is placed.
                 throw CallRefusedError(code: "not_found")
             }
-            let peerIk = try await formTwoKey(connectionId)
-            // Numbered just before `call.start` goes: an end lost before this cannot be this call's.
-            startsBegun += 1
-            let mine = startsBegun
-            call = try await gateway.start(
-                connectionId: connectionId, pinnedFingerprint: fingerprint, sdp: sdp, suites: suites, peerIk: peerIk
-            )
+            let mine: Int
+            (call, mine) = try await placeOnce(connectionId, fingerprint, sdp, suites, wanted)
             let remembered = endedWhileStarting.first { $0.callId == call.callId }
             rememberedEnd = remembered?.end
             endedAlready = remembered != nil || mine <= lostForStartsUpTo
@@ -322,13 +323,65 @@ package final class VaultCallSignalling: CallSignalling {
     }
 
     /// (C2) A device that knows its vault to be C2 starts in form 2 too, naming the connection's key; nil for an S10 vault.
-    /// Without that key no call is placed: form 1 alone would leave a relay by a shared connection undetected.
-    private func formTwoKey(_ connectionId: String) async throws -> [UInt8]? {
+    /// Without that key no call is placed: form 1 alone would leave a relay by a shared connection undetected. The key and the
+    /// fingerprint the call is pinned to ([shownAs]) are read apart, so they must be of one record: a key whose fingerprint is
+    /// not the one shown (the list changed in between) places no call.
+    private func formTwoKey(_ connectionId: String, shownAs fingerprint: String) async throws -> [UInt8]? {
         guard formTwo else { return nil }
         guard let k = await peerKey(connectionId) else {
             throw CallSecurityError("C2 vault without the connection's identity key: no call placed")
         }
+        guard let f = try? IkFingerprint.format(k), Bytes.constantTimeEquals(Array(f.utf8), Array(fingerprint.utf8)) else {
+            throw CallSecurityError("the connection's key is not the one shown: no call placed")
+        }
         return k
+    }
+
+    /// The `call.start` of one tap, and the number of the start that placed it. (C2, VAULT-MESSAGING §10.10 "Signed
+    /// key-exchange shares") A form 2 start refused `bad_request` is placed once more, with a new `call_id`, after this device
+    /// has refreshed both keys it names (this vault's, read again by the start; the connection's, from the vault's list read
+    /// again): an `identity.rotate` during the first start. Only once, in form 2 again, and only while the call is still
+    /// [wanted]; a second refusal ends the call as the first would have.
+    private func placeOnce(
+        _ connectionId: String, _ fingerprint: String, _ sdp: String, _ suites: [MediaSuite],
+        _ wanted: @escaping @MainActor () -> Bool
+    ) async throws -> (OutgoingCall, Int) {
+        // A hang-up or a lock meanwhile: `call.start` is not deposited again (0.97.0 §10.10 "Placing a call").
+        let mayResend: @Sendable () async -> Bool = { await wanted() }
+        let peerIk = try await formTwoKey(connectionId, shownAs: fingerprint)
+        // Numbered just before `call.start` goes: an end lost before this cannot be this call's.
+        startsBegun += 1
+        let first = startsBegun
+        do {
+            let call = try await gateway.start(
+                connectionId: connectionId, pinnedFingerprint: fingerprint, sdp: sdp, suites: suites, peerIk: peerIk,
+                mayResend: mayResend
+            )
+            return (call, first)
+        } catch let e as VaultOpError where peerIk != nil && e.code == "bad_request" {
+            // After an `identity.rotate` the connection is shown by its new key: both are read again, together.
+            guard let (shown, again) = try await refreshed(connectionId, wanted) else { throw e }
+            startsBegun += 1
+            let mine = startsBegun
+            let call = try await gateway.start(
+                connectionId: connectionId, pinnedFingerprint: shown, sdp: sdp, suites: suites, peerIk: again, mayResend: mayResend
+            )
+            return (call, mine)
+        }
+    }
+
+    /// The connection's fingerprint and key for the form 2 re-place, read after the connections are read again (at most
+    /// ``refreshTimeout``); nil when the call is no longer [wanted], before or after the refresh. Never nil for a connection or
+    /// key that is gone: then no call is placed at all, and never one in form 1.
+    private func refreshed(_ connectionId: String, _ wanted: @MainActor () -> Bool) async throws -> (String, [UInt8])? {
+        guard wanted() else { return nil }
+        await within(Self.refreshTimeout, refreshConnections)
+        guard wanted() else { return nil }
+        guard let shown = await pinned(connectionId) else { throw CallSecurityError("the connection is gone: no call placed") }
+        guard let k = try await formTwoKey(connectionId, shownAs: shown) else {
+            throw CallSecurityError("the connection's identity key is gone: no call placed")
+        }
+        return (shown, k)
     }
 
     @discardableResult

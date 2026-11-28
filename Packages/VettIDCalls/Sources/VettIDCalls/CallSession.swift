@@ -69,6 +69,9 @@ final class CallSession {
     /// This member ended the call here (a hang-up, a decline, a lock): the connection's held offer is then not rung, since a
     /// call rings only while the vault is open and the member has just said no.
     var memberEnded = false
+    /// The vault is locking: set at once by ``CallMachine/vaultLocking()``, before its hang-up is handled, so that a start out
+    /// at that moment is told its call is no longer wanted.
+    var locking = false
 
     /// The connection's own offer that arrived while this outgoing call rang to it (a glare's winner, perhaps). Its candidates
     /// kept so far go with it: another offer, or none, drops them.

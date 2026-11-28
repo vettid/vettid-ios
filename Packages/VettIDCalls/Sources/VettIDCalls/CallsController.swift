@@ -397,7 +397,7 @@ package final class CallsController {
                 vaultC2 = list.formTwo
                 supported = true
                 listSkipped = list.skipped
-                if list.formTwo { await endStaleC2(list) } else { await endStale(list.calls) }
+                await sweep(list)
                 return
             } catch is CancellationError {
                 return
@@ -439,6 +439,17 @@ package final class CallsController {
                 // Not ended: the next unlock tries again.
             }
             if Task.isCancelled || !openFlag.isOpen { return }
+        }
+    }
+
+    /// The stale sweep the vault's level calls for: the C2 one, the C1 one for an S10 vault, and none for `v` 2 or more
+    /// without a readable `now` (the C1 sweep, by this phone's clock, would end every live record, another device's call
+    /// included, which the C2 rule forbids; and without `now` the C2 sweep has no clock of the vault's). As vettid-android.
+    private func sweep(_ list: CallList) async {
+        if list.formTwo {
+            await endStaleC2(list)
+        } else if (list.version ?? 0) < 2 {
+            await endStale(list.calls)
         }
     }
 
