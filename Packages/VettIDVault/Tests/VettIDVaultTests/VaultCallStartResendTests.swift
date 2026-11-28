@@ -12,12 +12,14 @@ import VettIDTesting
 /// (VAULT-MESSAGING 0.97.0 §10.10 "Placing a call", "Servers and credentials") `call.start` is deposited again, with the same
 /// inner `id`, while no answer has come, and given up with its hang-up at the end of the wait; the first answer is the one used;
 /// a cached copy marked `withheld: true` is kept as the call. The times are short here: 10 s and 20 s of 30 s in the app.
+/// A resend that must go is set 2 s or more after the first deposit: a resend time already past when the first deposit returns
+/// is skipped, and on a loaded runner that deposit can take longer than a few tenths of a second.
 extension VaultDeviceTests {
     @Test func callStartIsDepositedAgainWithTheSameIdThenRungOff() async throws {
         let (d, v) = try await pairedDevice()
         let api = VaultApi(device: d)
         await #expect(throws: VaultStateError.self) {
-            _ = try await api.callStart("conn-1", pinnedFingerprint: Self.callFp, sdp: Self.callSdp, timeout: 1.2, resendAfter: [0.3, 0.6])
+            _ = try await api.callStart("conn-1", pinnedFingerprint: Self.callFp, sdp: Self.callSdp, timeout: 4, resendAfter: [2, 3])
         }
         let first = try v.open(try await relay.nextDeposit().payload)
         let second = try v.open(try await relay.nextDeposit().payload)
@@ -36,7 +38,7 @@ extension VaultDeviceTests {
     @Test func theFirstAnswerEndsTheResends() async throws {
         let (d, v) = try await pairedDevice()
         let api = VaultApi(device: d)
-        let starting = Task { try await api.callStart("conn-1", pinnedFingerprint: Self.callFp, sdp: Self.callSdp, timeout: 3, resendAfter: [0.3, 1.5]) }
+        let starting = Task { try await api.callStart("conn-1", pinnedFingerprint: Self.callFp, sdp: Self.callSdp, timeout: 6, resendAfter: [2, 4]) }
         let first = try v.open(try await relay.nextDeposit().payload)
         let again = try v.open(try await relay.nextDeposit().payload)
         #expect(again.id == first.id)
@@ -56,7 +58,7 @@ extension VaultDeviceTests {
     @Test func aWithheldCopyIsKeptAsTheCall() async throws {
         let (d, v) = try await pairedDevice()
         let api = VaultApi(device: d)
-        let starting = Task { try await api.callStart("conn-1", pinnedFingerprint: Self.callFp, sdp: Self.callSdp, timeout: 3, resendAfter: [0.3]) }
+        let starting = Task { try await api.callStart("conn-1", pinnedFingerprint: Self.callFp, sdp: Self.callSdp, timeout: 5, resendAfter: [2]) }
         let first = try v.open(try await relay.nextDeposit().payload)
         _ = try v.open(try await relay.nextDeposit().payload)
         let callId = try StrictJson.parseObject(first.body).string("call_id")
@@ -81,11 +83,11 @@ extension VaultDeviceTests {
             relay.holdDepositsAfter = 0
         }
         let began = ContinuousClock.now
-        let waiting = Task { try await d.requestOnce("call.start", timeout: 1, resendAfter: [0.3]) }
+        let waiting = Task { try await d.requestOnce("call.start", timeout: 3, resendAfter: [2]) }
         #expect(try v.open(try await relay.nextDeposit().payload).type == "call.start")
         _ = try await relay.nextDeposit()
         await #expect(throws: VaultStateError.self) { _ = try await waiting.value }
-        // Its 1 s wait, with room for a loaded runner; a resend awaited in the wait would wait out the relay client's tries
+        // Its 3 s wait, with room for a loaded runner; a resend awaited in the wait would wait out the relay client's tries
         // (20 s each) for the held deposit.
         #expect(began.duration(to: .now) < .seconds(10), "ended at its time, not after the stalled resend")
     }
@@ -192,7 +194,7 @@ extension VaultDeviceTests {
             heldOne.value = true
             return false
         }
-        let starting = Task { try await api.callStart("conn-1", pinnedFingerprint: Self.callFp, sdp: Self.callSdp, timeout: 1.2, resendAfter: [0.3, 0.8]) }
+        let starting = Task { try await api.callStart("conn-1", pinnedFingerprint: Self.callFp, sdp: Self.callSdp, timeout: 4, resendAfter: [2, 3]) }
         #expect(try v.open(try await relay.nextDeposit().payload).type == "call.start")
         await #expect(throws: (any Error).self) { _ = try await starting.value }
         #expect(heldOne.value, "the gate held the first resend")
@@ -211,7 +213,7 @@ extension VaultDeviceTests {
         defer { relay.onDeposit = nil }
         let starting = Task {
             try await api.callStart(
-                "conn-1", pinnedFingerprint: Self.callFp, sdp: Self.callSdp, timeout: 1, resendAfter: [0.3, 0.6],
+                "conn-1", pinnedFingerprint: Self.callFp, sdp: Self.callSdp, timeout: 4, resendAfter: [2, 3],
                 mayResend: { wanted.value }
             )
         }
@@ -226,7 +228,7 @@ extension VaultDeviceTests {
         let (d, v) = try await pairedDevice()
         // The first deposit is taken; every one after it fails, so the resend's relay client tries it again and again.
         relay.failDepositsAfter = 1
-        let waiting = Task { try await d.requestOnce("call.start", timeout: 20, resendAfter: [0.2]) }
+        let waiting = Task { try await d.requestOnce("call.start", timeout: 20, resendAfter: [2]) }
         let first = try v.open(try await relay.nextDeposit().payload)
         #expect(await eventually { self.relay.failedDeposits > 0 }, "the resend is out, being tried again")
         try await d.handle(try v.seal("call.start", "{}", re: first.id, status: Inner.statusOK))
@@ -263,7 +265,7 @@ extension VaultDeviceTests {
         relay.onDeposit = { shut.value = true }
         defer { relay.onDeposit = nil }
         d.setFlushGate { !shut.value }
-        let starting = Task { try await api.callStart("conn-1", pinnedFingerprint: Self.callFp, sdp: Self.callSdp, timeout: 1, resendAfter: [0.4]) }
+        let starting = Task { try await api.callStart("conn-1", pinnedFingerprint: Self.callFp, sdp: Self.callSdp, timeout: 3, resendAfter: [2]) }
         #expect(try v.open(try await relay.nextDeposit().payload).type == "call.start")
         await #expect(throws: (any Error).self) { _ = try await starting.value }
         d.setFlushGate { true }
