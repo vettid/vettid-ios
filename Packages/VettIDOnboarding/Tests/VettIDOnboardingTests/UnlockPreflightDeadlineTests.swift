@@ -85,11 +85,11 @@ extension UnlockViewModelTests {
     @Test(arguments: [false, true])
     func aLateAnswerOfAGivenUpCheckChangesNothing(fails: Bool) async {
         let answer = TestGate()
-        // Not cancellable: the answer comes after the deadline, whatever it cancels.
+        // Not cancellable: the answer (a failure too) comes after the deadline, whatever it cancels.
         vault.preflightWait = { _ in
             await withCheckedContinuation { c in Task { try? await answer.wait(); c.resume() } }
+            if fails { throw VaultFailure(.enclave) }
         }
-        if fails { vault.fail["preflight"] = VaultFailure(.enclave) }
         let vm = UnlockViewModel(vault: vault, account: vault, tick: ticker.tick, preflightDeadline: {})
         await until { !vm.state.loading }
         #expect(vm.state.preflightError == .noResponse)
@@ -153,6 +153,33 @@ extension UnlockViewModelTests {
         answer.open()
         await vm.settle()
         #expect(!vm.state.loading && !vm.state.checkStarting && vm.state.preflight != nil && vm.state.pinAllowed)
+    }
+
+    /// A superseded check's `release_starting` comes late: it neither shows the starting text nor touches the new check's
+    /// deadline, which still gives the new check up.
+    @Test func aSupersededChecksStartingChangesNothing() async {
+        let heldStarting = OSAllocatedUnfairLock<(@Sendable (Int) -> Void)?>(initialState: nil)
+        vault.preflightWait = { onStarting in
+            heldStarting.withLock { $0 = onStarting }
+            try await Task.sleep(for: .seconds(60))
+        }
+        let second = TestGate()
+        let armed = OSAllocatedUnfairLock(initialState: 0)
+        // The first check's deadline never ends; the second's when the test opens it; any later one never.
+        let vm = UnlockViewModel(vault: vault, account: vault, tick: ticker.tick, preflightDeadline: {
+            if armed.withLock({ $0 += 1; return $0 }) == 2 { try await second.wait() } else { try await Task.sleep(for: .seconds(60)) }
+        })
+        await until { heldStarting.withLock { $0 } != nil }
+        let old = heldStarting.withLock { $0 }
+        vault.preflightWait = { _ in try await Task.sleep(for: .seconds(60)) }
+        vm.retryPreflight()
+        await until { armed.withLock { $0 } == 2 }
+        old?(5)
+        try? await Task.sleep(for: .milliseconds(100))
+        #expect(!vm.state.checkStarting && armed.withLock { $0 } == 2, "the old check's starting changes nothing")
+        second.open()
+        await until { !vm.state.loading }
+        #expect(vm.state.preflightError == .noResponse, "the new check still has its deadline")
     }
 
     /// A check that answers keeps its answer: its deadline's later end changes nothing.

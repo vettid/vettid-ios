@@ -230,7 +230,7 @@ public final class UnlockViewModel: UnlockActions {
     private func startDeadline(_ generation: Int) {
         deadlineTimer?.cancel()
         deadlineTimer = Task { [weak self, preflightDeadline] in
-            guard (try? await preflightDeadline()) != nil else { return }
+            guard (try? await preflightDeadline()) != nil, !Task.isCancelled else { return }
             guard let self, generation == preflightGeneration, state.loading else { return }
             preflightGeneration += 1
             preflightTask?.cancel()
