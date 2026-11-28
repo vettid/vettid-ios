@@ -79,6 +79,10 @@ public struct IconButton: View {
 /// Main top bar (Proton inbox): menu, large start-aligned title, optional search, the Notifications [bell] and the
 /// member's avatar tile which opens the account sheet. Mirrors vettid-android `VettIdTopAppBar`.
 public struct VettIDTopAppBar<Actions: View>: View {
+    @Environment(\.vettIDApprovalsIndicator) private var approvals
+    // The screen's own size: the bar caps its own at xxxLarge, which would hide an accessibility size.
+    @Environment(\.dynamicTypeSize) private var typeSize
+    @State private var width: CGFloat = 0
     let title: String
     let accountName: String
     let accountPhoto: UIImage?
@@ -128,6 +132,8 @@ public struct VettIDTopAppBar<Actions: View>: View {
                     .accessibilityIdentifier("top_bar_search_open")
             }
             actions
+            // Before the bell (IOS-PLAN §4.12, as vettid-android's top bar).
+            if let approvals { ApprovalsIndicatorButton(approvals, typeSize: typeSize, width: width) }
             if let bell { NotificationBellButton(bell) }
             Button(action: onAvatar) {
                 InitialTile(accountName, size: 36, style: .ownAccount, photo: accountPhoto)
@@ -142,6 +148,7 @@ public struct VettIDTopAppBar<Actions: View>: View {
         }
         .padding(.horizontal, Spacing.xs)
         .frame(minHeight: 72)
+        .onGeometryChange(for: CGFloat.self, of: \.size.width) { width = $0 }
         .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
     }
 }
@@ -150,6 +157,9 @@ public struct VettIDTopAppBar<Actions: View>: View {
 /// screens (``CenteredTitle``), large and start-aligned for settings (``LargeTitle``).
 /// Mirrors vettid-android `VettIdBackTopBar`.
 public struct VettIDBackTopBar<Actions: View>: View {
+    @Environment(\.vettIDApprovalsIndicator) private var approvals
+    @Environment(\.dynamicTypeSize) private var typeSize
+    @State private var width: CGFloat = 0
     let onBack: @MainActor () -> Void
     let actions: Actions
 
@@ -162,10 +172,15 @@ public struct VettIDBackTopBar<Actions: View>: View {
         HStack(spacing: 0) {
             IconButton(.back, label: UIStrings.back, action: onBack).accessibilityIdentifier("top_bar_back")
             Spacer()
+            // Before the screen's own actions; with actions, the icon only, so it never pushes them out (IOS-PLAN §4.12).
+            if let approvals {
+                ApprovalsIndicatorButton(approvals, compact: Actions.self != EmptyView.self, typeSize: typeSize, width: width)
+            }
             actions
         }
         .padding(.horizontal, Spacing.xs)
         .frame(minHeight: 64)
+        .onGeometryChange(for: CGFloat.self, of: \.size.width) { width = $0 }
     }
 }
 

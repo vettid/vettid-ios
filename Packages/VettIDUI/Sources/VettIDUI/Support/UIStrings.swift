@@ -48,6 +48,20 @@ enum UIStrings {
     static func notificationsUnread(_ count: Int) -> String {
         String(localized: "core_ui_notifications_unread", defaultValue: "Notifications, \(count) unread", bundle: .module)
     }
+    /// The approvals indicator (ID19; the Android texts the owner approved, GC #17779).
+    static func approvalsIndicator(_ count: Int) -> String {
+        String(localized: "approvals_indicator_description", defaultValue: "Approvals, \(count) waiting", bundle: .module)
+    }
+    static func approvalsIndicatorUrgent(_ count: Int, label: String, time: String) -> String {
+        String(
+            localized: "approvals_indicator_description_urgent",
+            defaultValue: "Approvals, \(count) waiting. \(label) expires in \(time)",
+            bundle: .module
+        )
+    }
+    static func approvalsIndicatorTime(_ minutes: Int64, _ seconds: Int64) -> String {
+        String(format: "%lld:%02lld", minutes, seconds)
+    }
     static func notificationsUnreadUrgent(_ count: Int) -> String {
         String(
             localized: "core_ui_notifications_unread_urgent",
