@@ -92,9 +92,9 @@ extension FakeVaultRepository: VaultRepository {
         phase = .unlocked
     }
 
-    public func preflight() async throws -> PreflightInfo {
+    public func preflight(onStarting: (@Sendable (Int) -> Void)?) async throws -> PreflightInfo {
         try call("preflight")
-        try await preflightWait?()
+        try await preflightWait?(onStarting)
         return preflightInfo
     }
 

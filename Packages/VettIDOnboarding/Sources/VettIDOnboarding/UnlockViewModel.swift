@@ -34,10 +34,12 @@ public final class UnlockViewModel: UnlockActions {
     @ObservationIgnored private var attemptGeneration = 0
     /// How long an unlock waits before the screen says the vault may be starting.
     @ObservationIgnored private let slowAfter: @Sendable () async throws -> Void
-    /// How long the release check may take before it is given up and "Try again" is offered: a read that never answers, or a
-    /// routed release that goes on starting, does not leave "Checking your vault's software" on the screen with no keypad
-    /// and no way on. Longer than one request's own timeout (the system's 60 s, with up to 8 s waiting for a network), so a
-    /// slow request ends with its own error first. (chosen; not in the spec)
+    /// How long the release check may go with no sign of progress before it is given up and "Try again" is offered: a read
+    /// that never answers does not leave "Checking your vault's software" on the screen with no keypad and no way on.
+    /// Progress is the check's start and each `release_starting` while the routed release starts (a cold start takes 2-3
+    /// minutes, VAULT-RELEASES §8.6; that wait is bounded by `MemberApiClient.maxStartTotal`), so a starting release is
+    /// waited for, with the screen saying so. Longer than one request's own timeout (the system's 60 s, with up to 8 s
+    /// waiting for a network), so a slow request ends with its own error first. (chosen; not in the spec)
     @ObservationIgnored private let preflightDeadline: @Sendable () async throws -> Void
     /// The release check under way and its watchdog; a check of an earlier generation (superseded, or given up) changes
     /// nothing.
@@ -158,6 +160,7 @@ public final class UnlockViewModel: UnlockActions {
         state.loading = true
         state.preflightError = nil
         state.preflight = nil
+        state.checkStarting = false
         // §6.7.1: a phone without a usable user_guid is told that it cannot open the vault (recover or erase) as soon as
         // the release check has answered (an ended release or a rollback wins), with no PIN asked; nothing will ever add
         // one.
@@ -175,13 +178,14 @@ public final class UnlockViewModel: UnlockActions {
         preflightTask = launch { [self] in
             let result: Result<PreflightInfo, any Error>
             do {
-                result = .success(try await vault.preflight())
+                result = .success(try await vault.preflight(onStarting: startingHeard(generation)))
             } catch {
                 result = .failure(error)
             }
             // Superseded by a new check, or given up by the watchdog: its answer changes nothing.
             guard generation == preflightGeneration else { return }
             deadlineTimer?.cancel()
+            state.checkStarting = false
             // Whatever the check's answer: the erase is offered only once it is known whether recover-only wins.
             defer { state.keysGone = state.keysGone || state.noUserGuid }
             do {
@@ -207,9 +211,22 @@ public final class UnlockViewModel: UnlockActions {
         }
     }
 
-    /// Starts the watchdog of the release check of [generation]: unanswered after ``preflightDeadline``, the check is given up
-    /// as one that did not answer ("Try again"; a retry starts a new check, which waits again), and its late answer changes
-    /// nothing.
+    /// A routed release that starts, heard by the release check of [generation]: progress, so the deadline starts again, and
+    /// the screen says the vault is starting.
+    private func startingHeard(_ generation: Int) -> @Sendable (Int) -> Void {
+        { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self, generation == preflightGeneration, state.loading else { return }
+                state.checkStarting = true
+                startDeadline(generation)
+            }
+        }
+    }
+
+    /// (Re)starts the watchdog of the release check of [generation]: with no progress for ``preflightDeadline``, the check is
+    /// given up as one that did not answer ("Try again"; a retry starts a new check, which waits again), and its late answer
+    /// changes nothing. The check stops being waited for; what it waits on (a session opening shared with other callers)
+    /// may go on.
     private func startDeadline(_ generation: Int) {
         deadlineTimer?.cancel()
         deadlineTimer = Task { [weak self, preflightDeadline] in
@@ -218,6 +235,7 @@ public final class UnlockViewModel: UnlockActions {
             preflightGeneration += 1
             preflightTask?.cancel()
             state.loading = false
+            state.checkStarting = false
             // As a check that did not answer (not mapped to a clock off: nothing answered to say so).
             state.preflightError = .noResponse
             state.approveOffer = false

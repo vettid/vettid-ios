@@ -483,6 +483,17 @@ final class FakeAltAPI: @unchecked Sendable {
         #expect(try await f.preflight(p.state).rollback)
     }
 
+    /// The routed release starts: the check hears each `release_starting` (its watchdog sees progress), then answers.
+    @Test func preflightHearsAReleaseThatStarts() async throws {
+        let (api, p, f) = try setUp()
+        // The manifest, then the routed release starting twice (§11.10.5), then the handler's descriptor.
+        let starting = FakeHTTPServer.Answer.json(503, #"{"error":"release_starting","retry_after":3}"#)
+        api.server.enqueue(.bytes(200, try api.served()), starting, starting)
+        let heard = Recorder<Int>()
+        let pre = try await f.preflight(p.state, onStarting: { heard.add($0) })
+        #expect(heard.all == [3, 3] && pre.routed.number == 3)
+    }
+
     /// Never a PIN to an older release than the last one unlocked into (§11.10.6).
     @Test func anUnlockToAnOlderReleaseIsRefused() async throws {
         let (api, p, f) = try setUp()

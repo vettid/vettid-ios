@@ -285,11 +285,14 @@ struct UnlockNotices: View {
 
     var body: some View {
         if state.loading {
+            // The routed release starting (§11.10.5): the text of the same wait during an unlock, below.
             HStack(spacing: Spacing.m) {
                 ProgressView()
-                Text(OnboardingStrings.unlockChecking).vettIDFont(.bodyMedium)
+                Text(state.checkStarting ? RecoveryScreenStrings.recoverRegisteringStarting : OnboardingStrings.unlockChecking)
+                    .vettIDFont(.bodyMedium)
             }
             .accessibilityElement(children: .combine)
+            .accessibilityIdentifier(state.checkStarting ? "unlock_check_starting" : "unlock_checking")
         }
         if state.busy, state.slowUnlock {
             // The unlock waits long for the vault: it may be starting (Android's text for the same wait of a recovery's

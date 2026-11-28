@@ -43,6 +43,8 @@ public struct UnlockState: Equatable, Sendable, CustomStringConvertible, CustomD
     public var email: String?
     public var preflight: PreflightInfo?
     public var preflightError: FailureKind?
+    /// The release check waits for the routed release to start (`503 release_starting`, §11.10.5): the screen says so.
+    public var checkStarting = false
     /// The member read the "vault software was updated" notice (§11.10.6).
     public var updateAcknowledged = false
     /// The member approves the offered release with this unlock (§11.10.3).
