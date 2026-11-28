@@ -216,6 +216,7 @@ package final class CallMachine {
 
     /// Keeps [e] for a call that has no id yet (see ``CallSession/early``); true if it was kept.
     private func heldEarly(_ s: CallSession?, _ e: SignalEvent) -> Bool {
+        if let s, endsPendingStart(s, e) { return true }
         guard let s, s.callId == nil, s.early.count < Self.maxEarly else { return false }
         if case .offer = e { return false }
         s.early.append(e)

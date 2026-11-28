@@ -66,6 +66,13 @@ package struct CallRefusedError: Error, Equatable, Sendable, CustomStringConvert
     package var description: String { "call refused: \(code)" }
 }
 
+/// The call was hung up, or the vault began locking, before its `call.start` went: nothing was placed, nothing is to end.
+package struct CallNotWantedError: Error, Equatable, Sendable, CustomStringConvertible {
+    package init() {}
+
+    package var description: String { "call no longer wanted: not placed" }
+}
+
 /// `call.start` placed [callId], but the call can no longer be made: it was ended, or an end for it may have been lost, while
 /// it was being started, and its key is gone. The machine ends it (``CallMachine``'s `lost`), with the reason the session calls for.
 package struct CallLostError: Error, Equatable, Sendable, CustomStringConvertible {
@@ -206,9 +213,11 @@ package protocol CallSignalling: AnyObject {
 
     /// ``start(connectionId:sdp:suites:)``, with [wanted]: whether the call is still wanted (not hung up, the vault not
     /// closing). A start that may place the call a second time (``VaultCallSignalling``'s form 2 re-place) does so only while
-    /// it is.
+    /// it is. [placing]: told the `call_id` of each `call.start` just before it goes, so that a hang-up or a lock while the
+    /// start is unanswered can end that call at once.
     func start(
-        connectionId: String, sdp: String, suites: [MediaSuite], wanted: @escaping @MainActor () -> Bool
+        connectionId: String, sdp: String, suites: [MediaSuite], wanted: @escaping @MainActor () -> Bool,
+        placing: @escaping @MainActor (String) -> Void
     ) async throws -> PlacedCall
 
     /// `call.answer` for a verified offer: returns the call's keys. Throws ``CallSecurityError`` or another error.
@@ -232,7 +241,8 @@ package protocol CallSignalling: AnyObject {
 
 extension CallSignalling {
     package func start(
-        connectionId: String, sdp: String, suites: [MediaSuite], wanted: @escaping @MainActor () -> Bool
+        connectionId: String, sdp: String, suites: [MediaSuite], wanted: @escaping @MainActor () -> Bool,
+        placing: @escaping @MainActor (String) -> Void
     ) async throws -> PlacedCall {
         try await start(connectionId: connectionId, sdp: sdp, suites: suites)
     }

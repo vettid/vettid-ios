@@ -34,6 +34,10 @@ public enum CallLimits {
     public static let startTimeout: TimeInterval = 30
     /// (0.97.0) When `call.start` is deposited again, with the same inner `id`, while no answer has come.
     public static let startResends: [TimeInterval] = [10, 20]
+    /// The least wait for `call.start`'s answer after its first deposit returns, when the relay took it so slowly that the
+    /// 30 s were nearly or all gone: ringing the callee and hanging up at once would be a missed call for nothing. (Chosen;
+    /// not in the spec.)
+    public static let startAnswerGrace: TimeInterval = 5
     /// The most entries one `call.list` may ask for (the vault keeps the latest 200 calls).
     public static let maxListLimit = 200
     /// (C2) How often the call's device sends `call.keepalive`, and the `exp` it gives one ("Liveness").
@@ -182,7 +186,8 @@ extension VaultApi {
     /// 0.88.16 §10.10) and `keepalive: true`; a device passes it only when its vault is C2 (`call.list` `v: 2`). Nil: form 1
     /// only, as to an S10 vault. Rule 3 holds for both: form 1 is in every start, so suite 1 alone is offered.
     public func callStart(
-        _ connectionId: String, pinnedFingerprint: String, sdp: String, suites: [MediaSuite] = MediaSuite.default,
+        _ connectionId: String, callId: String? = nil, pinnedFingerprint: String, sdp: String,
+        suites: [MediaSuite] = MediaSuite.default,
         media: String = CallWire.mediaAudio,
         timeout: TimeInterval = CallLimits.startTimeout, peerIk: [UInt8]? = nil,
         resendAfter: [TimeInterval] = CallLimits.startResends, mayResend: (@Sendable () async -> Bool)? = nil
@@ -190,7 +195,8 @@ extension VaultApi {
         // The call is bound to the identity the member sees: no fingerprint, no call. Nothing is sent.
         guard !pinnedFingerprint.isEmpty else { throw CallMessageError("pinned fingerprint") }
         guard media == CallWire.mediaAudio || media == CallWire.mediaVideo else { throw CallMessageError("media") }
-        let callId = device.newRequestID()
+        // [callId]: made by the caller just before this, so that it can end the call while the start is unanswered.
+        let callId = callId ?? device.newRequestID()
         let offered = try checked("media suites") { try CallMedia.offerOf(MediaSuite.formOne(suites)) }
         let parties = try peerIk.map { ik in
             try checked("call parties") { try CallWire.Parties(caller: try device.vaultIdentityKey(), callee: ik) }
@@ -216,7 +222,8 @@ extension VaultApi {
             // no longer holds the call a cached copy marked `withheld: true` without the TURN entry, which is kept as the
             // call all the same (it is not placed again: the callee sees one call). [mayResend]: the call still wanted.
             let o = VaultJSON.object(try await device.opOnce(
-                "call.start", body: body.bytes(), timeout: timeout, resendAfter: resendAfter, mayResend: mayResend
+                "call.start", body: body.bytes(), timeout: timeout, resendAfter: resendAfter, mayResend: mayResend,
+                answerGrace: CallLimits.startAnswerGrace
             ))
             guard try o.need("call_id") == callId else { throw CallMessageError("call.start answered for another call") }
             let exp = try checked("exp") { try Timestamps.parseMillis(try o.need("exp")) }

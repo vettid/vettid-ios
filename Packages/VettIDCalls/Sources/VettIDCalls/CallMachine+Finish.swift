@@ -29,7 +29,15 @@ extension CallMachine {
         }
         release(s)
         let callId = s.callId
-        if let tell, let callId { sendEnd(callId, tell) }
+        if let tell, let callId {
+            sendEnd(callId, tell)
+        } else if callId == nil, s.supersededBy == nil, let starting = s.startingCallId {
+            // (0.97.0 §10.10 "Placing a call") An outgoing call that ends, by whatever path (a hang-up, a lock, a failure of
+            // its engine), while its `call.start` is out unanswered: that call is ended now, not when the start returns (up to
+            // its 30 s, the callee ringing all the while if the answer was lost). Should the start place it after all, its own
+            // end then is a duplicate the vault ignores.
+            sendEnd(starting, reason == .failed ? CallReason.failed : CallReason.hangup)
+        }
         // An incoming call that rang here and has ended: its offer delivered again is not rung. (Chosen; not in the spec.) That
         // includes one still live at the vault until its `exp`: an answer CallKit refused (missed, nothing sent) or this
         // device's ring timer run out; a redelivered offer for it does not ring here again.

@@ -276,10 +276,15 @@ class FakeSignalling: CallSignalling {
     /// What the last start was told about whether its call is still wanted (the form 2 re-place asks it).
     var startWanted: (@MainActor () -> Bool)?
 
+    /// The `call_id` the next start names before it goes (``start(connectionId:sdp:suites:wanted:placing:)``'s [placing]).
+    var startCallId: String?
+
     func start(
-        connectionId: String, sdp: String, suites: [MediaSuite], wanted: @escaping @MainActor () -> Bool
+        connectionId: String, sdp: String, suites: [MediaSuite], wanted: @escaping @MainActor () -> Bool,
+        placing: @escaping @MainActor (String) -> Void
     ) async throws -> PlacedCall {
         startWanted = wanted
+        if let startCallId { placing(startCallId) }
         return try await start(connectionId: connectionId, sdp: sdp, suites: suites)
     }
 

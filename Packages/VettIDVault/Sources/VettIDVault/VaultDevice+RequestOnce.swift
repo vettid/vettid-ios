@@ -11,10 +11,13 @@ extension VaultDevice {
     /// call"). The first answer is the one used; a deposit that fails then is not an end: the wait goes on. A resend goes
     /// only while [mayResend] says so (the caller's: the call still wanted) and only while nothing has stopped this request
     /// going since its first deposit: once the lock gate held one resend, or the device stopped, no other goes, though the
-    /// gate opens again when the vault has taken the lock. A resend still out when the wait ends is cancelled.
+    /// gate opens again when the vault has taken the lock. A resend still out when the wait ends is cancelled. A first
+    /// deposit the relay is slow to take: the resend times already past when it returns are skipped (the request has only just
+    /// reached the relay), and the wait lasts at least [answerGrace] after it returns, so that a request that landed at the very
+    /// end of its time is not given up before its answer could come.
     public func requestOnce(
         _ type: String, body: [UInt8] = VaultJSON.empty, timeout: TimeInterval? = nil, exp: Date? = nil,
-        resendAfter: [TimeInterval] = [], mayResend: (@Sendable () async -> Bool)? = nil
+        resendAfter: [TimeInterval] = [], mayResend: (@Sendable () async -> Bool)? = nil, answerGrace: TimeInterval = 0
     ) async throws -> VaultMessage {
         let id = Ulid.new(now())
         let d = OneShot<Inner>()
@@ -27,15 +30,18 @@ extension VaultDevice {
         // The times count from the first deposit's start, on a clock that cannot be set back: a slow deposit (the relay
         // client's own tries) delays neither a resend nor the end of the wait, and each resend is deposited beside the wait.
         let sent = ContinuousClock.now
-        func left(until at: TimeInterval) -> TimeInterval {
-            let elapsed = sent.duration(to: .now)
-            return max(0, at - Double(elapsed.components.seconds) - Double(elapsed.components.attoseconds) / 1e18)
+        func elapsed() -> TimeInterval {
+            let e = sent.duration(to: .now)
+            return Double(e.components.seconds) + Double(e.components.attoseconds) / 1e18
         }
+        func left(until at: TimeInterval) -> TimeInterval { max(0, at - elapsed()) }
         _ = try await countingSend(type) { try await sendOnceUnlocked(id: id, type: type, body: body, exp: exp) }
+        let landed = elapsed()
+        let end = max(total, landed + answerGrace)
         var resends: [Task<Void, Never>] = []
         defer { resends.forEach { $0.cancel() } }
         var stopped = false
-        for at in resendAfter.sorted() where at > 0 && at < total {
+        for at in resendAfter.sorted() where at > landed && at < total {
             if let inner = await d.wait(timeout: left(until: at)) { return VaultMessage(inner: countingAnswer(type, inner)) }
             try Task.checkCancellation()
             if !stopped { stopped = await !mayResendNow(type, since: mark, mayResend) }
@@ -43,7 +49,7 @@ extension VaultDevice {
                 resends.append(Task { _ = try? await self.sendOnceUnlocked(id: id, type: type, body: body, exp: exp) })
             }
         }
-        guard let inner = await d.wait(timeout: left(until: total)) else {
+        guard let inner = await d.wait(timeout: left(until: end)) else {
             try Task.checkCancellation()
             countingNoAnswer(type)
             throw VaultStateError(message: "\(type): no response")
@@ -59,14 +65,14 @@ extension VaultDevice {
         return mem.withLock { stops == mark && !forgotten }
     }
 
-    /// ``requestOnce(_:body:timeout:exp:resendAfter:mayResend:)``, returning the body of an ok response or throwing
-    /// ``VaultOpError``.
+    /// ``requestOnce(_:body:timeout:exp:resendAfter:mayResend:answerGrace:)``, returning the body of an ok response or
+    /// throwing ``VaultOpError``.
     public func opOnce(
         _ type: String, body: [UInt8] = VaultJSON.empty, timeout: TimeInterval? = nil, exp: Date? = nil,
-        resendAfter: [TimeInterval] = [], mayResend: (@Sendable () async -> Bool)? = nil
+        resendAfter: [TimeInterval] = [], mayResend: (@Sendable () async -> Bool)? = nil, answerGrace: TimeInterval = 0
     ) async throws -> [UInt8] {
-        try Self.okBody(
-            type, try await requestOnce(type, body: body, timeout: timeout, exp: exp, resendAfter: resendAfter, mayResend: mayResend)
-        )
+        try Self.okBody(type, try await requestOnce(
+            type, body: body, timeout: timeout, exp: exp, resendAfter: resendAfter, mayResend: mayResend, answerGrace: answerGrace
+        ))
     }
 }

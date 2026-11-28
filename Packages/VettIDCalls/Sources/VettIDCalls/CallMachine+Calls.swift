@@ -28,13 +28,28 @@ extension CallMachine {
             try await uncancellable { [self] in
                 do {
                     // Still wanted while this call is the current one: a hang-up or a lock meanwhile places nothing more.
+                    // Each `call.start`'s id is known before it goes: a hang-up or a lock while it is unanswered ends that
+                    // call at once (``finish(_:_:_:)``), not when the start returns.
                     let placed = try await signalling.start(
-                        connectionId: connectionId, sdp: sdp, suites: offered, wanted: { [weak self] in self?.session === s && !s.locking }
+                        connectionId: connectionId, sdp: sdp, suites: offered, wanted: { [weak self] in self?.session === s && !s.locking },
+                        placing: { [weak self] id in
+                            if self?.session === s {
+                                s.startingCallId = id
+                            } else {
+                                // Ended in between (never so today: each start, the re-place's included, asks [wanted] just
+                                // before, with nothing awaited between): ended as well.
+                                self?.sendEnd(id, CallReason.hangup)
+                            }
+                        }
                     )
+                    // Returned: from here its own answer says what is to end (``onPlaced``, ``onLost``), not the pending id.
+                    s.startingCallId = nil
                     post(.placed(seq: s.seq, placed, atMs: clock.elapsedMs()))
                 } catch let e as CallRefusedError {
+                    s.startingCallId = nil
                     post(.failed(seq: s.seq, Self.refusal(e.code)))
                 } catch let e as CallLostError {
+                    s.startingCallId = nil
                     post(.lost(seq: s.seq, callId: e.callId, end: e.end))
                 }
                 // Any other failure after the request may have left (no answer in time, a lost answer, one that does not

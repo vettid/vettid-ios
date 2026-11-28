@@ -35,6 +35,8 @@ final class FakeGateway: CallGateway {
     var startGates: [Gate] = []
     /// The last start's [mayResend]: whether `call.start` may still be deposited again.
     var startMayResend: (@Sendable () async -> Bool)?
+    /// Each start's wait (nil: the default 30 s).
+    var startTimeouts: [TimeInterval?] = []
     var answerKeys: CallKeys?
     var acceptGate: Gate?
 
@@ -52,9 +54,10 @@ final class FakeGateway: CallGateway {
 
     // swiftlint:disable:next function_parameter_count
     func start(
-        connectionId: String, pinnedFingerprint: String, sdp: String, suites: [MediaSuite], peerIk: [UInt8]?,
-        mayResend: @escaping @Sendable () async -> Bool
+        connectionId: String, callId: String, pinnedFingerprint: String, sdp: String, suites: [MediaSuite], peerIk: [UInt8]?,
+        timeout: TimeInterval?, mayResend: @escaping @Sendable () async -> Bool
     ) async throws -> OutgoingCall {
+        startTimeouts.append(timeout)
         startMayResend = mayResend
         asked.append("start(\(connectionId), \(suites.map(\.id))\(peerIk.map { ", ik \($0.count)" } ?? ""))")
         if startGates.isEmpty { await startGate?.wait() } else { await startGates.removeFirst().wait() }
@@ -69,6 +72,16 @@ final class FakeGateway: CallGateway {
     func answer(_ call: IncomingCall, sdp: String, keepalive: Bool) async throws -> CallKeys {
         asked.append("answer(\(call.callId)\(keepalive ? ", keepalive" : ""))")
         return try #require(answerKeys)
+    }
+
+    /// The `call_id`s handed out for starts, in order.
+    var newCallIds: [String] = []
+
+    func newCallId() throws -> String {
+        // The first is the id the fakes' placed calls carry (``callId``), as a real start's call has its start's id.
+        let id = newCallIds.isEmpty ? callId : "start-\(newCallIds.count + 1)"
+        newCallIds.append(id)
+        return id
     }
 
     func keepalive(_ callId: String) async throws { asked.append("keepalive(\(callId))") }
