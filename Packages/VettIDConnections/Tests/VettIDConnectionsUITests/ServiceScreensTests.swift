@@ -58,7 +58,7 @@ import VettIDUI
         #expect(ConnectedScreen.buttons(hasMessages: false, service: false) == ["Done"])
     }
 
-    /// A request with the marker shows the name labelled "Name given by the service", the line and its small print above
+    /// A request with the marker shows the name labeled "Name given by the service", the line and its small print above
     /// the code; one without shows none of them.
     @Test func theRequestOfAServiceSaysSo() {
         func state(_ service: Bool) -> AcceptState {
@@ -132,7 +132,8 @@ import VettIDUI
         let screen = ConnectionDetailScreen(state: state, actions: DetailActions())
         #expect(screen.title == "Example Bank")
         #expect(screen.pill(s).first?.label == "Add \u{2068}Example Bank\u{2069} to favorites")
-        #expect(ProfileCard.profileNameLabel(s) == "Name given by the service", "its only name, labelled as the service's")
+        #expect(ProfileCard.profileNameLabel(s) == "Name given by the service", "its only name, labeled as the service's")
+        #expect(!ProfileCard.showsNone(s), "its name is a profile")
 
         var person = s
         person.isService = false
@@ -151,7 +152,7 @@ import VettIDUI
     }
 
     /// A service's page: no message, no sharing cards, "What this service can ask" (with or without votes), and its
-    /// names labelled as the service's; a person's page has all of them and no such card.
+    /// names labeled as the service's; a person's page has all of them and no such card.
     @Test func aServicesPageHasNoPersonOnlyActions() {
         var actions = DetailActions()
         actions.onMessage = {}
