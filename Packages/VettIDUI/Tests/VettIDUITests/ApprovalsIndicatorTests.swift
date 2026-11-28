@@ -75,6 +75,20 @@ struct ApprovalsIndicatorTests {
         #expect(!icon.ticks(voiceOver: false) && icon.ticks(voiceOver: true), "the icon ticks only for VoiceOver's label")
         #expect(!ApprovalsIndicatorButton(Self.indicator(1, critical: true)).ticks(voiceOver: true), "no deadline: the clock alone")
         #expect(!ApprovalsIndicatorButton(Self.indicator(2)).ticks(voiceOver: true))
+        // Under the daily check, drawn over the shell: no tick at all (vettid-android `noTickUnderTheDailyCheck`).
+        let critical = Self.indicator(1, critical: true, in: 60, label: "Bank")
+        #expect(ApprovalsIndicatorButton.ticks(critical, capsule: true, covered: false, voiceOver: false))
+        #expect(!ApprovalsIndicatorButton.ticks(critical, capsule: true, covered: true, voiceOver: true))
+        #expect(!ApprovalsIndicatorButton.ticks(critical, capsule: false, covered: true, voiceOver: true))
+    }
+
+    /// Equal on what it shows, whatever its tap: the bars are not drawn again when the shell rebuilds the same indicator.
+    @Test func equalOnWhatItShows() {
+        var tapped = 0
+        let a = ApprovalsIndicator(count: 2, critical: true, urgent: true, deadline: Self.now, label: "Bank") {}
+        let b = ApprovalsIndicator(count: 2, critical: true, urgent: true, deadline: Self.now, label: "Bank") { tapped += 1 }
+        #expect(a == b && tapped == 0)
+        #expect(a != Self.indicator(3) && Self.indicator(1, critical: true, in: 60) != Self.indicator(1, critical: true, in: 61))
     }
 
     @Test func itIsAtLeastATarget() {

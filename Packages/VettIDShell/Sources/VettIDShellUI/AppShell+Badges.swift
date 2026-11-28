@@ -46,27 +46,38 @@ extension AppShell {
 
     /// The approvals indicator for the screens of the stack, each of which may opt out.
     var indicator: ApprovalsIndicator? { approvalsIndicator(locked: appLocked) }
+
+    /// What the top-level screen gets: none on Approvals itself.
+    func rootIndicator(_ i: ApprovalsIndicator?) -> ApprovalsIndicator? { model.destination == .approvals ? nil : i }
+
+    /// What a pushed screen gets: none on the screens of ``ShellIndicator``.
+    func detailIndicator(_ route: ShellRoute, _ i: ApprovalsIndicator?) -> ApprovalsIndicator? {
+        ShellIndicator.hidden(route) ? nil : i
+    }
 }
 
 /// Moves [now] on at each of [points] without a new read (ANDROID-PLAN §4 "The approvals indicator" 3), and reads the time
-/// again whenever the app comes back to the front (a sleep does not run while the phone sleeps). vettid-android
-/// `deadlineClock` with its `resumed`.
+/// again whenever the app comes back from the background (a sleep does not run while the phone sleeps). It keeps going while
+/// the app is only inactive (Notification Center over it), so an entry stops counting at its deadline there too.
+/// vettid-android `deadlineClock` with its `resumed`.
 struct ApprovalsClock: ViewModifier {
     @Environment(\.scenePhase) private var scenePhase
     let points: [Date]
     @Binding var now: Date
 
     func body(content: Content) -> some View {
-        content.task(id: Key(points: points, phase: scenePhase)) {
-            guard scenePhase == .active else { return }
+        content.task(id: Self.key(points, scenePhase)) {
+            guard scenePhase != .background else { return }
             await DeadlineClock().run(points) { now = $0 }
         }
     }
 
-    /// What restarts the clock: a change of the points, or of the scene phase (a return to the front).
-    private struct Key: Equatable {
+    /// What restarts the clock: a change of the points, or a move into or out of the background.
+    static func key(_ points: [Date], _ phase: ScenePhase) -> Key { Key(points: points, background: phase == .background) }
+
+    struct Key: Equatable {
         let points: [Date]
-        let phase: ScenePhase
+        let background: Bool
     }
 }
 #endif

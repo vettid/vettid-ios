@@ -4,7 +4,7 @@ import SwiftUI
 /// (above 0: the shell provides none at 0), and while one is time-critical ([critical]) the countdown to [deadline] (nil:
 /// the clock alone), in the urgency colors when [urgent], else neutral. [label] names the soonest time-critical entry for
 /// VoiceOver, cleaned and bidi-isolated. Mirrors vettid-android `ApprovalsIndicator`.
-public struct ApprovalsIndicator: Sendable {
+public struct ApprovalsIndicator: Sendable, Equatable {
     public let count: Int
     public let critical: Bool
     public let urgent: Bool
@@ -22,6 +22,12 @@ public struct ApprovalsIndicator: Sendable {
         self.deadline = deadline
         self.label = label
         self.onTap = onTap
+    }
+
+    /// Equal on what it shows: the shell builds a new one at every render with the same tap (always the Approvals list), so
+    /// the top bars are drawn again only when the indicator changes (vettid-android `remember(open, …)`).
+    public static func == (a: Self, b: Self) -> Bool {
+        a.count == b.count && a.critical == b.critical && a.urgent == b.urgent && a.deadline == b.deadline && a.label == b.label
     }
 
     /// The whole seconds left to [deadline] at [now], rounded up and never below 0 (80.4 s reads "1:21").
@@ -92,8 +98,10 @@ public struct ApprovalsIndicatorButton: View {
 
     /// The one-second tick runs only while shown and not under the daily check: for the capsule, or while VoiceOver is on for
     /// the icon's label to name the time left (it needs the entry's name). It announces nothing.
-    func ticks(voiceOver: Bool) -> Bool {
-        !covered && indicator.critical && indicator.deadline != nil && (capsule || (indicator.label != nil && voiceOver))
+    func ticks(voiceOver: Bool) -> Bool { Self.ticks(indicator, capsule: capsule, covered: covered, voiceOver: voiceOver) }
+
+    static func ticks(_ i: ApprovalsIndicator, capsule: Bool, covered: Bool, voiceOver: Bool) -> Bool {
+        !covered && i.critical && i.deadline != nil && (capsule || (i.label != nil && voiceOver))
     }
 
     public var body: some View {

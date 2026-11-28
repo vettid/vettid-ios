@@ -83,6 +83,27 @@ import VettIDUI
         #expect(s.badges[.approvals] == 1 && s.approvalsIndicator(locked: false)?.count == 1)
     }
 
+    /// None on Approvals itself, or on the screens of `INDICATOR_HIDDEN_ON`; every other screen gets the shell's.
+    @Test func approvalsAndTheHiddenScreensGetNone() throws {
+        approvals.listed = [Self.grant("g1", conn: "c1")]
+        let s = shell()
+        let i = try #require(s.indicator)
+        model.navigate(.messages)
+        #expect(s.rootIndicator(i) == i)
+        model.navigate(.approvals)
+        #expect(s.rootIndicator(i) == nil)
+        #expect(s.detailIndicator(.approval("grant:g1"), i) == nil && s.detailIndicator(.transferOut, i) == nil)
+        #expect(s.detailIndicator(.conversation("c1"), i) == i && s.detailIndicator(.connection("c1"), i) == i)
+    }
+
+    /// The clock starts again when its points change and on a return from the background, not when the app is only inactive.
+    @Test func theClockRestartsOnNewPointsAndAReturnFromTheBackground() {
+        let p = [Date(timeIntervalSince1970: 100)]
+        #expect(ApprovalsClock.key(p, .active) == ApprovalsClock.key(p, .inactive))
+        #expect(ApprovalsClock.key(p, .active) != ApprovalsClock.key(p, .background))
+        #expect(ApprovalsClock.key(p, .active) != ApprovalsClock.key(p + [Date(timeIntervalSince1970: 200)], .active))
+    }
+
     /// Time-critical: the soonest entry's connection by its title, bidi-isolated, and its deadline.
     @Test func aTimeCriticalEntryIsNamedByItsConnection() throws {
         var c = ConnectionInfo(id: "c1", name: "", state: .active)

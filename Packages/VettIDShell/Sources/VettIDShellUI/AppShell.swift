@@ -274,12 +274,12 @@ public struct AppShell: View {
                     }
                     NavigationStack(path: $model.path) {
                         root
-                            .environment(\.vettIDApprovalsIndicator, model.destination == .approvals ? nil : indicator)
+                            .environment(\.vettIDApprovalsIndicator, rootIndicator(indicator))
                             .toolbar(.hidden, for: .navigationBar)
                             .systemBackGesture()
                             .navigationDestination(for: ShellRoute.self) { route in
                                 detail(route)
-                                    .environment(\.vettIDApprovalsIndicator, ShellIndicator.hidden(route) ? nil : indicator)
+                                    .environment(\.vettIDApprovalsIndicator, detailIndicator(route, indicator))
                                     .toolbar(.hidden, for: .navigationBar)
                             }
                     }
