@@ -34,6 +34,15 @@ public final class UnlockViewModel: UnlockActions {
     @ObservationIgnored private var attemptGeneration = 0
     /// How long an unlock waits before the screen says the vault may be starting.
     @ObservationIgnored private let slowAfter: @Sendable () async throws -> Void
+    /// How long the release check may go with no sign of progress (its start, or a `release_starting` answer while the
+    /// routed release starts) before it is given up and "Try again" is offered: a read that never answers does not leave
+    /// "Checking your vault's software" on the screen with no keypad and no way on. (chosen; not in the spec)
+    @ObservationIgnored private let preflightStall: @Sendable () async throws -> Void
+    /// The release check under way and its watchdog; a check of an earlier generation (superseded, or given up) changes
+    /// nothing.
+    @ObservationIgnored private var preflightTask: Task<Void, Never>?
+    @ObservationIgnored private var stallTimer: Task<Void, Never>?
+    @ObservationIgnored private var preflightGeneration = 0
 
     public init(
         vault: any VaultRepository,
@@ -43,9 +52,13 @@ public final class UnlockViewModel: UnlockActions {
         now: @escaping @Sendable () -> Date = { Date() },
         tick: @escaping @Sendable () async throws -> Void = { try await Task.sleep(for: .seconds(1)) },
         recheck: @escaping @Sendable () async throws -> Void = { try await Task.sleep(for: .seconds(15)) },
-        slowAfter: @escaping @Sendable () async throws -> Void = { try await Task.sleep(for: .seconds(10)) }
+        slowAfter: @escaping @Sendable () async throws -> Void = { try await Task.sleep(for: .seconds(10)) },
+        preflightStall: @escaping @Sendable () async throws -> Void = {
+            try await Task.sleep(for: .seconds(UnlockViewModel.preflightStallSeconds))
+        }
     ) {
         self.slowAfter = slowAfter
+        self.preflightStall = preflightStall
         self.vault = vault
         self.account = account
         self.releaseNotes = releaseNotes
@@ -90,7 +103,11 @@ public final class UnlockViewModel: UnlockActions {
         }
     }
 
+    /// ``preflightStall``'s length in the app.
+    public nonisolated static let preflightStallSeconds: Double = 30
+
     deinit {
+        stallTimer?.cancel()
         followers.cancelAll()
         countdowns.cancelAll()
         notesTask?.cancel()
@@ -150,11 +167,30 @@ public final class UnlockViewModel: UnlockActions {
         state.keysGone = false
         state.earlierSecret = false
         state.eraseConfirm = false
-        launch { [self] in
+        preflightGeneration += 1
+        let generation = preflightGeneration
+        preflightTask?.cancel()
+        armStall(generation)
+        preflightTask = launch { [self] in
+            let onStarting: @Sendable (Int) -> Void = { [weak self] _ in
+                Task { @MainActor [weak self] in
+                    guard let self, generation == preflightGeneration else { return }
+                    armStall(generation)
+                }
+            }
+            let result: Result<PreflightInfo, any Error>
+            do {
+                result = .success(try await vault.preflight(onStarting: onStarting))
+            } catch {
+                result = .failure(error)
+            }
+            // Superseded by a new check, or given up by the watchdog: its answer changes nothing.
+            guard generation == preflightGeneration else { return }
+            stallTimer?.cancel()
             // Whatever the check's answer: the erase is offered only once it is known whether recover-only wins.
             defer { state.keysGone = state.keysGone || state.noUserGuid }
             do {
-                let p = try await vault.preflight()
+                let p = try result.get()
                 state.loading = false
                 state.preflight = p
                 // A tick is for the offer it was given on: another release or PCR0 (or none) clears it; the same offer
@@ -173,6 +209,22 @@ public final class UnlockViewModel: UnlockActions {
                 state.preflightError = .other
                 state.approveOffer = false
             }
+        }
+    }
+
+    /// (Re)starts the watchdog of the release check of [generation]: with no progress for ``preflightStall``, the check is
+    /// given up as one that did not answer ("Try again"), and its late answer changes nothing.
+    private func armStall(_ generation: Int) {
+        stallTimer?.cancel()
+        stallTimer = Task { [weak self, preflightStall] in
+            guard (try? await preflightStall()) != nil else { return }
+            guard let self, generation == preflightGeneration, state.loading else { return }
+            preflightGeneration += 1
+            preflightTask?.cancel()
+            state.loading = false
+            state.preflightError = .noResponse
+            state.approveOffer = false
+            state.keysGone = state.keysGone || state.noUserGuid
         }
     }
 

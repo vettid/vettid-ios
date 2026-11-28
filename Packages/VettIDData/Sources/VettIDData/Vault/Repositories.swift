@@ -272,8 +272,9 @@ public protocol VaultRepository:
     /// Leaves onboarding for the app.
     func finishSetup() async throws
 
-    /// The release check before the PIN (§11.10.6).
-    func preflight() async throws -> PreflightInfo
+    /// The release check before the PIN (§11.10.6). [onStarting] hears each `release_starting` while the routed release
+    /// starts (§11.10.5): the check is still going on.
+    func preflight(onStarting: (@Sendable (Int) -> Void)?) async throws -> PreflightInfo
 
     /// Unlocks (§11.4), optionally approving [approve] (§11.10.3) or cancelling a recovery (§11.11.4).
     func unlock(pin: String, approve: ReleaseView?, cancelRecovery: Bool) async throws -> UnlockAttempt
@@ -337,6 +338,8 @@ public protocol VaultRepository:
 }
 
 public extension VaultRepository {
+    /// ``preflight(onStarting:)``, not told of a release that starts.
+    func preflight() async throws -> PreflightInfo { try await preflight(onStarting: nil) }
     var lockNotice: LockNotice { .none }
     func retryLock() {}
     func dismissLockNotice() {}
